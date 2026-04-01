@@ -206,6 +206,7 @@ function bootDesktopApp() {
             mainWindow.loadURL('data:text/html,<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;background:%23c0392b;color:%23fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.box{background:rgba(0,0,0,.3);border-radius:12px;padding:40px;max-width:600px;text-align:center}</style></head><body><div class="box"><h2>⚠️ Server kunne ikke starte</h2><p>' + msg + '</p><p style="margin-top:20px;font-size:12px;opacity:.6">Luk og prøv igen.</p></div></body></html>');
         }
     });
+}
 
 app.whenReady().then(bootDesktopApp).catch((err) => {
     console.error('Desktop startup failed:', err);
