@@ -11,7 +11,16 @@ const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 
 const app = express();
-const APP_VERSION = 'Gantech Efterkalkulation - v1.1.5 (2026-03-31)';
+
+// Read version from package.json
+let pkgVersion = '1.0.0';
+try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    pkgVersion = pkg.version || '1.0.0';
+} catch (e) {
+    console.warn('Could not read package.json version');
+}
+const APP_VERSION = 'Gantech Efterkalkulation - v' + pkgVersion;
 
 function resolveWritableLogFile() {
     const candidates = [
