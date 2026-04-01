@@ -1807,15 +1807,21 @@ app.get('/', (req, res) => {
             function toDrawingUrl(rawPath) {
                 const value = String(rawPath || '').trim();
                 if (!value) return '';
-                if (/^https?:\/\//i.test(value) || /^file:\/\//i.test(value)) return value;
+                const lower = value.toLowerCase();
+                if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('file://')) return value;
 
-                if (/^\\\\/.test(value)) {
-                    const uncPath = value.replace(/^\\\\/, '').replace(/\\/g, '/');
+                const bs = String.fromCharCode(92);
+                if (value.startsWith(bs + bs)) {
+                    const uncPath = value.slice(2).split(bs).join('/');
                     return 'file://' + encodeURI(uncPath);
                 }
 
-                const normalized = value.replace(/\\/g, '/');
-                if (/^[a-zA-Z]:\//.test(normalized)) {
+                const normalized = value.split(bs).join('/');
+                const hasDrivePrefix = normalized.length >= 3
+                    && ((normalized[0] >= 'A' && normalized[0] <= 'Z') || (normalized[0] >= 'a' && normalized[0] <= 'z'))
+                    && normalized[1] === ':'
+                    && normalized[2] === '/';
+                if (hasDrivePrefix) {
                     return 'file:///' + encodeURI(normalized);
                 }
 
