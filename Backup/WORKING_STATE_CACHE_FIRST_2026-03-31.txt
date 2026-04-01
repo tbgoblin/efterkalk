@@ -1,0 +1,23 @@
+System cache-first with background freshness check implemented.
+
+Date: 2026-03-31
+Changes:
+
+1. Server endpoint `/order-list-check-time`:
+   - Lightweight DB query for max invoice date in last 30 days
+   - Returns: lastModifiedDate, serverTime, cacheLastModified
+   - No heavy calculation, only timestamp check
+
+2. Client-side changes:
+   - Added `checkOrderListFreshness()` - polls /order-list-check-time every 30 sec
+   - If remote date differs from cached date, silently reloads list
+   - Modified `loadOrderList()` to show cached data immediately (if available) before checking freshness
+   - Auto-refresh every 2 min now calls check instead of forced reload
+
+3. Optimized UX:
+   - Startup: list appears INSTANTLY from cache (if exists)
+   - Background: every 30 seconds checks if DB has changes
+   - If new order detected: silently refreshes list in background
+   - User can also click "Aggiorna liste" for immediate force refresh
+
+Result: Zero wait time at startup + automatic refresh when DB changes

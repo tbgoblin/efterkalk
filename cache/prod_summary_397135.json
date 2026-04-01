@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397135",
+  "cachedAt": "2026-03-31T11:50:02.715Z",
+  "cachedAtMs": 1774957802715,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.715Z",
+  "data": {
+    "ordNo": 397135,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400248-1",
+        "Descr": "Montagebelsag",
+        "NoFin": 4,
+        "DPrice": 3.03,
+        "CCstPr": 3.03,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 12.12,
+        "NestingCost": null,
+        "EffectiveLineCost": 12.12
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400248-1L",
+        "Descr": "Laser Montagebelsag",
+        "NoFin": 4,
+        "DPrice": 3.03,
+        "CCstPr": 3.03,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 12.12,
+        "NestingCost": 8.33,
+        "EffectiveLineCost": 33.32
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400248-1",
+        "Descr": "Rute for Montagebelsag",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 33.32
+  }
+}

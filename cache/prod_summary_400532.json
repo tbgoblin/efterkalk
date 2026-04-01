@@ -1,0 +1,12 @@
+{
+  "key": "prod_summary_400532",
+  "cachedAt": "2026-03-31T13:52:46.982Z",
+  "cachedAtMs": 1774965166982,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:22:46.982Z",
+  "data": {
+    "ordNo": 400532,
+    "lines": [],
+    "totalCost": 0
+  }
+}

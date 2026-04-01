@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396926",
+  "cachedAt": "2026-03-31T13:39:59.636Z",
+  "cachedAtMs": 1774964399637,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.637Z",
+  "data": {
+    "ordNo": 396926,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500022-6",
+        "Descr": "Bracket for lev feet and wheel rear",
+        "NoFin": 50,
+        "DPrice": 5.553,
+        "CCstPr": 5.553,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 277.65,
+        "NestingCost": null,
+        "EffectiveLineCost": 277.65
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500022-6L",
+        "Descr": "Laser Bracket for lev feet and wheel rear",
+        "NoFin": 50,
+        "DPrice": 5.553,
+        "CCstPr": 5.553,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 277.65,
+        "NestingCost": 5.814705,
+        "EffectiveLineCost": 290.74
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500022-6",
+        "Descr": "Rute for Hjul beslag",
+        "NoFin": 50,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 290.74
+  }
+}

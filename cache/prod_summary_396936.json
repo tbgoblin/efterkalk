@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396936",
+  "cachedAt": "2026-03-31T13:39:59.692Z",
+  "cachedAtMs": 1774964399692,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.692Z",
+  "data": {
+    "ordNo": 396936,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-2",
+        "Descr": "Ventilation cover front",
+        "NoFin": 50,
+        "DPrice": 2.69,
+        "CCstPr": 2.69,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 134.5,
+        "NestingCost": null,
+        "EffectiveLineCost": 134.5
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-2L",
+        "Descr": "¤ N2  - Ventilation cover front",
+        "NoFin": 50,
+        "DPrice": 2.69,
+        "CCstPr": 2.69,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 134.5,
+        "NestingCost": 2.683846,
+        "EffectiveLineCost": 134.19
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-2",
+        "Descr": "Rute for Ventilation cover front",
+        "NoFin": 50,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 134.19
+  }
+}

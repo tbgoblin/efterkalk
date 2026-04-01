@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397140",
+  "cachedAt": "2026-03-31T11:50:02.743Z",
+  "cachedAtMs": 1774957802743,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.743Z",
+  "data": {
+    "ordNo": 397140,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400340-2",
+        "Descr": "Låg for vange - udskud",
+        "NoFin": 1,
+        "DPrice": 264.27,
+        "CCstPr": 264.27,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 264.27,
+        "NestingCost": null,
+        "EffectiveLineCost": 264.27
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400340-2L",
+        "Descr": "Laser Låg for vange - udskud",
+        "NoFin": 1,
+        "DPrice": 264.27,
+        "CCstPr": 264.27,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 264.27,
+        "NestingCost": 264.27,
+        "EffectiveLineCost": 264.27
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400340-2",
+        "Descr": "Rute for Låg for vange - udskud",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 264.27
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397129",
+  "cachedAt": "2026-03-31T11:50:02.694Z",
+  "cachedAtMs": 1774957802694,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.694Z",
+  "data": {
+    "ordNo": 397129,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400251-25",
+        "Descr": "Kile",
+        "NoFin": 4,
+        "DPrice": 2.08,
+        "CCstPr": 2.08,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 8.32,
+        "NestingCost": null,
+        "EffectiveLineCost": 8.32
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400251-25L",
+        "Descr": "Laser Kile",
+        "NoFin": 4,
+        "DPrice": 2.08,
+        "CCstPr": 2.08,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 8.32,
+        "NestingCost": 2.08,
+        "EffectiveLineCost": 8.32
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400251-25",
+        "Descr": "Rute for Kile",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 8.32
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397196",
+  "cachedAt": "2026-03-31T11:50:02.896Z",
+  "cachedAtMs": 1774957802896,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.896Z",
+  "data": {
+    "ordNo": 397196,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400249-2",
+        "Descr": "Justerplade for slæbesko",
+        "NoFin": 1,
+        "DPrice": 91.5,
+        "CCstPr": 91.5,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 91.5,
+        "NestingCost": null,
+        "EffectiveLineCost": 91.5
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400249-2L",
+        "Descr": "Laser Justerplade for slæbesko",
+        "NoFin": 1,
+        "DPrice": 91.5,
+        "CCstPr": 91.5,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 91.5,
+        "NestingCost": 91.5,
+        "EffectiveLineCost": 91.5
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400249-2",
+        "Descr": "Rute for Justerplade for slæbesko",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 91.5
+  }
+}

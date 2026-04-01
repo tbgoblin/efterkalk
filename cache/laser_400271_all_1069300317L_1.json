@@ -1,0 +1,57 @@
+{
+  "key": "laser_400271_all_1069300317L_1",
+  "cachedAt": "2026-03-31T10:48:47.206Z",
+  "cachedAtMs": 1774954127206,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T11:48:47.206Z",
+  "data": {
+    "ordine": "400271",
+    "route": null,
+    "nestingOrdNo": "400292",
+    "prodNo": "1069300317L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 72,
+      "CostoLastre": 523.97,
+      "KgFiniti": 57.266,
+      "SfridoKg": 14.734,
+      "SfridoPct": 0.204639
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1069300317L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 14,
+        "KgProdotto": 58.333338,
+        "OldNWgtU_medio": 2.864,
+        "NWgtU_medio": 4.166667,
+        "KgUtilizzatiEffettivi": 50.412321,
+        "KgPerPezzoEffettivo": 3.60088,
+        "QuotaCosto": 366.868668,
+        "CostoPerPezzo": 26.204905,
+        "EuroPerKgFinito": 6.289177,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\400257\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CAVERION_DANMARK\\1069300189R00.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CAVERION_DANMARK\\1069300189R00.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\400257\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\400257\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CAVERION_DANMARK\\1069300189R00.jpg"
+      }
+    ]
+  }
+}

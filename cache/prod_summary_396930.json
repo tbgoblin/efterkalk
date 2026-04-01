@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396930",
+  "cachedAt": "2026-03-31T13:39:59.644Z",
+  "cachedAtMs": 1774964399644,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.644Z",
+  "data": {
+    "ordNo": 396930,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-4",
+        "Descr": "Spacer for center pillar",
+        "NoFin": 25,
+        "DPrice": 0.26,
+        "CCstPr": 0.26,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 6.5,
+        "NestingCost": null,
+        "EffectiveLineCost": 6.5
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-4L",
+        "Descr": "¤ N2  - Spacer for center pillar",
+        "NoFin": 25,
+        "DPrice": 0.26,
+        "CCstPr": 0.26,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 6.5,
+        "NestingCost": 0.32054,
+        "EffectiveLineCost": 8.01
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-4",
+        "Descr": "Rute for Spacer for center pillar",
+        "NoFin": 25,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 8.01
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397147",
+  "cachedAt": "2026-03-31T11:50:02.781Z",
+  "cachedAtMs": 1774957802781,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.781Z",
+  "data": {
+    "ordNo": 397147,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400341-2",
+        "Descr": "Vange for underbom",
+        "NoFin": 1,
+        "DPrice": 552.04,
+        "CCstPr": 552.04,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 552.04,
+        "NestingCost": null,
+        "EffectiveLineCost": 552.04
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400341-2L",
+        "Descr": "Laser Vange for underbom",
+        "NoFin": 1,
+        "DPrice": 552.04,
+        "CCstPr": 552.04,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 552.04,
+        "NestingCost": 675.45,
+        "EffectiveLineCost": 675.45
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400341-2",
+        "Descr": "Rute for Vange for underbom",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 675.45
+  }
+}

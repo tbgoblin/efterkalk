@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396938",
+  "cachedAt": "2026-03-31T13:39:59.706Z",
+  "cachedAtMs": 1774964399707,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.707Z",
+  "data": {
+    "ordNo": 396938,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-1",
+        "Descr": "Steel tube 50x40x2-1900",
+        "NoFin": 75,
+        "DPrice": 67.2132,
+        "CCstPr": 67.2132,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 5040.99,
+        "NestingCost": null,
+        "EffectiveLineCost": 5040.99
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3050500223526",
+        "Descr": "KoldF. S235 blank  50 x 40 x 2  rør  EN 10305-5",
+        "NoFin": 150,
+        "DPrice": 33.606623,
+        "CCstPr": 33.606623,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 5040.99,
+        "NestingCost": null,
+        "EffectiveLineCost": 5040.99
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-1",
+        "Descr": "Rute for Steel tube 50x40x2-1900",
+        "NoFin": 75,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 5040.99
+  }
+}

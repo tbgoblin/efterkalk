@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397188",
+  "cachedAt": "2026-03-31T11:50:02.879Z",
+  "cachedAtMs": 1774957802879,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.879Z",
+  "data": {
+    "ordNo": 397188,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400252-1",
+        "Descr": "60x60x5",
+        "NoFin": 1,
+        "DPrice": 57.42,
+        "CCstPr": 57.42,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 57.42,
+        "NestingCost": null,
+        "EffectiveLineCost": 57.42
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3050600035558",
+        "Descr": "KoldF. S355  60 x 60 x 5  rør  EN 10219",
+        "NoFin": 0.7,
+        "DPrice": 82.031667,
+        "CCstPr": 82.031667,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 57.42,
+        "NestingCost": null,
+        "EffectiveLineCost": 57.42
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400252-1",
+        "Descr": "Rute for 60x60x5",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 57.42
+  }
+}

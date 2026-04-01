@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397195",
+  "cachedAt": "2026-03-31T11:50:02.897Z",
+  "cachedAtMs": 1774957802897,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.897Z",
+  "data": {
+    "ordNo": 397195,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400249-1",
+        "Descr": "Laske",
+        "NoFin": 2,
+        "DPrice": 0.96,
+        "CCstPr": 0.96,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1.92,
+        "NestingCost": null,
+        "EffectiveLineCost": 1.92
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400249-1L",
+        "Descr": "Laser Laske",
+        "NoFin": 2,
+        "DPrice": 0.96,
+        "CCstPr": 0.96,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1.92,
+        "NestingCost": 1.01,
+        "EffectiveLineCost": 2.02
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400249-1",
+        "Descr": "Rute for Laske",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 2.02
+  }
+}

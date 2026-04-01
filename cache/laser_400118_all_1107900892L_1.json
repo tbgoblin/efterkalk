@@ -1,0 +1,57 @@
+{
+  "key": "laser_400118_all_1107900892L_1",
+  "cachedAt": "2026-03-31T13:42:06.081Z",
+  "cachedAtMs": 1774964526081,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:42:06.081Z",
+  "data": {
+    "ordine": "400118",
+    "route": null,
+    "nestingOrdNo": "400148",
+    "prodNo": "1107900892L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 73.91484,
+      "CostoLastre": 475.28,
+      "KgFiniti": 50.065,
+      "SfridoKg": 23.84984,
+      "SfridoPct": 0.322666
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1107900892L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 2.25,
+        "OldNWgtU_medio": 1.327,
+        "NWgtU_medio": 2.25,
+        "KgUtilizzatiEffettivi": 1.959153,
+        "KgPerPezzoEffettivo": 1.959153,
+        "QuotaCosto": 12.597554,
+        "CostoPerPezzo": 12.597554,
+        "EuroPerKgFinito": 5.598913,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\400113-396073\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\P13 - S355J2 - 1 STK 5 MM  CEQ MAX 0,41 TEST MIN 50 J - CERT.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\P13 - S355J2 - 1 STK 5 MM  CEQ MAX 0,41 TEST MIN 50 J - CERT.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\400113-396073\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\400113-396073\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\P13 - S355J2 - 1 STK 5 MM  CEQ MAX 0,41 TEST MIN 50 J - CERT.jpg"
+      }
+    ]
+  }
+}

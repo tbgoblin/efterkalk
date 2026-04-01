@@ -1,0 +1,57 @@
+{
+  "key": "laser_398221_all_1013106246L_1",
+  "cachedAt": "2026-03-31T13:29:31.358Z",
+  "cachedAtMs": 1774963771358,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:29:31.358Z",
+  "data": {
+    "ordine": "398221",
+    "route": null,
+    "nestingOrdNo": "398272",
+    "prodNo": "1013106246L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1370.02024,
+      "CostoLastre": 8548.48,
+      "KgFiniti": 1096.649,
+      "SfridoKg": 273.37124,
+      "SfridoPct": 0.199538
+    },
+    "products": [
+      {
+        "LnNo": 54,
+        "ProdNo": "1013106246L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 14,
+        "KgProdotto": 5.22144,
+        "OldNWgtU_medio": 0.208,
+        "NWgtU_medio": 0.37296,
+        "KgUtilizzatiEffettivi": 4.561468,
+        "KgPerPezzoEffettivo": 0.325819,
+        "QuotaCosto": 27.688154,
+        "CostoPerPezzo": 1.977725,
+        "EuroPerKgFinito": 5.302781,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-KDB-61-1014-1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-KDB-61-1014-1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-KDB-61-1014-1.jpg"
+      }
+    ]
+  }
+}

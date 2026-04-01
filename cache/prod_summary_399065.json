@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399065",
+  "cachedAt": "2026-03-31T13:50:46.379Z",
+  "cachedAtMs": 1774965046379,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:20:46.379Z",
+  "data": {
+    "ordNo": 399065,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400373-1",
+        "Descr": "Plade for liftophæng",
+        "NoFin": 2,
+        "DPrice": 272.61,
+        "CCstPr": 272.61,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 545.22,
+        "NestingCost": null,
+        "EffectiveLineCost": 545.22
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400373-1L",
+        "Descr": "Laser Plade for liftophæng",
+        "NoFin": 2,
+        "DPrice": 272.61,
+        "CCstPr": 272.61,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 545.22,
+        "NestingCost": 272.61,
+        "EffectiveLineCost": 545.22
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400373-1",
+        "Descr": "Rute for Plade for liftophæng",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 545.22
+  }
+}

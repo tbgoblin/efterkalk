@@ -1,0 +1,159 @@
+{
+  "key": "laser_399033_all_1108100729-5L_1",
+  "cachedAt": "2026-03-31T13:27:12.768Z",
+  "cachedAtMs": 1774963632768,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:27:12.768Z",
+  "data": {
+    "ordine": "399033",
+    "route": null,
+    "nestingOrdNo": "399067",
+    "prodNo": "1108100729-5L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 864,
+      "CostoLastre": 5614.32,
+      "KgFiniti": 762.54,
+      "SfridoKg": 101.46,
+      "SfridoPct": 0.117431
+    },
+    "products": [
+      {
+        "LnNo": 5,
+        "ProdNo": "1108100729-5L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 7.714284,
+        "OldNWgtU_medio": 1.703,
+        "NWgtU_medio": 1.928571,
+        "KgUtilizzatiEffettivi": 7.617399,
+        "KgPerPezzoEffettivo": 1.90435,
+        "QuotaCosto": 49.498281,
+        "CostoPerPezzo": 12.37457,
+        "EuroPerKgFinito": 6.416445,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg"
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "1108100729-5L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 6,
+        "KgProdotto": 11.571426,
+        "OldNWgtU_medio": 1.703,
+        "NWgtU_medio": 1.928571,
+        "KgUtilizzatiEffettivi": 11.734212,
+        "KgPerPezzoEffettivo": 1.955702,
+        "QuotaCosto": 76.249564,
+        "CostoPerPezzo": 12.708261,
+        "EuroPerKgFinito": 6.58947,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg"
+      },
+      {
+        "LnNo": 14,
+        "ProdNo": "1108100729-5L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 7.714284,
+        "OldNWgtU_medio": 1.703,
+        "NWgtU_medio": 1.928571,
+        "KgUtilizzatiEffettivi": 7.669972,
+        "KgPerPezzoEffettivo": 1.917493,
+        "QuotaCosto": 49.839901,
+        "CostoPerPezzo": 12.459975,
+        "EuroPerKgFinito": 6.460729,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg"
+      },
+      {
+        "LnNo": 18,
+        "ProdNo": "1108100729-5L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 7.714284,
+        "OldNWgtU_medio": 1.703,
+        "NWgtU_medio": 1.928571,
+        "KgUtilizzatiEffettivi": 7.766651,
+        "KgPerPezzoEffettivo": 1.941663,
+        "QuotaCosto": 50.468129,
+        "CostoPerPezzo": 12.617032,
+        "EuroPerKgFinito": 6.542166,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-3.jpg"
+      }
+    ]
+  }
+}

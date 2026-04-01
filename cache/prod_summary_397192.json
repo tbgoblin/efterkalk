@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397192",
+  "cachedAt": "2026-03-31T11:50:02.892Z",
+  "cachedAtMs": 1774957802892,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.892Z",
+  "data": {
+    "ordNo": 397192,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400250-1",
+        "Descr": "Venstre slæbesko",
+        "NoFin": 1,
+        "DPrice": 89.19,
+        "CCstPr": 89.19,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 89.19,
+        "NestingCost": null,
+        "EffectiveLineCost": 89.19
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400250-1L",
+        "Descr": "Laser Venstre slæbesko",
+        "NoFin": 1,
+        "DPrice": 89.19,
+        "CCstPr": 89.19,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 89.19,
+        "NestingCost": 89.19,
+        "EffectiveLineCost": 89.19
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400250-1",
+        "Descr": "Rute for Venstre slæbesko",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 89.19
+  }
+}

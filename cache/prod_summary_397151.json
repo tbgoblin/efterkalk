@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397151",
+  "cachedAt": "2026-03-31T11:50:02.784Z",
+  "cachedAtMs": 1774957802784,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.784Z",
+  "data": {
+    "ordNo": 397151,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400342-2",
+        "Descr": "140x140x5",
+        "NoFin": 1,
+        "DPrice": 783.74,
+        "CCstPr": 783.74,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 783.74,
+        "NestingCost": null,
+        "EffectiveLineCost": 783.74
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3051401535554",
+        "Descr": "KoldF.  S355   140x140x5  rør   EN 10210",
+        "NoFin": 3,
+        "DPrice": 261.246667,
+        "CCstPr": 261.246667,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 783.74,
+        "NestingCost": null,
+        "EffectiveLineCost": 783.74
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400342-2",
+        "Descr": "Rute for 140x140x5",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 783.74
+  }
+}

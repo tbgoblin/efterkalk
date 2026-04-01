@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_396608",
+  "cachedAt": "2026-03-31T12:41:14.784Z",
+  "cachedAtMs": 1774960874784,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T13:11:14.784Z",
+  "data": {
+    "ordNo": 396608,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1014700108",
+        "Descr": "Låsebeslag låge G2-194-00",
+        "NoFin": 4,
+        "DPrice": 19.28,
+        "CCstPr": 19.28,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 77.12,
+        "NestingCost": null,
+        "EffectiveLineCost": 77.12
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1014700108-2",
+        "Descr": "Rør f/låsebeslag",
+        "NoFin": 4,
+        "DPrice": 19.2,
+        "CCstPr": 19.2,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 76.8,
+        "NestingCost": null,
+        "EffectiveLineCost": 76.8
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1014700108-1",
+        "Descr": "Lap f/låsebeslag",
+        "NoFin": 4,
+        "DPrice": 0.08,
+        "CCstPr": 0.08,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 396609,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0.32,
+        "NestingCost": null,
+        "EffectiveLineCost": 0.32
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "V1014700108",
+        "Descr": "Rute for Låsebeslag låge G2-194-00",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 77.12
+  }
+}

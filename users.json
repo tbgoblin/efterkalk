@@ -1,0 +1,26 @@
+[
+  {
+    "username": "admin",
+    "displayName": "Superbruger",
+    "sellerUsr": "admin",
+    "passwordSalt": "8ecdcdf9b09cba5e772765d25b7351c3",
+    "passwordHash": "ef55c26f694e64e35d42d38c3a0a64525d11c3654ee26af9638943668e758806074fcddbc47aad3af077cfcb6078bd55f4856b4dd1c0386519fd437859961e60",
+    "isSuperUser": true,
+    "permissions": {
+      "viewAllUsers": true
+    },
+    "createdAt": "2026-03-19T12:20:46.055Z"
+  },
+  {
+    "username": "test",
+    "displayName": "test",
+    "sellerUsr": "test",
+    "passwordSalt": "6ab1f0bbef911ed95f24c29d786430e2",
+    "passwordHash": "899264a82cb7d668c98f4327314ae3dfab05d5118d8f884caec3e79106b138751d53900581b328014132822f721e290c1e15d71302a15b75b093da434afa01f7",
+    "isSuperUser": false,
+    "permissions": {
+      "viewAllUsers": true
+    },
+    "createdAt": "2026-03-19T12:37:54.959Z"
+  }
+]

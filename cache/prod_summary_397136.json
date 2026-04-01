@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397136",
+  "cachedAt": "2026-03-31T11:50:02.720Z",
+  "cachedAtMs": 1774957802720,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.720Z",
+  "data": {
+    "ordNo": 397136,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400248-2",
+        "Descr": "Slæbesko",
+        "NoFin": 2,
+        "DPrice": 206.33,
+        "CCstPr": 206.33,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 412.66,
+        "NestingCost": null,
+        "EffectiveLineCost": 412.66
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400248-2L",
+        "Descr": "Laser Slæbesko",
+        "NoFin": 2,
+        "DPrice": 206.33,
+        "CCstPr": 206.33,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 412.66,
+        "NestingCost": 1380.38,
+        "EffectiveLineCost": 2760.76
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400248-2",
+        "Descr": "Rute for Slæbesko",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 2760.76
+  }
+}

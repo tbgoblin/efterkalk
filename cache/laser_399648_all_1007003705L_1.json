@@ -1,0 +1,159 @@
+{
+  "key": "laser_399648_all_1007003705L_1",
+  "cachedAt": "2026-03-31T13:38:12.598Z",
+  "cachedAtMs": 1774964292598,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:38:12.598Z",
+  "data": {
+    "ordine": "399648",
+    "route": null,
+    "nestingOrdNo": "399650",
+    "prodNo": "1007003705L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 2929.7212,
+      "CostoLastre": 24679.04,
+      "KgFiniti": 2104.776,
+      "SfridoKg": 824.9452,
+      "SfridoPct": 0.281578
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1007003705L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 30,
+        "KgProdotto": 1371.42858,
+        "OldNWgtU_medio": 30.504,
+        "NWgtU_medio": 45.714286,
+        "KgUtilizzatiEffettivi": 1280,
+        "KgPerPezzoEffettivo": 42.666667,
+        "QuotaCosto": 10816,
+        "CostoPerPezzo": 360.533333,
+        "EuroPerKgFinito": 7.886667,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg"
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1007003705L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 5,
+        "KgProdotto": 228.57143,
+        "OldNWgtU_medio": 30.504,
+        "NWgtU_medio": 45.714286,
+        "KgUtilizzatiEffettivi": 213.6,
+        "KgPerPezzoEffettivo": 42.72,
+        "QuotaCosto": 1708.8,
+        "CostoPerPezzo": 341.76,
+        "EuroPerKgFinito": 7.476,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1007003705L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 23,
+        "KgProdotto": 1051.428578,
+        "OldNWgtU_medio": 30.504,
+        "NWgtU_medio": 45.714286,
+        "KgUtilizzatiEffettivi": 948.47,
+        "KgPerPezzoEffettivo": 41.237826,
+        "QuotaCosto": 8204.27,
+        "CostoPerPezzo": 356.707391,
+        "EuroPerKgFinito": 7.802974,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg"
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "1007003705L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 11,
+        "KgProdotto": 502.857146,
+        "OldNWgtU_medio": 30.504,
+        "NWgtU_medio": 45.714286,
+        "KgUtilizzatiEffettivi": 487.6512,
+        "KgPerPezzoEffettivo": 44.331927,
+        "QuotaCosto": 3949.97,
+        "CostoPerPezzo": 359.088182,
+        "EuroPerKgFinito": 7.855054,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399647\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AH_INDUSTRIES\\PZD2212191705_03.jpg"
+      }
+    ]
+  }
+}

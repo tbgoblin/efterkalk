@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397122",
+  "cachedAt": "2026-03-31T11:50:02.662Z",
+  "cachedAtMs": 1774957802662,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.662Z",
+  "data": {
+    "ordNo": 397122,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400251-29",
+        "Descr": "80x40x4",
+        "NoFin": 4,
+        "DPrice": 32.595,
+        "CCstPr": 32.595,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 130.38,
+        "NestingCost": null,
+        "EffectiveLineCost": 130.38
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3050801135558",
+        "Descr": "KoldF.  S355   80x40x4   rør   EN10219",
+        "NoFin": 2,
+        "DPrice": 65.1875,
+        "CCstPr": 65.1875,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 130.38,
+        "NestingCost": null,
+        "EffectiveLineCost": 130.38
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400251-29",
+        "Descr": "Rute for 80x40x4",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 130.38
+  }
+}

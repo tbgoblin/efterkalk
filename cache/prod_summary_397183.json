@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_397183",
+  "cachedAt": "2026-03-31T11:50:02.877Z",
+  "cachedAtMs": 1774957802877,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.877Z",
+  "data": {
+    "ordNo": 397183,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400343-11",
+        "Descr": "Justerbar skrabeplade",
+        "NoFin": 2,
+        "DPrice": 246.35,
+        "CCstPr": 246.35,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 492.7,
+        "NestingCost": null,
+        "EffectiveLineCost": 492.7
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400247-1",
+        "Descr": "Holdebeslag",
+        "NoFin": 4,
+        "DPrice": 3.185,
+        "CCstPr": 3.185,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397184,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 12.74,
+        "NestingCost": null,
+        "EffectiveLineCost": 12.74
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1086400343-12",
+        "Descr": "Skrabeplade",
+        "NoFin": 2,
+        "DPrice": 239.98,
+        "CCstPr": 239.98,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397185,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 479.96,
+        "NestingCost": null,
+        "EffectiveLineCost": 479.96
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "V1086400343-11",
+        "Descr": "Rute for Justerbar skrabeplade",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 492.7
+  }
+}

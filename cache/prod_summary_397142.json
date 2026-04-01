@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397142",
+  "cachedAt": "2026-03-31T11:50:02.755Z",
+  "cachedAtMs": 1774957802755,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.755Z",
+  "data": {
+    "ordNo": 397142,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400340-4",
+        "Descr": "Plade 220x150x10",
+        "NoFin": 1,
+        "DPrice": 18.5,
+        "CCstPr": 18.5,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 18.5,
+        "NestingCost": null,
+        "EffectiveLineCost": 18.5
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400340-4L",
+        "Descr": "Laser Plade 220x150x10",
+        "NoFin": 1,
+        "DPrice": 18.5,
+        "CCstPr": 18.5,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 18.5,
+        "NestingCost": 18.5,
+        "EffectiveLineCost": 18.5
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400340-4",
+        "Descr": "Rute for Plade 220x150x10",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 18.5
+  }
+}

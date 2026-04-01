@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397145",
+  "cachedAt": "2026-03-31T11:50:02.759Z",
+  "cachedAtMs": 1774957802759,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.759Z",
+  "data": {
+    "ordNo": 397145,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400341-1",
+        "Descr": "Lod for vange",
+        "NoFin": 1,
+        "DPrice": 283.24,
+        "CCstPr": 283.24,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 283.24,
+        "NestingCost": null,
+        "EffectiveLineCost": 283.24
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400341-1L",
+        "Descr": "Laser Lod for vange",
+        "NoFin": 1,
+        "DPrice": 283.24,
+        "CCstPr": 283.24,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 283.24,
+        "NestingCost": 283.24,
+        "EffectiveLineCost": 283.24
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400341-1",
+        "Descr": "Rute for Lod for vange",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 283.24
+  }
+}

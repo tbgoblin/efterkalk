@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397121",
+  "cachedAt": "2026-03-31T11:50:02.660Z",
+  "cachedAtMs": 1774957802660,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.660Z",
+  "data": {
+    "ordNo": 397121,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400251-28",
+        "Descr": "100x50x4",
+        "NoFin": 1,
+        "DPrice": 31.59,
+        "CCstPr": 31.59,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 31.59,
+        "NestingCost": null,
+        "EffectiveLineCost": 31.59
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3051001835558",
+        "Descr": "KoldF.  S355   100 x 50x 4   rør   EN10219",
+        "NoFin": 0.4,
+        "DPrice": 78.976668,
+        "CCstPr": 78.976668,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 31.59,
+        "NestingCost": null,
+        "EffectiveLineCost": 31.59
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400251-28",
+        "Descr": "Rute for 100x50x4",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 31.59
+  }
+}

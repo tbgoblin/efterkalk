@@ -1,0 +1,57 @@
+{
+  "key": "laser_399035_all_1108100729-3L_1",
+  "cachedAt": "2026-03-31T13:27:12.759Z",
+  "cachedAtMs": 1774963632759,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:27:12.759Z",
+  "data": {
+    "ordine": "399035",
+    "route": null,
+    "nestingOrdNo": "399067",
+    "prodNo": "1108100729-3L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 864,
+      "CostoLastre": 5614.32,
+      "KgFiniti": 762.54,
+      "SfridoKg": 101.46,
+      "SfridoPct": 0.117431
+    },
+    "products": [
+      {
+        "LnNo": 15,
+        "ProdNo": "1108100729-3L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 180,
+        "OldNWgtU_medio": 48.027,
+        "NWgtU_medio": 90,
+        "KgUtilizzatiEffettivi": 109.515249,
+        "KgPerPezzoEffettivo": 54.757625,
+        "QuotaCosto": 711.636175,
+        "CostoPerPezzo": 355.818087,
+        "EuroPerKgFinito": 3.953534,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-4.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-4.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399031\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CSK_STEEL\\2001-4.jpg"
+      }
+    ]
+  }
+}

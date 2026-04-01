@@ -1,0 +1,93 @@
+{
+  "key": "prod_summary_396931",
+  "cachedAt": "2026-03-31T13:39:59.649Z",
+  "cachedAtMs": 1774964399649,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.649Z",
+  "data": {
+    "ordNo": 396931,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-8",
+        "Descr": "Floor end plate tube rear",
+        "NoFin": 25,
+        "DPrice": 53.9728,
+        "CCstPr": 53.9728,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1349.32,
+        "NestingCost": null,
+        "EffectiveLineCost": 1349.32
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-8L",
+        "Descr": "¤ N2 PEM-tol Ø 5.45 Ø 10.54    - Floor end plate tube rear",
+        "NoFin": 25,
+        "DPrice": 49.164,
+        "CCstPr": 49.164,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1229.1,
+        "NestingCost": 49.22,
+        "EffectiveLineCost": 1230.5
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-8",
+        "Descr": "Rute for Floor end plate tube rear",
+        "NoFin": 25,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 9,
+        "ProdNo": "4420400011002",
+        "Descr": "Presmøtrik M4-2 Zink (pl.min. 1,4mm)",
+        "NoFin": 150,
+        "DPrice": 0.418913,
+        "CCstPr": 0.418913,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 62.84,
+        "NestingCost": null,
+        "EffectiveLineCost": 62.84
+      },
+      {
+        "LnNo": 10,
+        "ProdNo": "4420800011002",
+        "Descr": "Presmøtrik M8-2 Zink (pl.min. 2,3mm)",
+        "NoFin": 50,
+        "DPrice": 1.147528,
+        "CCstPr": 1.147528,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 57.38,
+        "NestingCost": null,
+        "EffectiveLineCost": 57.38
+      }
+    ],
+    "totalCost": 1350.72
+  }
+}

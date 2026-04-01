@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399062",
+  "cachedAt": "2026-03-31T13:50:46.360Z",
+  "cachedAtMs": 1774965046360,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:20:46.360Z",
+  "data": {
+    "ordNo": 399062,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400373-2",
+        "Descr": "Øje 1 f. liftophæng",
+        "NoFin": 4,
+        "DPrice": 14.7075,
+        "CCstPr": 14.7075,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 58.83,
+        "NestingCost": null,
+        "EffectiveLineCost": 58.83
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400373-2L",
+        "Descr": "Laser Øje 1 f. liftophæng",
+        "NoFin": 4,
+        "DPrice": 14.7075,
+        "CCstPr": 14.7075,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 58.83,
+        "NestingCost": 15.66,
+        "EffectiveLineCost": 62.64
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400373-2",
+        "Descr": "Rute for Øje 1 f. liftophæng",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 62.64
+  }
+}

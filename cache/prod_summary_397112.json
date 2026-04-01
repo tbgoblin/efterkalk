@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397112",
+  "cachedAt": "2026-03-31T11:50:02.628Z",
+  "cachedAtMs": 1774957802628,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.628Z",
+  "data": {
+    "ordNo": 397112,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400369-1",
+        "Descr": "Konsol. Stor asfald-slæb",
+        "NoFin": 1,
+        "DPrice": 278.84,
+        "CCstPr": 278.84,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 278.84,
+        "NestingCost": null,
+        "EffectiveLineCost": 278.84
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3051801135554",
+        "Descr": "KoldF.  S355   180x100x8  rør   EN 10219",
+        "NoFin": 0.5,
+        "DPrice": 557.6875,
+        "CCstPr": 557.6875,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 278.84,
+        "NestingCost": null,
+        "EffectiveLineCost": 278.84
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400369-1",
+        "Descr": "Rute for Konsol. Stor asfald-slæb",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 278.84
+  }
+}

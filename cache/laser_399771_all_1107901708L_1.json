@@ -1,0 +1,2913 @@
+{
+  "key": "laser_399771_all_1107901708L_1",
+  "cachedAt": "2026-03-31T10:49:10.375Z",
+  "cachedAtMs": 1774954150375,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T11:49:10.375Z",
+  "data": {
+    "ordine": "399771",
+    "route": null,
+    "nestingOrdNo": "399904",
+    "prodNo": "1107901708L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 8113.68,
+      "CostoLastre": 68120.74,
+      "KgFiniti": 7245.12,
+      "SfridoKg": 868.56,
+      "SfridoPct": 0.107049
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 10.08,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 11.108571,
+        "KgPerPezzoEffettivo": 11.108571,
+        "QuotaCosto": 81.696214,
+        "CostoPerPezzo": 81.696214,
+        "EuroPerKgFinito": 16.339243,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X420X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X420X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X420X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 18.96,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 20.894694,
+        "KgPerPezzoEffettivo": 20.894694,
+        "QuotaCosto": 153.666689,
+        "CostoPerPezzo": 153.666689,
+        "EuroPerKgFinito": 30.733338,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X790X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X790X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X790X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 14.88,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 16.398367,
+        "KgPerPezzoEffettivo": 16.398367,
+        "QuotaCosto": 120.599173,
+        "CostoPerPezzo": 120.599173,
+        "EuroPerKgFinito": 24.119835,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X620X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X620X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X620X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 138.24,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 152.346122,
+        "KgPerPezzoEffettivo": 152.346122,
+        "QuotaCosto": 1120.405224,
+        "CostoPerPezzo": 1120.405224,
+        "EuroPerKgFinito": 224.081045,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X5760X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X5760X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X5760X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 5,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 134.16,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 147.849796,
+        "KgPerPezzoEffettivo": 147.849796,
+        "QuotaCosto": 1087.337709,
+        "CostoPerPezzo": 1087.337709,
+        "EuroPerKgFinito": 217.467542,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X5590X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X5590X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X5590X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 6,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 132.96,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 146.527347,
+        "KgPerPezzoEffettivo": 146.527347,
+        "QuotaCosto": 1077.611969,
+        "CostoPerPezzo": 1077.611969,
+        "EuroPerKgFinito": 215.522394,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X5540X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X5540X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X5540X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 123.84,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 136.476735,
+        "KgPerPezzoEffettivo": 136.476735,
+        "QuotaCosto": 1003.696347,
+        "CostoPerPezzo": 1003.696347,
+        "EuroPerKgFinito": 200.739269,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X5160X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X5160X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X5160X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 8,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 83.68,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 92.218776,
+        "KgPerPezzoEffettivo": 92.218776,
+        "QuotaCosto": 678.208255,
+        "CostoPerPezzo": 678.208255,
+        "EuroPerKgFinito": 135.641651,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5230X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5230X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5230X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 9,
+        "ProdNo": "1107901708L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 127.2,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 140.179592,
+        "KgPerPezzoEffettivo": 140.179592,
+        "QuotaCosto": 1030.928418,
+        "CostoPerPezzo": 1030.928418,
+        "EuroPerKgFinito": 206.185684,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X5300X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X5300X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X5300X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 10,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 118.32,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 133.792901,
+        "KgPerPezzoEffettivo": 133.792901,
+        "QuotaCosto": 983.958523,
+        "CostoPerPezzo": 983.958523,
+        "EuroPerKgFinito": 196.791705,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4930X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4930X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4930X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 11,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 24.48,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 27.68129,
+        "KgPerPezzoEffettivo": 27.68129,
+        "QuotaCosto": 203.577625,
+        "CostoPerPezzo": 203.577625,
+        "EuroPerKgFinito": 40.715525,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X1020X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X1020X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X1020X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 12,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 72.48,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 81.958329,
+        "KgPerPezzoEffettivo": 81.958329,
+        "QuotaCosto": 602.74944,
+        "CostoPerPezzo": 602.74944,
+        "EuroPerKgFinito": 120.549888,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X6040X10_DEL1_3020_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X6040X10_DEL1_3020_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X6040X10_DEL1_3020_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 13,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 67.44,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 76.25924,
+        "KgPerPezzoEffettivo": 76.25924,
+        "QuotaCosto": 560.836399,
+        "CostoPerPezzo": 560.836399,
+        "EuroPerKgFinito": 112.16728,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X2810X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X2810X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X2810X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 14,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 72.48,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 81.958329,
+        "KgPerPezzoEffettivo": 81.958329,
+        "QuotaCosto": 602.74944,
+        "CostoPerPezzo": 602.74944,
+        "EuroPerKgFinito": 120.549888,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X6040X10_DEL2_3020_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X6040X10_DEL2_3020_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X6040X10_DEL2_3020_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 15,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 66.96,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 75.716469,
+        "KgPerPezzoEffettivo": 75.716469,
+        "QuotaCosto": 556.844681,
+        "CostoPerPezzo": 556.844681,
+        "EuroPerKgFinito": 111.368936,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X2790X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X2790X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X2790X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 16,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 129.12,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 292.01047,
+        "KgPerPezzoEffettivo": 146.005235,
+        "QuotaCosto": 2147.544362,
+        "CostoPerPezzo": 1073.772181,
+        "EuroPerKgFinito": 214.754436,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED12_300X5380X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED12_300X5380X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED12_300X5380X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 17,
+        "ProdNo": "1107901708L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 83.68,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 94.622971,
+        "KgPerPezzoEffettivo": 94.622971,
+        "QuotaCosto": 695.88953,
+        "CostoPerPezzo": 695.88953,
+        "EuroPerKgFinito": 139.177906,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5230X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5230X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5230X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 18,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 97.92,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 106.552746,
+        "KgPerPezzoEffettivo": 106.552746,
+        "QuotaCosto": 783.625149,
+        "CostoPerPezzo": 783.625149,
+        "EuroPerKgFinito": 156.72503,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X4080X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X4080X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X4080X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 19,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 44.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 48.314358,
+        "KgPerPezzoEffettivo": 48.314358,
+        "QuotaCosto": 355.320227,
+        "CostoPerPezzo": 355.320227,
+        "EuroPerKgFinito": 71.064045,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1850X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1850X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1850X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 20,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 95.28,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 103.68,
+        "KgPerPezzoEffettivo": 103.68,
+        "QuotaCosto": 762.498,
+        "CostoPerPezzo": 762.498,
+        "EuroPerKgFinito": 152.4996,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X3970X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X3970X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X3970X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 21,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 47.28,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 51.448262,
+        "KgPerPezzoEffettivo": 51.448262,
+        "QuotaCosto": 378.368025,
+        "CostoPerPezzo": 378.368025,
+        "EuroPerKgFinito": 75.673605,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X1970X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X1970X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X1970X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 22,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 95.28,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 103.68,
+        "KgPerPezzoEffettivo": 103.68,
+        "QuotaCosto": 762.498,
+        "CostoPerPezzo": 762.498,
+        "EuroPerKgFinito": 152.4996,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X3970X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X3970X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X3970X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 23,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 47.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 51.709421,
+        "KgPerPezzoEffettivo": 51.709421,
+        "QuotaCosto": 380.288675,
+        "CostoPerPezzo": 380.288675,
+        "EuroPerKgFinito": 76.057735,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X1980X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X1980X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X1980X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 24,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 94.32,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 102.635365,
+        "KgPerPezzoEffettivo": 102.635365,
+        "QuotaCosto": 754.815401,
+        "CostoPerPezzo": 754.815401,
+        "EuroPerKgFinito": 150.96308,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X3930X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X3930X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X3930X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 25,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 47.76,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 51.970579,
+        "KgPerPezzoEffettivo": 51.970579,
+        "QuotaCosto": 382.209325,
+        "CostoPerPezzo": 382.209325,
+        "EuroPerKgFinito": 76.441865,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1990X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1990X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1990X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 26,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 93.84,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 102.113048,
+        "KgPerPezzoEffettivo": 102.113048,
+        "QuotaCosto": 750.974101,
+        "CostoPerPezzo": 750.974101,
+        "EuroPerKgFinito": 150.19482,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X3910X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X3910X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X3910X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 27,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 48,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 52.231738,
+        "KgPerPezzoEffettivo": 52.231738,
+        "QuotaCosto": 384.129975,
+        "CostoPerPezzo": 384.129975,
+        "EuroPerKgFinito": 76.825995,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X2000X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X2000X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X2000X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 28,
+        "ProdNo": "1107901708L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 89.664484,
+        "KgPerPezzoEffettivo": 89.664484,
+        "QuotaCosto": 659.423123,
+        "CostoPerPezzo": 659.423123,
+        "EuroPerKgFinito": 131.884625,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5150X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5150X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5150X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 29,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 73.6,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 163.943488,
+        "KgPerPezzoEffettivo": 81.971744,
+        "QuotaCosto": 1205.696195,
+        "CostoPerPezzo": 602.848097,
+        "EuroPerKgFinito": 120.569619,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg"
+      },
+      {
+        "LnNo": 30,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 30.48,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 33.946994,
+        "KgPerPezzoEffettivo": 33.946994,
+        "QuotaCosto": 249.657745,
+        "CostoPerPezzo": 249.657745,
+        "EuroPerKgFinito": 49.931549,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X1270X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X1270X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X1270X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 31,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 107.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 119.750026,
+        "KgPerPezzoEffettivo": 119.750026,
+        "QuotaCosto": 880.682438,
+        "CostoPerPezzo": 880.682438,
+        "EuroPerKgFinito": 176.136488,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X4480X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X4480X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X4480X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 32,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 33.12,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 36.887285,
+        "KgPerPezzoEffettivo": 36.887285,
+        "QuotaCosto": 271.281644,
+        "CostoPerPezzo": 271.281644,
+        "EuroPerKgFinito": 54.256329,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1380X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1380X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X1380X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 33,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 59.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 132.580386,
+        "KgPerPezzoEffettivo": 66.290193,
+        "QuotaCosto": 975.04127,
+        "CostoPerPezzo": 487.520635,
+        "EuroPerKgFinito": 97.504127,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL2_3720_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL2_3720_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL2_3720_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 34,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 53.76,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 59.875013,
+        "KgPerPezzoEffettivo": 59.875013,
+        "QuotaCosto": 440.341219,
+        "CostoPerPezzo": 440.341219,
+        "EuroPerKgFinito": 88.068244,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X2240X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X2240X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X2240X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 35,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 88.8,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 98.900691,
+        "KgPerPezzoEffettivo": 98.900691,
+        "QuotaCosto": 727.349335,
+        "CostoPerPezzo": 727.349335,
+        "EuroPerKgFinito": 145.469867,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X3700X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X3700X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X3700X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 36,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 53.76,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 59.875013,
+        "KgPerPezzoEffettivo": 59.875013,
+        "QuotaCosto": 440.341219,
+        "CostoPerPezzo": 440.341219,
+        "EuroPerKgFinito": 88.068244,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X2240X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X2240X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X2240X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 37,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 87.12,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 97.029597,
+        "KgPerPezzoEffettivo": 97.029597,
+        "QuotaCosto": 713.588672,
+        "CostoPerPezzo": 713.588672,
+        "EuroPerKgFinito": 142.717734,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X3630X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X3630X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X3630X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 38,
+        "ProdNo": "1107901708L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 54.96,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 61.211509,
+        "KgPerPezzoEffettivo": 61.211509,
+        "QuotaCosto": 450.170264,
+        "CostoPerPezzo": 450.170264,
+        "EuroPerKgFinito": 90.034053,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X2290X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X2290X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X2290X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 39,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 73.6,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 81.209644,
+        "KgPerPezzoEffettivo": 81.209644,
+        "QuotaCosto": 597.243359,
+        "CostoPerPezzo": 597.243359,
+        "EuroPerKgFinito": 119.448672,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg"
+      },
+      {
+        "LnNo": 40,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 66.24,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 73.08868,
+        "KgPerPezzoEffettivo": 73.08868,
+        "QuotaCosto": 537.519023,
+        "CostoPerPezzo": 537.519023,
+        "EuroPerKgFinito": 107.503805,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X2760X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X2760X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X2760X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 41,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 76.8,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 84.740499,
+        "KgPerPezzoEffettivo": 84.740499,
+        "QuotaCosto": 623.210462,
+        "CostoPerPezzo": 623.210462,
+        "EuroPerKgFinito": 124.642092,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X3200X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X3200X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X3200X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 42,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 101.04,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 111.486718,
+        "KgPerPezzoEffettivo": 111.486718,
+        "QuotaCosto": 819.911264,
+        "CostoPerPezzo": 819.911264,
+        "EuroPerKgFinito": 163.982253,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X4210X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X4210X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X4210X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 43,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 41.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 45.812832,
+        "KgPerPezzoEffettivo": 45.812832,
+        "QuotaCosto": 336.923156,
+        "CostoPerPezzo": 336.923156,
+        "EuroPerKgFinito": 67.384631,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X1730X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X1730X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X1730X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 44,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 99.6,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 219.795668,
+        "KgPerPezzoEffettivo": 109.897834,
+        "QuotaCosto": 1616.452135,
+        "CostoPerPezzo": 808.226068,
+        "EuroPerKgFinito": 161.645214,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4150X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4150X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4150X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 45,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 38.88,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 42.899877,
+        "KgPerPezzoEffettivo": 42.899877,
+        "QuotaCosto": 315.500296,
+        "CostoPerPezzo": 315.500296,
+        "EuroPerKgFinito": 63.100059,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X1620X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X1620X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED14_300X1620X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 46,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 42.96,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 47.401716,
+        "KgPerPezzoEffettivo": 47.401716,
+        "QuotaCosto": 348.608352,
+        "CostoPerPezzo": 348.608352,
+        "EuroPerKgFinito": 69.72167,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X1790X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X1790X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X1790X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 47,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 98.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 108.573764,
+        "KgPerPezzoEffettivo": 108.573764,
+        "QuotaCosto": 798.488404,
+        "CostoPerPezzo": 798.488404,
+        "EuroPerKgFinito": 159.697681,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X4100X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X4100X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X4100X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 48,
+        "ProdNo": "1107901708L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 44.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 48.990601,
+        "KgPerPezzoEffettivo": 48.990601,
+        "QuotaCosto": 360.293548,
+        "CostoPerPezzo": 360.293548,
+        "EuroPerKgFinito": 72.05871,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X1850X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X1850X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X1850X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 49,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 124.56,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 142.248916,
+        "KgPerPezzoEffettivo": 142.248916,
+        "QuotaCosto": 1046.146933,
+        "CostoPerPezzo": 1046.146933,
+        "EuroPerKgFinito": 209.229387,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X5190X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X5190X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED16_300X5190X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 50,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 94.101724,
+        "KgPerPezzoEffettivo": 94.101724,
+        "QuotaCosto": 692.056096,
+        "CostoPerPezzo": 692.056096,
+        "EuroPerKgFinito": 138.411219,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5150X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5150X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED4_200X5150X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 51,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 81.84,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 93.462197,
+        "KgPerPezzoEffettivo": 93.462197,
+        "QuotaCosto": 687.352802,
+        "CostoPerPezzo": 687.352802,
+        "EuroPerKgFinito": 137.47056,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X3410X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X3410X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X3410X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 52,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 59.76,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 68.24659,
+        "KgPerPezzoEffettivo": 68.24659,
+        "QuotaCosto": 501.908644,
+        "CostoPerPezzo": 501.908644,
+        "EuroPerKgFinito": 100.381729,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X2490X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X2490X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X2490X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 53,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.08,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 93.73628,
+        "KgPerPezzoEffettivo": 93.73628,
+        "QuotaCosto": 689.3685,
+        "CostoPerPezzo": 689.3685,
+        "EuroPerKgFinito": 137.8737,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL1_3420_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL1_3420_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL1_3420_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 54,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 60.24,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 68.794755,
+        "KgPerPezzoEffettivo": 68.794755,
+        "QuotaCosto": 505.940039,
+        "CostoPerPezzo": 505.940039,
+        "EuroPerKgFinito": 101.188008,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X2510X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X2510X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X2510X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 55,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.08,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 93.73628,
+        "KgPerPezzoEffettivo": 93.73628,
+        "QuotaCosto": 689.3685,
+        "CostoPerPezzo": 689.3685,
+        "EuroPerKgFinito": 137.8737,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL2_3420_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL2_3420_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL2_3420_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 56,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 46.56,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 53.172042,
+        "KgPerPezzoEffettivo": 53.172042,
+        "QuotaCosto": 391.045289,
+        "CostoPerPezzo": 391.045289,
+        "EuroPerKgFinito": 78.209058,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X1940X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X1940X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X1940X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 57,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.56,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 94.284445,
+        "KgPerPezzoEffettivo": 94.284445,
+        "QuotaCosto": 693.399894,
+        "CostoPerPezzo": 693.399894,
+        "EuroPerKgFinito": 138.679979,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6880X10_DEL2_3440_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6880X10_DEL2_3440_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6880X10_DEL2_3440_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 58,
+        "ProdNo": "1107901708L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 54.48,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 62.216771,
+        "KgPerPezzoEffettivo": 62.216771,
+        "QuotaCosto": 457.563302,
+        "CostoPerPezzo": 457.563302,
+        "EuroPerKgFinito": 91.51266,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X2270X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X2270X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X2270X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 59,
+        "ProdNo": "1107901708L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 121.92,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 137.260828,
+        "KgPerPezzoEffettivo": 137.260828,
+        "QuotaCosto": 1009.462347,
+        "CostoPerPezzo": 1009.462347,
+        "EuroPerKgFinito": 201.892469,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X5080X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X5080X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X5080X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 60,
+        "ProdNo": "1107901708L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 118.32,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 133.207851,
+        "KgPerPezzoEffettivo": 133.207851,
+        "QuotaCosto": 979.655388,
+        "CostoPerPezzo": 979.655388,
+        "EuroPerKgFinito": 195.931078,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4930X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4930X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED15_300X4930X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 61,
+        "ProdNo": "1107901708L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 117.84,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 132.667454,
+        "KgPerPezzoEffettivo": 132.667454,
+        "QuotaCosto": 975.681127,
+        "CostoPerPezzo": 975.681127,
+        "EuroPerKgFinito": 195.136225,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X4910X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X4910X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X4910X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 62,
+        "ProdNo": "1107901708L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 114.24,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 128.614477,
+        "KgPerPezzoEffettivo": 128.614477,
+        "QuotaCosto": 945.874168,
+        "CostoPerPezzo": 945.874168,
+        "EuroPerKgFinito": 189.174834,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X4760X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X4760X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED13_300X4760X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 63,
+        "ProdNo": "1107901708L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 107.04,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 120.508522,
+        "KgPerPezzoEffettivo": 120.508522,
+        "QuotaCosto": 886.26025,
+        "CostoPerPezzo": 886.26025,
+        "EuroPerKgFinito": 177.25205,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X4460X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X4460X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X4460X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 64,
+        "ProdNo": "1107901708L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 73.6,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 82.860867,
+        "KgPerPezzoEffettivo": 82.860867,
+        "QuotaCosto": 609.386719,
+        "CostoPerPezzo": 609.386719,
+        "EuroPerKgFinito": 121.877344,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED3_200X4600X10_ANTAL4.jpg"
+      },
+      {
+        "LnNo": 65,
+        "ProdNo": "1107901708L",
+        "Route": "08",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 105.36,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 238.138771,
+        "KgPerPezzoEffettivo": 119.069386,
+        "QuotaCosto": 4916.500341,
+        "CostoPerPezzo": 2458.250171,
+        "EuroPerKgFinito": 491.650034,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X4390X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X4390X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X4390X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 66,
+        "ProdNo": "1107901708L",
+        "Route": "08",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 101.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 114.729727,
+        "KgPerPezzoEffettivo": 114.729727,
+        "QuotaCosto": 2368.655631,
+        "CostoPerPezzo": 2368.655631,
+        "EuroPerKgFinito": 473.731126,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X4230X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X4230X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED11_300X4230X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 67,
+        "ProdNo": "1107901708L",
+        "Route": "08",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 100.08,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 113.102355,
+        "KgPerPezzoEffettivo": 113.102355,
+        "QuotaCosto": 2335.057679,
+        "CostoPerPezzo": 2335.057679,
+        "EuroPerKgFinito": 467.011536,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X4170X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X4170X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED7_300X4170X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 68,
+        "ProdNo": "1107901708L",
+        "Route": "08",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 90.72,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 102.524437,
+        "KgPerPezzoEffettivo": 102.524437,
+        "QuotaCosto": 2116.67099,
+        "CostoPerPezzo": 2116.67099,
+        "EuroPerKgFinito": 423.334198,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X3780X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X3780X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X3780X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 69,
+        "ProdNo": "1107901708L",
+        "Route": "08",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 59.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 67.26471,
+        "KgPerPezzoEffettivo": 67.26471,
+        "QuotaCosto": 1388.715358,
+        "CostoPerPezzo": 1388.715358,
+        "EuroPerKgFinito": 277.743072,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL1_3720_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL1_3720_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\008.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL1_3720_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 70,
+        "ProdNo": "1107901708L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 90,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 100.567341,
+        "KgPerPezzoEffettivo": 100.567341,
+        "QuotaCosto": 739.604711,
+        "CostoPerPezzo": 739.604711,
+        "EuroPerKgFinito": 147.920942,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X7500X10_DEL2_3750_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X7500X10_DEL2_3750_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X7500X10_DEL2_3750_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 71,
+        "ProdNo": "1107901708L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 90,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 100.567341,
+        "KgPerPezzoEffettivo": 100.567341,
+        "QuotaCosto": 739.604711,
+        "CostoPerPezzo": 739.604711,
+        "EuroPerKgFinito": 147.920942,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X7500X10_DEL1_3750_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X7500X10_DEL1_3750_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X7500X10_DEL1_3750_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 72,
+        "ProdNo": "1107901708L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 59.52,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 66.508535,
+        "KgPerPezzoEffettivo": 66.508535,
+        "QuotaCosto": 489.125249,
+        "CostoPerPezzo": 489.125249,
+        "EuroPerKgFinito": 97.82505,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL1_3720_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL1_3720_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X7440X10_DEL1_3720_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 73,
+        "ProdNo": "1107901708L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.56,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 92.253774,
+        "KgPerPezzoEffettivo": 92.253774,
+        "QuotaCosto": 678.464055,
+        "CostoPerPezzo": 678.464055,
+        "EuroPerKgFinito": 135.692811,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6880X10_DEL1_3440_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6880X10_DEL1_3440_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6880X10_DEL1_3440_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 74,
+        "ProdNo": "1107901708L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.32,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 91.985594,
+        "KgPerPezzoEffettivo": 91.985594,
+        "QuotaCosto": 676.491776,
+        "CostoPerPezzo": 676.491776,
+        "EuroPerKgFinito": 135.298355,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X3430X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X3430X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED6_300X3430X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 75,
+        "ProdNo": "1107901708L",
+        "Route": "09",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.08,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 91.717415,
+        "KgPerPezzoEffettivo": 91.717415,
+        "QuotaCosto": 674.519497,
+        "CostoPerPezzo": 674.519497,
+        "EuroPerKgFinito": 134.903899,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL2_3420_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL2_3420_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\009.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL2_3420_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 76,
+        "ProdNo": "1107901708L",
+        "Route": "10",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 86.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 98.61116,
+        "KgPerPezzoEffettivo": 98.61116,
+        "QuotaCosto": 725.218961,
+        "CostoPerPezzo": 725.218961,
+        "EuroPerKgFinito": 145.043792,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X3600X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X3600X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED9_300X3600X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 77,
+        "ProdNo": "1107901708L",
+        "Route": "10",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 82.08,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 93.680602,
+        "KgPerPezzoEffettivo": 93.680602,
+        "QuotaCosto": 688.958013,
+        "CostoPerPezzo": 688.958013,
+        "EuroPerKgFinito": 137.791603,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL1_3420_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL1_3420_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X6840X10_DEL1_3420_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 78,
+        "ProdNo": "1107901708L",
+        "Route": "10",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 79.92,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 91.215323,
+        "KgPerPezzoEffettivo": 91.215323,
+        "QuotaCosto": 670.827539,
+        "CostoPerPezzo": 670.827539,
+        "EuroPerKgFinito": 134.165508,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X3330X10_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X3330X10_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED10_300X3330X10_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 79,
+        "ProdNo": "1107901708L",
+        "Route": "10",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 77.28,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 176.404408,
+        "KgPerPezzoEffettivo": 88.202204,
+        "QuotaCosto": 1297.336141,
+        "CostoPerPezzo": 648.668071,
+        "EuroPerKgFinito": 129.733614,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED12_300X3220X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED12_300X3220X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED12_300X3220X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 80,
+        "ProdNo": "1107901708L",
+        "Route": "10",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 54.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 62.088508,
+        "KgPerPezzoEffettivo": 62.088508,
+        "QuotaCosto": 456.619346,
+        "CostoPerPezzo": 456.619346,
+        "EuroPerKgFinito": 91.323869,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X3400X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X3400X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\010.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X3400X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 81,
+        "ProdNo": "1107901708L",
+        "Route": "11",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 54.4,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 62.640269,
+        "KgPerPezzoEffettivo": 62.640269,
+        "QuotaCosto": 460.676504,
+        "CostoPerPezzo": 460.676504,
+        "EuroPerKgFinito": 92.135301,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X3400X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X3400X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED2_200X3400X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 82,
+        "ProdNo": "1107901708L",
+        "Route": "11",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 76.8,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 88.433321,
+        "KgPerPezzoEffettivo": 88.433321,
+        "QuotaCosto": 650.366829,
+        "CostoPerPezzo": 650.366829,
+        "EuroPerKgFinito": 130.073366,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X3200X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X3200X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED8_300X3200X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 83,
+        "ProdNo": "1107901708L",
+        "Route": "11",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 10,
+        "OldNWgtU_medio": 75.84,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 174.655809,
+        "KgPerPezzoEffettivo": 87.327904,
+        "QuotaCosto": 1284.474486,
+        "CostoPerPezzo": 642.237243,
+        "EuroPerKgFinito": 128.447449,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X3160X10_ANTAL2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X3160X10_ANTAL2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED17_300X3160X10_ANTAL2.jpg"
+      },
+      {
+        "LnNo": 84,
+        "ProdNo": "1107901708L",
+        "Route": "11",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 72.72,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 83.735301,
+        "KgPerPezzoEffettivo": 83.735301,
+        "QuotaCosto": 615.816091,
+        "CostoPerPezzo": 615.816091,
+        "EuroPerKgFinito": 123.163218,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6060X10_DEL2_3030_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6060X10_DEL2_3030_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6060X10_DEL2_3030_ANTAL1.jpg"
+      },
+      {
+        "LnNo": 85,
+        "ProdNo": "1107901708L",
+        "Route": "11",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 5,
+        "OldNWgtU_medio": 72.72,
+        "NWgtU_medio": 5,
+        "KgUtilizzatiEffettivi": 83.735301,
+        "KgPerPezzoEffettivo": 83.735301,
+        "QuotaCosto": 615.816091,
+        "CostoPerPezzo": 615.816091,
+        "EuroPerKgFinito": 123.163218,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6060X10_DEL1_3030_ANTAL1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6060X10_DEL1_3030_ANTAL1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399223\\011.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\BED5_300X6060X10_DEL1_3030_ANTAL1.jpg"
+      }
+    ]
+  }
+}

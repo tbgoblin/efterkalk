@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+
+# Runtime/cache/log
+cache/
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Electron builder artifacts
+*.blockmap
+latest*.yml

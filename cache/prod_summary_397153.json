@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397153",
+  "cachedAt": "2026-03-31T11:50:02.793Z",
+  "cachedAtMs": 1774957802793,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.793Z",
+  "data": {
+    "ordNo": 397153,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400253-2",
+        "Descr": "Endeplade",
+        "NoFin": 1,
+        "DPrice": 18.94,
+        "CCstPr": 18.94,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 18.94,
+        "NestingCost": null,
+        "EffectiveLineCost": 18.94
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400253-2L",
+        "Descr": "Laser Endeplade",
+        "NoFin": 1,
+        "DPrice": 18.94,
+        "CCstPr": 18.94,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 18.94,
+        "NestingCost": 18.94,
+        "EffectiveLineCost": 18.94
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400253-2",
+        "Descr": "Rute for Endeplade",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 18.94
+  }
+}

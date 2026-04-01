@@ -1,0 +1,125 @@
+{
+  "key": "laser_396936_all_1080500037-2L_1",
+  "cachedAt": "2026-03-31T13:39:59.936Z",
+  "cachedAtMs": 1774964399936,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:39:59.936Z",
+  "data": {
+    "ordine": "396936",
+    "route": null,
+    "nestingOrdNo": "396945",
+    "prodNo": "1080500037-2L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1575,
+      "CostoLastre": 9643.89,
+      "KgFiniti": 1122.577,
+      "SfridoKg": 452.423,
+      "SfridoPct": 0.287253
+    },
+    "products": [
+      {
+        "LnNo": 6,
+        "ProdNo": "1080500037-2L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 12,
+        "KgProdotto": 4.363632,
+        "OldNWgtU_medio": 0.311,
+        "NWgtU_medio": 0.363636,
+        "KgUtilizzatiEffettivi": 5.56893,
+        "KgPerPezzoEffettivo": 0.464078,
+        "QuotaCosto": 34.109264,
+        "CostoPerPezzo": 2.842439,
+        "EuroPerKgFinito": 7.816714,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg"
+      },
+      {
+        "LnNo": 15,
+        "ProdNo": "1080500037-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 36,
+        "KgProdotto": 13.090896,
+        "OldNWgtU_medio": 0.311,
+        "NWgtU_medio": 0.363636,
+        "KgUtilizzatiEffettivi": 15.21747,
+        "KgPerPezzoEffettivo": 0.422708,
+        "QuotaCosto": 93.20599,
+        "CostoPerPezzo": 2.589055,
+        "EuroPerKgFinito": 7.119909,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg"
+      },
+      {
+        "LnNo": 27,
+        "ProdNo": "1080500037-2L",
+        "Route": "04",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 1.454544,
+        "OldNWgtU_medio": 0.311,
+        "NWgtU_medio": 0.363636,
+        "KgUtilizzatiEffettivi": 1.998287,
+        "KgPerPezzoEffettivo": 0.499572,
+        "QuotaCosto": 12.220188,
+        "CostoPerPezzo": 3.055047,
+        "EuroPerKgFinito": 8.401388,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\004.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\004.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396922\\004.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\MUTEBOX\\03-00202R01.jpg"
+      }
+    ]
+  }
+}

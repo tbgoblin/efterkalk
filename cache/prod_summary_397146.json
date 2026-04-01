@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397146",
+  "cachedAt": "2026-03-31T11:50:02.760Z",
+  "cachedAtMs": 1774957802760,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.760Z",
+  "data": {
+    "ordNo": 397146,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400341-5",
+        "Descr": "Side for bøsning",
+        "NoFin": 2,
+        "DPrice": 23.52,
+        "CCstPr": 23.52,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 47.04,
+        "NestingCost": null,
+        "EffectiveLineCost": 47.04
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400341-5L",
+        "Descr": "Laser Side for bøsning",
+        "NoFin": 2,
+        "DPrice": 23.52,
+        "CCstPr": 23.52,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 47.04,
+        "NestingCost": 23.52,
+        "EffectiveLineCost": 47.04
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400341-5",
+        "Descr": "Rute for Side for bøsning",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 47.04
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "key": "laser_398349_all_1002000330L_1",
+  "cachedAt": "2026-03-31T11:34:25.754Z",
+  "cachedAtMs": 1774956865754,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T12:34:25.754Z",
+  "data": {
+    "ordine": "398349",
+    "route": null,
+    "nestingOrdNo": "398375",
+    "prodNo": "1002000330L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 4750,
+      "CostoLastre": 27797.39,
+      "KgFiniti": 4412.18,
+      "SfridoKg": 337.82,
+      "SfridoPct": 0.07112
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1002000330L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 1615,
+        "KgProdotto": 4764.25,
+        "OldNWgtU_medio": 2.732,
+        "NWgtU_medio": 2.95,
+        "KgUtilizzatiEffettivi": 4750,
+        "KgPerPezzoEffettivo": 2.941176,
+        "QuotaCosto": 27797.39,
+        "CostoPerPezzo": 17.212006,
+        "EuroPerKgFinito": 5.834578,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398343\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AMBOLTEN\\1002000556R00.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AMBOLTEN\\1002000556R00.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398343\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398343\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\AMBOLTEN\\1002000556R00.jpg"
+      }
+    ]
+  }
+}

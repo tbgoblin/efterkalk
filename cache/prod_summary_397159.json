@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397159",
+  "cachedAt": "2026-03-31T11:50:02.821Z",
+  "cachedAtMs": 1774957802821,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.821Z",
+  "data": {
+    "ordNo": 397159,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400342-4",
+        "Descr": "Uproil. venstre slæbesko",
+        "NoFin": 1,
+        "DPrice": 106.63,
+        "CCstPr": 106.63,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 106.63,
+        "NestingCost": null,
+        "EffectiveLineCost": 106.63
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400342-4L",
+        "Descr": "Laser Uproil. venstre slæbesko",
+        "NoFin": 1,
+        "DPrice": 106.63,
+        "CCstPr": 106.63,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 106.63,
+        "NestingCost": 106.63,
+        "EffectiveLineCost": 106.63
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400342-4",
+        "Descr": "Rute for Uproil. venstre slæbesko",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 106.63
+  }
+}

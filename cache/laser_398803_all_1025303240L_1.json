@@ -1,0 +1,57 @@
+{
+  "key": "laser_398803_all_1025303240L_1",
+  "cachedAt": "2026-03-31T12:49:27.659Z",
+  "cachedAtMs": 1774961367659,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T13:49:27.659Z",
+  "data": {
+    "ordine": "398803",
+    "route": null,
+    "nestingOrdNo": "398843",
+    "prodNo": "1025303240L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 19.68,
+      "CostoLastre": 334.78,
+      "KgFiniti": 12.418,
+      "SfridoKg": 7.262,
+      "SfridoPct": 0.369004
+    },
+    "products": [
+      {
+        "LnNo": 7,
+        "ProdNo": "1025303240L",
+        "Route": "05",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 11.111112,
+        "OldNWgtU_medio": 2.39,
+        "NWgtU_medio": 5.555556,
+        "KgUtilizzatiEffettivi": 6.32,
+        "KgPerPezzoEffettivo": 3.16,
+        "QuotaCosto": 107.44,
+        "CostoPerPezzo": 53.72,
+        "EuroPerKgFinito": 9.669599,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398263\\005.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RIMBØL_TEKNIK\\11760-801-32 - SHEET1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RIMBØL_TEKNIK\\11760-801-32 - SHEET1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398263\\005.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398263\\005.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RIMBØL_TEKNIK\\11760-801-32 - SHEET1.jpg"
+      }
+    ]
+  }
+}

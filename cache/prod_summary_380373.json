@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_380373",
+  "cachedAt": "2026-03-31T13:54:39.649Z",
+  "cachedAtMs": 1774965279649,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:24:39.649Z",
+  "data": {
+    "ordNo": 380373,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1005401474",
+        "Descr": "Rail for storage system. El-galv",
+        "NoFin": 143,
+        "DPrice": 107.285385,
+        "CCstPr": 107.285385,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 15341.81,
+        "NestingCost": null,
+        "EffectiveLineCost": 15341.81
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "V1005401474",
+        "Descr": "Rute for Rail for storage system. El-galv",
+        "NoFin": 143,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "U1-1005401474",
+        "Descr": "Overfladebehandling  af Rail for storage system. El-galv",
+        "NoFin": 143,
+        "DPrice": 105.3,
+        "CCstPr": 105.3,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 6,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 15057.9,
+        "NestingCost": null,
+        "EffectiveLineCost": 15057.9
+      },
+      {
+        "LnNo": 5,
+        "ProdNo": "1005401474-1",
+        "Descr": "Rail for storage system",
+        "NoFin": 1,
+        "DPrice": 283.91,
+        "CCstPr": 283.91,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 283.91,
+        "NestingCost": null,
+        "EffectiveLineCost": 283.91
+      }
+    ],
+    "totalCost": 15341.81
+  }
+}

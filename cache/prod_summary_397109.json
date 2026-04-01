@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397109",
+  "cachedAt": "2026-03-31T11:50:02.620Z",
+  "cachedAtMs": 1774957802620,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.620Z",
+  "data": {
+    "ordNo": 397109,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400293-1",
+        "Descr": "U-profil for styr. Udskud",
+        "NoFin": 1,
+        "DPrice": 27.86,
+        "CCstPr": 27.86,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 27.86,
+        "NestingCost": null,
+        "EffectiveLineCost": 27.86
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400293-1L",
+        "Descr": "Laser U-profil for styr. Udskud",
+        "NoFin": 1,
+        "DPrice": 27.86,
+        "CCstPr": 27.86,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 27.86,
+        "NestingCost": 15.28,
+        "EffectiveLineCost": 15.28
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400293-1",
+        "Descr": "Rute for U-profil for styr. Udskud",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 15.28
+  }
+}

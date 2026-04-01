@@ -1,0 +1,93 @@
+{
+  "key": "prod_summary_397123",
+  "cachedAt": "2026-03-31T11:50:02.670Z",
+  "cachedAtMs": 1774957802670,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.670Z",
+  "data": {
+    "ordNo": 397123,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400295",
+        "Descr": "Lygtebom. Grusslæb",
+        "NoFin": 1,
+        "DPrice": 320.91,
+        "CCstPr": 320.91,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 320.91,
+        "NestingCost": null,
+        "EffectiveLineCost": 320.91
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400295-1",
+        "Descr": "60x60x5",
+        "NoFin": 1,
+        "DPrice": 219.69,
+        "CCstPr": 219.69,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397124,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 219.69,
+        "NestingCost": null,
+        "EffectiveLineCost": 219.69
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400295",
+        "Descr": "Rute for Lygtebom. Grusslæb",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": null,
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 6,
+        "ProdNo": "1086400295-2",
+        "Descr": "Lygteskærm - Venstre",
+        "NoFin": 1,
+        "DPrice": 50.61,
+        "CCstPr": 50.61,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397125,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 50.61,
+        "NestingCost": null,
+        "EffectiveLineCost": 50.61
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "1086400295-3",
+        "Descr": "Lygteskærm - Højre",
+        "NoFin": 1,
+        "DPrice": 50.61,
+        "CCstPr": 50.61,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397126,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 50.61,
+        "NestingCost": null,
+        "EffectiveLineCost": 50.61
+      }
+    ],
+    "totalCost": 320.91
+  }
+}

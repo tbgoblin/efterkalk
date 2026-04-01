@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397127",
+  "cachedAt": "2026-03-31T11:50:02.685Z",
+  "cachedAtMs": 1774957802685,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.685Z",
+  "data": {
+    "ordNo": 397127,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400251-23",
+        "Descr": "Dækplade",
+        "NoFin": 4,
+        "DPrice": 1.8,
+        "CCstPr": 1.8,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 7.2,
+        "NestingCost": null,
+        "EffectiveLineCost": 7.2
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400251-23L",
+        "Descr": "Laser Dækplade",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": 0,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400251-23",
+        "Descr": "Rute for Dækplade",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 0
+  }
+}

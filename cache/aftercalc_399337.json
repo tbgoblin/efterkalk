@@ -1,0 +1,40 @@
+{
+  "key": "aftercalc_399337",
+  "cachedAt": "2026-03-31T13:35:47.214Z",
+  "cachedAtMs": 1774964147214,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:05:47.214Z",
+  "data": {
+    "orderHeader": {
+      "OrdNo": 399337,
+      "TrTp": 1,
+      "InvoSF": 380,
+      "CustomerName": "Dortheashvile ApS"
+    },
+    "salesOrderLines": [
+      {
+        "OrdNo": 399337,
+        "LnNo": 1,
+        "ProdNo": "3041270023534",
+        "Descr": "K.rør 127x4 EN10219 1+2",
+        "DPrice": 190,
+        "NoFin": 2,
+        "CCstPr": 190.916667,
+        "PurcNo": 0,
+        "LineCost": 381.83,
+        "IsDiscountLine": false,
+        "EffectiveLineCost": 381.83,
+        "ProductionOrderTotalCost": null
+      }
+    ],
+    "salesLines": [],
+    "salesLinesTotalCost": 0,
+    "productionOrders": [],
+    "summary": {
+      "totalRevenue": 380,
+      "totalCost": 381.83,
+      "margin": -1.83,
+      "marginPercentage": "99.52"
+    }
+  }
+}

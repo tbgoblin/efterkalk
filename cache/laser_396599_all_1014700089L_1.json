@@ -1,0 +1,57 @@
+{
+  "key": "laser_396599_all_1014700089L_1",
+  "cachedAt": "2026-03-31T12:41:14.916Z",
+  "cachedAtMs": 1774960874916,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T13:41:14.916Z",
+  "data": {
+    "ordine": "396599",
+    "route": null,
+    "nestingOrdNo": "396716",
+    "prodNo": "1014700089L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1725.22096,
+      "CostoLastre": 16772.66,
+      "KgFiniti": 1384.539,
+      "SfridoKg": 340.68196,
+      "SfridoPct": 0.197471
+    },
+    "products": [
+      {
+        "LnNo": 26,
+        "ProdNo": "1014700089L",
+        "Route": "06",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 0.69818,
+        "OldNWgtU_medio": 0.152,
+        "NWgtU_medio": 0.174545,
+        "KgUtilizzatiEffettivi": 0.734916,
+        "KgPerPezzoEffettivo": 0.183729,
+        "QuotaCosto": 4.61169,
+        "CostoPerPezzo": 1.152923,
+        "EuroPerKgFinito": 6.605302,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396391-393994\\006.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\FRITZ_SCHUR_TEKNIK\\1014705151.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\FRITZ_SCHUR_TEKNIK\\1014705151.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396391-393994\\006.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396391-393994\\006.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\FRITZ_SCHUR_TEKNIK\\1014705151.jpg"
+      }
+    ]
+  }
+}

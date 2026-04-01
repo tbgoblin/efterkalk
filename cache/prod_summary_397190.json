@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397190",
+  "cachedAt": "2026-03-31T11:50:02.884Z",
+  "cachedAtMs": 1774957802884,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.884Z",
+  "data": {
+    "ordNo": 397190,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400249-3",
+        "Descr": "Trekant f. slæbesko",
+        "NoFin": 4,
+        "DPrice": 0.725,
+        "CCstPr": 0.725,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 2.9,
+        "NestingCost": null,
+        "EffectiveLineCost": 2.9
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400249-3L",
+        "Descr": "Laser Trekant f. slæbesko",
+        "NoFin": 4,
+        "DPrice": 0.725,
+        "CCstPr": 0.725,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 2.9,
+        "NestingCost": 0.74,
+        "EffectiveLineCost": 2.96
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400249-3",
+        "Descr": "Rute for Trekant f. slæbesko",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 2.96
+  }
+}

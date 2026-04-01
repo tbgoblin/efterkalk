@@ -1,0 +1,91 @@
+{
+  "key": "laser_397182_all_1086400343-3L_1",
+  "cachedAt": "2026-03-31T11:50:03.745Z",
+  "cachedAtMs": 1774957803745,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T12:50:03.745Z",
+  "data": {
+    "ordine": "397182",
+    "route": null,
+    "nestingOrdNo": "397276",
+    "prodNo": "1086400343-3L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1952.1792,
+      "CostoLastre": 14793.16,
+      "KgFiniti": 1516.641,
+      "SfridoKg": 435.5382,
+      "SfridoPct": 0.223104
+    },
+    "products": [
+      {
+        "LnNo": 13,
+        "ProdNo": "1086400343-3L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 8,
+        "KgProdotto": 22.857144,
+        "OldNWgtU_medio": 2.083,
+        "NWgtU_medio": 2.857143,
+        "KgUtilizzatiEffettivi": 17.816696,
+        "KgPerPezzoEffettivo": 2.227087,
+        "QuotaCosto": 506.014118,
+        "CostoPerPezzo": 63.251765,
+        "EuroPerKgFinito": 22.138117,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\Lastvogncenter_Syd\\1086405304R00.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\Lastvogncenter_Syd\\1086405304R00.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\Lastvogncenter_Syd\\1086405304R00.jpg"
+      },
+      {
+        "LnNo": 14,
+        "ProdNo": "1086400343-3L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 9,
+        "KgProdotto": 25.714287,
+        "OldNWgtU_medio": 2.083,
+        "NWgtU_medio": 2.857143,
+        "KgUtilizzatiEffettivi": 20.043784,
+        "KgPerPezzoEffettivo": 2.227087,
+        "QuotaCosto": 569.265882,
+        "CostoPerPezzo": 63.251765,
+        "EuroPerKgFinito": 22.138117,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\Lastvogncenter_Syd\\1086405304R00.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\Lastvogncenter_Syd\\1086405304R00.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\Lastvogncenter_Syd\\1086405304R00.jpg"
+      }
+    ]
+  }
+}

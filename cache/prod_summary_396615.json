@@ -1,0 +1,93 @@
+{
+  "key": "prod_summary_396615",
+  "cachedAt": "2026-03-31T12:41:14.788Z",
+  "cachedAtMs": 1774960874788,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T13:11:14.788Z",
+  "data": {
+    "ordNo": 396615,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1014700110",
+        "Descr": "Låge 1 svejst",
+        "NoFin": 2,
+        "DPrice": 165.13,
+        "CCstPr": 165.13,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 330.26,
+        "NestingCost": null,
+        "EffectiveLineCost": 330.26
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "V1014700110",
+        "Descr": "Rute for Låge 1 svejst",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 5,
+        "ProdNo": "1014700110-1",
+        "Descr": "Plade f/låge",
+        "NoFin": 2,
+        "DPrice": 126.1,
+        "CCstPr": 126.1,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 396616,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 252.2,
+        "NestingCost": null,
+        "EffectiveLineCost": 252.2
+      },
+      {
+        "LnNo": 6,
+        "ProdNo": "1014700110-2",
+        "Descr": "Skinne f/låge",
+        "NoFin": 2,
+        "DPrice": 17.35,
+        "CCstPr": 17.35,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 396617,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 34.7,
+        "NestingCost": null,
+        "EffectiveLineCost": 34.7
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "1014700111",
+        "Descr": "Ramme f/låge",
+        "NoFin": 2,
+        "DPrice": 21.68,
+        "CCstPr": 21.68,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 396618,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 43.36,
+        "NestingCost": null,
+        "EffectiveLineCost": 43.36
+      }
+    ],
+    "totalCost": 330.26
+  }
+}

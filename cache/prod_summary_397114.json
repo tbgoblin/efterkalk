@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397114",
+  "cachedAt": "2026-03-31T11:50:02.631Z",
+  "cachedAtMs": 1774957802631,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.631Z",
+  "data": {
+    "ordNo": 397114,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400251-16",
+        "Descr": "Bøsning",
+        "NoFin": 1,
+        "DPrice": 98.45,
+        "CCstPr": 98.45,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 98.45,
+        "NestingCost": null,
+        "EffectiveLineCost": 98.45
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3040501035539",
+        "Descr": "Sømløs Varmf. Emnerør EN10294-1 S355  ø50x30",
+        "NoFin": 0.2,
+        "DPrice": 492.236365,
+        "CCstPr": 492.236365,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 98.45,
+        "NestingCost": null,
+        "EffectiveLineCost": 98.45
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400251-16",
+        "Descr": "Rute for Bøsning",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 98.45
+  }
+}

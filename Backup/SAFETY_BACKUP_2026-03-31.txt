@@ -1,0 +1,10 @@
+Safety backup marker created: 2026-03-31
+Project: Gantech Efterkalkulation
+
+State captured:
+- server.js updated with cache diagnostics and 10-minute scheduled refresh
+- disk cache + memory cache clear behavior aligned
+
+Notes:
+- Use this marker to identify the working state after these changes.
+- Existing backup files remain in Backup/.

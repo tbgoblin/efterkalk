@@ -1,0 +1,669 @@
+{
+  "key": "laser_398928_all_1107901691L_1",
+  "cachedAt": "2026-03-31T11:33:56.715Z",
+  "cachedAtMs": 1774956836715,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T12:33:56.715Z",
+  "data": {
+    "ordine": "398928",
+    "route": null,
+    "nestingOrdNo": "398933",
+    "prodNo": "1107901691L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 75,
+      "CostoLastre": 622.05,
+      "KgFiniti": 39.652,
+      "SfridoKg": 35.348,
+      "SfridoPct": 0.471307
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.162,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.395743,
+        "KgPerPezzoEffettivo": 2.197871,
+        "QuotaCosto": 36.458292,
+        "CostoPerPezzo": 18.229146,
+        "EuroPerKgFinito": 10.633667,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_10.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_10.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_10.jpg"
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.162,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.395743,
+        "KgPerPezzoEffettivo": 2.197871,
+        "QuotaCosto": 36.458292,
+        "CostoPerPezzo": 18.229146,
+        "EuroPerKgFinito": 10.633667,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_11.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_11.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_11.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 0.743,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 2.810703,
+        "KgPerPezzoEffettivo": 1.405352,
+        "QuotaCosto": 23.311972,
+        "CostoPerPezzo": 11.655986,
+        "EuroPerKgFinito": 6.799324,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_16.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_16.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_16.jpg"
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 0.701,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 2.651821,
+        "KgPerPezzoEffettivo": 1.32591,
+        "QuotaCosto": 21.994202,
+        "CostoPerPezzo": 10.997101,
+        "EuroPerKgFinito": 6.414975,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_18.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_18.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_18.jpg"
+      },
+      {
+        "LnNo": 5,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.285,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.861041,
+        "KgPerPezzoEffettivo": 2.430521,
+        "QuotaCosto": 40.317475,
+        "CostoPerPezzo": 20.158737,
+        "EuroPerKgFinito": 11.759261,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_4.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_4.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_4.jpg"
+      },
+      {
+        "LnNo": 6,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 0.743,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 2.810703,
+        "KgPerPezzoEffettivo": 1.405352,
+        "QuotaCosto": 23.311972,
+        "CostoPerPezzo": 11.655986,
+        "EuroPerKgFinito": 6.799324,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_15.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_15.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_15.jpg"
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.303,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.929133,
+        "KgPerPezzoEffettivo": 2.464567,
+        "QuotaCosto": 40.882233,
+        "CostoPerPezzo": 20.441116,
+        "EuroPerKgFinito": 11.923983,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_3.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_3.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_3.jpg"
+      },
+      {
+        "LnNo": 8,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 0.743,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 2.810703,
+        "KgPerPezzoEffettivo": 1.405352,
+        "QuotaCosto": 23.311972,
+        "CostoPerPezzo": 11.655986,
+        "EuroPerKgFinito": 6.799324,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_17.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_17.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_17.jpg"
+      },
+      {
+        "LnNo": 9,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 0.496,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 1.876324,
+        "KgPerPezzoEffettivo": 0.938162,
+        "QuotaCosto": 15.562231,
+        "CostoPerPezzo": 7.781116,
+        "EuroPerKgFinito": 4.538983,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_19.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_19.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_19.jpg"
+      },
+      {
+        "LnNo": 10,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.157,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.376828,
+        "KgPerPezzoEffettivo": 2.188414,
+        "QuotaCosto": 36.301415,
+        "CostoPerPezzo": 18.150707,
+        "EuroPerKgFinito": 10.587911,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_12.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_12.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_12.jpg"
+      },
+      {
+        "LnNo": 11,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 0.872,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 3.298699,
+        "KgPerPezzoEffettivo": 1.649349,
+        "QuotaCosto": 27.359407,
+        "CostoPerPezzo": 13.679703,
+        "EuroPerKgFinito": 7.979826,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_14.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_14.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_14.jpg"
+      },
+      {
+        "LnNo": 12,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.238,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.683244,
+        "KgPerPezzoEffettivo": 2.341622,
+        "QuotaCosto": 38.842828,
+        "CostoPerPezzo": 19.421414,
+        "EuroPerKgFinito": 11.329156,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_2.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_2.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_2.jpg"
+      },
+      {
+        "LnNo": 13,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.26,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.766468,
+        "KgPerPezzoEffettivo": 2.383234,
+        "QuotaCosto": 39.533088,
+        "CostoPerPezzo": 19.766544,
+        "EuroPerKgFinito": 11.530482,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_5.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_5.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_5.jpg"
+      },
+      {
+        "LnNo": 14,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.102,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.168768,
+        "KgPerPezzoEffettivo": 2.084384,
+        "QuotaCosto": 34.575764,
+        "CostoPerPezzo": 17.287882,
+        "EuroPerKgFinito": 10.084596,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_9.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_9.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_9.jpg"
+      },
+      {
+        "LnNo": 15,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.102,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.168768,
+        "KgPerPezzoEffettivo": 2.084384,
+        "QuotaCosto": 34.575764,
+        "CostoPerPezzo": 17.287882,
+        "EuroPerKgFinito": 10.084596,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_8.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_8.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_8.jpg"
+      },
+      {
+        "LnNo": 16,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.26,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.766468,
+        "KgPerPezzoEffettivo": 2.383234,
+        "QuotaCosto": 39.533088,
+        "CostoPerPezzo": 19.766544,
+        "EuroPerKgFinito": 11.530482,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_6.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_6.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_6.jpg"
+      },
+      {
+        "LnNo": 17,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.155,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.369263,
+        "KgPerPezzoEffettivo": 2.184631,
+        "QuotaCosto": 36.238664,
+        "CostoPerPezzo": 18.119332,
+        "EuroPerKgFinito": 10.569609,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_13.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_13.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_13.jpg"
+      },
+      {
+        "LnNo": 18,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.102,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.168768,
+        "KgPerPezzoEffettivo": 2.084384,
+        "QuotaCosto": 34.575764,
+        "CostoPerPezzo": 17.287882,
+        "EuroPerKgFinito": 10.084596,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_7.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_7.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_7.jpg"
+      },
+      {
+        "LnNo": 19,
+        "ProdNo": "1107901691L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 3.428572,
+        "OldNWgtU_medio": 1.24,
+        "NWgtU_medio": 1.714286,
+        "KgUtilizzatiEffettivi": 4.69081,
+        "KgPerPezzoEffettivo": 2.345405,
+        "QuotaCosto": 38.905579,
+        "CostoPerPezzo": 19.452789,
+        "EuroPerKgFinito": 11.347459,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398731\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\2 SÆT LØSE BOGSTAVER - 3 MM CORTEN STÅL_1.jpg"
+      }
+    ]
+  }
+}

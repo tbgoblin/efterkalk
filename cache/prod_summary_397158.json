@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397158",
+  "cachedAt": "2026-03-31T11:50:02.820Z",
+  "cachedAtMs": 1774957802820,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.820Z",
+  "data": {
+    "ordNo": 397158,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400253-8",
+        "Descr": "Lakse for aktuator",
+        "NoFin": 4,
+        "DPrice": 2.53,
+        "CCstPr": 2.53,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 10.12,
+        "NestingCost": null,
+        "EffectiveLineCost": 10.12
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400253-8L",
+        "Descr": "Laser Lakse for aktuator",
+        "NoFin": 4,
+        "DPrice": 2.53,
+        "CCstPr": 2.53,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 10.12,
+        "NestingCost": 2.53,
+        "EffectiveLineCost": 10.12
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400253-8",
+        "Descr": "Rute for Lakse for aktuator",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 10.12
+  }
+}

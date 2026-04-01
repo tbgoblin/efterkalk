@@ -1,0 +1,91 @@
+{
+  "key": "laser_399366_all_1038400455L_1",
+  "cachedAt": "2026-03-31T13:44:04.307Z",
+  "cachedAtMs": 1774964644307,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:44:04.307Z",
+  "data": {
+    "ordine": "399366",
+    "route": null,
+    "nestingOrdNo": "399799",
+    "prodNo": "1038400455L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 80.05,
+      "CostoLastre": 1555.58,
+      "KgFiniti": 53.4,
+      "SfridoKg": 26.65,
+      "SfridoPct": 0.332917
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1038400455L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 420,
+        "KgProdotto": 44.47044,
+        "OldNWgtU_medio": 0.077,
+        "NWgtU_medio": 0.105882,
+        "KgUtilizzatiEffettivi": 46.385542,
+        "KgPerPezzoEffettivo": 0.110442,
+        "QuotaCosto": 899.925904,
+        "CostoPerPezzo": 2.142681,
+        "EuroPerKgFinito": 20.236497,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399365\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CALJAN_RITE-HITE\\0113117.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CALJAN_RITE-HITE\\0113117.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399365\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399365\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CALJAN_RITE-HITE\\0113117.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1038400455L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 180,
+        "KgProdotto": 19.05876,
+        "OldNWgtU_medio": 0.077,
+        "NWgtU_medio": 0.105882,
+        "KgUtilizzatiEffettivi": 21.09589,
+        "KgPerPezzoEffettivo": 0.117199,
+        "QuotaCosto": 409.285589,
+        "CostoPerPezzo": 2.273809,
+        "EuroPerKgFinito": 21.474933,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399365\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CALJAN_RITE-HITE\\0113117.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CALJAN_RITE-HITE\\0113117.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399365\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399365\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\CALJAN_RITE-HITE\\0113117.jpg"
+      }
+    ]
+  }
+}

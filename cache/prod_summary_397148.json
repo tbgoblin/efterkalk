@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397148",
+  "cachedAt": "2026-03-31T11:50:02.794Z",
+  "cachedAtMs": 1774957802794,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.794Z",
+  "data": {
+    "ordNo": 397148,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400341-4",
+        "Descr": "Trekant f. underbom",
+        "NoFin": 2,
+        "DPrice": 9.505,
+        "CCstPr": 9.505,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 19.01,
+        "NestingCost": null,
+        "EffectiveLineCost": 19.01
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400341-4L",
+        "Descr": "Laser Trekant f. underbom",
+        "NoFin": 2,
+        "DPrice": 9.505,
+        "CCstPr": 9.505,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 19.01,
+        "NestingCost": 9.505,
+        "EffectiveLineCost": 19.01
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400341-4",
+        "Descr": "Rute for Trekant f. underbom",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 19.01
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399431",
+  "cachedAt": "2026-03-31T11:42:18.837Z",
+  "cachedAtMs": 1774957338837,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:12:18.837Z",
+  "data": {
+    "ordNo": 399431,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1000905403-4",
+        "Descr": "5mm",
+        "NoFin": 1,
+        "DPrice": 159.2,
+        "CCstPr": 159.2,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 159.2,
+        "NestingCost": null,
+        "EffectiveLineCost": 159.2
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1000905403-4L",
+        "Descr": "Laser 5mm",
+        "NoFin": 6,
+        "DPrice": 26.533333,
+        "CCstPr": 26.533333,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 159.2,
+        "NestingCost": 26.533333,
+        "EffectiveLineCost": 159.2
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "V1000905403-4",
+        "Descr": "Rute for 5mm",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 159.2
+  }
+}

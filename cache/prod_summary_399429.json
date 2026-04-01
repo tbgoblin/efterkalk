@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399429",
+  "cachedAt": "2026-03-31T11:42:18.833Z",
+  "cachedAtMs": 1774957338833,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:12:18.833Z",
+  "data": {
+    "ordNo": 399429,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1000905403-2",
+        "Descr": "2mm",
+        "NoFin": 1,
+        "DPrice": 292.6,
+        "CCstPr": 292.6,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 292.6,
+        "NestingCost": null,
+        "EffectiveLineCost": 292.6
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1000905403-2L",
+        "Descr": "Laser 2mm",
+        "NoFin": 20,
+        "DPrice": 14.63,
+        "CCstPr": 14.63,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 292.6,
+        "NestingCost": 14.63,
+        "EffectiveLineCost": 292.6
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1000905403-2",
+        "Descr": "Rute for 2mm",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 292.6
+  }
+}

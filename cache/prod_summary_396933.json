@@ -1,0 +1,93 @@
+{
+  "key": "prod_summary_396933",
+  "cachedAt": "2026-03-31T13:39:59.684Z",
+  "cachedAtMs": 1774964399684,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.684Z",
+  "data": {
+    "ordNo": 396933,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-10",
+        "Descr": "Floor mid beam",
+        "NoFin": 25,
+        "DPrice": 51.4908,
+        "CCstPr": 51.4908,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1287.27,
+        "NestingCost": null,
+        "EffectiveLineCost": 1287.27
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-10L",
+        "Descr": "¤ N2 PEM-tol Ø 5.45 Ø 8.8 Ø 10.54   - Floor mid beam",
+        "NoFin": 25,
+        "DPrice": 47.908,
+        "CCstPr": 47.908,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1197.7,
+        "NestingCost": 48.2036,
+        "EffectiveLineCost": 1205.09
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-10",
+        "Descr": "Rute for Floor mid beam",
+        "NoFin": 25,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 9,
+        "ProdNo": "4420400011002",
+        "Descr": "Presmøtrik M4-2 Zink (pl.min. 1,4mm)",
+        "NoFin": 100,
+        "DPrice": 0.418913,
+        "CCstPr": 0.418913,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 41.89,
+        "NestingCost": null,
+        "EffectiveLineCost": 41.89
+      },
+      {
+        "LnNo": 10,
+        "ProdNo": "4420600011002",
+        "Descr": "Presmøtrik M6-2 Zink (pl.min. 2,3mm)",
+        "NoFin": 50,
+        "DPrice": 0.953694,
+        "CCstPr": 0.953694,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 47.68,
+        "NestingCost": null,
+        "EffectiveLineCost": 47.68
+      }
+    ],
+    "totalCost": 1294.66
+  }
+}

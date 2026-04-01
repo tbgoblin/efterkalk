@@ -1,0 +1,91 @@
+{
+  "key": "laser_396903_0_1005401343L_1",
+  "cachedAt": "2026-03-31T12:43:16.684Z",
+  "cachedAtMs": 1774960996684,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T13:43:16.684Z",
+  "data": {
+    "ordine": "396903",
+    "route": null,
+    "nestingOrdNo": "396946",
+    "prodNo": "1005401343L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 166.86,
+      "CostoLastre": 1187.8,
+      "KgFiniti": 117.148,
+      "SfridoKg": 49.712,
+      "SfridoPct": 0.297926
+    },
+    "products": [
+      {
+        "LnNo": 2,
+        "ProdNo": "1005401343L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 174,
+        "KgProdotto": 57.42,
+        "OldNWgtU_medio": 0.174,
+        "NWgtU_medio": 0.33,
+        "KgUtilizzatiEffettivi": 43.19087,
+        "KgPerPezzoEffettivo": 0.248223,
+        "QuotaCosto": 310.010467,
+        "CostoPerPezzo": 1.781669,
+        "EuroPerKgFinito": 5.398998,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396901\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396901\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396901\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1005401343L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 228,
+        "KgProdotto": 75.24,
+        "OldNWgtU_medio": 0.174,
+        "NWgtU_medio": 0.33,
+        "KgUtilizzatiEffettivi": 56.346072,
+        "KgPerPezzoEffettivo": 0.247132,
+        "QuotaCosto": 394.987306,
+        "CostoPerPezzo": 1.7324,
+        "EuroPerKgFinito": 5.249698,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396901\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396901\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396901\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg"
+      }
+    ]
+  }
+}

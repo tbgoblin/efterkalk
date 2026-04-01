@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399608",
+  "cachedAt": "2026-03-31T10:49:18.915Z",
+  "cachedAtMs": 1774954158915,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T11:19:18.915Z",
+  "data": {
+    "ordNo": 399608,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1108100734-1",
+        "Descr": "6067.08.01 pl15-1",
+        "NoFin": 2,
+        "DPrice": 88.54,
+        "CCstPr": 88.54,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 177.08,
+        "NestingCost": null,
+        "EffectiveLineCost": 177.08
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1108100734-1L",
+        "Descr": "Laser 6067.08.01 pl15-1",
+        "NoFin": 2,
+        "DPrice": 88.54,
+        "CCstPr": 88.54,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 177.08,
+        "NestingCost": 88.54,
+        "EffectiveLineCost": 177.08
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1108100734-1",
+        "Descr": "Rute for 6067.08.01 pl15-1",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 177.08
+  }
+}

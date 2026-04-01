@@ -1,0 +1,45 @@
+{
+  "key": "prod_summary_397171",
+  "cachedAt": "2026-03-31T11:50:02.852Z",
+  "cachedAtMs": 1774957802852,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.852Z",
+  "data": {
+    "ordNo": 397171,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400343-1",
+        "Descr": "Indv. Teleskoprør",
+        "NoFin": 1,
+        "DPrice": 432,
+        "CCstPr": 432,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 432,
+        "NestingCost": null,
+        "EffectiveLineCost": 432
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "V1086400343-1",
+        "Descr": "Rute for Indv. Teleskoprør",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 0
+  }
+}

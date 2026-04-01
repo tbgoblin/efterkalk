@@ -1,0 +1,227 @@
+{
+  "key": "laser_399429_all_1000905403-2L_1",
+  "cachedAt": "2026-03-31T11:42:18.955Z",
+  "cachedAtMs": 1774957338955,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T12:42:18.955Z",
+  "data": {
+    "ordine": "399429",
+    "route": null,
+    "nestingOrdNo": "399485",
+    "prodNo": "1000905403-2L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 242.2768,
+      "CostoLastre": 1489.68,
+      "KgFiniti": 185.385,
+      "SfridoKg": 56.8918,
+      "SfridoPct": 0.234821
+    },
+    "products": [
+      {
+        "LnNo": 3,
+        "ProdNo": "1000905403-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 16,
+        "OldNWgtU_medio": 0.479,
+        "NWgtU_medio": 4,
+        "KgUtilizzatiEffettivi": 2.309209,
+        "KgPerPezzoEffettivo": 0.577302,
+        "QuotaCosto": 13.513519,
+        "CostoPerPezzo": 3.37838,
+        "EuroPerKgFinito": 0.844595,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-067-D.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-067-D.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-067-D.jpg"
+      },
+      {
+        "LnNo": 4,
+        "ProdNo": "1000905403-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 8,
+        "OldNWgtU_medio": 4.152,
+        "NWgtU_medio": 4,
+        "KgUtilizzatiEffettivi": 10.008179,
+        "KgPerPezzoEffettivo": 5.00409,
+        "QuotaCosto": 58.567988,
+        "CostoPerPezzo": 29.283994,
+        "EuroPerKgFinito": 7.320999,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_628-081.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_628-081.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_628-081.jpg"
+      },
+      {
+        "LnNo": 5,
+        "ProdNo": "1000905403-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 16,
+        "OldNWgtU_medio": 1.764,
+        "NWgtU_medio": 4,
+        "KgUtilizzatiEffettivi": 8.50406,
+        "KgPerPezzoEffettivo": 2.126015,
+        "QuotaCosto": 49.765863,
+        "CostoPerPezzo": 12.441466,
+        "EuroPerKgFinito": 3.110366,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-067-B.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-067-B.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-067-B.jpg"
+      },
+      {
+        "LnNo": 6,
+        "ProdNo": "1000905403-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 16,
+        "OldNWgtU_medio": 0.298,
+        "NWgtU_medio": 4,
+        "KgUtilizzatiEffettivi": 1.436627,
+        "KgPerPezzoEffettivo": 0.359157,
+        "QuotaCosto": 8.407158,
+        "CostoPerPezzo": 2.10179,
+        "EuroPerKgFinito": 0.525447,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-070-A.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-070-A.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-070-A.jpg"
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "1000905403-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 4,
+        "KgProdotto": 16,
+        "OldNWgtU_medio": 0.38,
+        "NWgtU_medio": 4,
+        "KgUtilizzatiEffettivi": 1.83194,
+        "KgPerPezzoEffettivo": 0.457985,
+        "QuotaCosto": 10.720537,
+        "CostoPerPezzo": 2.680134,
+        "EuroPerKgFinito": 0.670034,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-070-B.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-070-B.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\BUK_616-070-B.jpg"
+      },
+      {
+        "LnNo": 8,
+        "ProdNo": "1000905403-2L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 2,
+        "KgProdotto": 8,
+        "OldNWgtU_medio": 3.406,
+        "NWgtU_medio": 4,
+        "KgUtilizzatiEffettivi": 8.209985,
+        "KgPerPezzoEffettivo": 4.104993,
+        "QuotaCosto": 48.044934,
+        "CostoPerPezzo": 24.022467,
+        "EuroPerKgFinito": 6.005617,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\628-077.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\628-077.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399424\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\RILESA\\628-077.jpg"
+      }
+    ]
+  }
+}

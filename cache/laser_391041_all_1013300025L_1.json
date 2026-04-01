@@ -1,0 +1,91 @@
+{
+  "key": "laser_391041_all_1013300025L_1",
+  "cachedAt": "2026-03-31T11:18:41.653Z",
+  "cachedAtMs": 1774955921653,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T12:18:41.653Z",
+  "data": {
+    "ordine": "391041",
+    "route": null,
+    "nestingOrdNo": "391638",
+    "prodNo": "1013300025L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 2450.496,
+      "CostoLastre": 14212.88,
+      "KgFiniti": 1667.6,
+      "SfridoKg": 782.896,
+      "SfridoPct": 0.319485
+    },
+    "products": [
+      {
+        "LnNo": 2,
+        "ProdNo": "1013300025L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 210,
+        "KgProdotto": 916.36356,
+        "OldNWgtU_medio": 2.145,
+        "NWgtU_medio": 4.363636,
+        "KgUtilizzatiEffettivi": 735.174344,
+        "KgPerPezzoEffettivo": 3.50083,
+        "QuotaCosto": 4264.011198,
+        "CostoPerPezzo": 20.304815,
+        "EuroPerKgFinito": 4.653187,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\391039\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\DANBOX\\FA-00021S01V00_GANR01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\DANBOX\\FA-00021S01V00_GANR01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\391039\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\391039\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\DANBOX\\FA-00021S01V00_GANR01.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1013300025L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 40,
+        "KgProdotto": 174.54544,
+        "OldNWgtU_medio": 2.145,
+        "NWgtU_medio": 4.363636,
+        "KgUtilizzatiEffettivi": 145.956743,
+        "KgPerPezzoEffettivo": 3.648919,
+        "QuotaCosto": 846.552295,
+        "CostoPerPezzo": 21.163807,
+        "EuroPerKgFinito": 4.85004,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\391039\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\DANBOX\\FA-00021S01V00_GANR01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\DANBOX\\FA-00021S01V00_GANR01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\391039\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\391039\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\DANBOX\\FA-00021S01V00_GANR01.jpg"
+      }
+    ]
+  }
+}

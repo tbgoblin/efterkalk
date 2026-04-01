@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396939",
+  "cachedAt": "2026-03-31T13:39:59.706Z",
+  "cachedAtMs": 1774964399706,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.706Z",
+  "data": {
+    "ordNo": 396939,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500022-5",
+        "Descr": "Bracket for lev feet and wheel front",
+        "NoFin": 50,
+        "DPrice": 6.2836,
+        "CCstPr": 6.2836,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 314.18,
+        "NestingCost": null,
+        "EffectiveLineCost": 314.18
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500022-5L",
+        "Descr": "Bracket for lev feet and wheel front",
+        "NoFin": 50,
+        "DPrice": 6.2836,
+        "CCstPr": 6.2836,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 314.18,
+        "NestingCost": 6.005882,
+        "EffectiveLineCost": 300.29
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500022-5",
+        "Descr": "Rute for Hjul beslag front",
+        "NoFin": 50,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 300.29
+  }
+}

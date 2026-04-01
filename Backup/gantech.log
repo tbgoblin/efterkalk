@@ -1,0 +1,849 @@
+[2026-03-18T12:27:27.514Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T12:27:27.522Z] Server started - Ready to accept requests
+[2026-03-18T12:27:32.028Z] SEARCH: OrdNo=395717
+[2026-03-18T12:27:32.528Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:27:34.869Z] SEARCH: OrdNo=395717
+[2026-03-18T12:27:35.250Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:27:51.630Z] SEARCH: OrdNo=395717
+[2026-03-18T12:27:52.026Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:28:02.738Z] SEARCH: OrdNo=395717
+[2026-03-18T12:28:03.134Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:28:07.892Z] SEARCH: OrdNo=395717
+[2026-03-18T12:28:08.456Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:28:13.823Z] SEARCH: OrdNo=395717
+[2026-03-18T12:28:14.234Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:28:22.220Z] SEARCH: OrdNo=395717
+[2026-03-18T12:28:22.629Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:28:23.532Z] SEARCH: OrdNo=395717
+[2026-03-18T12:28:23.953Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:28:57.141Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T12:28:57.150Z] Server started - Ready to accept requests
+[2026-03-18T12:28:57.311Z] SEARCH: OrdNo=395717
+[2026-03-18T12:28:57.883Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:29:03.516Z] SEARCH: OrdNo=395717
+[2026-03-18T12:29:03.945Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:29:38.357Z] SEARCH: OrdNo=395717
+[2026-03-18T12:29:38.741Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:30:04.192Z] SEARCH: OrdNo=395717
+[2026-03-18T12:30:04.663Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:30:11.614Z] SEARCH: OrdNo=395717
+[2026-03-18T12:30:11.996Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T12:30:24.934Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T12:30:24.943Z] Server started - Ready to accept requests
+[2026-03-18T12:30:35.409Z] SEARCH: OrdNo=395717
+[2026-03-18T12:30:35.886Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T13:45:36.488Z] SEARCH: OrdNo=395717
+[2026-03-18T13:45:36.910Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T13:45:44.316Z] SEARCH: OrdNo=399717
+[2026-03-18T13:45:46.673Z]   -> Found: Revenue=0, Margin=0%
+[2026-03-18T13:46:01.409Z] SEARCH: OrdNo=395717
+[2026-03-18T13:46:01.752Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T13:46:31.518Z] SEARCH: OrdNo=399028
+[2026-03-18T13:46:31.584Z]   -> Found: Revenue=6435.94, Margin=31.14%
+[2026-03-18T13:47:04.424Z] SEARCH: OrdNo=398267
+[2026-03-18T13:47:04.639Z]   -> Found: Revenue=4040, Margin=67.56%
+[2026-03-18T13:47:19.922Z] SEARCH: OrdNo=398267
+[2026-03-18T13:47:20.137Z]   -> Found: Revenue=4040, Margin=67.56%
+[2026-03-18T13:47:25.631Z] SEARCH: OrdNo=398351
+[2026-03-18T13:47:26.060Z]   -> Found: Revenue=8567, Margin=54.72%
+[2026-03-18T13:55:22.567Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T13:55:22.575Z] Server started - Ready to accept requests
+[2026-03-18T13:55:40.897Z] SEARCH: OrdNo=398351
+[2026-03-18T13:55:41.335Z]   -> Found: Revenue=8567, Margin=54.72%
+[2026-03-18T13:56:24.113Z] SEARCH: OrdNo=399028
+[2026-03-18T13:56:24.179Z]   -> Found: Revenue=6435.94, Margin=31.14%
+[2026-03-18T13:57:07.881Z] SEARCH: OrdNo=398351
+[2026-03-18T13:57:08.195Z]   -> Found: Revenue=8567, Margin=54.72%
+[2026-03-18T13:58:40.853Z] SEARCH: OrdNo=395717
+[2026-03-18T13:58:41.363Z]   -> Found: Revenue=16959.4, Margin=60.94%
+[2026-03-18T14:09:12.639Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T14:09:12.648Z] Server started - Ready to accept requests
+[2026-03-18T14:53:36.342Z] SEARCH: OrdNo=398351
+[2026-03-18T14:53:36.883Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T14:59:20.737Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T14:59:20.747Z] Server started - Ready to accept requests
+[2026-03-18T15:00:26.664Z] SEARCH: OrdNo=398351
+[2026-03-18T15:00:27.059Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:00:47.937Z] SEARCH: OrdNo=398351
+[2026-03-18T15:00:48.262Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:00:49.986Z] SEARCH: OrdNo=398351
+[2026-03-18T15:00:50.326Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:00:51.290Z] SEARCH: OrdNo=398351
+[2026-03-18T15:00:51.620Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:00:52.008Z] SEARCH: OrdNo=398351
+[2026-03-18T15:00:52.371Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:07:09.437Z] SEARCH: OrdNo=398351
+[2026-03-18T15:07:09.784Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:07:10.781Z] SEARCH: OrdNo=398351
+[2026-03-18T15:07:11.129Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:07:16.289Z] SEARCH: OrdNo=398351
+[2026-03-18T15:07:16.573Z]   -> Found: Revenue=8567, Margin=220.83%
+[2026-03-18T15:14:15.239Z] SEARCH: OrdNo=371141
+[2026-03-18T15:14:15.528Z]   -> Found: Revenue=24283.2, Margin=145.60%
+[2026-03-18T15:14:20.398Z] SEARCH: OrdNo=371141
+[2026-03-18T15:14:20.658Z]   -> Found: Revenue=24283.2, Margin=145.60%
+[2026-03-18T15:14:37.276Z] SEARCH: OrdNo=371141
+[2026-03-18T15:14:37.493Z]   -> Found: Revenue=24283.2, Margin=145.60%
+[2026-03-18T15:14:44.976Z] SEARCH: OrdNo=371141
+[2026-03-18T15:14:45.199Z]   -> Found: Revenue=24283.2, Margin=145.60%
+[2026-03-18T15:18:41.648Z] SEARCH: OrdNo=399916
+[2026-03-18T15:18:41.819Z]   -> Found: Revenue=1204, Margin=175.78%
+[2026-03-18T15:26:32.865Z] SEARCH: OrdNo=399255
+[2026-03-18T15:26:33.258Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T15:51:20.615Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T15:51:20.623Z] Server started - Ready to accept requests
+[2026-03-18T15:51:21.091Z] SEARCH: OrdNo=399433
+[2026-03-18T15:51:21.340Z] ERROR: Error converting data type varchar to numeric.
+[2026-03-18T15:51:22.966Z] SEARCH: OrdNo=399433
+[2026-03-18T15:51:23.131Z] ERROR: Error converting data type varchar to numeric.
+[2026-03-18T15:52:39.683Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T15:52:39.694Z] Server started - Ready to accept requests
+[2026-03-18T15:53:31.744Z] SEARCH: OrdNo=399433
+[2026-03-18T15:53:46.986Z] ERROR: Query timeout expired
+[2026-03-18T15:53:56.641Z] SEARCH: OrdNo=399433
+[2026-03-18T15:54:11.869Z] ERROR: Query timeout expired
+[2026-03-18T15:54:39.077Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T15:54:39.085Z] Server started - Ready to accept requests
+[2026-03-18T15:54:51.507Z] SEARCH: OrdNo=399433
+[2026-03-18T15:54:53.214Z]   -> Found: Revenue=0, Margin=0.00%
+[2026-03-18T15:55:26.918Z] SEARCH: OrdNo=399433
+[2026-03-18T15:55:28.411Z]   -> Found: Revenue=0, Margin=0.00%
+[2026-03-18T15:56:06.599Z] SEARCH: OrdNo=397545
+[2026-03-18T15:56:06.742Z]   -> Found: Revenue=530, Margin=369.85%
+[2026-03-18T15:57:02.596Z] SEARCH: OrdNo=398776
+[2026-03-18T15:57:02.732Z]   -> Found: Revenue=8168, Margin=137.97%
+[2026-03-18T16:03:37.872Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:03:37.881Z] Server started - Ready to accept requests
+[2026-03-18T16:03:52.161Z] ERROR order-list: Arithmetic overflow error converting expression to data type datetime.
+[2026-03-18T16:03:54.611Z] ERROR order-list: Arithmetic overflow error converting expression to data type datetime.
+[2026-03-18T16:04:19.943Z] ERROR order-list: Arithmetic overflow error converting expression to data type datetime.
+[2026-03-18T16:04:20.974Z] ERROR order-list: Arithmetic overflow error converting expression to data type datetime.
+[2026-03-18T16:05:37.736Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:05:37.744Z] Server started - Ready to accept requests
+[2026-03-18T16:06:01.600Z] SEARCH: OrdNo=390280
+[2026-03-18T16:06:01.726Z]   -> Found: Revenue=0, Margin=0.00%
+[2026-03-18T16:06:04.375Z] SEARCH: OrdNo=390280
+[2026-03-18T16:06:04.576Z]   -> Found: Revenue=0, Margin=0.00%
+[2026-03-18T16:06:08.402Z] SEARCH: OrdNo=390280
+[2026-03-18T16:06:08.570Z]   -> Found: Revenue=0, Margin=0.00%
+[2026-03-18T16:06:10.683Z] SEARCH: OrdNo=390280
+[2026-03-18T16:06:10.853Z]   -> Found: Revenue=0, Margin=0.00%
+[2026-03-18T16:09:41.570Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:09:41.579Z] Server started - Ready to accept requests
+[2026-03-18T16:10:24.806Z] SEARCH: OrdNo=397679
+[2026-03-18T16:10:25.188Z]   -> Found: Revenue=2243, Margin=70.58%
+[2026-03-18T16:10:31.810Z] SEARCH: OrdNo=397679
+[2026-03-18T16:10:32.215Z]   -> Found: Revenue=2243, Margin=70.58%
+[2026-03-18T16:10:41.680Z] SEARCH: OrdNo=395126
+[2026-03-18T16:10:41.914Z]   -> Found: Revenue=32320, Margin=131.51%
+[2026-03-18T16:10:53.205Z] SEARCH: OrdNo=395126
+[2026-03-18T16:10:53.447Z]   -> Found: Revenue=32320, Margin=131.51%
+[2026-03-18T16:13:14.543Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:13:14.552Z] Server started - Ready to accept requests
+[2026-03-18T16:13:49.625Z] SEARCH: OrdNo=396986
+[2026-03-18T16:13:50.492Z]   -> Found: Revenue=57744, Margin=82.89%
+[2026-03-18T16:15:39.726Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:15:39.734Z] Server started - Ready to accept requests
+[2026-03-18T16:15:40.502Z] SEARCH: OrdNo=399331
+[2026-03-18T16:15:40.775Z]   -> Found: Revenue=4838.4, Margin=124.08%
+[2026-03-18T16:19:15.280Z] SEARCH: OrdNo=396986
+[2026-03-18T16:19:16.028Z]   -> Found: Revenue=57744, Margin=82.89%
+[2026-03-18T16:19:41.265Z] SEARCH: OrdNo=396986
+[2026-03-18T16:19:41.436Z] ERROR: Connection is closed.
+[2026-03-18T16:19:47.818Z] SEARCH: OrdNo=397538
+[2026-03-18T16:19:47.973Z]   -> Found: Revenue=583.6, Margin=89.31%
+[2026-03-18T16:19:52.065Z] SEARCH: OrdNo=396994
+[2026-03-18T16:19:52.849Z]   -> Found: Revenue=60124, Margin=84.34%
+[2026-03-18T16:21:46.115Z] SEARCH: OrdNo=396994
+[2026-03-18T16:21:47.745Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:21:47.762Z] Server started - Ready to accept requests
+[2026-03-18T16:21:48.008Z] SEARCH: OrdNo=396994
+[2026-03-18T16:21:48.842Z]   -> Found: Revenue=60124, Margin=84.34%
+[2026-03-18T16:22:35.935Z] SEARCH: OrdNo=397414
+[2026-03-18T16:22:36.180Z]   -> Found: Revenue=1640, Margin=62.58%
+[2026-03-18T16:24:49.887Z] SEARCH: OrdNo=396067
+[2026-03-18T16:24:50.199Z]   -> Found: Revenue=168251.6, Margin=130.96%
+[2026-03-18T16:25:20.884Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T16:25:20.892Z] Server started - Ready to accept requests
+[2026-03-18T16:25:26.885Z] SEARCH: OrdNo=399337
+[2026-03-18T16:25:27.111Z]   -> Found: Revenue=380, Margin=99.52%
+[2026-03-18T16:25:51.321Z] SEARCH: OrdNo=398199
+[2026-03-18T16:25:51.747Z]   -> Found: Revenue=20092.4, Margin=262.14%
+[2026-03-18T16:28:37.802Z] SEARCH: OrdNo=396986
+[2026-03-18T16:28:38.480Z]   -> Found: Revenue=57744, Margin=82.89%
+[2026-03-18T16:28:45.316Z] SEARCH: OrdNo=396986
+[2026-03-18T16:28:46.055Z]   -> Found: Revenue=57744, Margin=82.89%
+[2026-03-18T16:30:20.020Z] SEARCH: OrdNo=397698
+[2026-03-18T16:30:20.939Z]   -> Found: Revenue=8641.8, Margin=137.00%
+[2026-03-18T16:33:50.190Z] SEARCH: OrdNo=397447
+[2026-03-18T16:33:50.443Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T16:34:34.485Z] SEARCH: OrdNo=397447
+[2026-03-18T16:34:34.696Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T16:34:46.553Z] SEARCH: OrdNo=397447
+[2026-03-18T16:34:46.743Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T16:34:48.358Z] SEARCH: OrdNo=397447
+[2026-03-18T16:34:48.607Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T16:34:52.607Z] SEARCH: OrdNo=397447
+[2026-03-18T16:34:52.821Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T20:12:41.849Z] SEARCH: OrdNo=398342
+[2026-03-18T20:12:42.037Z]   -> Found: Revenue=34125.6, Margin=126.73%
+[2026-03-18T20:15:01.848Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:15:01.855Z] Server started - Ready to accept requests
+[2026-03-18T20:17:28.618Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:17:28.626Z] Server started - Ready to accept requests
+[2026-03-18T20:17:39.123Z] SEARCH: OrdNo=398791
+[2026-03-18T20:17:39.466Z]   -> Found: Revenue=11733.8, Margin=194.76%
+[2026-03-18T20:20:03.938Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:20:03.948Z] Server started - Ready to accept requests
+[2026-03-18T20:20:09.389Z] SEARCH: OrdNo=395126
+[2026-03-18T20:20:09.616Z]   -> Found: Revenue=32320, Margin=131.51%
+[2026-03-18T20:21:11.527Z] SEARCH: OrdNo=399375
+[2026-03-18T20:21:15.122Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:21:15.131Z] Server started - Ready to accept requests
+[2026-03-18T20:21:15.157Z] SEARCH: OrdNo=399375
+[2026-03-18T20:21:16.446Z] ERROR: Connection is closed.
+[2026-03-18T20:21:17.644Z] SEARCH: OrdNo=398929
+[2026-03-18T20:21:17.789Z]   -> Found: Revenue=2128.4, Margin=227.54%
+[2026-03-18T20:22:38.733Z] SEARCH: OrdNo=398929
+[2026-03-18T20:22:38.999Z]   -> Found: Revenue=2128.4, Margin=227.54%
+[2026-03-18T20:22:44.785Z] SEARCH: OrdNo=398929
+[2026-03-18T20:22:44.938Z]   -> Found: Revenue=2128.4, Margin=227.54%
+[2026-03-18T20:22:49.696Z] SEARCH: OrdNo=398929
+[2026-03-18T20:22:49.854Z]   -> Found: Revenue=2128.4, Margin=227.54%
+[2026-03-18T20:24:49.058Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:24:49.067Z] Server started - Ready to accept requests
+[2026-03-18T20:27:37.881Z] SEARCH: OrdNo=398827
+[2026-03-18T20:27:38.188Z]   -> Found: Revenue=19449, Margin=165.31%
+[2026-03-18T20:28:27.751Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:28:27.758Z] Server started - Ready to accept requests
+[2026-03-18T20:29:12.638Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:29:12.646Z] Server started - Ready to accept requests
+[2026-03-18T20:31:59.800Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:31:59.808Z] Server started - Ready to accept requests
+[2026-03-18T20:34:56.244Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:34:56.252Z] Server started - Ready to accept requests
+[2026-03-18T20:36:09.164Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:36:09.169Z] Server started - Ready to accept requests
+[2026-03-18T20:38:15.132Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:38:15.138Z] Server started - Ready to accept requests
+[2026-03-18T20:38:24.954Z] SEARCH: OrdNo=396741
+[2026-03-18T20:38:25.112Z]   -> Found: Revenue=6117, Margin=338.48%
+[2026-03-18T20:39:00.556Z] SEARCH: OrdNo=396741
+[2026-03-18T20:39:00.711Z]   -> Found: Revenue=6117, Margin=338.48%
+[2026-03-18T20:43:00.154Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:43:00.162Z] Server started - Ready to accept requests
+[2026-03-18T20:43:17.292Z] ERROR order-list: Invalid column name 'SellBuy'.
+[2026-03-18T20:44:16.799Z] ERROR order-list: Invalid column name 'SellBuy'.
+[2026-03-18T20:44:18.320Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:44:18.330Z] Server started - Ready to accept requests
+[2026-03-18T20:46:22.588Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:46:22.597Z] Server started - Ready to accept requests
+[2026-03-18T20:47:45.542Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T20:47:45.549Z] Server started - Ready to accept requests
+[2026-03-18T20:48:11.288Z] SEARCH: OrdNo=397698
+[2026-03-18T20:48:12.207Z]   -> Found: Revenue=8641.8, Margin=137.00%
+[2026-03-18T21:23:25.204Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T21:23:25.211Z] Server started - Ready to accept requests
+[2026-03-18T21:26:46.412Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T21:26:46.419Z] Server started - Ready to accept requests
+[2026-03-18T21:27:55.124Z] SEARCH: OrdNo=398969
+[2026-03-18T21:27:55.323Z]   -> Found: Revenue=6311, Margin=212.82%
+[2026-03-18T21:28:28.605Z] SEARCH: OrdNo=397447
+[2026-03-18T21:28:28.901Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T21:28:48.889Z] SEARCH: OrdNo=397447
+[2026-03-18T21:28:49.123Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T21:28:55.803Z] SEARCH: OrdNo=397447
+[2026-03-18T21:28:56.072Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-18T21:30:07.231Z] SEARCH: OrdNo=399255
+[2026-03-18T21:30:07.534Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T21:30:10.608Z] SEARCH: OrdNo=399255
+[2026-03-18T21:30:10.978Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T21:30:13.763Z] SEARCH: OrdNo=399255
+[2026-03-18T21:30:14.105Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T21:30:25.251Z] SEARCH: OrdNo=399255
+[2026-03-18T21:30:25.591Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T21:30:45.137Z] SEARCH: OrdNo=399255
+[2026-03-18T21:30:45.488Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T21:30:57.510Z] SEARCH: OrdNo=397738
+[2026-03-18T21:30:57.657Z]   -> Found: Revenue=2333.4, Margin=59.50%
+[2026-03-18T21:33:43.782Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T21:33:43.789Z] Server started - Ready to accept requests
+[2026-03-18T21:33:53.750Z] SEARCH: OrdNo=398929
+[2026-03-18T21:33:53.880Z]   -> Found: Revenue=2128.4, Margin=226.76%
+[2026-03-18T21:34:39.305Z] SEARCH: OrdNo=399714
+[2026-03-18T21:34:39.591Z]   -> Found: Revenue=1711.2, Margin=1172.05%
+[2026-03-18T21:35:01.512Z] SEARCH: OrdNo=399255
+[2026-03-18T21:35:01.857Z]   -> Found: Revenue=1440, Margin=15.91%
+[2026-03-18T21:35:34.140Z] SEARCH: OrdNo=397738
+[2026-03-18T21:35:34.266Z]   -> Found: Revenue=2333.4, Margin=155.57%
+[2026-03-18T21:35:48.760Z] SEARCH: OrdNo=397738
+[2026-03-18T21:35:48.897Z]   -> Found: Revenue=2333.4, Margin=155.57%
+[2026-03-18T21:36:15.883Z] SEARCH: OrdNo=397738
+[2026-03-18T21:36:16.033Z]   -> Found: Revenue=2333.4, Margin=155.57%
+[2026-03-18T21:37:48.884Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T21:37:48.891Z] Server started - Ready to accept requests
+[2026-03-18T21:37:58.930Z] ERROR order-list: Cannot perform an aggregate function on an expression containing an aggregate or a subquery.
+[2026-03-18T21:38:16.978Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-18T21:38:16.985Z] Server started - Ready to accept requests
+[2026-03-18T21:38:42.008Z] ERROR order-list: Query timeout expired
+[2026-03-18T21:39:03.154Z] ERROR order-list: Query timeout expired
+[2026-03-18T21:39:18.601Z] ERROR order-list: Query timeout expired
+[2026-03-18T21:39:18.618Z] SEARCH: OrdNo=396067
+[2026-03-18T21:39:18.837Z]   -> Found: Revenue=168251.6, Margin=130.96%
+[2026-03-19T08:20:18.623Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:20:18.632Z] Server started - Ready to accept requests
+[2026-03-19T08:20:48.044Z] SEARCH: OrdNo=313196
+[2026-03-19T08:20:48.284Z]   -> Found: Revenue=44800, Margin=166.03%
+[2026-03-19T08:22:13.305Z] SEARCH: OrdNo=313196
+[2026-03-19T08:22:13.467Z]   -> Found: Revenue=44800, Margin=166.03%
+[2026-03-19T08:22:16.719Z] SEARCH: OrdNo=313196
+[2026-03-19T08:22:16.872Z]   -> Found: Revenue=44800, Margin=166.03%
+[2026-03-19T08:23:51.251Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:23:51.257Z] Server started - Ready to accept requests
+[2026-03-19T08:24:55.984Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:24:55.991Z] Server started - Ready to accept requests
+[2026-03-19T08:25:16.097Z] ERROR order-list: Query timeout expired
+[2026-03-19T08:26:43.900Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:26:43.908Z] Server started - Ready to accept requests
+[2026-03-19T08:30:38.712Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:30:38.720Z] Server started - Ready to accept requests
+[2026-03-19T08:30:42.660Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:43.004Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:43.203Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:43.466Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:44.547Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:44.820Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:45.074Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:45.356Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:45.797Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:46.008Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:46.233Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:46.523Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:46.802Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:47.336Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:47.545Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:48.106Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:48.615Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:49.106Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:49.672Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:50.314Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:50.702Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:51.162Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:52.734Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:53.055Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:53.931Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:55.328Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:55.898Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:56.273Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:30:57.340Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:31:37.025Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:31:37.032Z] Server started - Ready to accept requests
+[2026-03-19T08:31:37.836Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:31:37.837Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:31:37.841Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:31:41.335Z] ERROR order-margin: Connection is closed.
+[2026-03-19T08:33:01.723Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:33:01.730Z] Server started - Ready to accept requests
+[2026-03-19T08:33:02.525Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:33:59.513Z] SEARCH: OrdNo=396986
+[2026-03-19T08:34:00.172Z]   -> Found: Revenue=57744, Margin=85.48%
+[2026-03-19T08:35:01.692Z] SEARCH: OrdNo=396986
+[2026-03-19T08:35:02.424Z]   -> Found: Revenue=57744, Margin=85.48%
+[2026-03-19T08:35:27.465Z] SEARCH: OrdNo=396986
+[2026-03-19T08:35:28.198Z]   -> Found: Revenue=57744, Margin=85.48%
+[2026-03-19T08:35:52.048Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:35:52.056Z] Server started - Ready to accept requests
+[2026-03-19T08:35:52.854Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:35:59.860Z] SEARCH: OrdNo=396986
+[2026-03-19T08:36:00.531Z]   -> Found: Revenue=57744, Margin=187.98%
+[2026-03-19T08:36:04.525Z] SEARCH: OrdNo=396986
+[2026-03-19T08:36:05.206Z]   -> Found: Revenue=57744, Margin=187.98%
+[2026-03-19T08:37:24.711Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:37:24.719Z] Server started - Ready to accept requests
+[2026-03-19T08:37:25.520Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:38:17.726Z] SEARCH: OrdNo=399194
+[2026-03-19T08:38:17.863Z]   -> Found: Revenue=3006.4, Margin=198.38%
+[2026-03-19T08:39:49.818Z] SEARCH: OrdNo=397698
+[2026-03-19T08:39:50.819Z]   -> Found: Revenue=8641.8, Margin=137.18%
+[2026-03-19T08:40:21.369Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:40:21.376Z] Server started - Ready to accept requests
+[2026-03-19T08:40:22.552Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:41:39.815Z] SEARCH: OrdNo=396727
+[2026-03-19T08:41:39.950Z]   -> Found: Revenue=908, Margin=145.15%
+[2026-03-19T08:41:55.262Z] SEARCH: OrdNo=399255
+[2026-03-19T08:41:55.592Z]   -> Found: Revenue=1440, Margin=7.82%
+[2026-03-19T08:43:27.661Z] === SERVER STARTED - Gantech AS Beta - v1.0 (2026-03-18) ===
+[2026-03-19T08:43:27.668Z] Server started - Ready to accept requests
+[2026-03-19T08:43:28.458Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:43:40.983Z] SEARCH: OrdNo=397462
+[2026-03-19T08:43:41.111Z]   -> Found: Revenue=22528.4, Margin=39.15%
+[2026-03-19T08:45:58.339Z] === SERVER STARTED - Gantech AS Beta - v1.0.3 (2026-03-19) ===
+[2026-03-19T08:45:58.346Z] Server started - Ready to accept requests
+[2026-03-19T08:45:59.205Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:47:13.866Z] SEARCH: OrdNo=397198
+[2026-03-19T08:47:14.048Z]   -> Found: Revenue=7550, Margin=240.24%
+[2026-03-19T08:48:01.190Z] SEARCH: OrdNo=399781
+[2026-03-19T08:48:01.461Z]   -> Found: Revenue=10514.4, Margin=165.88%
+[2026-03-19T08:51:20.933Z] SEARCH: OrdNo=396976
+[2026-03-19T08:51:21.464Z]   -> Found: Revenue=8975, Margin=169.97%
+[2026-03-19T08:51:30.103Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T08:51:30.110Z] Server started - Ready to accept requests
+[2026-03-19T08:51:30.870Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:53:37.676Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T08:53:37.683Z] Server started - Ready to accept requests
+[2026-03-19T08:53:38.474Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:54:25.831Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T08:54:25.838Z] Server started - Ready to accept requests
+[2026-03-19T08:54:26.591Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:56:02.434Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T08:56:02.442Z] Server started - Ready to accept requests
+[2026-03-19T08:56:03.181Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:57:02.186Z] SEARCH: OrdNo=399647
+[2026-03-19T08:57:02.361Z]   -> Found: Revenue=35532, Margin=35.80%
+[2026-03-19T08:57:48.828Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T08:57:48.837Z] Server started - Ready to accept requests
+[2026-03-19T08:57:49.614Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T08:58:16.641Z] SEARCH: OrdNo=400055
+[2026-03-19T08:58:16.830Z]   -> Found: Revenue=730, Margin=157.96%
+[2026-03-19T08:59:21.210Z] SEARCH: OrdNo=397216
+[2026-03-19T08:59:21.777Z]   -> Found: Revenue=59990.4, Margin=87.00%
+[2026-03-19T09:00:20.488Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T09:00:20.495Z] Server started - Ready to accept requests
+[2026-03-19T09:00:21.269Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T09:00:23.204Z] ORDER-LIST: force=0
+[2026-03-19T09:00:23.207Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:01:52.412Z] ORDER-LIST: force=1
+[2026-03-19T09:01:53.104Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:01:56.556Z] ORDER-LIST: force=1
+[2026-03-19T09:01:57.277Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:02:06.377Z] ORDER-LIST: force=0
+[2026-03-19T09:02:06.378Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:03:46.363Z] ORDER-LIST: force=0
+[2026-03-19T09:03:46.364Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:04:06.524Z] SEARCH: OrdNo=399255
+[2026-03-19T09:04:06.901Z]   -> Found: Revenue=1440, Margin=7.82%
+[2026-03-19T09:04:44.593Z] SEARCH: OrdNo=399796
+[2026-03-19T09:04:44.763Z]   -> Found: Revenue=5410, Margin=78.79%
+[2026-03-19T09:06:23.589Z] ORDER-LIST: force=0
+[2026-03-19T09:06:23.591Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:06:34.464Z] SEARCH: OrdNo=399210
+[2026-03-19T09:06:34.670Z]   -> Found: Revenue=6196, Margin=77.42%
+[2026-03-19T09:08:28.006Z] SEARCH: OrdNo=397451
+[2026-03-19T09:08:28.191Z]   -> Found: Revenue=11030, Margin=92.94%
+[2026-03-19T09:10:40.155Z] SEARCH: OrdNo=399255
+[2026-03-19T09:10:40.463Z]   -> Found: Revenue=1440, Margin=7.82%
+[2026-03-19T09:15:16.163Z] SEARCH: OrdNo=396901
+[2026-03-19T09:15:16.393Z]   -> Found: Revenue=10966.4, Margin=338.48%
+[2026-03-19T09:40:26.126Z] ORDER-LIST: force=0
+[2026-03-19T09:40:26.868Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:40:52.550Z] SEARCH: OrdNo=399647
+[2026-03-19T09:40:52.700Z]   -> Found: Revenue=35532, Margin=35.80%
+[2026-03-19T09:43:48.541Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T09:43:48.548Z] Server started - Ready to accept requests
+[2026-03-19T09:43:49.427Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T09:43:52.202Z] SEARCH: OrdNo=399647
+[2026-03-19T09:43:52.348Z]   -> Found: Revenue=35532, Margin=131.90%
+[2026-03-19T09:44:01.390Z] ORDER-LIST: force=1
+[2026-03-19T09:44:02.144Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:44:34.504Z] SEARCH: OrdNo=399781
+[2026-03-19T09:44:34.754Z]   -> Found: Revenue=10514.4, Margin=165.88%
+[2026-03-19T09:56:13.854Z] ORDER-LIST: force=0
+[2026-03-19T09:56:14.602Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:56:19.907Z] SEARCH: OrdNo=399331
+[2026-03-19T09:56:20.041Z]   -> Found: Revenue=4838.4, Margin=41.68%
+[2026-03-19T09:58:38.042Z] SEARCH: OrdNo=399331
+[2026-03-19T09:58:38.229Z]   -> Found: Revenue=4838.4, Margin=144.49%
+[2026-03-19T09:59:10.894Z] ORDER-LIST: force=0
+[2026-03-19T09:59:10.895Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:59:18.530Z] SEARCH: OrdNo=399331
+[2026-03-19T09:59:18.670Z]   -> Found: Revenue=4838.4, Margin=146.04%
+[2026-03-19T09:59:28.825Z] ORDER-LIST: force=0
+[2026-03-19T09:59:28.826Z] ORDER-LIST: returned 200 rows
+[2026-03-19T09:59:32.468Z] SEARCH: OrdNo=397414
+[2026-03-19T09:59:32.662Z]   -> Found: Revenue=1640, Margin=57.56%
+[2026-03-19T10:00:31.390Z] SEARCH: OrdNo=397414
+[2026-03-19T10:00:31.593Z]   -> Found: Revenue=1640, Margin=70.08%
+[2026-03-19T10:02:17.424Z] SEARCH: OrdNo=397414
+[2026-03-19T10:02:17.686Z]   -> Found: Revenue=1640, Margin=114.84%
+[2026-03-19T10:02:23.992Z] ORDER-LIST: force=0
+[2026-03-19T10:02:23.993Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:03:05.233Z] SEARCH: OrdNo=397447
+[2026-03-19T10:03:05.471Z]   -> Found: Revenue=1126.4, Margin=98.83%
+[2026-03-19T10:03:40.250Z] SEARCH: OrdNo=399331
+[2026-03-19T10:03:40.405Z]   -> Found: Revenue=4838.4, Margin=146.04%
+[2026-03-19T10:03:43.556Z] SEARCH: OrdNo=399331
+[2026-03-19T10:03:43.699Z]   -> Found: Revenue=4838.4, Margin=146.04%
+[2026-03-19T10:03:53.686Z] SEARCH: OrdNo=397679
+[2026-03-19T10:03:54.186Z]   -> Found: Revenue=2243, Margin=70.58%
+[2026-03-19T10:03:58.847Z] ORDER-LIST: force=0
+[2026-03-19T10:03:58.848Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:04:23.253Z] SEARCH: OrdNo=398791
+[2026-03-19T10:04:23.571Z]   -> Found: Revenue=11733.8, Margin=194.17%
+[2026-03-19T10:09:30.822Z] ORDER-LIST: force=0
+[2026-03-19T10:09:31.584Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:10:05.585Z] SEARCH: OrdNo=399647
+[2026-03-19T10:10:05.745Z]   -> Found: Revenue=35532, Margin=131.90%
+[2026-03-19T10:12:43.819Z] SEARCH: OrdNo=399647
+[2026-03-19T10:12:43.993Z]   -> Found: Revenue=35532, Margin=131.90%
+[2026-03-19T10:12:44.285Z] SEARCH: OrdNo=399647
+[2026-03-19T10:12:44.433Z]   -> Found: Revenue=35532, Margin=131.90%
+[2026-03-19T10:12:45.079Z] ORDER-LIST: force=1
+[2026-03-19T10:12:45.873Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:13:05.938Z] SEARCH: OrdNo=399255
+[2026-03-19T10:13:06.286Z]   -> Found: Revenue=1440, Margin=7.82%
+[2026-03-19T10:14:56.996Z] SEARCH: OrdNo=396494
+[2026-03-19T10:14:57.179Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:16:29.697Z] SEARCH: OrdNo=396494
+[2026-03-19T10:16:29.856Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:16:39.822Z] SEARCH: OrdNo=396494
+[2026-03-19T10:16:39.982Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:36:05.378Z] SEARCH: OrdNo=396494
+[2026-03-19T10:36:05.566Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:36:05.962Z] SEARCH: OrdNo=396494
+[2026-03-19T10:36:06.137Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:36:06.385Z] SEARCH: OrdNo=396494
+[2026-03-19T10:36:06.522Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:36:06.764Z] SEARCH: OrdNo=396494
+[2026-03-19T10:36:06.902Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:36:11.590Z] SEARCH: OrdNo=396494
+[2026-03-19T10:36:11.739Z]   -> Found: Revenue=11120, Margin=173.69%
+[2026-03-19T10:36:15.766Z] SEARCH: OrdNo=399376
+[2026-03-19T10:36:15.904Z]   -> Found: Revenue=1200, Margin=290.68%
+[2026-03-19T10:37:51.140Z] SEARCH: OrdNo=397547
+[2026-03-19T10:37:51.290Z]   -> Found: Revenue=27569.4, Margin=147.03%
+[2026-03-19T10:38:24.433Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T10:38:24.439Z] Server started - Ready to accept requests
+[2026-03-19T10:38:25.953Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T10:38:27.270Z] ORDER-LIST: force=0
+[2026-03-19T10:38:27.272Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:39:58.016Z] ORDER-LIST: force=0
+[2026-03-19T10:39:58.021Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:40:04.724Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T10:40:04.732Z] Server started - Ready to accept requests
+[2026-03-19T10:40:05.508Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T10:40:07.681Z] ORDER-LIST: force=0
+[2026-03-19T10:40:07.711Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:43:31.682Z] ORDER-LIST: force=0
+[2026-03-19T10:43:31.685Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:43:32.340Z] ORDER-LIST: force=0
+[2026-03-19T10:43:32.342Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:43:37.599Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T10:43:37.605Z] Server started - Ready to accept requests
+[2026-03-19T10:43:38.357Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T10:43:42.304Z] ORDER-LIST: force=0
+[2026-03-19T10:43:42.305Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:44:12.652Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T10:44:12.659Z] Server started - Ready to accept requests
+[2026-03-19T10:44:13.494Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T10:44:15.758Z] ORDER-LIST: force=0
+[2026-03-19T10:44:15.761Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:45:15.669Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T10:45:15.675Z] Server started - Ready to accept requests
+[2026-03-19T10:45:16.436Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T10:45:18.287Z] ORDER-LIST: force=0
+[2026-03-19T10:45:18.288Z] ORDER-LIST: returned 200 rows
+[2026-03-19T10:48:07.934Z] ORDER-LIST: force=0
+[2026-03-19T10:48:07.938Z] ORDER-LIST: returned 200 rows
+[2026-03-19T12:08:01.167Z] ORDER-LIST: force=0
+[2026-03-19T12:08:01.916Z] ORDER-LIST: returned 200 rows
+[2026-03-19T12:09:24.318Z] ORDER-LIST: force=0
+[2026-03-19T12:09:24.319Z] ORDER-LIST: returned 200 rows
+[2026-03-19T12:09:26.136Z] ORDER-LIST: force=1
+[2026-03-19T12:09:26.891Z] ORDER-LIST: returned 200 rows
+[2026-03-19T12:09:35.255Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:09:35.262Z] Server started - Ready to accept requests
+[2026-03-19T12:09:37.933Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:09:40.904Z] ORDER-LIST: force=0
+[2026-03-19T12:09:40.905Z] ORDER-LIST: returned 1000 rows
+[2026-03-19T12:11:27.920Z] ORDER-LIST: force=0
+[2026-03-19T12:11:27.923Z] ORDER-LIST: returned 1000 rows
+[2026-03-19T12:12:10.072Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:12:10.079Z] Server started - Ready to accept requests
+[2026-03-19T12:12:12.597Z] ORDER-LIST: force=0
+[2026-03-19T12:12:12.762Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:12:12.765Z] ORDER-LIST: returned 1000 rows
+[2026-03-19T12:13:21.466Z] ORDER-LIST: force=0
+[2026-03-19T12:13:21.468Z] ORDER-LIST: returned 1000 rows
+[2026-03-19T12:13:35.257Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:13:35.264Z] Server started - Ready to accept requests
+[2026-03-19T12:13:36.162Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:13:37.260Z] ORDER-LIST: force=0
+[2026-03-19T12:13:37.262Z] ORDER-LIST: returned 577 rows
+[2026-03-19T12:20:32.723Z] ORDER-LIST: force=0
+[2026-03-19T12:20:32.725Z] ORDER-LIST: returned 577 rows
+[2026-03-19T12:20:46.056Z] AUTH: superuser created: username=admin
+[2026-03-19T12:20:46.057Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:20:46.062Z] Server started - Ready to accept requests
+[2026-03-19T12:20:46.826Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:23:17.253Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:23:17.259Z] Server started - Ready to accept requests
+[2026-03-19T12:23:18.102Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:25:33.222Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:25:33.229Z] Server started - Ready to accept requests
+[2026-03-19T12:25:34.000Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:29:51.217Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:29:51.224Z] Server started - Ready to accept requests
+[2026-03-19T12:29:52.086Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:33:33.849Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:33:33.856Z] Server started - Ready to accept requests
+[2026-03-19T12:33:34.681Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:36:19.977Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:36:19.984Z] Server started - Ready to accept requests
+[2026-03-19T12:36:20.756Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:37:54.960Z] AUTH: user created by admin: test
+[2026-03-19T12:40:54.131Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:40:54.137Z] Server started - Ready to accept requests
+[2026-03-19T12:40:54.934Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:41:04.214Z] ROOT: user=test initialRows=577
+[2026-03-19T12:42:23.080Z] ROOT: user=test initialRows=577
+[2026-03-19T12:43:24.423Z] ROOT: user=test initialRows=577
+[2026-03-19T12:44:46.836Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:44:46.842Z] Server started - Ready to accept requests
+[2026-03-19T12:44:47.643Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:44:54.847Z] ROOT: user=test initialRows=577
+[2026-03-19T12:45:03.049Z] ROOT: user=test initialRows=577
+[2026-03-19T12:47:37.335Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:47:37.342Z] Server started - Ready to accept requests
+[2026-03-19T12:47:38.093Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:47:46.735Z] ROOT: user=test initialRows=577
+[2026-03-19T12:50:06.880Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:50:06.886Z] Server started - Ready to accept requests
+[2026-03-19T12:50:07.714Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:50:12.822Z] ROOT: user=test initialRows=577
+[2026-03-19T12:51:47.005Z] ROOT: user=test initialRows=577
+[2026-03-19T12:51:58.428Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T12:51:58.435Z] Server started - Ready to accept requests
+[2026-03-19T12:51:59.218Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T12:52:02.903Z] ROOT: user=test initialRows=577
+[2026-03-19T13:56:50.684Z] ROOT: user=test initialRows=577
+[2026-03-19T13:56:54.585Z] ROOT: user=test initialRows=577
+[2026-03-19T13:57:03.240Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T13:57:03.247Z] Server started - Ready to accept requests
+[2026-03-19T13:57:04.027Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T13:57:09.092Z] ROOT: user=test initialRows=577
+[2026-03-19T13:59:35.244Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T13:59:35.251Z] Server started - Ready to accept requests
+[2026-03-19T13:59:36.051Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T13:59:39.962Z] ROOT: user=guest initialRows=577
+[2026-03-19T13:59:53.553Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T13:59:53.559Z] Server started - Ready to accept requests
+[2026-03-19T13:59:54.398Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T13:59:55.461Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:01.637Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:02.331Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:05.385Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:06.095Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:06.926Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:29.418Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:30.482Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:31.131Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:36.398Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:37.269Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:00:38.905Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:01:09.154Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:01:29.504Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:01:32.532Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:01:42.303Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T14:01:42.310Z] Server started - Ready to accept requests
+[2026-03-19T14:01:43.132Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T14:01:44.387Z] ROOT: user=guest initialRows=577
+[2026-03-19T14:02:40.516Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T14:02:40.524Z] Server started - Ready to accept requests
+[2026-03-19T14:02:41.496Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T14:02:44.190Z] ORDER-LIST: force=0
+[2026-03-19T14:02:44.194Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:03:14.195Z] ORDER-LIST: force=1
+[2026-03-19T14:03:15.012Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:03:44.156Z] ORDER-LIST: force=1
+[2026-03-19T14:03:44.927Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:04:14.181Z] ORDER-LIST: force=1
+[2026-03-19T14:04:14.952Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:04:44.173Z] ORDER-LIST: force=1
+[2026-03-19T14:04:44.979Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:05:14.162Z] ORDER-LIST: force=1
+[2026-03-19T14:05:15.043Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:05:36.873Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-19T14:05:36.880Z] Server started - Ready to accept requests
+[2026-03-19T14:05:37.642Z] Cache primed: order list loaded and margin warmup started
+[2026-03-19T14:05:39.965Z] ORDER-LIST: force=0
+[2026-03-19T14:05:39.967Z] ORDER-LIST: returned 577 rows
+[2026-03-19T14:07:06.351Z] ORDER-LIST: force=0
+[2026-03-19T14:07:06.353Z] ORDER-LIST: returned 577 rows
+[2026-03-20T11:21:26.616Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:21:26.658Z] Server started - Ready to accept requests
+[2026-03-20T11:21:26.743Z] ORDER-LIST: force=1
+[2026-03-20T11:21:27.779Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:21:27.782Z] ORDER-LIST: returned 575 rows
+[2026-03-20T11:21:36.329Z] ORDER-LIST: force=1
+[2026-03-20T11:21:37.848Z] ORDER-LIST: returned 575 rows
+[2026-03-20T11:22:36.360Z] ORDER-LIST: force=1
+[2026-03-20T11:22:37.042Z] ORDER-LIST: returned 575 rows
+[2026-03-20T11:22:56.160Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:22:56.169Z] Server started - Ready to accept requests
+[2026-03-20T11:22:56.795Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:22:58.697Z] ORDER-LIST: force=0
+[2026-03-20T11:22:58.707Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:23:27.728Z] SEARCH: OrdNo=396994
+[2026-03-20T11:23:28.416Z]   -> Found: Revenue=60124, Margin=196.36%
+[2026-03-20T11:23:28.640Z] ORDER-LIST: force=1
+[2026-03-20T11:23:29.157Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:23:58.640Z] ORDER-LIST: force=1
+[2026-03-20T11:23:59.058Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:24:28.645Z] ORDER-LIST: force=1
+[2026-03-20T11:24:29.027Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:24:58.645Z] ORDER-LIST: force=1
+[2026-03-20T11:24:59.003Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:25:28.641Z] ORDER-LIST: force=1
+[2026-03-20T11:25:28.998Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:25:58.642Z] ORDER-LIST: force=1
+[2026-03-20T11:25:59.031Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:26:28.645Z] ORDER-LIST: force=1
+[2026-03-20T11:26:29.042Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:26:45.905Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:26:45.913Z] Server started - Ready to accept requests
+[2026-03-20T11:26:46.360Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:26:48.800Z] ORDER-LIST: force=0
+[2026-03-20T11:26:48.806Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:26:54.735Z] SEARCH: OrdNo=399712
+[2026-03-20T11:26:54.908Z]   -> Found: Revenue=755, Margin=328.28%
+[2026-03-20T11:28:48.763Z] ORDER-LIST: force=0
+[2026-03-20T11:28:48.765Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:30:48.763Z] ORDER-LIST: force=0
+[2026-03-20T11:30:48.763Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:31:32.931Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:31:32.937Z] Server started - Ready to accept requests
+[2026-03-20T11:31:33.423Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:31:35.398Z] ORDER-LIST: force=0
+[2026-03-20T11:31:35.400Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:31:37.946Z] SEARCH: OrdNo=400055
+[2026-03-20T11:31:38.098Z]   -> Found: Revenue=730, Margin=157.96%
+[2026-03-20T11:31:57.199Z] ORDER-LIST: force=0
+[2026-03-20T11:31:57.201Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:31:57.980Z] ORDER-LIST: force=0
+[2026-03-20T11:31:57.981Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:32:07.601Z] SEARCH: OrdNo=399781
+[2026-03-20T11:32:07.864Z]   -> Found: Revenue=10514.4, Margin=165.88%
+[2026-03-20T11:33:06.701Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:33:06.708Z] Server started - Ready to accept requests
+[2026-03-20T11:33:07.186Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:34:15.369Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:34:15.376Z] Server started - Ready to accept requests
+[2026-03-20T11:34:16.028Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:34:17.031Z] ORDER-LIST: force=0
+[2026-03-20T11:34:17.032Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:34:18.290Z] SEARCH: OrdNo=399856
+[2026-03-20T11:34:18.434Z]   -> Found: Revenue=6387.4, Margin=182.91%
+[2026-03-20T11:34:22.323Z] ORDER-LIST: force=0
+[2026-03-20T11:34:22.324Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:34:25.131Z] SEARCH: OrdNo=398977
+[2026-03-20T11:34:26.281Z]   -> Found: Revenue=20763.4, Margin=208.48%
+[2026-03-20T11:34:52.149Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:34:52.156Z] Server started - Ready to accept requests
+[2026-03-20T11:34:52.610Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:34:54.125Z] ORDER-LIST: force=0
+[2026-03-20T11:34:54.126Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:34:55.014Z] SEARCH: OrdNo=400055
+[2026-03-20T11:34:55.167Z]   -> Found: Revenue=730, Margin=157.96%
+[2026-03-20T11:35:09.963Z] SEARCH: OrdNo=399781
+[2026-03-20T11:35:10.207Z]   -> Found: Revenue=10514.4, Margin=165.88%
+[2026-03-20T11:36:54.131Z] ORDER-LIST: force=0
+[2026-03-20T11:36:54.133Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:38:54.135Z] ORDER-LIST: force=0
+[2026-03-20T11:38:54.137Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:39:43.550Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:39:43.557Z] Server started - Ready to accept requests
+[2026-03-20T11:39:44.021Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:39:50.914Z] ORDER-LIST: force=0
+[2026-03-20T11:39:50.915Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:39:52.453Z] SEARCH: OrdNo=400055
+[2026-03-20T11:39:52.593Z]   -> Found: Revenue=730, Margin=157.96%
+[2026-03-20T11:41:50.924Z] ORDER-LIST: force=0
+[2026-03-20T11:41:50.925Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:43:48.638Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:43:48.645Z] Server started - Ready to accept requests
+[2026-03-20T11:43:49.139Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:43:50.914Z] ORDER-LIST: force=0
+[2026-03-20T11:43:50.915Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:43:51.621Z] ORDER-LIST: force=0
+[2026-03-20T11:43:51.622Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:43:53.151Z] SEARCH: OrdNo=400055
+[2026-03-20T11:43:53.294Z]   -> Found: Revenue=730, Margin=157.96%
+[2026-03-20T11:44:11.282Z] SEARCH: OrdNo=399574
+[2026-03-20T11:44:11.694Z]   -> Found: Revenue=1193.6, Margin=380.81%
+[2026-03-20T11:44:28.227Z] SEARCH: OrdNo=398233
+[2026-03-20T11:44:28.534Z]   -> Found: Revenue=6665.2, Margin=141.39%
+[2026-03-20T11:45:51.597Z] ORDER-LIST: force=0
+[2026-03-20T11:45:51.599Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:47:50.236Z] ORDER-LIST: force=0
+[2026-03-20T11:47:50.237Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:47:51.935Z] SEARCH: OrdNo=399616
+[2026-03-20T11:47:52.149Z]   -> Found: Revenue=1000, Margin=180.15%
+[2026-03-20T11:48:03.197Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:48:03.203Z] Server started - Ready to accept requests
+[2026-03-20T11:48:03.716Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:50:31.136Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:50:31.143Z] Server started - Ready to accept requests
+[2026-03-20T11:50:31.609Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:50:32.822Z] ORDER-LIST: force=0
+[2026-03-20T11:50:32.835Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:50:33.464Z] SEARCH: OrdNo=399900
+[2026-03-20T11:50:33.828Z]   -> Found: Revenue=9302.4, Margin=165.09%
+[2026-03-20T11:52:19.598Z] SEARCH: OrdNo=399601
+[2026-03-20T11:52:19.738Z]   -> Found: Revenue=17191.4, Margin=166.74%
+[2026-03-20T11:52:32.782Z] ORDER-LIST: force=0
+[2026-03-20T11:52:32.783Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:54:32.792Z] ORDER-LIST: force=0
+[2026-03-20T11:54:32.793Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:56:32.801Z] ORDER-LIST: force=0
+[2026-03-20T11:56:32.803Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:58:03.605Z] ORDER-LIST: force=0
+[2026-03-20T11:58:03.613Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:58:09.779Z] === SERVER STARTED - Gantech AS Beta - v0.3.2 (2026-03-19) ===
+[2026-03-20T11:58:09.786Z] Server started - Ready to accept requests
+[2026-03-20T11:58:10.238Z] Cache primed: order list loaded and margin warmup started
+[2026-03-20T11:58:15.954Z] ORDER-LIST: force=0
+[2026-03-20T11:58:15.957Z] ORDER-LIST: returned 150 rows
+[2026-03-20T11:58:17.817Z] SEARCH: OrdNo=399916
+[2026-03-20T11:58:17.955Z]   -> Found: Revenue=1204, Margin=175.78%
+[2026-03-20T12:00:15.940Z] ORDER-LIST: force=0
+[2026-03-20T12:00:15.943Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:02:15.946Z] ORDER-LIST: force=0
+[2026-03-20T12:02:15.948Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:04:15.956Z] ORDER-LIST: force=0
+[2026-03-20T12:04:15.957Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:06:15.947Z] ORDER-LIST: force=0
+[2026-03-20T12:06:15.949Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:08:15.942Z] ORDER-LIST: force=0
+[2026-03-20T12:08:16.547Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:08:29.142Z] ORDER-LIST: force=0
+[2026-03-20T12:08:29.144Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:08:31.898Z] SEARCH: OrdNo=399856
+[2026-03-20T12:08:32.079Z]   -> Found: Revenue=6387.4, Margin=182.91%
+[2026-03-20T12:10:29.106Z] ORDER-LIST: force=0
+[2026-03-20T12:10:29.108Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:12:29.121Z] ORDER-LIST: force=0
+[2026-03-20T12:12:29.122Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:14:29.129Z] ORDER-LIST: force=0
+[2026-03-20T12:14:29.129Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:16:29.118Z] ORDER-LIST: force=0
+[2026-03-20T12:16:29.119Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:18:29.112Z] ORDER-LIST: force=0
+[2026-03-20T12:18:29.540Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:20:29.119Z] ORDER-LIST: force=0
+[2026-03-20T12:20:29.120Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:22:29.106Z] ORDER-LIST: force=0
+[2026-03-20T12:22:29.106Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:24:29.111Z] ORDER-LIST: force=0
+[2026-03-20T12:24:29.112Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:26:08.364Z] ORDER-LIST: force=0
+[2026-03-20T12:26:08.366Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:26:11.633Z] SEARCH: OrdNo=397451
+[2026-03-20T12:26:11.789Z]   -> Found: Revenue=11030, Margin=92.94%
+[2026-03-20T12:28:08.346Z] ORDER-LIST: force=0
+[2026-03-20T12:28:08.347Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:30:08.344Z] ORDER-LIST: force=0
+[2026-03-20T12:30:08.820Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:32:08.343Z] ORDER-LIST: force=0
+[2026-03-20T12:32:08.344Z] ORDER-LIST: returned 150 rows
+[2026-03-20T12:34:08.333Z] ORDER-LIST: force=0
+[2026-03-20T12:34:08.334Z] ORDER-LIST: returned 150 rows

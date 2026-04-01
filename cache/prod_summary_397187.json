@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397187",
+  "cachedAt": "2026-03-31T11:50:02.881Z",
+  "cachedAtMs": 1774957802881,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.881Z",
+  "data": {
+    "ordNo": 397187,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400252-7",
+        "Descr": "Styr",
+        "NoFin": 4,
+        "DPrice": 9.36,
+        "CCstPr": 9.36,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 37.44,
+        "NestingCost": null,
+        "EffectiveLineCost": 37.44
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400252-7L",
+        "Descr": "Laser Styr",
+        "NoFin": 4,
+        "DPrice": 9.36,
+        "CCstPr": 9.36,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 37.44,
+        "NestingCost": 9.36,
+        "EffectiveLineCost": 37.44
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400252-7",
+        "Descr": "Rute for Styr",
+        "NoFin": 4,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 37.44
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "key": "order_margin_399358",
+  "cachedAt": "2026-03-31T11:10:03.390Z",
+  "cachedAtMs": 1774955403390,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T11:40:03.390Z",
+  "data": {
+    "ordNo": 399358,
+    "totalRevenue": 22082.4,
+    "totalCost": 14277.15,
+    "cached": true
+  }
+}

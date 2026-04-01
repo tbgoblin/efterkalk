@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_396934",
+  "cachedAt": "2026-03-31T13:39:59.685Z",
+  "cachedAtMs": 1774964399685,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.685Z",
+  "data": {
+    "ordNo": 396934,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-14",
+        "Descr": "Floor rear flange",
+        "NoFin": 25,
+        "DPrice": 20.4876,
+        "CCstPr": 20.4876,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 512.19,
+        "NestingCost": null,
+        "EffectiveLineCost": 512.19
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-14L",
+        "Descr": "¤ N2 PEM-tol Ø 8.8     - Floor rear flange",
+        "NoFin": 25,
+        "DPrice": 16.6728,
+        "CCstPr": 16.6728,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 416.82,
+        "NestingCost": 16.6496,
+        "EffectiveLineCost": 416.24
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-14",
+        "Descr": "Rute for Floor rear flange",
+        "NoFin": 25,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 9,
+        "ProdNo": "4420600011002",
+        "Descr": "Presmøtrik M6-2 Zink (pl.min. 2,3mm)",
+        "NoFin": 100,
+        "DPrice": 0.953694,
+        "CCstPr": 0.953694,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 95.37,
+        "NestingCost": null,
+        "EffectiveLineCost": 95.37
+      }
+    ],
+    "totalCost": 511.61
+  }
+}

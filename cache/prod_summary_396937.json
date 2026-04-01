@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396937",
+  "cachedAt": "2026-03-31T13:39:59.687Z",
+  "cachedAtMs": 1774964399687,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.687Z",
+  "data": {
+    "ordNo": 396937,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-3",
+        "Descr": "Ventilation cover rear",
+        "NoFin": 50,
+        "DPrice": 2.9852,
+        "CCstPr": 2.9852,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 149.26,
+        "NestingCost": null,
+        "EffectiveLineCost": 149.26
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-3L",
+        "Descr": "¤ N2  - Ventilation cover rear",
+        "NoFin": 50,
+        "DPrice": 2.9852,
+        "CCstPr": 2.9852,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 149.26,
+        "NestingCost": 3.006923,
+        "EffectiveLineCost": 150.35
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-3",
+        "Descr": "Rute for Ventilation cover rear",
+        "NoFin": 50,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 150.35
+  }
+}

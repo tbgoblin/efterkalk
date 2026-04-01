@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_396928",
+  "cachedAt": "2026-03-31T13:39:59.640Z",
+  "cachedAtMs": 1774964399640,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.640Z",
+  "data": {
+    "ordNo": 396928,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-6",
+        "Descr": "Floor plate for end plate",
+        "NoFin": 25,
+        "DPrice": 11.1976,
+        "CCstPr": 11.1976,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 279.94,
+        "NestingCost": null,
+        "EffectiveLineCost": 279.94
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-6L",
+        "Descr": "¤ N2 PEM-tol Ø 8.8     - Floor plate for end plate",
+        "NoFin": 25,
+        "DPrice": 8.3364,
+        "CCstPr": 8.3364,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 208.41,
+        "NestingCost": 8.3364,
+        "EffectiveLineCost": 208.41
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-6",
+        "Descr": "Rute for Floor plate for end plate",
+        "NoFin": 25,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 7,
+        "ProdNo": "4420600011002",
+        "Descr": "Presmøtrik M6-2 Zink (pl.min. 2,3mm)",
+        "NoFin": 75,
+        "DPrice": 0.953694,
+        "CCstPr": 0.953694,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 71.53,
+        "NestingCost": null,
+        "EffectiveLineCost": 71.53
+      }
+    ],
+    "totalCost": 279.94
+  }
+}

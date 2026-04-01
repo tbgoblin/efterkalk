@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397108",
+  "cachedAt": "2026-03-31T11:50:02.610Z",
+  "cachedAtMs": 1774957802610,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.610Z",
+  "data": {
+    "ordNo": 397108,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400293-2",
+        "Descr": "Montageplade for styr",
+        "NoFin": 1,
+        "DPrice": 9.19,
+        "CCstPr": 9.19,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 9.19,
+        "NestingCost": null,
+        "EffectiveLineCost": 9.19
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400293-2L",
+        "Descr": "¤ Gevind M12  - Montageplade for styr",
+        "NoFin": 1,
+        "DPrice": 9.19,
+        "CCstPr": 9.19,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 9.19,
+        "NestingCost": 9.19,
+        "EffectiveLineCost": 9.19
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400293-2",
+        "Descr": "Rute for Montageplade for styr",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 9.19
+  }
+}

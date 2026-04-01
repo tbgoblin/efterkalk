@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397157",
+  "cachedAt": "2026-03-31T11:50:02.814Z",
+  "cachedAtMs": 1774957802814,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.814Z",
+  "data": {
+    "ordNo": 397157,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400342-1",
+        "Descr": "Montageplade",
+        "NoFin": 1,
+        "DPrice": 209.05,
+        "CCstPr": 209.05,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 209.05,
+        "NestingCost": null,
+        "EffectiveLineCost": 209.05
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400342-1L",
+        "Descr": "Laser Montageplade",
+        "NoFin": 1,
+        "DPrice": 209.05,
+        "CCstPr": 209.05,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 209.05,
+        "NestingCost": 209.05,
+        "EffectiveLineCost": 209.05
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400342-1",
+        "Descr": "Rute for Montageplade",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 209.05
+  }
+}

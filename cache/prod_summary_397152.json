@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397152",
+  "cachedAt": "2026-03-31T11:50:02.785Z",
+  "cachedAtMs": 1774957802786,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.786Z",
+  "data": {
+    "ordNo": 397152,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400342-3",
+        "Descr": "Trakant med Ø40",
+        "NoFin": 2,
+        "DPrice": 32.595,
+        "CCstPr": 32.595,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 65.19,
+        "NestingCost": null,
+        "EffectiveLineCost": 65.19
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400342-3L",
+        "Descr": "Laser Trakant med Ø40",
+        "NoFin": 2,
+        "DPrice": 32.595,
+        "CCstPr": 32.595,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 65.19,
+        "NestingCost": 33.27,
+        "EffectiveLineCost": 66.54
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400342-3",
+        "Descr": "Rute for Trakant med Ø40",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 66.54
+  }
+}

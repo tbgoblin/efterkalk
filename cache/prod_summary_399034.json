@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399034",
+  "cachedAt": "2026-03-31T13:27:12.531Z",
+  "cachedAtMs": 1774963632531,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T13:57:12.531Z",
+  "data": {
+    "ordNo": 399034,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1108100729-6",
+        "Descr": "2001-6",
+        "NoFin": 6,
+        "DPrice": 8.22,
+        "CCstPr": 8.22,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 49.32,
+        "NestingCost": null,
+        "EffectiveLineCost": 49.32
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1108100729-6L",
+        "Descr": "Laser 2001-6",
+        "NoFin": 6,
+        "DPrice": 8.22,
+        "CCstPr": 8.22,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 49.32,
+        "NestingCost": 8.22,
+        "EffectiveLineCost": 49.32
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1108100729-6",
+        "Descr": "Rute for 2001-6",
+        "NoFin": 6,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 49.32
+  }
+}

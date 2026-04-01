@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_396600",
+  "cachedAt": "2026-03-31T12:41:14.765Z",
+  "cachedAtMs": 1774960874765,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T13:11:14.765Z",
+  "data": {
+    "ordNo": 396600,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1014700104",
+        "Descr": "Baglåge 1 m/gæller",
+        "NoFin": 2,
+        "DPrice": 77.985,
+        "CCstPr": 77.985,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 155.97,
+        "NestingCost": null,
+        "EffectiveLineCost": 155.97
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1014700104L",
+        "Descr": "Laser Baglåge 1 m/gæller",
+        "NoFin": 2,
+        "DPrice": 77.985,
+        "CCstPr": 77.985,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 155.97,
+        "NestingCost": 51.93,
+        "EffectiveLineCost": 103.86
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1014700104",
+        "Descr": "Rute for Baglåge 1 m/gæller",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 103.86
+  }
+}

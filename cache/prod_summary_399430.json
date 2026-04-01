@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399430",
+  "cachedAt": "2026-03-31T11:42:18.835Z",
+  "cachedAtMs": 1774957338835,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:12:18.835Z",
+  "data": {
+    "ordNo": 399430,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1000905403-3",
+        "Descr": "3mm",
+        "NoFin": 1,
+        "DPrice": 468.52,
+        "CCstPr": 468.52,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 468.52,
+        "NestingCost": null,
+        "EffectiveLineCost": 468.52
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1000905403-3L",
+        "Descr": "Laser 3mm",
+        "NoFin": 104,
+        "DPrice": 4.505,
+        "CCstPr": 4.505,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 468.52,
+        "NestingCost": 4.368148,
+        "EffectiveLineCost": 454.29
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1000905403-3",
+        "Descr": "Rute for 3mm",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 454.29
+  }
+}

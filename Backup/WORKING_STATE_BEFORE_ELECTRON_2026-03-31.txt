@@ -1,0 +1,10 @@
+Backup marker created before introducing Electron desktop container changes.
+
+Date: 2026-03-31
+Project: Gantech Efterkalk
+Known working app version in server.js before/at this step: v1.1.5 (2026-03-31)
+
+Main files involved in desktop-container step:
+- package.json
+- electron-main.js
+- server.js (startup refactor only; app logic unchanged)

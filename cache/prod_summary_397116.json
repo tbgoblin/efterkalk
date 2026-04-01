@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_397116",
+  "cachedAt": "2026-03-31T11:50:02.655Z",
+  "cachedAtMs": 1774957802655,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.655Z",
+  "data": {
+    "ordNo": 397116,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400369-2",
+        "Descr": "302x100x8 Svejst Profil",
+        "NoFin": 1,
+        "DPrice": 878.4,
+        "CCstPr": 878.4,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 878.4,
+        "NestingCost": null,
+        "EffectiveLineCost": 878.4
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "V1086400369-2",
+        "Descr": "Rute for 302x100x8 Svejst Profil",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 5,
+        "ProdNo": "1086400369-3",
+        "Descr": "U-profil f. 302x100 profil",
+        "NoFin": 1,
+        "DPrice": 541.29,
+        "CCstPr": 541.29,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397117,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 541.29,
+        "NestingCost": null,
+        "EffectiveLineCost": 541.29
+      },
+      {
+        "LnNo": 6,
+        "ProdNo": "1086400369-4",
+        "Descr": "Dækplade f. 302x100 profil",
+        "NoFin": 1,
+        "DPrice": 337.11,
+        "CCstPr": 337.11,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 4,
+        "PurcNo": 397118,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 337.11,
+        "NestingCost": null,
+        "EffectiveLineCost": 337.11
+      }
+    ],
+    "totalCost": 878.4
+  }
+}

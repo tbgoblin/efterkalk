@@ -1,0 +1,77 @@
+{
+  "key": "prod_summary_396932",
+  "cachedAt": "2026-03-31T13:39:59.683Z",
+  "cachedAtMs": 1774964399683,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:09:59.683Z",
+  "data": {
+    "ordNo": 396932,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1080500037-9",
+        "Descr": "Floor front plate",
+        "NoFin": 25,
+        "DPrice": 51.8508,
+        "CCstPr": 51.8508,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1296.27,
+        "NestingCost": null,
+        "EffectiveLineCost": 1296.27
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1080500037-9L",
+        "Descr": "¤ N2 PEM-tol Ø 5.45     - Floor front plate",
+        "NoFin": 25,
+        "DPrice": 49.3372,
+        "CCstPr": 49.3372,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 1233.43,
+        "NestingCost": 49.3372,
+        "EffectiveLineCost": 1233.43
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1080500037-9",
+        "Descr": "Rute for Floor front plate",
+        "NoFin": 25,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      },
+      {
+        "LnNo": 9,
+        "ProdNo": "4420400011002",
+        "Descr": "Presmøtrik M4-2 Zink (pl.min. 1,4mm)",
+        "NoFin": 150,
+        "DPrice": 0.418913,
+        "CCstPr": 0.418913,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 62.84,
+        "NestingCost": null,
+        "EffectiveLineCost": 62.84
+      }
+    ],
+    "totalCost": 1296.27
+  }
+}

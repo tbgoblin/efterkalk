@@ -1,0 +1,21 @@
+Backup marker created with auto-update system integrated.
+
+Date: 2026-03-31
+Project: Gantech Efterkalk
+State: Desktop container (Electron) + Automatic updates via GitHub Releases
+
+Files modified for auto-update:
+- package.json: Added electron-updater, publish config (GitHub provider)
+- electron-main.js: Added setupAutoUpdater() and update notification flow
+- DESKTOP_DEPLOY.md: Added note on auto-update
+- AUTO_UPDATE_SETUP.md: Complete setup guide for releases
+
+How it works:
+1. User builds new version: npm version patch && npm run build:win
+2. Developer creates GitHub Release with new .exe
+3. Running app checks GitHub every startup
+4. If new version available, downloads in background
+5. Notifies user with dialog: "Opdatering tilgængelig" 
+6. User can restart now or later to apply update
+
+No code logic changes since last state - only desktop deployment layer modified.

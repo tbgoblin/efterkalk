@@ -1,0 +1,91 @@
+{
+  "key": "laser_397145_all_1086400341-1L_1",
+  "cachedAt": "2026-03-31T11:50:03.480Z",
+  "cachedAtMs": 1774957803480,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T12:50:03.480Z",
+  "data": {
+    "ordine": "397145",
+    "route": null,
+    "nestingOrdNo": "397276",
+    "prodNo": "1086400341-1L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1952.1792,
+      "CostoLastre": 14793.16,
+      "KgFiniti": 1516.641,
+      "SfridoKg": 435.5382,
+      "SfridoPct": 0.223104
+    },
+    "products": [
+      {
+        "LnNo": 41,
+        "ProdNo": "1086400341-1L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 53.333333,
+        "OldNWgtU_medio": 39.81,
+        "NWgtU_medio": 53.333333,
+        "KgUtilizzatiEffettivi": 47.206467,
+        "KgPerPezzoEffettivo": 47.206467,
+        "QuotaCosto": 330.248572,
+        "CostoPerPezzo": 330.248572,
+        "EuroPerKgFinito": 6.192161,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\LASTVOGNCENTER_SYD\\1086405306R01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\LASTVOGNCENTER_SYD\\1086405306R01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\LASTVOGNCENTER_SYD\\1086405306R01.jpg"
+      },
+      {
+        "LnNo": 42,
+        "ProdNo": "1086400341-1L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 53.333333,
+        "OldNWgtU_medio": 39.81,
+        "NWgtU_medio": 53.333333,
+        "KgUtilizzatiEffettivi": 47.206467,
+        "KgPerPezzoEffettivo": 47.206467,
+        "QuotaCosto": 330.248572,
+        "CostoPerPezzo": 330.248572,
+        "EuroPerKgFinito": 6.192161,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\LASTVOGNCENTER_SYD\\1086405306R01.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\LASTVOGNCENTER_SYD\\1086405306R01.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\396986-396994-397243\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\LASTVOGNCENTER_SYD\\1086405306R01.jpg"
+      }
+    ]
+  }
+}

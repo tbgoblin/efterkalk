@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397111",
+  "cachedAt": "2026-03-31T11:50:02.626Z",
+  "cachedAtMs": 1774957802626,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.626Z",
+  "data": {
+    "ordNo": 397111,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400251-10",
+        "Descr": "180x100x8",
+        "NoFin": 1,
+        "DPrice": 469.02,
+        "CCstPr": 469.02,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 469.02,
+        "NestingCost": null,
+        "EffectiveLineCost": 469.02
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "3051801135554",
+        "Descr": "KoldF.  S355   180x100x8  rør   EN 10219",
+        "NoFin": 1,
+        "DPrice": 469.023334,
+        "CCstPr": 469.023334,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 469.02,
+        "NestingCost": null,
+        "EffectiveLineCost": 469.02
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400251-10",
+        "Descr": "Rute for 180x100x8",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 469.02
+  }
+}

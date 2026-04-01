@@ -1,0 +1,125 @@
+{
+  "key": "laser_397312_0_1005401343L_1",
+  "cachedAt": "2026-03-31T12:29:25.203Z",
+  "cachedAtMs": 1774960165203,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T13:29:25.203Z",
+  "data": {
+    "ordine": "397312",
+    "route": null,
+    "nestingOrdNo": "397359",
+    "prodNo": "1005401343L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1612.738,
+      "CostoLastre": 11573.58,
+      "KgFiniti": 1188.594,
+      "SfridoKg": 424.144,
+      "SfridoPct": 0.262996
+    },
+    "products": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1005401343L",
+        "Route": "01",
+        "TrTp": 7,
+        "QtaPezzi": 48,
+        "KgProdotto": 15.84,
+        "OldNWgtU_medio": 0.174,
+        "NWgtU_medio": 0.33,
+        "KgUtilizzatiEffettivi": 12.79,
+        "KgPerPezzoEffettivo": 0.266458,
+        "QuotaCosto": 89.66,
+        "CostoPerPezzo": 1.867917,
+        "EuroPerKgFinito": 5.660354,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\001.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\001.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\001.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg"
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1005401343L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 6412,
+        "KgProdotto": 2115.96,
+        "OldNWgtU_medio": 0.174,
+        "NWgtU_medio": 0.33,
+        "KgUtilizzatiEffettivi": 1512,
+        "KgPerPezzoEffettivo": 0.235808,
+        "QuotaCosto": 10852.66,
+        "CostoPerPezzo": 1.692555,
+        "EuroPerKgFinito": 5.128953,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg"
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "1005401343L",
+        "Route": "03",
+        "TrTp": 7,
+        "QtaPezzi": 371,
+        "KgProdotto": 122.43,
+        "OldNWgtU_medio": 0.174,
+        "NWgtU_medio": 0.33,
+        "KgUtilizzatiEffettivi": 87.948,
+        "KgPerPezzoEffettivo": 0.237057,
+        "QuotaCosto": 631.26,
+        "CostoPerPezzo": 1.701509,
+        "EuroPerKgFinito": 5.156089,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\003.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\003.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\397311\\003.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\POLYTECH\\34497-D.jpg"
+      }
+    ]
+  }
+}

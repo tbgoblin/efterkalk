@@ -1,0 +1,57 @@
+{
+  "key": "laser_399583_all_1107901730L_1",
+  "cachedAt": "2026-03-31T10:49:05.705Z",
+  "cachedAtMs": 1774954145705,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T11:49:05.705Z",
+  "data": {
+    "ordine": "399583",
+    "route": null,
+    "nestingOrdNo": "399613",
+    "prodNo": "1107901730L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 4.07,
+      "CostoLastre": 69.19,
+      "KgFiniti": 2.31,
+      "SfridoKg": 1.76,
+      "SfridoPct": 0.432432
+    },
+    "products": [
+      {
+        "LnNo": 2,
+        "ProdNo": "1107901730L",
+        "Route": "02",
+        "TrTp": 7,
+        "QtaPezzi": 12,
+        "KgProdotto": 3.6,
+        "OldNWgtU_medio": 0.119,
+        "NWgtU_medio": 0.3,
+        "KgUtilizzatiEffettivi": 2.36,
+        "KgPerPezzoEffettivo": 0.196667,
+        "QuotaCosto": 40.12,
+        "CostoPerPezzo": 3.343333,
+        "EuroPerKgFinito": 11.144444,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399581\\002.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\10 STK 3 MM AISI304.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\10 STK 3 MM AISI304.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399581\\002.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\399581\\002.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\SANDERUM\\10 STK 3 MM AISI304.jpg"
+      }
+    ]
+  }
+}

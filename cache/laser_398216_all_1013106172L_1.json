@@ -1,0 +1,91 @@
+{
+  "key": "laser_398216_all_1013106172L_1",
+  "cachedAt": "2026-03-31T13:29:31.291Z",
+  "cachedAtMs": 1774963771291,
+  "ttlMs": 3600000,
+  "expiresAt": "2026-03-31T14:29:31.291Z",
+  "data": {
+    "ordine": "398216",
+    "route": null,
+    "nestingOrdNo": "398272",
+    "prodNo": "1013106172L",
+    "showAllRoutes": true,
+    "summary": {
+      "KgConsumati": 1370.02024,
+      "CostoLastre": 8548.48,
+      "KgFiniti": 1096.649,
+      "SfridoKg": 273.37124,
+      "SfridoPct": 0.199538
+    },
+    "products": [
+      {
+        "LnNo": 29,
+        "ProdNo": "1013106172L",
+        "Route": "07",
+        "TrTp": 7,
+        "QtaPezzi": 8,
+        "KgProdotto": 5.194808,
+        "OldNWgtU_medio": 0.404,
+        "NWgtU_medio": 0.649351,
+        "KgUtilizzatiEffettivi": 4.540442,
+        "KgPerPezzoEffettivo": 0.567555,
+        "QuotaCosto": 27.098946,
+        "CostoPerPezzo": 3.387368,
+        "EuroPerKgFinito": 5.216544,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\007.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-D-KDB-29-0520-1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-D-KDB-29-0520-1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\007.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\007.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-D-KDB-29-0520-1.jpg"
+      },
+      {
+        "LnNo": 47,
+        "ProdNo": "1013106172L",
+        "Route": "08",
+        "TrTp": 7,
+        "QtaPezzi": 1,
+        "KgProdotto": 0.649351,
+        "OldNWgtU_medio": 0.404,
+        "NWgtU_medio": 0.649351,
+        "KgUtilizzatiEffettivi": 1.28922,
+        "KgPerPezzoEffettivo": 1.28922,
+        "QuotaCosto": 6.446099,
+        "CostoPerPezzo": 6.446099,
+        "EuroPerKgFinito": 9.926988,
+        "ImageItems": [
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\008.jpg\\S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-D-KDB-29-0520-1.jpg",
+            "label": "WebPg + PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-D-KDB-29-0520-1.jpg",
+            "label": "PictFNm"
+          },
+          {
+            "type": "file",
+            "value": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\008.jpg",
+            "label": "WebPg"
+          }
+        ],
+        "WebPg": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Nesting\\398128-398173-398200\\008.jpg",
+        "PictFNm": "S:\\Sicam\\RPBridge\\SharedData\\Snapshots\\Icons\\EHCOLO\\40-D-KDB-29-0520-1.jpg"
+      }
+    ]
+  }
+}

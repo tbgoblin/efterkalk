@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_399432",
+  "cachedAt": "2026-03-31T11:42:18.842Z",
+  "cachedAtMs": 1774957338842,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:12:18.842Z",
+  "data": {
+    "ordNo": 399432,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1000905403-5",
+        "Descr": "10mm",
+        "NoFin": 1,
+        "DPrice": 317.96,
+        "CCstPr": 317.96,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 317.96,
+        "NestingCost": null,
+        "EffectiveLineCost": 317.96
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1000905403-5L",
+        "Descr": "Laser 10mm",
+        "NoFin": 22,
+        "DPrice": 14.452727,
+        "CCstPr": 14.452727,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 317.96,
+        "NestingCost": 14.452727,
+        "EffectiveLineCost": 317.96
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1000905403-5",
+        "Descr": "Rute for 10mm",
+        "NoFin": 1,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 317.96
+  }
+}

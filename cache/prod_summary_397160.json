@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397160",
+  "cachedAt": "2026-03-31T11:50:02.829Z",
+  "cachedAtMs": 1774957802829,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.829Z",
+  "data": {
+    "ordNo": 397160,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400253-7",
+        "Descr": "Styr for aktuator",
+        "NoFin": 2,
+        "DPrice": 15.18,
+        "CCstPr": 15.18,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 30.36,
+        "NestingCost": null,
+        "EffectiveLineCost": 30.36
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400253-7L",
+        "Descr": "Laser Styr for aktuator",
+        "NoFin": 2,
+        "DPrice": 15.18,
+        "CCstPr": 15.18,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 30.36,
+        "NestingCost": 10.89,
+        "EffectiveLineCost": 21.78
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400253-7",
+        "Descr": "Rute for Styr for aktuator",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 21.78
+  }
+}

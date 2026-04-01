@@ -1,0 +1,40 @@
+{
+  "key": "aftercalc_400686",
+  "cachedAt": "2026-03-31T13:41:14.618Z",
+  "cachedAtMs": 1774964474618,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T14:11:14.618Z",
+  "data": {
+    "orderHeader": {
+      "OrdNo": 400686,
+      "TrTp": 1,
+      "InvoSF": 1080,
+      "CustomerName": "Logitrans A/S"
+    },
+    "salesOrderLines": [
+      {
+        "OrdNo": 400686,
+        "LnNo": 1,
+        "ProdNo": "6200",
+        "Descr": "Vibrationsafgrate time",
+        "DPrice": 540,
+        "NoFin": 2,
+        "CCstPr": 480,
+        "PurcNo": 0,
+        "LineCost": 960,
+        "IsDiscountLine": false,
+        "EffectiveLineCost": 960,
+        "ProductionOrderTotalCost": null
+      }
+    ],
+    "salesLines": [],
+    "salesLinesTotalCost": 0,
+    "productionOrders": [],
+    "summary": {
+      "totalRevenue": 1080,
+      "totalCost": 960,
+      "margin": 120,
+      "marginPercentage": "112.50"
+    }
+  }
+}

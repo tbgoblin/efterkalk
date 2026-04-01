@@ -1,0 +1,61 @@
+{
+  "key": "prod_summary_397155",
+  "cachedAt": "2026-03-31T11:50:02.805Z",
+  "cachedAtMs": 1774957802805,
+  "ttlMs": 1800000,
+  "expiresAt": "2026-03-31T12:20:02.805Z",
+  "data": {
+    "ordNo": 397155,
+    "lines": [
+      {
+        "LnNo": 1,
+        "ProdNo": "1086400253-9",
+        "Descr": "Forstærkningsøje",
+        "NoFin": 2,
+        "DPrice": 2.24,
+        "CCstPr": 2.24,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 0,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 4.48,
+        "NestingCost": null,
+        "EffectiveLineCost": 4.48
+      },
+      {
+        "LnNo": 2,
+        "ProdNo": "1086400253-9L",
+        "Descr": "Laser Forstærkningsøje",
+        "NoFin": 2,
+        "DPrice": 2.24,
+        "CCstPr": 2.24,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 2,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 4.48,
+        "NestingCost": 2.24,
+        "EffectiveLineCost": 4.48
+      },
+      {
+        "LnNo": 3,
+        "ProdNo": "V1086400253-9",
+        "Descr": "Rute for Forstærkningsøje",
+        "NoFin": 2,
+        "DPrice": 0,
+        "CCstPr": 0,
+        "TrInf2": " ",
+        "TrInf4": "0",
+        "ProdTp4": 5,
+        "PurcNo": 0,
+        "HvemNm": "KJ Stålmontage ApS",
+        "LineCost": 0,
+        "NestingCost": null,
+        "EffectiveLineCost": 0
+      }
+    ],
+    "totalCost": 4.48
+  }
+}
