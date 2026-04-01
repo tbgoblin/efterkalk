@@ -108,6 +108,10 @@ function isR1100Operation(prodNo) {
     return String(prodNo || '').trim().toUpperCase() === 'R1100';
 }
 
+function isGloballyExcludedProdNo(prodNo) {
+    return String(prodNo || '').trim().toUpperCase() === 'R1090';
+}
+
 function isLaserEagleOperator(hvemNm) {
     return String(hvemNm || '').trim().toUpperCase().includes('LASER EAGLE');
 }
@@ -461,7 +465,9 @@ async function getAfterCalc(ordNo) {
         ];
         const drawingByProdNo = await getLatestDrawingByProdNo(pool, prodNosForDrawings);
 
-        const salesLines = salesLinesResult.recordset.map(line => {
+        const salesLines = salesLinesResult.recordset
+            .filter(line => !isGloballyExcludedProdNo(line.ProdNo))
+            .map(line => {
             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
             const isDiscountLine = lineSalesPrice === 0;
             const effectiveLineCost = isDiscountLine ? 0 : (line.LineCost || 0);
@@ -476,7 +482,9 @@ async function getAfterCalc(ordNo) {
         const salesLinesTotalCost = salesLines.reduce((sum, line) => sum + (line.EffectiveLineCost || 0), 0);
 
         // 2b. Costo linee vendita senza P.O. (PurcNo nullo o 0) per il riepilogo finale
-        const salesOrderLines = salesOrderLinesResult.recordset.map(line => {
+        const salesOrderLines = salesOrderLinesResult.recordset
+            .filter(line => !isGloballyExcludedProdNo(line.ProdNo))
+            .map(line => {
             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
             const isDiscountLine = lineSalesPrice === 0;
             const effectiveLineCost = isDiscountLine ? 0 : (line.LineCost || 0);
@@ -549,6 +557,8 @@ async function getAfterCalc(ordNo) {
                 let total = 0;
 
                 for (const rawLine of prodLinesResult.recordset) {
+                    if (isGloballyExcludedProdNo(rawLine.ProdNo)) continue;
+
                     const line = adjustOperationLinePricing({ ...rawLine });
                     const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
                     let effectiveLineCost = Number(line.LineCost || 0);
@@ -556,7 +566,7 @@ async function getAfterCalc(ordNo) {
 
                     if (key === '1') {
                         const pnUp = String(line.ProdNo || '').toUpperCase();
-                        if (pnUp === 'R6200' || pnUp === 'R1090') {
+                        if (pnUp === 'R6200') {
                             // Employees don't register hours on these → use planned (NoOrg) as effective
                             effectiveLineCost = Number((line.NoOrg || 0) * (line.CCstPr || 0));
                         }
@@ -1071,7 +1081,9 @@ app.get('/production-summary/:ordno', async (req, res) => {
                 ORDER BY LnNo
             `);
 
-        const lines = linesResult.recordset.map(rawLine => {
+        const lines = linesResult.recordset
+            .filter(rawLine => !isGloballyExcludedProdNo(rawLine.ProdNo))
+            .map(rawLine => {
             const line = adjustOperationLinePricing({ ...rawLine });
             const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
             const hasNestingCost = Number(line.NestingCost || 0) > 0;
@@ -2930,13 +2942,13 @@ app.get('/', (req, res) => {
                                     html += '<td>' + (line.Descr || '') + '</td>';
                                     if (key === '1') {
                                         const pn = String(line.ProdNo || '').toUpperCase();
-                                        const isNoRegProd = (pn === 'R6200' || pn === 'R1090');
+                                        const isNoRegProd = (pn === 'R6200');
                                         // Stykliste Minutter: always NoOrg
                                         html += '<td>' + formatNumber(line.NoOrg || 0) + '</td>';
-                                        // Færdigmeldt minutter: for R6200/R1090 employees don't register hours → use NoOrg as estimated
+                                        // Færdigmeldt minutter: for R6200 employees don't register hours → use NoOrg as estimated
                                         const effectiveNoFin = isNoRegProd ? (line.NoOrg || 0) : (line.NoFin || 0);
                                         html += '<td>' + formatNumber(effectiveNoFin) + '</td>';
-                                        // Costs: use effectiveNoFin so R6200/R1090 show estimated cost
+                                        // Costs: use effectiveNoFin so R6200 shows estimated cost
                                         const displayUnitCost1 = (line.CCstPr || 0);
                                         const displayTotalCost1 = isNoRegProd
                                             ? (effectiveNoFin * (line.CCstPr || 0))
