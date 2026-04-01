@@ -590,6 +590,8 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
         };
 
         orderMarginCache.set(key, marginInfo);
+        // Also save to persistent disk cache (24 hours) for faster startup next time
+        diskCache.set('order_margin_' + key, marginInfo, 24 * 60 * 60 * 1000);
         return marginInfo;
     }).finally(() => {
         orderMarginInFlight.delete(key);
@@ -651,6 +653,50 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
     }
 }
 
+function tryLoadOrderListFromCache() {
+    try {
+        const cached = diskCache.get('order_list');
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+            logEvent('ORDER-LIST: loaded ' + cached.length + ' rows from diskCache');
+            return cached;
+        }
+    } catch (e) {
+        logEvent('ORDER-LIST-CACHE READ ERROR: ' + e.message);
+    }
+    return null;
+}
+
+function preloadMarginsAndDetailsFromCache(ordNos) {
+    let marginsLoaded = 0;
+    let detailsLoaded = 0;
+    
+    for (const ordNo of ordNos) {
+        try {
+            const key = Number(ordNo);
+            if (!Number.isFinite(key)) continue;
+            
+            // Preload margins
+            const marginCached = diskCache.get('order_margin_' + key);
+            if (marginCached) {
+                orderMarginCache.set(key, marginCached);
+                marginsLoaded += 1;
+            }
+            
+            // Preload aftercalc details
+            const detailsCached = diskCache.get('aftercalc_' + key);
+            if (detailsCached) {
+                detailsLoaded += 1;
+            }
+        } catch (e) {
+            // Silently skip errors during preload
+        }
+    }
+    
+    if (marginsLoaded > 0 || detailsLoaded > 0) {
+        logEvent('PRELOAD: loaded ' + marginsLoaded + ' margins + ' + detailsLoaded + ' details from diskCache');
+    }
+}
+
 async function refreshOrderListCache(force = false) {
     if (!force && isOrderListCacheFresh()) {
         return;
@@ -672,6 +718,10 @@ async function refreshOrderListCache(force = false) {
             orderListCache.data = rows;
             orderListCache.loadedAt = Date.now();
             orderListCache.lastError = null;
+
+            // Save to persistent disk cache (TTL: 24 hours) for startup speedup
+            diskCache.set('order_list', rows, 24 * 60 * 60 * 1000);
+            logEvent('ORDER-LIST-REFRESH: saved ' + rows.length + ' rows to diskCache');
 
             const warmOrdNos = rows.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
             warmMarginsInBackground(warmOrdNos);
@@ -3093,6 +3143,9 @@ app.get('/', (req, res) => {
             }
 
             async function clearAppCache() {
+                const confirmed = confirm('Er du sikker? Dette vil slette alt cache og tage lang tid at genindlæse data.');
+                if (!confirmed) return;
+                
                 const btn = document.getElementById('clearCacheBtn');
                 if (btn) { btn.disabled = true; btn.textContent = 'Rydder...'; }
                 try {
@@ -3289,12 +3342,33 @@ function ensureServerStarted() {
         const server = app.listen(PORT, async () => {
             try {
                 console.log('Server in ascolto su http://localhost:' + PORT);
-                logEvent('Server started - warm-up phase beginning');
+                logEvent('Server started - smart preload phase beginning');
 
-                // WAIT for cache warmup to complete before accepting requests
-                await refreshOrderListCache(true);
-                logEvent('Cache primed: order list loaded and all warmups completed');
+                // Try to load from persistent cache first for faster startup
+                const cachedList = tryLoadOrderListFromCache();
+                if (cachedList && cachedList.length > 0) {
+                    orderListCache.data = cachedList;
+                    orderListCache.loadedAt = Date.now();
+                    logEvent('Cache primed from disk: ' + cachedList.length + ' orders ready');
+                    
+                    // Preload margins AND aftercalc details from disk (instant load)
+                    const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
+                    preloadMarginsAndDetailsFromCache(preloadOrdNos);
+                    
+                    // Warm up margins in background (will check disk first, then refresh if needed)
+                    warmMarginsInBackground(preloadOrdNos);
+                    
+                    // Refresh from DB in background (don't block startup)
+                    refreshOrderListCache(true).catch(err => {
+                        logEvent('WARNING: background DB refresh failed: ' + err.message);
+                    });
+                } else {
+                    // No cache: load from DB (fresh startup)
+                    await refreshOrderListCache(true);
+                    logEvent('Cache primed from database (first startup)');
+                }
 
+                logEvent('Cache primed: order list loaded and ready');
                 startScheduledRefresh();
                 resolve(server);
             } catch (err) {
