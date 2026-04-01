@@ -204,13 +204,16 @@ function bootDesktopApp() {
         setupAutoUpdater();
     }).catch(err => {
         console.error('Server start failed:', err.message);
+        if (err && err.code) console.error('Server start failed code:', err.code);
+        if (err && err.stack) console.error('Server start failed stack:', err.stack);
         if (mainWindow) {
             const raw = (err && err.message ? err.message : 'Unknown startup error') + (err && err.code ? ' [' + err.code + ']' : '');
             const details = (err && err.code === 'EADDRINUSE')
                 ? ('Port ' + USER_PORT + ' er allerede i brug. Luk andre Efterkalk-processer og prov igen.')
                 : raw;
             const msg = details.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            mainWindow.loadURL('data:text/html,<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;background:%23c0392b;color:%23fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.box{background:rgba(0,0,0,.3);border-radius:12px;padding:40px;max-width:600px;text-align:center}</style></head><body><div class="box"><h2>⚠️ Server kunne ikke starte</h2><p>' + msg + '</p><p style="margin-top:20px;font-size:12px;opacity:.6">Luk og prøv igen.</p></div></body></html>');
+            const errorHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;background:#c0392b;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.box{background:rgba(0,0,0,.3);border-radius:12px;padding:40px;max-width:700px;text-align:center}</style></head><body><div class="box"><h2>Server kunne ikke starte</h2><p style="word-break:break-word">' + msg + '</p><p style="margin-top:20px;font-size:12px;opacity:.75">Luk og prov igen.</p></div></body></html>';
+            mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorHtml));
         }
     });
 }
