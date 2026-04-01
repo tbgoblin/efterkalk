@@ -1499,6 +1499,7 @@ app.get('/order-list', async (req, res) => {
 
 // Endpoint per HTML
 app.get('/', (req, res) => {
+    logEvent('HTTP GET /');
     res.send(`
     <!DOCTYPE html>
     <html>

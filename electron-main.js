@@ -31,6 +31,23 @@ if (!process.env.GANTECH_LOG_DIR) {
     }
 }
 
+const MAIN_LOG_FILE = path.join(process.env.GANTECH_LOG_DIR || process.cwd(), 'gantech.log');
+
+function writeDesktopLog(message) {
+    const timestamp = new Date().toISOString();
+    const line = '[' + timestamp + '] [desktop] ' + message + '\n';
+    try {
+        fs.appendFileSync(MAIN_LOG_FILE, line);
+    } catch (_) {
+        // Ignore logging failures.
+    }
+    try {
+        console.log(line.trim());
+    } catch (_) {
+        // Ignore console failures.
+    }
+}
+
 const { ensureServerStarted } = require('./server');
 
 // In RDS multiple sessions can run under the same username.
@@ -62,6 +79,7 @@ const IS_RDS = !!process.env.SESSIONNAME && process.env.SESSIONNAME !== 'Console
 
 const logDirInfo = process.env.GANTECH_LOG_DIR || '(auto)';
 console.info('Desktop process booting... port=' + USER_PORT + ' rds=' + IS_RDS + ' logDir=' + logDirInfo);
+writeDesktopLog('boot port=' + USER_PORT + ' rds=' + IS_RDS + ' logDir=' + logDirInfo);
 
 function waitForSingleUpdateResult(timeoutMs = 15000) {
     return new Promise((resolve) => {
@@ -193,6 +211,26 @@ function createMainWindow() {
 
     mainWindow.removeMenu();
 
+    mainWindow.webContents.on('did-start-loading', () => {
+        writeDesktopLog('did-start-loading url=' + mainWindow.webContents.getURL());
+    });
+
+    mainWindow.webContents.on('did-finish-load', () => {
+        writeDesktopLog('did-finish-load url=' + mainWindow.webContents.getURL());
+    });
+
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        writeDesktopLog('did-fail-load code=' + errorCode + ' desc=' + errorDescription + ' url=' + validatedURL + ' mainFrame=' + isMainFrame);
+    });
+
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+        writeDesktopLog('render-process-gone reason=' + details.reason + ' exitCode=' + details.exitCode);
+    });
+
+    mainWindow.on('unresponsive', () => {
+        writeDesktopLog('window-unresponsive');
+    });
+
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url).catch(() => {});
         return { action: 'deny' };
@@ -210,16 +248,19 @@ function bootDesktopApp() {
     createMainWindow();
     const pkgVersion = (() => { try { return require('./package.json').version; } catch(e) { return ''; } })();
     const loadingPath = path.join(__dirname, 'loading.html');
+    writeDesktopLog('load loading screen path=' + loadingPath + ' port=' + USER_PORT);
     mainWindow.loadFile(loadingPath, { query: { v: pkgVersion, port: String(USER_PORT) } });
 
     // Start server in background — loading.html polls /health and navigates itself
     // Keep electron-main as fallback in case polling fails
     ensureServerStarted().then(() => {
+        writeDesktopLog('ensureServerStarted resolved appUrl=' + APP_URL);
         global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
         // loading.html will navigate on its own via polling — no need to loadURL here
         // but as a safety net, navigate after a short delay if window is still on loading page
         setTimeout(() => {
             if (mainWindow && mainWindow.webContents.getURL().startsWith('file://')) {
+                writeDesktopLog('fallback loadURL ' + APP_URL);
                 mainWindow.loadURL(APP_URL);
             }
         }, 1000);
@@ -228,6 +269,9 @@ function bootDesktopApp() {
         console.error('Server start failed:', err.message);
         if (err && err.code) console.error('Server start failed code:', err.code);
         if (err && err.stack) console.error('Server start failed stack:', err.stack);
+        writeDesktopLog('server start failed message=' + (err && err.message ? err.message : 'unknown'));
+        if (err && err.code) writeDesktopLog('server start failed code=' + err.code);
+        if (err && err.stack) writeDesktopLog('server start failed stack=' + err.stack.replace(/\r?\n/g, ' | '));
         if (mainWindow) {
             const raw = (err && err.message ? err.message : 'Unknown startup error') + (err && err.code ? ' [' + err.code + ']' : '');
             const details = (err && err.code === 'EADDRINUSE')
@@ -240,8 +284,20 @@ function bootDesktopApp() {
     });
 }
 
+process.on('uncaughtException', (err) => {
+    writeDesktopLog('uncaughtException message=' + (err && err.message ? err.message : 'unknown'));
+    if (err && err.stack) writeDesktopLog('uncaughtException stack=' + err.stack.replace(/\r?\n/g, ' | '));
+});
+
+process.on('unhandledRejection', (reason) => {
+    const message = reason && reason.message ? reason.message : String(reason);
+    writeDesktopLog('unhandledRejection message=' + message);
+    if (reason && reason.stack) writeDesktopLog('unhandledRejection stack=' + reason.stack.replace(/\r?\n/g, ' | '));
+});
+
 app.whenReady().then(bootDesktopApp).catch((err) => {
     console.error('Desktop startup failed:', err);
+    writeDesktopLog('Desktop startup failed message=' + (err && err.message ? err.message : String(err)));
     app.quit();
 });
 
