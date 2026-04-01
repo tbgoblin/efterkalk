@@ -89,6 +89,16 @@
         <div class="version" id="versionText"></div>
     </div>
     <script>
+        const params = new URLSearchParams(window.location.search);
+        const port = params.get('port') || '3000';
+        const appUrl = 'http://localhost:' + port;
+
+        // Show version
+        try {
+            const v = params.get('v');
+            if (v) document.getElementById('versionText').textContent = 'v' + v;
+        } catch(e) {}
+
         const messages = [
             { pct: 10, text: 'Starter op...' },
             { pct: 25, text: 'Forbinder til database...' },
@@ -117,12 +127,31 @@
             }
         }, 1400);
 
-        // Show version if passed via URL param
-        try {
-            const params = new URLSearchParams(window.location.search);
-            const v = params.get('v');
-            if (v) document.getElementById('versionText').textContent = 'v' + v;
-        } catch(e) {}
+        // Poll /health — navigate as soon as server responds
+        let pollCount = 0;
+        const pollTimer = setInterval(async () => {
+            pollCount++;
+            try {
+                const r = await fetch(appUrl + '/health', { cache: 'no-store' });
+                if (r.ok) {
+                    clearInterval(pollTimer);
+                    clearInterval(timer);
+                    document.getElementById('progressBar').style.width = '100%';
+                    document.getElementById('statusText').textContent = 'Klar! Åbner...';
+                    setTimeout(() => { window.location.href = appUrl; }, 200);
+                }
+            } catch(e) {
+                // Server not ready yet — keep polling
+            }
+            // After 90 seconds show a warning
+            if (pollCount > 180) {
+                clearInterval(pollTimer);
+                document.getElementById('statusText').textContent = 'Serveren svarer ikke. Kontakt IT.';
+                document.getElementById('progressBar').style.background = 'rgba(255,255,255,0.4)';
+            }
+        }, 500);
+
+        // Show version if passed via URL param (already handled above)
     </script>
 </body>
 </html>

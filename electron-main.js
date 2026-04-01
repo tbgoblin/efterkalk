@@ -178,49 +178,34 @@ function createMainWindow() {
     });
 }
 
-async function bootDesktopApp() {
+function bootDesktopApp() {
     configureAutoStart();
 
     // Show loading screen immediately — don't wait for server
     createMainWindow();
     const pkgVersion = (() => { try { return require('./package.json').version; } catch(e) { return ''; } })();
     const loadingPath = path.join(__dirname, 'loading.html');
-    mainWindow.loadFile(loadingPath, { query: { v: pkgVersion } });
+    mainWindow.loadFile(loadingPath, { query: { v: pkgVersion, port: String(USER_PORT) } });
 
-    // Start server in background while loading screen is visible
-    // Add a 60-second timeout so user always gets feedback instead of stuck red screen
-    const serverStartPromise = ensureServerStarted();
-    const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Server startup timed out after 60 seconds')), 60000)
-    );
-
-    try {
-        await Promise.race([serverStartPromise, timeoutPromise]);
-    } catch (err) {
+    // Start server in background — loading.html polls /health and navigates itself
+    // Keep electron-main as fallback in case polling fails
+    ensureServerStarted().then(() => {
+        global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
+        // loading.html will navigate on its own via polling — no need to loadURL here
+        // but as a safety net, navigate after a short delay if window is still on loading page
+        setTimeout(() => {
+            if (mainWindow && mainWindow.webContents.getURL().startsWith('file://')) {
+                mainWindow.loadURL(APP_URL);
+            }
+        }, 1000);
+        setupAutoUpdater();
+    }).catch(err => {
         console.error('Server start failed:', err.message);
         if (mainWindow) {
-            const errHtml = `data:text/html,<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>body{font-family:Arial;background:#c0392b;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
-.box{background:rgba(0,0,0,0.3);border-radius:12px;padding:40px;max-width:600px;text-align:center;}
-h2{margin-bottom:16px;}p{opacity:0.85;font-size:13px;word-break:break-all;}</style></head>
-<body><div class="box"><h2>⚠️ Server kunne ikke starte</h2>
-<p>${err.message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
-<p style="margin-top:20px;font-size:12px;opacity:0.6;">Luk og prøv igen. Kontakt IT hvis problemet fortsætter.</p>
-</div></body></html>`;
-            mainWindow.loadURL(errHtml);
+            const msg = err.message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            mainWindow.loadURL('data:text/html,<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;background:%23c0392b;color:%23fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.box{background:rgba(0,0,0,.3);border-radius:12px;padding:40px;max-width:600px;text-align:center}</style></head><body><div class="box"><h2>⚠️ Server kunne ikke starte</h2><p>' + msg + '</p><p style="margin-top:20px;font-size:12px;opacity:.6">Luk og prøv igen.</p></div></body></html>');
         }
-        return;
-    }
-
-    global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
-
-    // Navigate to app once server is ready
-    if (mainWindow) {
-        mainWindow.loadURL(APP_URL);
-    }
-
-    setupAutoUpdater();
-}
+    });
 
 app.whenReady().then(bootDesktopApp).catch((err) => {
     console.error('Desktop startup failed:', err);

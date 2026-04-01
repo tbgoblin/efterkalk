@@ -20,6 +20,9 @@ const path = require('path');
 function resolveWritableCacheDir() {
     const candidates = [
         process.env.GANTECH_CACHE_DIR,
+        // Shared location on C:\ — works across all RDS users on the same machine
+        'C:\\GantechCache',
+        'C:\\cache\\Gantech',
         process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Gantech Efterkalk', 'cache') : null,
         process.env.APPDATA ? path.join(process.env.APPDATA, 'Gantech Efterkalk', 'cache') : null,
         path.join(process.cwd(), 'cache'),

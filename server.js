@@ -1237,6 +1237,10 @@ app.get('/cache-status', (req, res) => {
     res.json({ count: entries.length, entries });
 });
 
+app.get('/health', (req, res) => {
+    res.json({ ok: true, version: pkgVersion });
+});
+
 app.get('/warmup-status', (req, res) => {
     const done = warmupProgress.cached + warmupProgress.loaded + warmupProgress.failed;
     const pct = warmupProgress.total > 0 ? Math.round((done / warmupProgress.total) * 100) : 100;
