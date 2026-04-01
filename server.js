@@ -554,7 +554,13 @@ async function getAfterCalc(ordNo) {
                     let effectiveLineCost = Number(line.LineCost || 0);
                     let childProductionTotalCost = null;
 
-                    if (key === '2' && isLaserLProduct(line.ProdNo)) {
+                    if (key === '1') {
+                        const pnUp = String(line.ProdNo || '').toUpperCase();
+                        if (pnUp === 'R6200' || pnUp === 'R1090') {
+                            // Employees don't register hours on these → use planned (NoOrg) as effective
+                            effectiveLineCost = Number((line.NoOrg || 0) * (line.CCstPr || 0));
+                        }
+                    } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
                         const hasNestingCost = Number(line.NestingCost || 0) > 0;
                         effectiveLineCost = hasNestingCost
                             ? Number((line.NestingCost || 0) * (line.NoFin || 0))
