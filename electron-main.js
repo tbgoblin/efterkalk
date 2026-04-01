@@ -188,12 +188,26 @@ async function bootDesktopApp() {
     mainWindow.loadFile(loadingPath, { query: { v: pkgVersion } });
 
     // Start server in background while loading screen is visible
+    // Add a 60-second timeout so user always gets feedback instead of stuck red screen
+    const serverStartPromise = ensureServerStarted();
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Server startup timed out after 60 seconds')), 60000)
+    );
+
     try {
-        await ensureServerStarted();
+        await Promise.race([serverStartPromise, timeoutPromise]);
     } catch (err) {
         console.error('Server start failed:', err.message);
         if (mainWindow) {
-            mainWindow.loadURL('data:text/html,<h2 style="font-family:Arial;color:red;padding:40px">Server kunne ikke starte: ' + err.message + '</h2>');
+            const errHtml = `data:text/html,<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>body{font-family:Arial;background:#c0392b;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.box{background:rgba(0,0,0,0.3);border-radius:12px;padding:40px;max-width:600px;text-align:center;}
+h2{margin-bottom:16px;}p{opacity:0.85;font-size:13px;word-break:break-all;}</style></head>
+<body><div class="box"><h2>⚠️ Server kunne ikke starte</h2>
+<p>${err.message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+<p style="margin-top:20px;font-size:12px;opacity:0.6;">Luk og prøv igen. Kontakt IT hvis problemet fortsætter.</p>
+</div></body></html>`;
+            mainWindow.loadURL(errHtml);
         }
         return;
     }
