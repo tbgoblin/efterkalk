@@ -127,24 +127,68 @@
             }
         }, 1400);
 
-        // Poll /health — navigate as soon as server responds
+        // Phase 1: Poll /health — wait for server
+        // Phase 2: Poll /warmup-status — show real progress, navigate when done
         let pollCount = 0;
+        let serverReady = false;
+        let warmupPollCount = 0;
+
+        function navigateToApp() {
+            clearInterval(pollTimer);
+            clearInterval(timer);
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('statusText').textContent = 'Klar! Åbner...';
+            setTimeout(() => { window.location.href = appUrl; }, 300);
+        }
+
         const pollTimer = setInterval(async () => {
             pollCount++;
             try {
-                const r = await fetch(appUrl + '/health', { cache: 'no-store' });
-                if (r.ok) {
-                    clearInterval(pollTimer);
-                    clearInterval(timer);
-                    document.getElementById('progressBar').style.width = '100%';
-                    document.getElementById('statusText').textContent = 'Klar! Åbner...';
-                    setTimeout(() => { window.location.href = appUrl; }, 200);
+                if (!serverReady) {
+                    // Phase 1: wait for server
+                    const r = await fetch(appUrl + '/health', { cache: 'no-store' });
+                    if (r.ok) {
+                        serverReady = true;
+                        clearInterval(timer);
+                        bar.style.width = '30%';
+                        txt.textContent = 'Forberegner ordrer...';
+                    }
+                } else {
+                    // Phase 2: show real warmup progress
+                    warmupPollCount++;
+                    const r = await fetch(appUrl + '/warmup-status', { cache: 'no-store' });
+                    if (r.ok) {
+                        const data = await r.json();
+                        const cached = Number(data.cached || 0);
+                        const loaded = Number(data.loaded || 0);
+                        const failed = Number(data.failed || 0);
+                        const total = Number(data.total || 0);
+                        const done = cached + loaded + failed;
+
+                        if (total > 0) {
+                            const pct = Math.round(30 + (done / total) * 65);
+                            bar.style.width = Math.min(pct, 95) + '%';
+                            txt.textContent = 'Ordini: ' + done + '/' + total + ' (cache ' + cached + ', db ' + loaded + ', fejl ' + failed + ')';
+                        } else {
+                            bar.style.width = '40%';
+                            txt.textContent = 'Forbereder ordreliste...';
+                        }
+
+                        const warmupFinished = total > 0 && done >= total && !data.running;
+                        const noWarmupDetected = total === 0 && !data.running && warmupPollCount > 6;
+
+                        if (warmupFinished || noWarmupDetected || warmupPollCount > 240) {
+                            navigateToApp();
+                        }
+                    } else {
+                        navigateToApp();
+                    }
                 }
             } catch(e) {
-                // Server not ready yet — keep polling
+                // Not ready — keep polling
             }
-            // After 90 seconds show a warning
-            if (pollCount > 180) {
+            // After 90s in phase 1 — give up
+            if (!serverReady && pollCount > 180) {
                 clearInterval(pollTimer);
                 document.getElementById('statusText').textContent = 'Serveren svarer ikke. Kontakt IT.';
                 document.getElementById('progressBar').style.background = 'rgba(255,255,255,0.4)';

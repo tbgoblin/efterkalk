@@ -3457,6 +3457,8 @@ function ensureServerStarted() {
                     // Preload margins AND aftercalc details from disk (instant load)
                     const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
                     preloadMarginsAndDetailsFromCache(preloadOrdNos);
+                    const warmAftercalcOrdNos = cachedList.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
+                    warmAftercalcInBackground(warmAftercalcOrdNos, 'startup-cached-list', 25);
                     
                     // Warm up margins in background (will check disk first, then refresh if needed)
                     warmMarginsInBackground(preloadOrdNos);
@@ -3475,8 +3477,8 @@ function ensureServerStarted() {
                 startScheduledRefresh();
                 resolve(server);
             } catch (err) {
-                logEvent('ERROR cache warmup FATAL: ' + err.message);
-                reject(err);
+                logEvent('WARNING cache warmup error (non-fatal): ' + err.message);
+                resolve(server); // server is running — warmup error is not fatal
             }
         });
 
