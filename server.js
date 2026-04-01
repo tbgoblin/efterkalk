@@ -2,6 +2,7 @@ const express = require('express');
 const sql = require('mssql/msnodesqlv8');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const getConnection = require('./db');
 const diskCache = require('./diskCache');
 
@@ -11,6 +12,7 @@ const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 
 const app = express();
+app.use(express.json({ limit: '256kb' }));
 
 // Read version from package.json
 let pkgVersion = '1.0.0';
@@ -1449,6 +1451,34 @@ app.post('/desktop-update-check', async (req, res) => {
     }
 });
 
+app.post('/open-drawing', (req, res) => {
+    try {
+        const rawPath = String((req.body && req.body.path) || '').trim();
+        if (!rawPath) {
+            return res.status(400).json({ ok: false, message: 'Path mangler.' });
+        }
+
+        const lower = rawPath.toLowerCase();
+        if (lower.indexOf('.pdf') === -1) {
+            return res.status(400).json({ ok: false, message: 'Kun PDF er tilladt.' });
+        }
+
+        // Open with OS default app/browser in a detached process.
+        const child = spawn('cmd', ['/c', 'start', '', rawPath], {
+            windowsHide: true,
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
+
+        logEvent('OPEN-DRAWING: ' + rawPath);
+        return res.json({ ok: true });
+    } catch (err) {
+        logEvent('OPEN-DRAWING ERROR: ' + err.message);
+        return res.status(500).json({ ok: false, message: err.message });
+    }
+});
+
 // Endpoint ProdTr: transaktioner for en produktionslinje
 app.get('/prodtr/:ordno/:lnno', async (req, res) => {
     try {
@@ -1829,9 +1859,30 @@ app.get('/', (req, res) => {
             }
 
             function openDrawingPdf(pathValue) {
-                const url = toDrawingUrl(pathValue);
-                if (!url) return;
-                window.open(url, '_blank');
+                const value = String(pathValue || '').trim();
+                if (!value) return;
+                fetch('/open-drawing', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: value })
+                })
+                .then(async (r) => {
+                    if (r.ok) return;
+                    let msg = 'Kunne ikke aabne tegning.';
+                    try {
+                        const d = await r.json();
+                        if (d && d.message) msg = d.message;
+                    } catch (_) {}
+                    throw new Error(msg);
+                })
+                .catch((err) => {
+                    const url = toDrawingUrl(value);
+                    if (url) {
+                        window.open(url, '_blank');
+                    } else {
+                        alert('Fejl ved aabning af tegning: ' + err.message);
+                    }
+                });
             }
 
             function toggleLaserOrderSummary() {
