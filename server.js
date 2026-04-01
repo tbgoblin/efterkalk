@@ -1529,11 +1529,14 @@ app.get('/', (req, res) => {
                 <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Aabn sogefelt og filtre">▼ Søg</button>
                 <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." />
                 <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret">Søg</button>
-                <button id="refreshSingleOrderBtn" class="list-toggle-btn" onclick="refreshSingleOrderCache()" title="Opdater cache for det indtastede ordrenummer">Opdater ordre-cache</button>
-                <button id="refreshListBtn" class="list-toggle-btn" onclick="refreshOrderList()" title="Genindlaes ordreliste og marginer">Opdater liste</button>
+                <select id="updateActionSelect" class="filter-select" onchange="handleUpdateActionSelection()" title="Vaelg hvad du vil opdatere">
+                    <option value="">Opdater...</option>
+                    <option value="order-cache">Ordre cache</option>
+                    <option value="list">Liste</option>
+                    <option value="program">Program</option>
+                </select>
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
-                <button id="checkUpdateBtn" class="list-toggle-btn" onclick="checkDesktopUpdateNow()" title="Tjek om en ny app-version er tilgaengelig">Tjek opdatering nu</button>
                 <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
                 <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
                     <option value="">Alle brugere</option>
@@ -1646,6 +1649,7 @@ app.get('/', (req, res) => {
             const ORDER_LIST_AUTO_REFRESH_MS = 2 * 60 * 1000;
             let lastOrderListCheckTime = 0;
             let lastOrderListRemoteTime = 0;
+            let updateActionRunning = false;
 
             async function checkOrderListFreshness() {
                 const now = Date.now();
@@ -3122,6 +3126,36 @@ app.get('/', (req, res) => {
                     alert('Fejl ved opdateringskontrol: ' + e.message);
                 } finally {
                     if (btn) { btn.disabled = false; btn.textContent = 'Tjek opdatering nu'; }
+                }
+            }
+
+            async function handleUpdateActionSelection() {
+                const select = document.getElementById('updateActionSelect');
+                if (!select) return;
+
+                const action = String(select.value || '');
+                if (!action) return;
+
+                if (updateActionRunning) {
+                    alert('En opdatering koerer allerede. Vent venligst.');
+                    select.value = '';
+                    return;
+                }
+
+                updateActionRunning = true;
+                select.disabled = true;
+                try {
+                    if (action === 'order-cache') {
+                        await refreshSingleOrderCache();
+                    } else if (action === 'list') {
+                        await refreshOrderList();
+                    } else if (action === 'program') {
+                        await checkDesktopUpdateNow();
+                    }
+                } finally {
+                    select.disabled = false;
+                    select.value = '';
+                    updateActionRunning = false;
                 }
             }
 
