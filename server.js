@@ -2810,9 +2810,9 @@ app.get('/', (req, res) => {
                                 if (key === '2') {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Kostpris nesting</th><th>Samlet kost</th></tr>';
                                 } else if (key === '1') {
-                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>NoOrg (Stykliste minutter)</th><th>Færdigmeldt minutter</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
+                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Stykliste Minutter</th><th>Færdigmeldt minutter</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                                 } else {
-                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
+                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                                 }
 
                                 for (const line of lines) {
@@ -2838,9 +2838,25 @@ app.get('/', (req, res) => {
                                     }
                                     html += '<td>' + (line.Descr || '') + '</td>';
                                     if (key === '1') {
+                                        const pn = String(line.ProdNo || '').toUpperCase();
+                                        const isNoRegProd = (pn === 'R6200' || pn === 'R1090');
+                                        // Stykliste Minutter: always NoOrg
                                         html += '<td>' + formatNumber(line.NoOrg || 0) + '</td>';
+                                        // Færdigmeldt minutter: for R6200/R1090 employees don't register hours → use NoOrg as estimated
+                                        const effectiveNoFin = isNoRegProd ? (line.NoOrg || 0) : (line.NoFin || 0);
+                                        html += '<td>' + formatNumber(effectiveNoFin) + '</td>';
+                                        // Costs: use effectiveNoFin so R6200/R1090 show estimated cost
+                                        const displayUnitCost1 = (line.CCstPr || 0);
+                                        const displayTotalCost1 = isNoRegProd
+                                            ? (effectiveNoFin * (line.CCstPr || 0))
+                                            : (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null
+                                                ? (line.EffectiveLineCost || 0)
+                                                : (line.LineCost || 0));
+                                        html += '<td>' + formatNumber(displayUnitCost1) + '</td>';
+                                        html += '<td><strong>' + formatNumber(displayTotalCost1) + '</strong></td>';
+                                    } else {
+                                        html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
                                     }
-                                    html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
                                     if (key === '2') {
                                         const isLaserLine = isLaserLProdNo(line.ProdNo);
                                         const hasNestingCost = Number(line.NestingCost || 0) > 0;
@@ -2851,14 +2867,13 @@ app.get('/', (req, res) => {
                                         html += '<td>' + formatNumber(line.CCstPr || 0) + '</td>';
                                         html += '<td>' + formatNumber(nestingUnitCost) + '</td>';
                                         html += '<td><strong>' + formatNumber(nestingSamlet) + '</strong></td>';
-                                    } else {
+                                    } else if (key !== '1') {
                                         const displayUnitCost = Number(line.NoFin || 0) > 0 && line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null
                                             ? ((line.EffectiveLineCost || 0) / (line.NoFin || 0))
                                             : (line.CCstPr || 0);
                                         const displayTotalCost = line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null
                                             ? (line.EffectiveLineCost || 0)
                                             : (line.LineCost || 0);
-                                        html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                                         html += '<td>' + formatNumber(displayUnitCost) + '</td>';
                                         html += '<td><strong>' + formatNumber(displayTotalCost) + '</strong></td>';
                                     }
