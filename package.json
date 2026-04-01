@@ -28,7 +28,7 @@
   "build": {
     "appId": "com.gantech.efterkalk",
     "productName": "Gantech Efterkalk",
-    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "artifactName": "Gantech-Efterkalk-Setup-${version}.${ext}",
     "publish": {
       "provider": "github",
       "owner": "tbgoblin",
