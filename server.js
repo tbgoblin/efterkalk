@@ -2735,8 +2735,14 @@ app.get('/', (req, res) => {
 
                                 // Merge operation rows where ProdTp4 is 1 or 3 and ProdNo is the same.
                                 const normalizedKey = (rawKey === '3') ? '1' : rawKey;
+                                const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+
+                                // R1090 must be fully excluded from Operations: no row and no cost contribution.
+                                if (normalizedKey === '1' && prodNoKey === 'R1090') {
+                                    continue;
+                                }
+
                                 if (normalizedKey === '1') {
-                                    const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                                     if (prodNoKey) {
                                         const mergeKey = normalizedKey + '|' + prodNoKey;
                                         if (rawKey === '3') {
@@ -2804,7 +2810,7 @@ app.get('/', (req, res) => {
                                     }, 0)
                                     : lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
                                         const pn = String(line.ProdNo || '').toUpperCase();
-                                        if ((pn === 'R6200' || pn === 'R1090') && String(key) === '1') {
+                                        if (pn === 'R6200' && String(key) === '1') {
                                             return sum + ((line.NoOrg || 0) * (line.CCstPr || 0));
                                         }
                                         return sum + (line.EffectiveLineCost || line.LineCost || 0);
