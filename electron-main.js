@@ -7,8 +7,69 @@ const APP_NAME = 'Gantech Efterkalk';
 const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '1') === '1';
 
 let mainWindow = null;
+let manualUpdateCheckRunning = false;
 
 console.info('Desktop process booting...');
+
+function waitForSingleUpdateResult(timeoutMs = 15000) {
+    return new Promise((resolve) => {
+        let settled = false;
+
+        const cleanup = () => {
+            autoUpdater.removeListener('update-available', onAvailable);
+            autoUpdater.removeListener('update-not-available', onNotAvailable);
+            autoUpdater.removeListener('error', onError);
+        };
+
+        const finish = (payload) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(payload);
+        };
+
+        const onAvailable = (info) => {
+            finish({ ok: true, status: 'available', version: info && info.version ? info.version : null, message: 'Opdatering fundet.' });
+        };
+
+        const onNotAvailable = () => {
+            finish({ ok: true, status: 'up-to-date', message: 'App er allerede opdateret.' });
+        };
+
+        const onError = (err) => {
+            finish({ ok: false, status: 'error', message: err && err.message ? err.message : 'Ukendt updater-fejl.' });
+        };
+
+        autoUpdater.on('update-available', onAvailable);
+        autoUpdater.on('update-not-available', onNotAvailable);
+        autoUpdater.on('error', onError);
+
+        setTimeout(() => {
+            finish({ ok: true, status: 'checking', message: 'Opdateringskontrol startet. Proev igen om lidt.' });
+        }, timeoutMs);
+    });
+}
+
+async function triggerManualUpdateCheck() {
+    if (!app.isPackaged) {
+        return { ok: false, status: 'unsupported', message: 'Manuel opdatering virker kun i installeret app.' };
+    }
+
+    if (manualUpdateCheckRunning) {
+        return { ok: true, status: 'busy', message: 'Opdateringskontrol koerer allerede.' };
+    }
+
+    manualUpdateCheckRunning = true;
+    try {
+        const waitResultPromise = waitForSingleUpdateResult();
+        autoUpdater.checkForUpdates().catch((err) => {
+            console.warn('Manual update check failed:', err.message);
+        });
+        return await waitResultPromise;
+    } finally {
+        manualUpdateCheckRunning = false;
+    }
+}
 
 function setupAutoUpdater() {
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
@@ -89,6 +150,7 @@ function createMainWindow() {
 async function bootDesktopApp() {
     configureAutoStart();
     await ensureServerStarted();
+    global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
     createMainWindow();
     setupAutoUpdater();
 }
@@ -106,4 +168,8 @@ app.on('activate', () => {
 
 app.on('window-all-closed', () => {
     app.quit();
+});
+
+app.on('before-quit', () => {
+    delete global.__desktopManualUpdateCheck;
 });

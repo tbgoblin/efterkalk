@@ -1247,6 +1247,22 @@ app.post('/cache-clear', (req, res) => {
     res.json({ ok: true, deleted });
 });
 
+app.post('/desktop-update-check', async (req, res) => {
+    try {
+        const checkFn = global.__desktopManualUpdateCheck;
+        if (typeof checkFn !== 'function') {
+            return res.status(503).json({ ok: false, status: 'unavailable', message: 'Opdateringskontrol er ikke tilgaengelig i denne mode.' });
+        }
+
+        const result = await checkFn();
+        logEvent('MANUAL-UPDATE-CHECK: status=' + String(result && result.status || 'unknown') + ', ok=' + String(!!(result && result.ok)));
+        return res.json(result || { ok: false, status: 'error', message: 'Tomt svar fra updater.' });
+    } catch (err) {
+        logEvent('MANUAL-UPDATE-CHECK ERROR: ' + err.message);
+        return res.status(500).json({ ok: false, status: 'error', message: err.message });
+    }
+});
+
 // Endpoint ProdTr: transaktioner for en produktionslinje
 app.get('/prodtr/:ordno/:lnno', async (req, res) => {
     try {
@@ -1517,6 +1533,7 @@ app.get('/', (req, res) => {
                 <button id="refreshListBtn" class="list-toggle-btn" onclick="refreshOrderList()" title="Genindlaes ordreliste og marginer">Opdater liste</button>
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
+                <button id="checkUpdateBtn" class="list-toggle-btn" onclick="checkDesktopUpdateNow()" title="Tjek om en ny app-version er tilgaengelig">Tjek opdatering nu</button>
                 <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
                 <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
                     <option value="">Alle brugere</option>
@@ -3078,6 +3095,33 @@ app.get('/', (req, res) => {
                     alert('Fejl ved cache-rydning: ' + e.message);
                 } finally {
                     if (btn) { btn.disabled = false; btn.textContent = 'Ryd cache'; }
+                }
+            }
+
+            async function checkDesktopUpdateNow() {
+                const btn = document.getElementById('checkUpdateBtn');
+                if (btn) { btn.disabled = true; btn.textContent = 'Tjekker...'; }
+
+                try {
+                    const r = await fetch('/desktop-update-check', { method: 'POST' });
+                    const d = await r.json();
+                    if (!r.ok) throw new Error((d && d.message) ? d.message : ('HTTP ' + r.status));
+
+                    if (d.status === 'available' && d.version) {
+                        alert('Ny version fundet: ' + d.version + '. Den downloades i baggrunden.');
+                    } else if (d.status === 'up-to-date') {
+                        alert('Du har allerede den nyeste version.');
+                    } else if (d.status === 'busy') {
+                        alert('Opdateringskontrol koerer allerede. Proev igen om lidt.');
+                    } else if (d.status === 'checking') {
+                        alert('Opdateringskontrol startet. Vent lidt og proev igen.');
+                    } else {
+                        alert((d && d.message) ? d.message : 'Opdateringskontrol sendt.');
+                    }
+                } catch (e) {
+                    alert('Fejl ved opdateringskontrol: ' + e.message);
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = 'Tjek opdatering nu'; }
                 }
             }
 
