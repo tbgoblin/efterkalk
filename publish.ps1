@@ -74,6 +74,24 @@ Write-Host ""
 
 # Step 7: Build
 Write-Host "🔨 Step 6: Building Windows installer..." -ForegroundColor Yellow
+
+# Remove stale artifacts for this target version to avoid NSIS "Can't open output file"
+$distDir = Join-Path $PSScriptRoot 'dist'
+$installerPath = Join-Path $distDir ("Gantech-Efterkalk-Setup-{0}.exe" -f $newVersion)
+$blockmapPath = "$installerPath.blockmap"
+$uninstallerPath = Join-Path $distDir '__uninstaller-nsis-efterkalk.exe'
+
+foreach ($p in @($installerPath, $blockmapPath, $uninstallerPath)) {
+    if (Test-Path $p) {
+        try {
+            Remove-Item $p -Force -ErrorAction Stop
+            Write-Host "🧹 Removed stale build artifact: $p" -ForegroundColor DarkGray
+        } catch {
+            Write-Host "⚠️ Could not remove artifact before build: $p" -ForegroundColor Yellow
+        }
+    }
+}
+
 npm run build:win
 if ($LASTEXITCODE -ne 0) {
     throw "❌ npm run build:win failed"
