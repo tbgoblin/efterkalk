@@ -54,10 +54,6 @@ const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
 const BACKGROUND_AFTERCALC_WARM_COUNT = 100;
 const BACKGROUND_WARM_DELAY_MS = 50;  // 50ms delay tra calcoli warmup (faster for startup)
 const MAX_DB_CALC_CONCURRENCY = 2;
-const SESSION_COOKIE_NAME = 'gantech_sid';
-const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
-const INITIAL_SUPERUSER = process.env.GANTECH_ADMIN_USER || 'admin';
-const INITIAL_SUPERPASS = process.env.GANTECH_ADMIN_PASS || 'admin123';
 
 const orderListCache = {
     data: [],
