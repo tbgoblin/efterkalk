@@ -2796,7 +2796,13 @@ app.get('/', (req, res) => {
                                             ? ((line.NestingCost || 0) * (line.NoFin || 0))
                                             : (line.EffectiveLineCost || line.LineCost || 0));
                                     }, 0)
-                                    : lines.filter(line => line.LnNo !== 1).reduce((sum, line) => sum + (line.EffectiveLineCost || line.LineCost || 0), 0);
+                                    : lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
+                                        const pn = String(line.ProdNo || '').toUpperCase();
+                                        if ((pn === 'R6200' || pn === 'R1090') && String(key) === '1') {
+                                            return sum + ((line.NoOrg || 0) * (line.CCstPr || 0));
+                                        }
+                                        return sum + (line.EffectiveLineCost || line.LineCost || 0);
+                                    }, 0);
                                 const isOpenByDefault = false;
                                 orderVisibleTotal += subtotal;
 
