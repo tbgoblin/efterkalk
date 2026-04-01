@@ -1859,9 +1859,28 @@ app.get('/', (req, res) => {
             .order-list-table th { background: #1565C0; color: #fff; padding: 8px 10px; text-align: left; }
             .order-list-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; cursor: pointer; }
             .order-list-table tr:hover td { background: #e3f2fd; }
+            .access-gate-overlay { position: fixed; inset: 0; background: rgba(20, 26, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 12000; }
+            .access-gate-box { width: min(430px, 92vw); background: #ffffff; border-radius: 10px; padding: 22px; box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
+            .access-gate-box h3 { margin: 0 0 10px 0; border: none; padding: 0; color: #1f2937; }
+            .access-gate-box p { margin: 0 0 14px 0; color: #4b5563; }
+            .access-gate-row { display: flex; gap: 8px; }
+            .access-gate-row input { flex: 1; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 16px; }
+            .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
+            .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
         </style>
     </head>
     <body>
+        <div id="accessGateOverlay" class="access-gate-overlay">
+            <div class="access-gate-box">
+                <h3>Adgangskode</h3>
+                <p>Indtast kode for at se ordreliste og detaljer.</p>
+                <div class="access-gate-row">
+                    <input id="accessGateInput" type="password" placeholder="Kode" autocomplete="off" />
+                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Aabn</button>
+                </div>
+                <div id="accessGateError" class="access-gate-error"></div>
+            </div>
+        </div>
         <div class="header-banner-wrapper">
             <button id="homeBtn" onclick="goBackToList()" title="Tilbage til ordreliste" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
             <span style="flex:1;">🔷 ${APP_VERSION}</span>
@@ -2040,6 +2059,8 @@ app.get('/', (req, res) => {
             let summaryModalHistory = [];
             let summaryImageRegistry = {};
             let summaryImageRegistryCounter = 0;
+            const ACCESS_CODE = '12345';
+            let accessGranted = false;
             const MARGIN_MAX_CONCURRENT = 2;
             const MARGIN_QUEUE_DELAY_MS = 120;
             const MARGIN_FETCH_TIMEOUT_MS = 20000;
@@ -2048,6 +2069,58 @@ app.get('/', (req, res) => {
             let lastOrderListCheckTime = 0;
             let lastOrderListRemoteTime = 0;
             let updateActionRunning = false;
+
+            function showAccessGate() {
+                const overlay = document.getElementById('accessGateOverlay');
+                const input = document.getElementById('accessGateInput');
+                const err = document.getElementById('accessGateError');
+                if (!overlay) return;
+                if (err) err.textContent = '';
+                overlay.style.display = 'flex';
+                setTimeout(() => {
+                    if (input) input.focus();
+                }, 30);
+            }
+
+            function hideAccessGate() {
+                const overlay = document.getElementById('accessGateOverlay');
+                if (!overlay) return;
+                overlay.style.display = 'none';
+            }
+
+            function submitAccessCode() {
+                const input = document.getElementById('accessGateInput');
+                const err = document.getElementById('accessGateError');
+                const value = input ? String(input.value || '').trim() : '';
+                if (value !== ACCESS_CODE) {
+                    if (err) err.textContent = 'Forkert kode.';
+                    if (input) {
+                        input.select();
+                        input.focus();
+                    }
+                    return;
+                }
+
+                accessGranted = true;
+                hideAccessGate();
+                initializeAfterAccess();
+            }
+
+            function initializeAfterAccess() {
+                loadOrderList(false);
+                setTimeout(() => {
+                    if (!orderListData || orderListData.length === 0) {
+                        loadOrderList(true);
+                    }
+                }, 2500);
+                startOrderListAutoRefresh();
+
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('ord')) {
+                    document.getElementById('orderInput').value = params.get('ord');
+                    searchOrder();
+                }
+            }
 
             async function checkOrderListFreshness() {
                 const now = Date.now();
@@ -3746,19 +3819,26 @@ app.get('/', (req, res) => {
 
             // Soeg ved indlaesning hvis ordrenummer er i query string
             window.onload = function() {
-                loadOrderList(false);
-                setTimeout(() => {
-                    if (!orderListData || orderListData.length === 0) {
-                        loadOrderList(true);
-                    }
-                }, 2500);
-                startOrderListAutoRefresh();
+                showAccessGate();
                 const orderInput = document.getElementById('orderInput');
                 if (orderInput) {
                     orderInput.addEventListener('keydown', function(event) {
                         if (event.key === 'Enter') {
                             event.preventDefault();
+                            if (!accessGranted) {
+                                submitAccessCode();
+                                return;
+                            }
                             searchOrder();
+                        }
+                    });
+                }
+                const accessGateInput = document.getElementById('accessGateInput');
+                if (accessGateInput) {
+                    accessGateInput.addEventListener('keydown', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            submitAccessCode();
                         }
                     });
                 }
@@ -3804,11 +3884,6 @@ app.get('/', (req, res) => {
                         const tr = e.target.closest('tr[data-ordno]');
                         if (tr) selectOrder(Number(tr.dataset.ordno));
                     });
-                }
-                const params = new URLSearchParams(window.location.search);
-                if (params.has('ord')) {
-                    document.getElementById('orderInput').value = params.get('ord');
-                    searchOrder();
                 }
             };
         </script>
