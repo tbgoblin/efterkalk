@@ -193,6 +193,119 @@ function isSupportedImagePath(filePath) {
     return /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(String(filePath || '').trim());
 }
 
+function normalizeToken(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function isLikelyDrawingFileForProdNo(fileName, prodNo) {
+    const fileBase = String(fileName || '').replace(/\.pdf$/i, '');
+    const fileToken = normalizeToken(fileBase);
+    const prodToken = normalizeToken(prodNo);
+    if (!fileToken || !prodToken) return false;
+
+    const prodNoLStripped = prodToken.endsWith('L') ? prodToken.slice(0, -1) : prodToken;
+    return fileToken === prodToken
+        || fileToken.startsWith(prodToken)
+        || fileToken === prodNoLStripped
+        || (prodNoLStripped && fileToken.startsWith(prodNoLStripped));
+}
+
+function findNewestPdfInFolder(baseDir, prodNo, maxDepth = 2) {
+    const root = String(baseDir || '').trim();
+    if (!root) return null;
+    if (!fs.existsSync(root)) return null;
+
+    const queue = [{ dir: root, depth: 0 }];
+    let best = null;
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        let entries = [];
+        try {
+            entries = fs.readdirSync(current.dir, { withFileTypes: true });
+        } catch (_) {
+            continue;
+        }
+
+        for (const entry of entries) {
+            const fullPath = path.join(current.dir, entry.name);
+            if (entry.isDirectory()) {
+                if (current.depth < maxDepth) {
+                    queue.push({ dir: fullPath, depth: current.depth + 1 });
+                }
+                continue;
+            }
+
+            if (!entry.isFile() || !/\.pdf$/i.test(entry.name)) continue;
+            if (!isLikelyDrawingFileForProdNo(entry.name, prodNo)) continue;
+
+            let mtimeMs = 0;
+            try {
+                mtimeMs = Number(fs.statSync(fullPath).mtimeMs || 0);
+            } catch (_) {}
+
+            if (!best || mtimeMs > best.mtimeMs) {
+                best = { fullPath, mtimeMs };
+            }
+        }
+    }
+
+    return best ? best.fullPath : null;
+}
+
+function resolveDrawingPathFromWebPg(prodNo, webPg) {
+    const raw = String(webPg || '').trim();
+    if (!raw) return null;
+
+    const normalized = raw.replace(/\//g, '\\');
+
+    // Direct PDF path
+    if (/\.pdf(\?|#|$)/i.test(raw)) {
+        if (/^https?:\/\//i.test(raw) || /^file:\/\//i.test(raw)) return raw;
+        if (fs.existsSync(normalized)) return normalized;
+        return null;
+    }
+
+    // Folder path -> find newest PDF matching ProdNo
+    if (fs.existsSync(normalized)) {
+        try {
+            const stat = fs.statSync(normalized);
+            if (stat.isDirectory()) {
+                return findNewestPdfInFolder(normalized, prodNo, 3);
+            }
+            if (stat.isFile() && /\.pdf$/i.test(normalized)) {
+                return normalized;
+            }
+        } catch (_) {}
+    }
+
+    // If WebPg looks like a stem/path fragment, try adding .pdf
+    const withPdf = normalized + '.pdf';
+    if (fs.existsSync(withPdf)) return withPdf;
+
+    return null;
+}
+
+function isUsablePdfPath(webPg) {
+    const value = String(webPg || '').trim();
+    if (!value || !/\.pdf(\?|#|$)/i.test(value)) return false;
+
+    if (/^https?:\/\//i.test(value) || /^file:\/\//i.test(value)) {
+        return true;
+    }
+
+    const normalized = value.replace(/\//g, '\\');
+    if (normalized.startsWith('\\\\') || /^[A-Za-z]:\\/.test(normalized)) {
+        try {
+            return fs.existsSync(normalized);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 async function getLatestDrawingByProdNo(pool, prodNos) {
     const uniqueProdNos = Array.from(new Set(
         (prodNos || [])
@@ -244,22 +357,25 @@ async function getLatestDrawingByProdNo(pool, prodNos) {
                         ORDER BY ${orderByExpr}
                     ) AS rn
                 FROM FreeInf2
-                WHERE LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo))) IN (${placeholders.join(',')})
-                  AND WebPg IS NOT NULL
-                  AND LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) <> ''
-                  AND LOWER(CONVERT(VARCHAR(1000), WebPg)) LIKE '%.pdf%'
+                                WHERE LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo))) IN (${placeholders.join(',')})
+                                    AND WebPg IS NOT NULL
+                                    AND LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) <> ''
             )
             SELECT ProdNo, WebPg
             FROM x
-            WHERE rn = 1
+                        WHERE rn <= 12
+            ORDER BY ProdNo, rn
         `);
 
         const map = new Map();
         for (const row of (result.recordset || [])) {
             const key = String(row.ProdNo || '').trim().toUpperCase();
             const webPg = String(row.WebPg || '').trim();
-            if (key && webPg) {
-                map.set(key, webPg);
+            if (!key || !webPg || map.has(key)) continue;
+
+            const resolved = resolveDrawingPathFromWebPg(key, webPg);
+            if (resolved && isUsablePdfPath(resolved)) {
+                map.set(key, resolved);
             }
         }
         return map;
@@ -2606,6 +2722,7 @@ app.get('/', (req, res) => {
 
                             const groupedLines = {};
                             const operationMergeMap = new Map();
+                            const pendingNoOrgFromTp3 = new Map();
                             for (const line of prodOrder.lines) {
                                 const rawKey = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
                                 if (rawKey === '0' || rawKey === '5') continue;
@@ -2616,11 +2733,23 @@ app.get('/', (req, res) => {
                                     const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                                     if (prodNoKey) {
                                         const mergeKey = normalizedKey + '|' + prodNoKey;
+                                        if (rawKey === '3') {
+                                            const extraNoOrg = Number(line.NoOrg || 0);
+                                            if (operationMergeMap.has(mergeKey)) {
+                                                const mergedLine = operationMergeMap.get(mergeKey);
+                                                mergedLine.NoOrg = Number(mergedLine.NoOrg || 0) + extraNoOrg;
+                                            } else {
+                                                pendingNoOrgFromTp3.set(mergeKey, Number(pendingNoOrgFromTp3.get(mergeKey) || 0) + extraNoOrg);
+                                            }
+                                            continue;
+                                        }
+
                                         if (!operationMergeMap.has(mergeKey)) {
+                                            const extraNoOrg = Number(pendingNoOrgFromTp3.get(mergeKey) || 0);
                                             const mergedLine = {
                                                 ...line,
                                                 ProdTp4: 1,
-                                                NoOrg: Number(line.NoOrg || 0),
+                                                NoOrg: Number(line.NoOrg || 0) + extraNoOrg,
                                                 NoFin: Number(line.NoFin || 0),
                                                 LineCost: Number(line.LineCost || 0),
                                                 EffectiveLineCost: Number(line.EffectiveLineCost || 0)
