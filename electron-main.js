@@ -73,6 +73,7 @@ const { ensureServerStarted } = require('./server');
 const APP_URL = 'http://localhost:' + USER_PORT;
 const APP_NAME = 'Gantech Efterkalk';
 const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '1') === '1';
+let manualUpdateCheckRunning = false;
 
 // Detect RDS environment
 const IS_RDS = !!process.env.SESSIONNAME && process.env.SESSIONNAME !== 'Console';

@@ -191,6 +191,82 @@ function isSupportedImagePath(filePath) {
     return /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(String(filePath || '').trim());
 }
 
+async function getLatestDrawingByProdNo(pool, prodNos) {
+    const uniqueProdNos = Array.from(new Set(
+        (prodNos || [])
+            .map(p => String(p || '').trim())
+            .filter(Boolean)
+    ));
+
+    if (uniqueProdNos.length === 0) return new Map();
+
+    try {
+        const colsResult = await pool.request().query(`
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'FreeInf2'
+        `);
+
+        const colNameMap = new Map((colsResult.recordset || []).map(r => {
+            const name = String(r.COLUMN_NAME || '').trim();
+            return [name.toLowerCase(), name];
+        }));
+        const hasDateTimePair = colNameMap.has('chdt') && colNameMap.has('chtm');
+
+        let orderByExpr = 'CONVERT(VARCHAR(1000), WebPg) DESC';
+        if (hasDateTimePair) {
+            orderByExpr = '[' + colNameMap.get('chdt') + '] DESC, [' + colNameMap.get('chtm') + '] DESC';
+        } else {
+            const singleCandidates = ['moddt', 'upddt', 'regdt', 'insdt', 'crtdt', 'findt', 'id', 'recno', 'lnno'];
+            const chosen = singleCandidates.find(c => colNameMap.has(c));
+            if (chosen) {
+                const quoted = '[' + colNameMap.get(chosen) + ']';
+                orderByExpr = quoted + ' DESC';
+            }
+        }
+
+        const req = pool.request();
+        const placeholders = uniqueProdNos.map((prodNo, i) => {
+            const param = 'prod' + i;
+            req.input(param, sql.VarChar(100), prodNo);
+            return '@' + param;
+        });
+
+        const result = await req.query(`
+            WITH x AS (
+                SELECT
+                    LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo))) AS ProdNo,
+                    LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) AS WebPg,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo)))
+                        ORDER BY ${orderByExpr}
+                    ) AS rn
+                FROM FreeInf2
+                WHERE LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo))) IN (${placeholders.join(',')})
+                  AND WebPg IS NOT NULL
+                  AND LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) <> ''
+                  AND LOWER(CONVERT(VARCHAR(1000), WebPg)) LIKE '%.pdf%'
+            )
+            SELECT ProdNo, WebPg
+            FROM x
+            WHERE rn = 1
+        `);
+
+        const map = new Map();
+        for (const row of (result.recordset || [])) {
+            const key = String(row.ProdNo || '').trim().toUpperCase();
+            const webPg = String(row.WebPg || '').trim();
+            if (key && webPg) {
+                map.set(key, webPg);
+            }
+        }
+        return map;
+    } catch (err) {
+        logEvent('WARNING drawing lookup skipped: ' + err.message);
+        return new Map();
+    }
+}
+
 // Evita cache lato browser durante lo sviluppo: forza sempre il fetch dell'ultima UI/API.
 app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -261,14 +337,22 @@ async function getAfterCalc(ordNo) {
         
         const orderHeader = orderResult.recordset[0];
         
+        const prodNosForDrawings = [
+            ...salesOrderLinesResult.recordset.map(r => r.ProdNo),
+            ...salesLinesResult.recordset.map(r => r.ProdNo)
+        ];
+        const drawingByProdNo = await getLatestDrawingByProdNo(pool, prodNosForDrawings);
+
         const salesLines = salesLinesResult.recordset.map(line => {
             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
             const isDiscountLine = lineSalesPrice === 0;
             const effectiveLineCost = isDiscountLine ? 0 : (line.LineCost || 0);
+            const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
             return {
                 ...line,
                 IsDiscountLine: isDiscountLine,
-                EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2))
+                EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2)),
+                DrawingWebPg: drawingByProdNo.get(prodNoKey) || null
             };
         });
         const salesLinesTotalCost = salesLines.reduce((sum, line) => sum + (line.EffectiveLineCost || 0), 0);
@@ -278,10 +362,12 @@ async function getAfterCalc(ordNo) {
             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
             const isDiscountLine = lineSalesPrice === 0;
             const effectiveLineCost = isDiscountLine ? 0 : (line.LineCost || 0);
+            const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
             return {
                 ...line,
                 IsDiscountLine: isDiscountLine,
-                EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2))
+                EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2)),
+                DrawingWebPg: drawingByProdNo.get(prodNoKey) || null
             };
         });
 
@@ -314,6 +400,7 @@ async function getAfterCalc(ordNo) {
                             ProdNo, 
                             Descr, 
                             DPrice,
+                            NoOrg,
                             NoFin,
                             CCstPr,
                             PurcNo,
@@ -832,6 +919,7 @@ app.get('/production-summary/:ordno', async (req, res) => {
                     LnNo,
                     ProdNo,
                     Descr,
+                    NoOrg,
                     NoFin,
                     DPrice,
                     CCstPr,
@@ -1716,6 +1804,30 @@ app.get('/', (req, res) => {
                     .replace(/'/g, '&#39;');
             }
 
+            function toDrawingUrl(rawPath) {
+                const value = String(rawPath || '').trim();
+                if (!value) return '';
+                if (/^https?:\/\//i.test(value) || /^file:\/\//i.test(value)) return value;
+
+                if (/^\\\\/.test(value)) {
+                    const uncPath = value.replace(/^\\\\/, '').replace(/\\/g, '/');
+                    return 'file://' + encodeURI(uncPath);
+                }
+
+                const normalized = value.replace(/\\/g, '/');
+                if (/^[a-zA-Z]:\//.test(normalized)) {
+                    return 'file:///' + encodeURI(normalized);
+                }
+
+                return encodeURI(normalized);
+            }
+
+            function openDrawingPdf(pathValue) {
+                const url = toDrawingUrl(pathValue);
+                if (!url) return;
+                window.open(url, '_blank');
+            }
+
             function toggleLaserOrderSummary() {
                 const panel = document.getElementById('laserOrderSummaryPanel');
                 const btn = document.getElementById('laserOrderSummaryToggleBtn');
@@ -2327,8 +2439,9 @@ app.get('/', (req, res) => {
 
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
+                        const hasSalesOrderDrawing = data.salesOrderLines.some(line => !!line.DrawingWebPg);
                         html += '<div class="section"><h3>Salgsordrelinjer</h3>';
-                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th></tr>';
+                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
 
                         for (const line of data.salesOrderLines) {
                             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
@@ -2366,6 +2479,13 @@ app.get('/', (req, res) => {
                             html += '<td>' + formatNumber(lineSalesPrice) + '</td>';
                             html += '<td>' + lineMarginBadge + '</td>';
                             html += '<td>' + ((line.PurcNo && line.PurcNo !== 0) ? line.PurcNo : '-') + '</td>';
+                            if (hasSalesOrderDrawing) {
+                                if (line.DrawingWebPg) {
+                                    html += '<td><button class="list-toggle-btn drawing-open-btn" data-drawing-path="' + escapeHtml(String(line.DrawingWebPg || '')) + '" style="padding:4px 8px; margin-left:0;">Vis tegning</button></td>';
+                                } else {
+                                    html += '<td></td>';
+                                }
+                            }
                             html += '</tr>';
                         }
 
@@ -2374,8 +2494,9 @@ app.get('/', (req, res) => {
                     
                     // Sezione linee di vendita
                     if (data.salesLines.length > 0) {
+                        const hasSalesLinesDrawing = data.salesLines.some(line => !!line.DrawingWebPg);
                         html += '<div class="section"><h3>Salgslinjer (Ekstra produkter)</h3>';
-                        html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
+                        html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th>' + (hasSalesLinesDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
                         
                         for (const line of data.salesLines) {
                             html += '<tr>';
@@ -2385,10 +2506,17 @@ app.get('/', (req, res) => {
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + formatNumber(line.CCstPr || 0) + '</td>';
                             html += '<td><strong>' + formatNumber(line.EffectiveLineCost || 0) + '</strong></td>';
+                            if (hasSalesLinesDrawing) {
+                                if (line.DrawingWebPg) {
+                                    html += '<td><button class="list-toggle-btn drawing-open-btn" data-drawing-path="' + escapeHtml(String(line.DrawingWebPg || '')) + '" style="padding:4px 8px; margin-left:0;">Vis tegning</button></td>';
+                                } else {
+                                    html += '<td></td>';
+                                }
+                            }
                             html += '</tr>';
                         }
                         
-                        html += '<tr class="summary-row"><td colspan="5">Total salgslinjer:</td><td>' + formatNumber(data.salesLinesTotalCost) + ' DKK</td></tr>';
+                        html += '<tr class="summary-row"><td colspan="5">Total salgslinjer:</td><td>' + formatNumber(data.salesLinesTotalCost) + ' DKK</td>' + (hasSalesLinesDrawing ? '<td></td>' : '') + '</tr>';
                         html += '</table></div>';
                     }
                     
@@ -2420,11 +2548,45 @@ app.get('/', (req, res) => {
                             html += '<div class="prodtp4-hint">Klik paa en linje for at aabne/lukke detaljer.</div>';
 
                             const groupedLines = {};
+                            const operationMergeMap = new Map();
                             for (const line of prodOrder.lines) {
-                                const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
-                                if (key === '0' || key === '3' || key === '5') continue;
-                                if (!groupedLines[key]) groupedLines[key] = [];
-                                groupedLines[key].push(line);
+                                const rawKey = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+                                if (rawKey === '0' || rawKey === '5') continue;
+
+                                // Merge operation rows where ProdTp4 is 1 or 3 and ProdNo is the same.
+                                const normalizedKey = (rawKey === '3') ? '1' : rawKey;
+                                if (normalizedKey === '1') {
+                                    const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                                    if (prodNoKey) {
+                                        const mergeKey = normalizedKey + '|' + prodNoKey;
+                                        if (!operationMergeMap.has(mergeKey)) {
+                                            const mergedLine = {
+                                                ...line,
+                                                ProdTp4: 1,
+                                                NoOrg: Number(line.NoOrg || 0),
+                                                NoFin: Number(line.NoFin || 0),
+                                                LineCost: Number(line.LineCost || 0),
+                                                EffectiveLineCost: Number(line.EffectiveLineCost || 0)
+                                            };
+                                            operationMergeMap.set(mergeKey, mergedLine);
+                                            if (!groupedLines[normalizedKey]) groupedLines[normalizedKey] = [];
+                                            groupedLines[normalizedKey].push(mergedLine);
+                                        } else {
+                                            const mergedLine = operationMergeMap.get(mergeKey);
+                                            mergedLine.NoOrg = Number(mergedLine.NoOrg || 0) + Number(line.NoOrg || 0);
+                                            mergedLine.NoFin = Number(mergedLine.NoFin || 0) + Number(line.NoFin || 0);
+                                            mergedLine.LineCost = Number(mergedLine.LineCost || 0) + Number(line.LineCost || 0);
+                                            mergedLine.EffectiveLineCost = Number(mergedLine.EffectiveLineCost || 0) + Number(line.EffectiveLineCost || 0);
+                                            if ((!mergedLine.Descr || mergedLine.Descr === '-') && line.Descr) {
+                                                mergedLine.Descr = line.Descr;
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                }
+
+                                if (!groupedLines[normalizedKey]) groupedLines[normalizedKey] = [];
+                                groupedLines[normalizedKey].push({ ...line, ProdTp4: normalizedKey === '1' ? 1 : line.ProdTp4 });
                             }
 
                             const groupKeys = Object.keys(groupedLines).sort((a, b) => {
@@ -2461,6 +2623,8 @@ app.get('/', (req, res) => {
                                 html += '<div id="po-' + prodOrder.ordNo + '-group-' + key + '" class="prodtp4-body" style="display:' + (isOpenByDefault ? '' : 'none') + ';">';
                                 if (key === '2') {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Kostpris nesting</th><th>Samlet kost</th></tr>';
+                                } else if (key === '1') {
+                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>NoOrg (Stykliste minutter)</th><th>Færdigmeldt minutter</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                                 } else {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                                 }
@@ -2487,6 +2651,9 @@ app.get('/', (req, res) => {
                                         html += '<td>-</td>';
                                     }
                                     html += '<td>' + (line.Descr || '') + '</td>';
+                                    if (key === '1') {
+                                        html += '<td>' + formatNumber(line.NoOrg || 0) + '</td>';
+                                    }
                                     html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
                                     if (key === '2') {
                                         const isLaserLine = isLaserLProdNo(line.ProdNo);
@@ -2886,6 +3053,14 @@ app.get('/', (req, res) => {
                 }
             }
 
+            function handleDrawingOpenClick(e) {
+                const btn = e.target.closest('.drawing-open-btn');
+                if (!btn) return;
+                const pathValue = btn.dataset.drawingPath || '';
+                if (!pathValue) return;
+                openDrawingPdf(pathValue);
+            }
+
             function handlePreviewImageZoom(e) {
                 const image = e.target.closest('.image-preview-zoomable');
                 if (!image) return;
@@ -2899,6 +3074,7 @@ app.get('/', (req, res) => {
             // Outside modal content.
             document.addEventListener('click', handleProdNoClick);
             document.addEventListener('click', handleImagePreviewClick);
+            document.addEventListener('click', handleDrawingOpenClick);
             document.addEventListener('click', handlePreviewImageZoom);
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Escape') closeImageLightbox();
