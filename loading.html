@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Gantech Efterkalk</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #c0392b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: #fff;
+            user-select: none;
+        }
+        .card {
+            background: rgba(0,0,0,0.18);
+            border-radius: 14px;
+            padding: 48px 60px;
+            text-align: center;
+            min-width: 360px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .subtitle {
+            font-size: 13px;
+            opacity: 0.75;
+            margin-bottom: 36px;
+        }
+        .spinner-wrap {
+            margin-bottom: 24px;
+        }
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255,255,255,0.25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .progress-bar-bg {
+            background: rgba(255,255,255,0.2);
+            border-radius: 999px;
+            height: 6px;
+            width: 100%;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            background: #fff;
+            height: 100%;
+            border-radius: 999px;
+            width: 10%;
+            transition: width 0.4s ease;
+        }
+        .status-text {
+            font-size: 14px;
+            opacity: 0.85;
+            min-height: 20px;
+        }
+        .version {
+            margin-top: 32px;
+            font-size: 11px;
+            opacity: 0.45;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">🔷 Gantech Efterkalk</div>
+        <div class="subtitle">Efterkalkulation system</div>
+        <div class="spinner-wrap">
+            <div class="spinner"></div>
+        </div>
+        <div class="progress-bar-bg">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="status-text" id="statusText">Starter op...</div>
+        <div class="version" id="versionText"></div>
+    </div>
+    <script>
+        const messages = [
+            { pct: 10, text: 'Starter op...' },
+            { pct: 25, text: 'Forbinder til database...' },
+            { pct: 45, text: 'Indlæser ordreliste...' },
+            { pct: 65, text: 'Forberegner marginer...' },
+            { pct: 80, text: 'Opvarmer cache...' },
+            { pct: 92, text: 'Næsten klar...' },
+        ];
+        let step = 0;
+        const bar = document.getElementById('progressBar');
+        const txt = document.getElementById('statusText');
+
+        function advance() {
+            if (step >= messages.length) return;
+            bar.style.width = messages[step].pct + '%';
+            txt.textContent = messages[step].text;
+            step++;
+        }
+
+        advance();
+        const timer = setInterval(() => {
+            if (step < messages.length) {
+                advance();
+            } else {
+                clearInterval(timer);
+            }
+        }, 1400);
+
+        // Show version if passed via URL param
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const v = params.get('v');
+            if (v) document.getElementById('versionText').textContent = 'v' + v;
+        } catch(e) {}
+    </script>
+</body>
+</html>

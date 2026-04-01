@@ -125,7 +125,7 @@ function createMainWindow() {
         minWidth: 1100,
         minHeight: 760,
         autoHideMenuBar: true,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#c0392b',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -140,8 +140,6 @@ function createMainWindow() {
         return { action: 'deny' };
     });
 
-    mainWindow.loadURL(APP_URL);
-
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -149,9 +147,23 @@ function createMainWindow() {
 
 async function bootDesktopApp() {
     configureAutoStart();
-    await ensureServerStarted();
-    global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
+
+    // Show loading screen immediately — don't wait for server
     createMainWindow();
+    const pkgVersion = (() => { try { return require('./package.json').version; } catch(e) { return ''; } })();
+    const loadingPath = require('path').join(__dirname, 'loading.html');
+    mainWindow.loadFile(loadingPath, { query: { v: pkgVersion } });
+
+    // Start server in background while loading screen is visible
+    await ensureServerStarted();
+
+    global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
+
+    // Navigate to app once server is ready
+    if (mainWindow) {
+        mainWindow.loadURL(APP_URL);
+    }
+
     setupAutoUpdater();
 }
 
