@@ -48,8 +48,6 @@ function writeDesktopLog(message) {
     }
 }
 
-const { ensureServerStarted } = require('./server');
-
 // In RDS multiple sessions can run under the same username.
 // Include session identifiers in the hash to reduce port collisions.
 function getUserPort() {
@@ -69,6 +67,8 @@ function getUserPort() {
 
 const USER_PORT = getUserPort();
 process.env.PORT = String(USER_PORT);
+
+const { ensureServerStarted } = require('./server');
 
 const APP_URL = 'http://localhost:' + USER_PORT;
 const APP_NAME = 'Gantech Efterkalk';
