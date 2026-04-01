@@ -73,6 +73,17 @@ const dbCalcQueue = [];
 let activeDbCalcs = 0;
 let backgroundAftercalcWarmRunning = false;
 
+const warmupProgress = {
+    running: false,
+    total: 0,
+    cached: 0,
+    loaded: 0,
+    failed: 0,
+    current: null,
+    startedAt: null,
+    completedAt: null
+};
+
 // Log di sistema
 function logEvent(message) {
     const timestamp = new Date().toISOString();
@@ -623,6 +634,16 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
     let warmed = 0;
     let failed = 0;
 
+    // Reset global progress tracker
+    warmupProgress.running = true;
+    warmupProgress.total = ordNos.filter(o => Number.isFinite(Number(o))).length;
+    warmupProgress.cached = 0;
+    warmupProgress.loaded = 0;
+    warmupProgress.failed = 0;
+    warmupProgress.current = null;
+    warmupProgress.startedAt = Date.now();
+    warmupProgress.completedAt = null;
+
     try {
         for (const ordNo of ordNos) {
             const numericOrdNo = Number(ordNo);
@@ -631,14 +652,19 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
 
             if (diskCache.get('aftercalc_' + numericOrdNo)) {
                 alreadyCached += 1;
+                warmupProgress.cached += 1;
+                warmupProgress.current = numericOrdNo;
                 continue;
             }
 
+            warmupProgress.current = numericOrdNo;
             try {
                 await getOrComputeAftercalc(numericOrdNo, { priority: 'normal' });
                 warmed += 1;
+                warmupProgress.loaded += 1;
             } catch (err) {
                 failed += 1;
+                warmupProgress.failed += 1;
                 logEvent('WARM-AFTERCALC ERROR ordNo=' + numericOrdNo + ': ' + err.message);
             }
 
@@ -648,6 +674,9 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
         }
     } finally {
         backgroundAftercalcWarmRunning = false;
+        warmupProgress.running = false;
+        warmupProgress.current = null;
+        warmupProgress.completedAt = Date.now();
         const sec = ((Date.now() - startMs) / 1000).toFixed(1);
         logEvent('WARM-AFTERCALC (' + sourceLabel + '): total=' + total + ', cached=' + alreadyCached + ', warmed=' + warmed + ', failed=' + failed + ', time=' + sec + 's');
     }
@@ -1213,6 +1242,21 @@ app.get('/cache-status', (req, res) => {
     res.json({ count: entries.length, entries });
 });
 
+app.get('/warmup-status', (req, res) => {
+    const done = warmupProgress.cached + warmupProgress.loaded + warmupProgress.failed;
+    const pct = warmupProgress.total > 0 ? Math.round((done / warmupProgress.total) * 100) : 100;
+    res.json({
+        running: warmupProgress.running,
+        total: warmupProgress.total,
+        cached: warmupProgress.cached,
+        loaded: warmupProgress.loaded,
+        failed: warmupProgress.failed,
+        done,
+        pct,
+        current: warmupProgress.current
+    });
+});
+
 // Refresh cache for one sales order only
 app.post('/cache-refresh-order/:ordno', async (req, res) => {
     try {
@@ -1468,6 +1512,10 @@ app.get('/', (req, res) => {
             .container { max-width: 1200px; margin: 0 auto; }
             .header-banner-wrapper { background: #c0392b; color: #fff; font-weight: 800; font-size: 25px; padding: 10px 12px; border-radius: 6px; margin-bottom: 20px; letter-spacing: 0.2px; width: 100%; position: sticky; top: 0; z-index: 1200; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
             .header-status-badge { display: inline-block; font-size: 12px; font-weight: 700; color: #8a6d3b; background: #fff3cd; border: 1px solid #fff3cd; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+            #warmupBarWrap { display:none; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }
+            #warmupBarWrap.active { display:flex; }
+            #warmupBarBg { background:rgba(255,255,255,0.25); border-radius:999px; height:6px; width:110px; overflow:hidden; flex-shrink:0; }
+            #warmupBarFill { background:#fff; height:100%; border-radius:999px; width:0%; transition:width 0.35s ease; }
             .search-box { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 58px; z-index: 1100; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
             .search-box.collapsed { padding: 8px 12px; height: 36px; }
             .search-box.collapsed > * { display: none; }
@@ -1577,6 +1625,10 @@ app.get('/', (req, res) => {
         <div class="header-banner-wrapper">
             <button id="homeBtn" onclick="goBackToList()" title="Tilbage til ordreliste" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
             <span style="flex:1;">🔷 ${APP_VERSION}</span>
+            <div id="warmupBarWrap" title="Forberegner ordredata i baggrunden">
+                <div id="warmupBarBg"><div id="warmupBarFill"></div></div>
+                <span id="warmupBarText">Forberegner...</span>
+            </div>
             <span class="header-status-badge" id="systemStatusBadge">System indlaeser...</span>
         </div>
         <div class="container">
@@ -1876,6 +1928,47 @@ app.get('/', (req, res) => {
                 badge.style.color = textColor;
                 badge.style.borderColor = bgColor;
             }
+
+            // Warmup progress bar polling
+            let warmupPollTimer = null;
+            function startWarmupPolling() {
+                const wrap = document.getElementById('warmupBarWrap');
+                const fill = document.getElementById('warmupBarFill');
+                const txt  = document.getElementById('warmupBarText');
+                if (!wrap) return;
+
+                warmupPollTimer = setInterval(async () => {
+                    try {
+                        const r = await fetch('/warmup-status');
+                        if (!r.ok) return;
+                        const d = await r.json();
+
+                        if (d.total === 0) {
+                            wrap.classList.remove('active');
+                            clearInterval(warmupPollTimer);
+                            return;
+                        }
+
+                        wrap.classList.add('active');
+                        fill.style.width = d.pct + '%';
+
+                        if (d.running) {
+                            txt.textContent = 'Forberegner ' + d.done + '/' + d.total + ' ordrer...';
+                        } else {
+                            txt.textContent = 'Klar! ' + d.loaded + ' nye + ' + d.cached + ' fra cache';
+                            fill.style.width = '100%';
+                            setTimeout(() => {
+                                wrap.classList.remove('active');
+                                clearInterval(warmupPollTimer);
+                                warmupPollTimer = null;
+                            }, 3000);
+                        }
+                    } catch(e) {
+                        // ignore polling errors silently
+                    }
+                }, 800);
+            }
+            startWarmupPolling();
 
             function updateSystemStatusFromOrders(orders) {
                 if (!orders || orders.length === 0) {
@@ -3282,6 +3375,17 @@ app.get('/', (req, res) => {
                         e.preventDefault();
                         const field = sortHeader.getAttribute('data-sort-field');
                         if (field) setOrderListSort(field);
+                    });
+
+                    // Prefetch on hover: start loading order data before the user clicks
+                    const prefetchInFlight = new Set();
+                    orderListEl.addEventListener('mouseover', function(e) {
+                        const tr = e.target.closest('tr[data-ordno]');
+                        if (!tr) return;
+                        const ordNo = Number(tr.dataset.ordno);
+                        if (!ordNo || prefetchInFlight.has(ordNo)) return;
+                        prefetchInFlight.add(ordNo);
+                        fetch('/aftercalc/' + ordNo).catch(() => {});
                     });
 
                     orderListEl.addEventListener('click', function(e) {
