@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const os = require('os');
+const fs = require('fs');
 const path = require('path');
 
 // RDS / virtual desktop compatibility: disable GPU acceleration
@@ -9,6 +10,26 @@ app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('no-sandbox');
+
+// Keep logs in a predictable shared folder when possible.
+if (!process.env.GANTECH_LOG_DIR) {
+    const logCandidates = [
+        'C:\\GantechCache',
+        'C:\\cache\\Gantech',
+        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Gantech Efterkalk') : null
+    ].filter(Boolean);
+
+    for (const dir of logCandidates) {
+        try {
+            fs.mkdirSync(dir, { recursive: true });
+            fs.appendFileSync(path.join(dir, 'gantech.log'), '');
+            process.env.GANTECH_LOG_DIR = dir;
+            break;
+        } catch (_) {
+            // Try next candidate directory.
+        }
+    }
+}
 
 const { ensureServerStarted } = require('./server');
 
@@ -39,7 +60,8 @@ const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '1') === '1
 // Detect RDS environment
 const IS_RDS = !!process.env.SESSIONNAME && process.env.SESSIONNAME !== 'Console';
 
-console.info('Desktop process booting... port=' + USER_PORT + ' rds=' + IS_RDS);
+const logDirInfo = process.env.GANTECH_LOG_DIR || '(auto)';
+console.info('Desktop process booting... port=' + USER_PORT + ' rds=' + IS_RDS + ' logDir=' + logDirInfo);
 
 function waitForSingleUpdateResult(timeoutMs = 15000) {
     return new Promise((resolve) => {
