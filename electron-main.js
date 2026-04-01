@@ -12,17 +12,20 @@ app.commandLine.appendSwitch('no-sandbox');
 
 const { ensureServerStarted } = require('./server');
 
-// In RDS multiple users share the same machine — give each user their own port
-// based on a hash of the username to avoid conflicts
+// In RDS multiple sessions can run under the same username.
+// Include session identifiers in the hash to reduce port collisions.
 function getUserPort() {
     if (process.env.PORT) return Number(process.env.PORT);
     if (process.env.EFTERKALK_PORT) return Number(process.env.EFTERKALK_PORT);
     const username = (process.env.USERNAME || process.env.USER || os.userInfo().username || 'default').toLowerCase();
+    const sessionName = String(process.env.SESSIONNAME || '').toLowerCase();
+    const clientName = String(process.env.CLIENTNAME || '').toLowerCase();
+    const seed = username + '|' + sessionName + '|' + clientName;
     let hash = 0;
-    for (let i = 0; i < username.length; i++) {
-        hash = (hash * 31 + username.charCodeAt(i)) & 0xffff;
+    for (let i = 0; i < seed.length; i++) {
+        hash = (hash * 31 + seed.charCodeAt(i)) & 0xffff;
     }
-    // Range 3000-3999 — one port per user
+    // Range 3000-3999
     return 3000 + (hash % 1000);
 }
 
@@ -202,7 +205,11 @@ function bootDesktopApp() {
     }).catch(err => {
         console.error('Server start failed:', err.message);
         if (mainWindow) {
-            const msg = err.message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const raw = (err && err.message ? err.message : 'Unknown startup error') + (err && err.code ? ' [' + err.code + ']' : '');
+            const details = (err && err.code === 'EADDRINUSE')
+                ? ('Port ' + USER_PORT + ' er allerede i brug. Luk andre Efterkalk-processer og prov igen.')
+                : raw;
+            const msg = details.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             mainWindow.loadURL('data:text/html,<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;background:%23c0392b;color:%23fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.box{background:rgba(0,0,0,.3);border-radius:12px;padding:40px;max-width:600px;text-align:center}</style></head><body><div class="box"><h2>⚠️ Server kunne ikke starte</h2><p>' + msg + '</p><p style="margin-top:20px;font-size:12px;opacity:.6">Luk og prøv igen.</p></div></body></html>');
         }
     });
