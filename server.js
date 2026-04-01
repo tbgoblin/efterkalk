@@ -51,7 +51,7 @@ const ORDER_LIST_MAX_ROWS = 150;
 const ORDER_LIST_DAYS_BACK = 30;
 const STARTUP_MARGIN_WARM_COUNT = 150;
 const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = 100;
+const BACKGROUND_AFTERCALC_WARM_COUNT = 150;
 const BACKGROUND_WARM_DELAY_MS = 50;  // 50ms delay tra calcoli warmup (faster for startup)
 const MAX_DB_CALC_CONCURRENCY = 2;
 
@@ -204,58 +204,62 @@ async function getAfterCalc(ordNo) {
     const pool = await getConnection();
     
     try {
-        // 1. Carica l'intestazione dell'ordine di vendita con il nome cliente
-        const orderResult = await pool.request()
-            .input('ordNo', sql.Numeric, ordNo)
-            .query(`
-                SELECT O.OrdNo, O.TrTp, O.InvoAm, A.Nm as CustomerName
-                FROM Ord O
-                LEFT JOIN Actor A ON O.CustNo = A.CustNo
-                WHERE O.OrdNo = @ordNo
-            `);
-        
+        // 1+1b+2+3: Run all initial independent queries in parallel
+        const [orderResult, salesOrderLinesResult, salesLinesResult, productionLinesResult] = await Promise.all([
+            pool.request()
+                .input('ordNo', sql.Numeric, ordNo)
+                .query(`
+                    SELECT O.OrdNo, O.TrTp, O.InvoAm, A.Nm as CustomerName
+                    FROM Ord O
+                    LEFT JOIN Actor A ON O.CustNo = A.CustNo
+                    WHERE O.OrdNo = @ordNo
+                `),
+            pool.request()
+                .input('ordNo', sql.Numeric, ordNo)
+                .query(`
+                    SELECT
+                        OrdNo,
+                        LnNo,
+                        ProdNo,
+                        Descr,
+                        DPrice,
+                        NoFin,
+                        CCstPr,
+                        PurcNo,
+                        CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost
+                    FROM OrdLn
+                    WHERE OrdNo = @ordNo
+                    ORDER BY LnNo
+                `),
+            pool.request()
+                .input('ordNo', sql.Numeric, ordNo)
+                .query(`
+                    SELECT 
+                        OrdNo, 
+                        LnNo, 
+                        ProdNo, 
+                        Descr, 
+                        DPrice,
+                        NoFin,
+                        CCstPr,
+                        CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost
+                    FROM OrdLn
+                    WHERE OrdNo = @ordNo AND PurcNo IS NULL
+                    ORDER BY LnNo
+                `),
+            pool.request()
+                .input('ordNo', sql.Numeric, ordNo)
+                .query(`
+                    SELECT DISTINCT PurcNo FROM OrdLn
+                    WHERE OrdNo = @ordNo AND PurcNo IS NOT NULL
+                `)
+        ]);
+
         if (orderResult.recordset.length === 0) {
             return { error: 'Ordre ikke fundet' };
         }
         
         const orderHeader = orderResult.recordset[0];
-
-        // 1b. Carica TUTTE le linee dell'ordine di vendita (per visualizzazione e navigazione a cascata)
-        const salesOrderLinesResult = await pool.request()
-            .input('ordNo', sql.Numeric, ordNo)
-            .query(`
-                SELECT
-                    OrdNo,
-                    LnNo,
-                    ProdNo,
-                    Descr,
-                    DPrice,
-                    NoFin,
-                    CCstPr,
-                    PurcNo,
-                    CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost
-                FROM OrdLn
-                WHERE OrdNo = @ordNo
-                ORDER BY LnNo
-            `);
-        
-        // 2. Carica le linee di VENDITA (senza PurcNo)
-        const salesLinesResult = await pool.request()
-            .input('ordNo', sql.Numeric, ordNo)
-            .query(`
-                SELECT 
-                    OrdNo, 
-                    LnNo, 
-                    ProdNo, 
-                    Descr, 
-                    DPrice,
-                    NoFin,
-                    CCstPr,
-                    CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost
-                FROM OrdLn
-                WHERE OrdNo = @ordNo AND PurcNo IS NULL
-                ORDER BY LnNo
-            `);
         
         const salesLines = salesLinesResult.recordset.map(line => {
             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
@@ -376,42 +380,33 @@ async function getAfterCalc(ordNo) {
             return detailsPromise;
         }
         
-        // 3. Carica i numeri di produzione associati (quelli con PurcNo)
-        const productionLinesResult = await pool.request()
-            .input('ordNo', sql.Numeric, ordNo)
-            .query(`
-                SELECT DISTINCT PurcNo FROM OrdLn
-                WHERE OrdNo = @ordNo AND PurcNo IS NOT NULL
-            `);
-        
-        const productionOrders = [];
-        for (const prodLine of productionLinesResult.recordset) {
-            const purcNo = prodLine.PurcNo;
-            
-            // Carica l'intestazione dell'ordine di produzione
-            const prodOrderResult = await pool.request()
-                .input('purcNo', sql.Numeric, purcNo)
-                .query(`
-                    SELECT O.OrdNo, A.Nm, O.TrTp, O.InvoAm FROM Ord O JOIN Actor A ON O.CustNo=A.CustNo WHERE OrdNo = @purcNo
-                `);
-            
-            if (prodOrderResult.recordset.length > 0) {
+        // 3. Carica tutti gli ordini di produzione in parallelo
+        const productionOrderResults = await Promise.all(
+            productionLinesResult.recordset.map(async (prodLine) => {
+                const purcNo = prodLine.PurcNo;
+
+                const [prodOrderResult, prodDetails] = await Promise.all([
+                    pool.request()
+                        .input('purcNo', sql.Numeric, purcNo)
+                        .query(`
+                            SELECT O.OrdNo, A.Nm, O.TrTp, O.InvoAm FROM Ord O JOIN Actor A ON O.CustNo=A.CustNo WHERE OrdNo = @purcNo
+                        `),
+                    loadProductionOrderDetails(purcNo)
+                ]);
+
+                if (prodOrderResult.recordset.length === 0) return null;
                 const prodOrder = prodOrderResult.recordset[0];
 
-                // Carica le linee dell'ordine di produzione
-                const prodDetails = await loadProductionOrderDetails(purcNo);
-                const prodLines = prodDetails.lines;
-                const prodTotalCost = prodDetails.totalCost;
-
-                productionOrders.push({
+                return {
                     ordNo: purcNo,
                     trTp: prodOrder.TrTp,
                     revenue: prodOrder.InvoAm || 0,
-                    lines: prodLines,
-                    totalCost: prodTotalCost
-                });
-            }
-        }
+                    lines: prodDetails.lines,
+                    totalCost: prodDetails.totalCost
+                };
+            })
+        );
+        const productionOrders = productionOrderResults.filter(Boolean);
 
         const productionTotalByOrdNo = new Map(
             productionOrders.map(po => [Number(po.ordNo), Number(po.totalCost || 0)])

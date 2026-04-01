@@ -1,15 +1,42 @@
 const { app, BrowserWindow, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const os = require('os');
+const path = require('path');
+
+// RDS / virtual desktop compatibility: disable GPU acceleration
+// These must be set BEFORE app is ready
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+app.commandLine.appendSwitch('no-sandbox');
+
 const { ensureServerStarted } = require('./server');
 
-const APP_URL = process.env.EFTERKALK_URL || 'http://localhost:3000';
+// In RDS multiple users share the same machine — give each user their own port
+// based on a hash of the username to avoid conflicts
+function getUserPort() {
+    if (process.env.PORT) return Number(process.env.PORT);
+    if (process.env.EFTERKALK_PORT) return Number(process.env.EFTERKALK_PORT);
+    const username = (process.env.USERNAME || process.env.USER || os.userInfo().username || 'default').toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+        hash = (hash * 31 + username.charCodeAt(i)) & 0xffff;
+    }
+    // Range 3000-3999 — one port per user
+    return 3000 + (hash % 1000);
+}
+
+const USER_PORT = getUserPort();
+process.env.PORT = String(USER_PORT);
+
+const APP_URL = 'http://localhost:' + USER_PORT;
 const APP_NAME = 'Gantech Efterkalk';
 const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '1') === '1';
 
-let mainWindow = null;
-let manualUpdateCheckRunning = false;
+// Detect RDS environment
+const IS_RDS = !!process.env.SESSIONNAME && process.env.SESSIONNAME !== 'Console';
 
-console.info('Desktop process booting...');
+console.info('Desktop process booting... port=' + USER_PORT + ' rds=' + IS_RDS);
 
 function waitForSingleUpdateResult(timeoutMs = 15000) {
     return new Promise((resolve) => {
@@ -107,14 +134,20 @@ function setupAutoUpdater() {
 }
 
 function configureAutoStart() {
+    // Skip auto-start in RDS environments (shared machines)
+    if (IS_RDS) return;
     if (process.platform !== 'win32') return;
 
-    app.setLoginItemSettings({
-        openAtLogin: SHOULD_AUTO_START,
-        openAsHidden: false,
-        path: process.execPath,
-        args: []
-    });
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: SHOULD_AUTO_START,
+            openAsHidden: false,
+            path: process.execPath,
+            args: []
+        });
+    } catch (e) {
+        console.warn('setLoginItemSettings failed (RDS?):', e.message);
+    }
 }
 
 function createMainWindow() {
@@ -129,7 +162,7 @@ function createMainWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            sandbox: true
+            sandbox: !IS_RDS  // sandbox must be disabled on some RDS configurations
         }
     });
 
@@ -151,11 +184,19 @@ async function bootDesktopApp() {
     // Show loading screen immediately — don't wait for server
     createMainWindow();
     const pkgVersion = (() => { try { return require('./package.json').version; } catch(e) { return ''; } })();
-    const loadingPath = require('path').join(__dirname, 'loading.html');
+    const loadingPath = path.join(__dirname, 'loading.html');
     mainWindow.loadFile(loadingPath, { query: { v: pkgVersion } });
 
     // Start server in background while loading screen is visible
-    await ensureServerStarted();
+    try {
+        await ensureServerStarted();
+    } catch (err) {
+        console.error('Server start failed:', err.message);
+        if (mainWindow) {
+            mainWindow.loadURL('data:text/html,<h2 style="font-family:Arial;color:red;padding:40px">Server kunne ikke starte: ' + err.message + '</h2>');
+        }
+        return;
+    }
 
     global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
 
