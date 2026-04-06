@@ -11,6 +11,25 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
+    function buildLineWarnings(line, extraWarnings = []) {
+        const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+        const prodNoKey = String((line && line.ProdNo) || '').trim().toUpperCase();
+        const noFinValue = Number((line && line.NoFin) || 0);
+        const noOrgValue = Number((line && line.NoOrg) || 0);
+        const warnings = [];
+
+        if (key === '2' && prodNoKey.startsWith('3') && noFinValue === 0 && noOrgValue > 0) {
+            warnings.push('Inkonsekvens: materiale/tubo med NoFin=0 men NoOrg>0.');
+        }
+
+        for (const warning of extraWarnings || []) {
+            const text = String(warning || '').trim();
+            if (text && !warnings.includes(text)) warnings.push(text);
+        }
+
+        return warnings;
+    }
+
     async function getAfterCalc(ordNo) {
         const pool = await getConnection();
 
@@ -167,14 +186,23 @@ function createAftercalcService({
 
                     const lines = [];
                     let total = 0;
+                    let hasWarnings = false;
 
                     for (const rawLine of prodLinesResult.recordset) {
                         if (isGloballyExcludedProdNo(rawLine.ProdNo)) continue;
 
                         const line = adjustOperationLinePricing({ ...rawLine });
                         const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+                        const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                        const noFinValue = Number(line.NoFin || 0);
+                        const noOrgValue = Number(line.NoOrg || 0);
+                        const isTubeMaterialLine = key === '2' && prodNoKey.startsWith('3');
+                        const displayQuantity = (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                            ? noOrgValue
+                            : noFinValue;
                         let effectiveLineCost = Number(line.LineCost || 0);
                         let childProductionTotalCost = null;
+                        const warningMessages = buildLineWarnings(line);
 
                         if (key === '1') {
                             const pnUp = String(line.ProdNo || '').toUpperCase();
@@ -190,12 +218,20 @@ function createAftercalcService({
                             const childDetails = await loadProductionOrderDetails(Number(line.PurcNo), nextVisited);
                             childProductionTotalCost = Number(childDetails.totalCost || 0);
                             effectiveLineCost = childProductionTotalCost;
+                            if (childDetails.hasWarnings) {
+                                warningMessages.push('Underliggende produktionsordre har en advarsel.');
+                            }
                         }
 
                         line.ChildProductionTotalCost = childProductionTotalCost === null
                             ? null
                             : parseFloat(Number(childProductionTotalCost).toFixed(2));
+                        line.DisplayQuantity = parseFloat(Number(displayQuantity).toFixed(2));
+                        line.HasWarning = warningMessages.length > 0;
+                        line.ChildHasWarning = key === '4' && warningMessages.some(msg => msg.includes('Underliggende produktionsordre'));
+                        line.WarningText = warningMessages.join(' ');
                         line.EffectiveLineCost = parseFloat(Number(effectiveLineCost || 0).toFixed(2));
+                        if (line.HasWarning) hasWarnings = true;
                         lines.push(line);
 
                         if (line.LnNo === 1 || key === '0' || key === '3' || key === '5') continue;
@@ -204,7 +240,8 @@ function createAftercalcService({
 
                     return {
                         lines,
-                        totalCost: parseFloat(Number(total).toFixed(2))
+                        totalCost: parseFloat(Number(total).toFixed(2)),
+                        hasWarnings
                     };
                 })();
 
@@ -236,7 +273,8 @@ function createAftercalcService({
                         trTp: prodOrder.TrTp,
                         revenue: prodOrder.InvoAm || 0,
                         lines: prodDetails.lines,
-                        totalCost: prodDetails.totalCost
+                        totalCost: prodDetails.totalCost,
+                        hasWarnings: Boolean(prodDetails.hasWarnings)
                     };
                 })
             );
@@ -245,23 +283,31 @@ function createAftercalcService({
             const productionTotalByOrdNo = new Map(
                 productionOrders.map(po => [Number(po.ordNo), Number(po.totalCost || 0)])
             );
+            const productionWarningByOrdNo = new Map(
+                productionOrders.map(po => [Number(po.ordNo), Boolean(po.hasWarnings)])
+            );
 
             const salesOrderLinesWithProductionTotal = salesOrderLines.map(line => {
                 const purcNo = line.PurcNo ? Number(line.PurcNo) : 0;
                 const productionTotal = purcNo ? productionTotalByOrdNo.get(purcNo) : undefined;
+                const productionHasWarning = purcNo ? Boolean(productionWarningByOrdNo.get(purcNo)) : false;
 
                 if (productionTotal !== undefined && !line.IsDiscountLine) {
                     const roundedTotal = parseFloat(Number(productionTotal).toFixed(2));
                     return {
                         ...line,
                         ProductionOrderTotalCost: roundedTotal,
-                        EffectiveLineCost: roundedTotal
+                        EffectiveLineCost: roundedTotal,
+                        HasWarning: productionHasWarning,
+                        WarningText: productionHasWarning ? 'Tilknyttet produktionsordre har en advarsel.' : ''
                     };
                 }
 
                 return {
                     ...line,
-                    ProductionOrderTotalCost: productionTotal !== undefined ? parseFloat(Number(productionTotal).toFixed(2)) : null
+                    ProductionOrderTotalCost: productionTotal !== undefined ? parseFloat(Number(productionTotal).toFixed(2)) : null,
+                    HasWarning: productionHasWarning,
+                    WarningText: productionHasWarning ? 'Tilknyttet produktionsordre har en advarsel.' : ''
                 };
             });
 
@@ -339,11 +385,23 @@ function createAftercalcService({
         return result.recordset;
     }
 
-    async function getProductionSummary(ordNo) {
+    async function getProductionSummary(ordNo, visited = new Set()) {
         const numericOrdNo = Number(ordNo);
         if (!Number.isFinite(numericOrdNo)) {
             throw new Error('Ordrenummer ugyldigt');
         }
+
+        if (visited.has(numericOrdNo)) {
+            return {
+                ordNo: numericOrdNo,
+                lines: [],
+                hasWarnings: false,
+                totalCost: 0
+            };
+        }
+
+        const nextVisited = new Set(visited);
+        nextVisited.add(numericOrdNo);
 
         const cachedSummary = diskCache.get('prod_summary_' + numericOrdNo);
         if (cachedSummary) return cachedSummary;
@@ -381,7 +439,8 @@ function createAftercalcService({
                           AND n.ProdNo = OrdLn.ProdNo
                     ) AS NestingCost
                 FROM OrdLn
-                WHERE OrdNo = @ordNo AND NoFin > 0
+                WHERE OrdNo = @ordNo
+                  AND (LnNo = 1 OR NoFin > 0 OR NoOrg > 0)
                 ORDER BY LnNo
             `);
 
@@ -391,15 +450,45 @@ function createAftercalcService({
                 const line = adjustOperationLinePricing({ ...rawLine });
                 const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
                 const hasNestingCost = Number(line.NestingCost || 0) > 0;
+                const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                const noFinValue = Number(line.NoFin || 0);
+                const noOrgValue = Number(line.NoOrg || 0);
+                const isTubeMaterialLine = key === '2' && prodNoKey.startsWith('3');
+                const displayQuantity = (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                    ? noOrgValue
+                    : noFinValue;
+                const warningMessages = buildLineWarnings(line);
                 const effectiveLineCost = key === '2' && isLaserLProduct(line.ProdNo)
                     ? (hasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0))
-                    : Number(line.LineCost || 0);
+                    : (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                        ? Number(noOrgValue * (line.CCstPr || 0))
+                        : Number(line.LineCost || 0);
 
                 return {
                     ...line,
+                    DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
+                    HasWarning: warningMessages.length > 0,
+                    WarningText: warningMessages.join(' '),
                     EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2))
                 };
             });
+
+        for (const line of lines) {
+            const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+            const childOrdNo = Number(line.PurcNo || 0);
+            if (key !== '4' || !Number.isFinite(childOrdNo) || childOrdNo <= 0 || nextVisited.has(childOrdNo)) {
+                continue;
+            }
+
+            const childSummary = await getProductionSummary(childOrdNo, nextVisited);
+            if (childSummary && childSummary.hasWarnings) {
+                line.HasWarning = true;
+                line.ChildHasWarning = true;
+                line.WarningText = [line.WarningText, 'Underliggende produktionsordre har en advarsel.']
+                    .filter(Boolean)
+                    .join(' ');
+            }
+        }
 
         const totalCost = lines
             .filter(line => Number(line.LnNo || 0) !== 1)
@@ -408,6 +497,7 @@ function createAftercalcService({
         const result = {
             ordNo: numericOrdNo,
             lines,
+            hasWarnings: lines.some(line => line.HasWarning),
             totalCost: parseFloat(Number(totalCost).toFixed(2))
         };
         diskCache.set('prod_summary_' + numericOrdNo, result, cacheTtlProductionSummaryMs);

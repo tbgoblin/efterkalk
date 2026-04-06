@@ -526,6 +526,7 @@ app.get('/', (req, res) => {
             .access-gate-row input { flex: 1; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 16px; }
             .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
             .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
+            .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
         </style>
     </head>
     <body>
@@ -632,6 +633,12 @@ app.get('/', (req, res) => {
                     .replace(/>/g, '&gt;')
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;');
+            }
+
+            function getWarningFlagHtml(item, fallbackText) {
+                if (!item || !item.HasWarning) return '';
+                const title = escapeHtml(item.WarningText || fallbackText || 'Kontroller denne linje');
+                return ' <span class="warning-flag" title="' + title + '">⚠️</span>';
             }
 
             function toDrawingUrl(rawPath) {
@@ -1372,10 +1379,11 @@ app.get('/', (req, res) => {
                             html += '<tr>';
                             html += '<td>' + (line.LnNo || 0) + '</td>';
 
+                            const salesWarningFlag = getWarningFlagHtml(line, 'Tilknyttet produktionsordre har en advarsel.');
                             if (line.PurcNo && line.PurcNo !== 0) {
-                                html += '<td><span class="prod-link" onclick="openProduction(' + line.PurcNo + ')">' + (line.ProdNo || '-') + '</span></td>';
+                                html += '<td><span class="prod-link" onclick="openProduction(' + line.PurcNo + ')">' + (line.ProdNo || '-') + '</span>' + salesWarningFlag + '</td>';
                             } else {
-                                html += '<td>' + (line.ProdNo || '-') + '</td>';
+                                html += '<td>' + (line.ProdNo || '-') + salesWarningFlag + '</td>';
                             }
 
                             html += '<td>' + (line.Descr || '') + '</td>';
@@ -1452,7 +1460,7 @@ app.get('/', (req, res) => {
                                 : '-';
 
                             html += '<div id="po-' + prodOrder.ordNo + '" data-order="' + prodOrder.ordNo + '" style="margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">';
-                            html += '<h4>Produktionsordre: ' + prodOrder.ordNo + '</h4>';
+                            html += '<h4>Produktionsordre: ' + prodOrder.ordNo + getWarningFlagHtml({ HasWarning: !!prodOrder.hasWarnings, WarningText: 'Denne produktionsordre indeholder mindst en advarselslinje.' }) + '</h4>';
                             html += '<div class="main-product-box">';
                             html += '<div class="value">' + mainProductText + '</div>';
                             html += '</div>';
@@ -1567,24 +1575,25 @@ app.get('/', (req, res) => {
 
                                 for (const line of lines) {
                                     html += '<tr>';
+                                    const warningFlagHtml = getWarningFlagHtml(line);
                                     if (String(key) === '4' && line.PurcNo && line.PurcNo !== 0) {
-                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + line.PurcNo + ')">' + (line.ProdNo || '-') + '</span></td>';
+                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + line.PurcNo + ')">' + (line.ProdNo || '-') + '</span>' + warningFlagHtml + '</td>';
                                     } else if (String(key) === '1' && line.ProdNo) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span></td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span>' + warningFlagHtml + '</td>';
                                     } else if (String(key) === '2' && line.ProdNo && isLaserLProdNo(line.ProdNo)) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span></td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + warningFlagHtml + '</td>';
                                     } else if (line.ProdNo) {
-                                        html += '<td>' + (line.ProdNo || '-') + '</td>';
+                                        html += '<td>' + (line.ProdNo || '-') + warningFlagHtml + '</td>';
                                     } else {
-                                        html += '<td>-</td>';
+                                        html += '<td>-' + warningFlagHtml + '</td>';
                                     }
                                     html += '<td>' + (line.Descr || '') + '</td>';
                                     if (key === '1') {
@@ -2077,8 +2086,12 @@ app.get('/', (req, res) => {
                     }
 
                     if (!data.lines || data.lines.length === 0) {
-                        body.innerHTML = '<div>Ingen linjer med positivt færdigmeldt antal (NoFin > 0).</div>';
+                        body.innerHTML = '<div>Ingen linjer fundet for denne produktionsordre.</div>';
                         return;
+                    }
+
+                    if (data.hasWarnings) {
+                        title.textContent = 'Produktoversigt for ordre ' + childOrdNo + ' ⚠️';
                     }
 
                     let html = '';
@@ -2087,6 +2100,7 @@ app.get('/', (req, res) => {
                         const displayLineCost = Number(line.LnNo || 0) === 1
                             ? Number(data.totalCost || 0)
                             : Number(line.EffectiveLineCost || 0);
+                        const warningFlagHtml = getWarningFlagHtml(line);
                         html += '<tr>';
                         html += '<td>' + (line.LnNo || 0) + '</td>';
                         html += '<td>' + (line.ProdTp4 === null || line.ProdTp4 === undefined ? '-' : line.ProdTp4) + '</td>';
@@ -2096,12 +2110,15 @@ app.get('/', (req, res) => {
                             const trInf4FromLine = String(line.TrInf4 || '');
                             const safeChildTrInf2 = trInf2FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span></td>';
+                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + warningFlagHtml + '</td>';
                         } else {
-                            html += '<td>' + (line.ProdNo || '-') + '</td>';
+                            html += '<td>' + (line.ProdNo || '-') + warningFlagHtml + '</td>';
                         }
+                        const displayQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
+                            ? line.DisplayQuantity
+                            : (line.NoFin || 0);
                         html += '<td>' + (line.Descr || '') + '</td>';
-                        html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
+                        html += '<td>' + formatNumber(displayQty) + '</td>';
                         html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                         html += '<td>' + formatNumber(line.CCstPr || 0) + '</td>';
                         html += '<td>' + formatNumber(line.NestingCost || 0) + '</td>';
