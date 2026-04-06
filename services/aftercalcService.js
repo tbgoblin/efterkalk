@@ -11,19 +11,26 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 3;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 4;
 
     function buildLineWarnings(line, extraWarnings = []) {
         const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
         const prodNoKey = String((line && line.ProdNo) || '').trim().toUpperCase();
         const noFinValue = Number((line && line.NoFin) || 0);
         const noOrgValue = Number((line && line.NoOrg) || 0);
+        const purcNoValue = Number((line && line.PurcNo) || 0);
+        const noInvoValue = Number((line && line.NoInvo) || 0);
+        const noInvoAbValue = Number((line && line.NoInvoAb) || 0);
         const warnings = [];
 
         if (prodNoKey.startsWith('3') && noFinValue === 0 && noOrgValue > 0) {
             warnings.push(key === '2'
                 ? 'Inkonsekvens: materiale/tubo med NoFin=0 men NoOrg>0.'
                 : 'Inkonsekvens på salgsordre: produkt/tubo med NoFin=0 men NoOrg>0.');
+        }
+
+        if (key === '6' && purcNoValue > 0 && noInvoAbValue > noInvoValue) {
+            warnings.push('manglede indkøbsfaktura');
         }
 
         for (const warning of extraWarnings || []) {
@@ -72,6 +79,8 @@ function createAftercalcService({
                             DPrice,
                             NoOrg,
                             NoFin,
+                            NoInvo,
+                            NoInvoAb,
                             ProdTp4,
                             CCstPr,
                             PurcNo,
@@ -91,6 +100,8 @@ function createAftercalcService({
                             DPrice,
                             NoOrg,
                             NoFin,
+                            NoInvo,
+                            NoInvoAb,
                             ProdTp4,
                             CCstPr,
                             CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost
@@ -196,6 +207,8 @@ function createAftercalcService({
                                 DPrice,
                                 NoOrg,
                                 NoFin,
+                                NoInvo,
+                                NoInvoAb,
                                 CCstPr,
                                 PurcNo,
                                 TrInf2,
@@ -469,6 +482,8 @@ function createAftercalcService({
                     Descr,
                     NoOrg,
                     NoFin,
+                    NoInvo,
+                    NoInvoAb,
                     DPrice,
                     CCstPr,
                     TrInf2,
