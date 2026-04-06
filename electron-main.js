@@ -4,6 +4,8 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
+let mainWindow = null;
+
 // RDS / virtual desktop compatibility: disable GPU acceleration
 // These must be set BEFORE app is ready
 app.commandLine.appendSwitch('disable-gpu');
@@ -48,6 +50,12 @@ function writeDesktopLog(message) {
     }
 }
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    writeDesktopLog('second app launch detected -> quitting duplicate instance');
+    app.quit();
+}
+
 // In RDS multiple sessions can run under the same username.
 // Include session identifiers in the hash to reduce port collisions.
 function getUserPort() {
@@ -72,7 +80,8 @@ const { ensureServerStarted } = require('./server');
 
 const APP_URL = 'http://localhost:' + USER_PORT;
 const APP_NAME = 'Gantech Efterkalk';
-const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '1') === '1';
+// Disabled by default, especially for shared/RDS environments.
+const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '0') === '1';
 let manualUpdateCheckRunning = false;
 
 // Detect RDS environment
@@ -178,19 +187,21 @@ function setupAutoUpdater() {
 }
 
 function configureAutoStart() {
-    // Skip auto-start in RDS environments (shared machines)
-    if (IS_RDS) return;
     if (process.platform !== 'win32') return;
+
+    const openAtLogin = SHOULD_AUTO_START && !IS_RDS;
 
     try {
         app.setLoginItemSettings({
-            openAtLogin: SHOULD_AUTO_START,
+            openAtLogin,
             openAsHidden: false,
             path: process.execPath,
             args: []
         });
+        writeDesktopLog('configureAutoStart openAtLogin=' + openAtLogin + ' rds=' + IS_RDS + ' execPath=' + process.execPath);
     } catch (e) {
         console.warn('setLoginItemSettings failed (RDS?):', e.message);
+        writeDesktopLog('configureAutoStart failed: ' + e.message);
     }
 }
 
@@ -296,11 +307,21 @@ process.on('unhandledRejection', (reason) => {
     if (reason && reason.stack) writeDesktopLog('unhandledRejection stack=' + reason.stack.replace(/\r?\n/g, ' | '));
 });
 
-app.whenReady().then(bootDesktopApp).catch((err) => {
-    console.error('Desktop startup failed:', err);
-    writeDesktopLog('Desktop startup failed message=' + (err && err.message ? err.message : String(err)));
-    app.quit();
-});
+if (gotSingleInstanceLock) {
+    app.on('second-instance', () => {
+        writeDesktopLog('second-instance event -> focusing existing window');
+        if (!mainWindow) return;
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+    });
+
+    app.whenReady().then(bootDesktopApp).catch((err) => {
+        console.error('Desktop startup failed:', err);
+        writeDesktopLog('Desktop startup failed message=' + (err && err.message ? err.message : String(err)));
+        app.quit();
+    });
+}
 
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
