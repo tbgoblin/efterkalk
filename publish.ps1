@@ -4,6 +4,40 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Stop-WorkspaceLockingProcesses {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RootPath
+    )
+
+    try {
+        $escapedRoot = [Regex]::Escape($RootPath)
+        $candidates = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.ProcessId -ne $PID -and (
+                ($_.Name -in @('node.exe', 'electron.exe', 'Gantech Efterkalk.exe')) -and (
+                    ($_.CommandLine -and $_.CommandLine -match $escapedRoot) -or
+                    ($_.ExecutablePath -and $_.ExecutablePath -match $escapedRoot)
+                )
+            )
+        }
+
+        if ($candidates) {
+            Write-Host "🛑 Stopping workspace app/server processes before build..." -ForegroundColor Yellow
+            foreach ($proc in $candidates) {
+                try {
+                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+                    Write-Host "   Stopped PID $($proc.ProcessId) ($($proc.Name))" -ForegroundColor DarkGray
+                } catch {
+                    Write-Host "   Could not stop PID $($proc.ProcessId) ($($proc.Name))" -ForegroundColor Yellow
+                }
+            }
+            Start-Sleep -Milliseconds 1200
+        }
+    } catch {
+        Write-Host "⚠️ Process cleanup skipped: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
 Write-Host "🚀 Gantech Efterkalk - Automated Release Publisher" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
@@ -74,6 +108,9 @@ Write-Host ""
 
 # Step 7: Build
 Write-Host "🔨 Step 6: Building Windows installer..." -ForegroundColor Yellow
+
+# Stop local workspace processes that may lock native modules like msnodesqlv8/sqlserver.node
+Stop-WorkspaceLockingProcesses -RootPath $PSScriptRoot
 
 # Remove stale artifacts for this target version to avoid NSIS "Can't open output file"
 $distDir = Join-Path $PSScriptRoot 'dist'

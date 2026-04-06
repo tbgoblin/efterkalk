@@ -353,9 +353,14 @@ function createAftercalcService({
             const totalRevenue = orderHeader.InvoAm || 0;
             const margin = totalRevenue - totalCost;
             const marginPercentage = totalCost > 0 ? ((totalRevenue / totalCost) * 100).toFixed(2) : 0;
+            const hasWarnings = salesOrderLinesWithProductionTotal.some(line => line.HasWarning)
+                || salesLines.some(line => line.HasWarning)
+                || productionOrders.some(order => order.hasWarnings);
 
             return {
                 orderHeader,
+                hasWarnings,
+                warningText: hasWarnings ? 'Ordren indeholder mindst én advarsel.' : '',
                 salesOrderLines: salesOrderLinesWithProductionTotal,
                 salesLines,
                 salesLinesTotalCost: parseFloat(salesLinesTotalCost.toFixed(2)),

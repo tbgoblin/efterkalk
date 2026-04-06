@@ -2216,9 +2216,10 @@ app.get('/', (req, res) => {
 
                     const d = String(o.LstInvDt || '');
                     const invDate = d.length === 8 ? d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8) : (d || '-');
+                    const orderWarningFlag = getWarningFlagHtml(o, 'Ordren indeholder mindst én advarsel.');
                     html += '<tr data-ordno="' + o.OrdNo + '" class="order-list-row">'
                     html += '<td>' + (o.SellerUsr || '-') + '</td>';
-                    html += '<td><strong>' + o.OrdNo + '</strong></td>';
+                    html += '<td><strong>' + o.OrdNo + '</strong>' + orderWarningFlag + '</td>';
                     html += '<td>' + (o.CustomerName || '-') + '</td>';
                     html += '<td>' + invDate + '</td>';
                     html += '<td>' + formatNumber(o.InvoAm || 0) + ' DKK</td>';

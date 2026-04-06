@@ -648,9 +648,32 @@ function createApiRouter({
             let marginFromDiskStale = 0;
             let marginMissing = 0;
 
+            const rowHasWarnings = (aftercalc) => {
+                if (!aftercalc || typeof aftercalc !== 'object') return false;
+                if (aftercalc.hasWarnings === true) return true;
+
+                const lineHasWarning = (lines) => Array.isArray(lines) && lines.some(line => {
+                    if (!line || typeof line !== 'object') return false;
+                    if (line.HasWarning) return true;
+                    const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                    const noFinValue = Number(line.NoFin || 0);
+                    const noOrgValue = Number(line.NoOrg || 0);
+                    return prodNoKey.startsWith('3') && noFinValue === 0 && noOrgValue > 0;
+                });
+
+                const prodOrderHasWarning = Array.isArray(aftercalc.productionOrders)
+                    && aftercalc.productionOrders.some(order => order && (order.hasWarnings || lineHasWarning(order.lines)));
+
+                return lineHasWarning(aftercalc.salesOrderLines)
+                    || lineHasWarning(aftercalc.salesLines)
+                    || prodOrderHasWarning;
+            };
+
             const data = orderListCache.data.map(row => {
                 const ordNoNum = Number(row.OrdNo);
                 let marginInfo = orderMarginCache.get(ordNoNum);
+                let warningSource = diskCache.get('aftercalc_' + ordNoNum) || diskCache.getStale('aftercalc_' + ordNoNum);
+                const hasWarning = rowHasWarnings(warningSource);
                 if (marginInfo) {
                     marginFromMemory += 1;
                 }
@@ -689,6 +712,8 @@ function createApiRouter({
 
                 return {
                     ...row,
+                    HasWarning: hasWarning,
+                    WarningText: hasWarning ? 'Ordren indeholder mindst én advarsel.' : '',
                     TotalCost: marginInfo ? marginInfo.totalCost : null
                 };
             });
