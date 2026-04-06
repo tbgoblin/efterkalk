@@ -12,13 +12,26 @@ function Stop-WorkspaceLockingProcesses {
 
     try {
         $escapedRoot = [Regex]::Escape($RootPath)
+        $workspacePatterns = @(
+            $escapedRoot,
+            'server\.js',
+            'npm(?:\.cmd)?[\\/].*npm-cli\.js"?\s+start',
+            'electron(?:\.exe)?"?\s+\.',
+            'Gantech Efterkalk'
+        )
+
         $candidates = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            $_.ProcessId -ne $PID -and (
-                ($_.Name -in @('node.exe', 'electron.exe', 'Gantech Efterkalk.exe')) -and (
-                    ($_.CommandLine -and $_.CommandLine -match $escapedRoot) -or
-                    ($_.ExecutablePath -and $_.ExecutablePath -match $escapedRoot)
-                )
-            )
+            if ($_.ProcessId -eq $PID) { return $false }
+            if ($_.Name -notin @('node.exe', 'electron.exe', 'Gantech Efterkalk.exe')) { return $false }
+
+            $commandLine = [string]($_.CommandLine)
+            $exePath = [string]($_.ExecutablePath)
+            foreach ($pattern in $workspacePatterns) {
+                if (($commandLine -and $commandLine -match $pattern) -or ($exePath -and $exePath -match $pattern)) {
+                    return $true
+                }
+            }
+            return $false
         }
 
         if ($candidates) {
@@ -31,7 +44,7 @@ function Stop-WorkspaceLockingProcesses {
                     Write-Host "   Could not stop PID $($proc.ProcessId) ($($proc.Name))" -ForegroundColor Yellow
                 }
             }
-            Start-Sleep -Milliseconds 1200
+            Start-Sleep -Milliseconds 1500
         }
     } catch {
         Write-Host "⚠️ Process cleanup skipped: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -129,8 +142,21 @@ foreach ($p in @($installerPath, $blockmapPath, $uninstallerPath)) {
     }
 }
 
-npm run build:win
-if ($LASTEXITCODE -ne 0) {
+$buildSucceeded = $false
+for ($attempt = 1; $attempt -le 2; $attempt++) {
+    if ($attempt -gt 1) {
+        Write-Host "🔁 Retrying build after additional cleanup..." -ForegroundColor Yellow
+        Stop-WorkspaceLockingProcesses -RootPath $PSScriptRoot
+    }
+
+    npm run build:win
+    if ($LASTEXITCODE -eq 0) {
+        $buildSucceeded = $true
+        break
+    }
+}
+
+if (-not $buildSucceeded) {
     throw "❌ npm run build:win failed"
 }
 Write-Host "✅ Build complete" -ForegroundColor Green

@@ -11,6 +11,8 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 2;
+
     function buildLineWarnings(line, extraWarnings = []) {
         const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
         const prodNoKey = String((line && line.ProdNo) || '').trim().toUpperCase();
@@ -434,7 +436,9 @@ function createAftercalcService({
         nextVisited.add(numericOrdNo);
 
         const cachedSummary = diskCache.get('prod_summary_' + numericOrdNo);
-        if (cachedSummary) return cachedSummary;
+        if (cachedSummary && cachedSummary.cacheSchemaVersion === PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION) {
+            return cachedSummary;
+        }
 
         const pool = await getConnection();
         const linesResult = await pool.request()
@@ -490,16 +494,20 @@ function createAftercalcService({
                 const warningMessages = buildLineWarnings(line);
                 const effectiveLineCost = key === '2' && isLaserLProduct(line.ProdNo)
                     ? (hasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0))
-                    : (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
-                        ? Number(noOrgValue * (line.CCstPr || 0))
-                        : Number(line.LineCost || 0);
+                    : Number(line.LineCost || 0);
+
+                const roundedEffectiveLineCost = parseFloat(Number(effectiveLineCost).toFixed(2));
+                const displayUnitCost = Number(displayQuantity || 0) > 0
+                    ? parseFloat(Number(roundedEffectiveLineCost / displayQuantity).toFixed(2))
+                    : parseFloat(Number(line.CCstPr || 0).toFixed(2));
 
                 return {
                     ...line,
                     DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
+                    DisplayUnitCost: displayUnitCost,
                     HasWarning: warningMessages.length > 0,
                     WarningText: warningMessages.join(' '),
-                    EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2))
+                    EffectiveLineCost: roundedEffectiveLineCost
                 };
             });
 
@@ -511,6 +519,14 @@ function createAftercalcService({
             }
 
             const childSummary = await getProductionSummary(childOrdNo, nextVisited);
+            if (childSummary) {
+                const childTotal = parseFloat(Number(childSummary.totalCost || 0).toFixed(2));
+                line.ChildProductionTotalCost = childTotal;
+                line.EffectiveLineCost = childTotal;
+                line.DisplayUnitCost = Number(line.DisplayQuantity || 0) > 0
+                    ? parseFloat(Number(childTotal / line.DisplayQuantity).toFixed(2))
+                    : parseFloat(Number(line.CCstPr || 0).toFixed(2));
+            }
             if (childSummary && childSummary.hasWarnings) {
                 line.HasWarning = true;
                 line.ChildHasWarning = true;
@@ -523,12 +539,19 @@ function createAftercalcService({
         const totalCost = lines
             .filter(line => Number(line.LnNo || 0) !== 1)
             .reduce((sum, line) => sum + (line.EffectiveLineCost || 0), 0);
+        const roundedTotalCost = parseFloat(Number(totalCost).toFixed(2));
+
+        const mainLine = lines.find(line => Number(line.LnNo || 0) === 1);
+        if (mainLine && Number(mainLine.DisplayQuantity || 0) > 0) {
+            mainLine.DisplayUnitCost = parseFloat(Number(roundedTotalCost / mainLine.DisplayQuantity).toFixed(2));
+        }
 
         const result = {
             ordNo: numericOrdNo,
+            cacheSchemaVersion: PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION,
             lines,
             hasWarnings: lines.some(line => line.HasWarning),
-            totalCost: parseFloat(Number(totalCost).toFixed(2))
+            totalCost: roundedTotalCost
         };
         diskCache.set('prod_summary_' + numericOrdNo, result, cacheTtlProductionSummaryMs);
         return result;

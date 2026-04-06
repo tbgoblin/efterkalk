@@ -641,6 +641,24 @@ app.get('/', (req, res) => {
                 return ' <span class="warning-flag" title="' + title + '">⚠️</span>';
             }
 
+            const laserNestCostHints = new Map();
+
+            function setLaserNestCostHint(ordNo, prodNo, nestingCost) {
+                const numericOrdNo = Number(ordNo || 0);
+                const normalizedProdNo = String(prodNo || '').trim().toUpperCase();
+                const numericCost = Number(nestingCost || 0);
+                if (!numericOrdNo || !normalizedProdNo || !(numericCost > 0)) return;
+                laserNestCostHints.set(numericOrdNo + '|' + normalizedProdNo, numericCost);
+            }
+
+            function getLaserNestCostHint(ordNo, prodNo) {
+                const numericOrdNo = Number(ordNo || 0);
+                const normalizedProdNo = String(prodNo || '').trim().toUpperCase();
+                if (!numericOrdNo || !normalizedProdNo) return null;
+                const value = laserNestCostHints.get(numericOrdNo + '|' + normalizedProdNo);
+                return Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null;
+            }
+
             function toDrawingUrl(rawPath) {
                 const value = String(rawPath || '').trim();
                 if (!value) return '';
@@ -1682,59 +1700,78 @@ app.get('/', (req, res) => {
                 try {
                     const requests = [];
                     const targetDedupe = new Set();
+                    const visitedProdOrders = new Set();
                     const productionOrders = Array.isArray(orderData.productionOrders) ? orderData.productionOrders : [];
                     const laserTargets = [];
 
-                    function addLaserTarget(targetOrdNo, prodNo) {
+                    function addLaserTarget(targetOrdNo, prodNo, nestingCost) {
                         const cleanedOrdNo = Number(targetOrdNo || 0);
                         const cleanedProdNo = String(prodNo || '').trim();
+                        const cleanedNestingCost = Number(nestingCost || 0);
                         if (!cleanedOrdNo || !cleanedProdNo) return;
+
+                        if (cleanedNestingCost > 0) {
+                            setLaserNestCostHint(cleanedOrdNo, cleanedProdNo, cleanedNestingCost);
+                        }
 
                         const key = cleanedOrdNo + '|' + cleanedProdNo;
                         if (targetDedupe.has(key)) return;
                         targetDedupe.add(key);
-                        laserTargets.push({ ordNo: cleanedOrdNo, prodNo: cleanedProdNo });
+                        laserTargets.push({ ordNo: cleanedOrdNo, prodNo: cleanedProdNo, nestingCost: cleanedNestingCost > 0 ? cleanedNestingCost : null });
                     }
 
-                    // 1) Direct L-lines from loaded production orders.
-                    for (const prodOrder of productionOrders) {
-                        const lines = Array.isArray(prodOrder.lines) ? prodOrder.lines : [];
-                        for (const line of lines) {
+                    function collectLaserTargetsFromLines(sourceOrdNo, lines) {
+                        const childOrdNos = [];
+                        for (const line of (Array.isArray(lines) ? lines : [])) {
                             const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
                             const prodNo = String(line.ProdNo || '').trim();
-                            const route = String(line.TrInf4 || '').trim();
-                            if (key !== '2' || !isLaserLProdNo(prodNo) || !route) continue;
-                            addLaserTarget(prodOrder.ordNo, prodNo);
+                            if (key === '2' && isLaserLProdNo(prodNo)) {
+                                addLaserTarget(sourceOrdNo, prodNo, line.NestingCost);
+                            }
+                            if (key === '4' && Number(line.PurcNo || 0) > 0) {
+                                childOrdNos.push(Number(line.PurcNo || 0));
+                            }
+                        }
+                        return childOrdNos;
+                    }
+
+                    async function fetchProductionSummarySafe(childOrdNo) {
+                        try {
+                            const response = await fetch('/production-summary/' + childOrdNo);
+                            const data = await response.json();
+                            if (!response.ok || !data || data.error) return null;
+                            return data;
+                        } catch (_) {
+                            return null;
                         }
                     }
 
-                    // 2) L-lines inside Produkt dele child orders (PurcNo).
-                    const childOrdNos = Array.from(new Set(
-                        productionOrders
-                            .flatMap(prodOrder => (Array.isArray(prodOrder.lines) ? prodOrder.lines : []))
-                            .filter(line => String((line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : line.ProdTp4) === '4' && Number(line.PurcNo || 0) > 0)
-                            .map(line => Number(line.PurcNo || 0))
-                            .filter(v => Number.isFinite(v) && v > 0)
-                    ));
+                    const pendingChildOrdNos = [];
 
-                    if (childOrdNos.length > 0) {
-                        const childSummaries = await Promise.all(
-                            childOrdNos.map(childOrdNo =>
-                                fetch('/production-summary/' + childOrdNo)
-                                    .then(r => r.json().then(data => ({ ok: r.ok, data, childOrdNo })))
-                                    .catch(() => null)
-                            )
-                        );
+                    for (const prodOrder of productionOrders) {
+                        const currentOrdNo = Number(prodOrder && prodOrder.ordNo || 0);
+                        if (!currentOrdNo || visitedProdOrders.has(currentOrdNo)) continue;
+                        visitedProdOrders.add(currentOrdNo);
+                        const discoveredChildOrdNos = collectLaserTargetsFromLines(currentOrdNo, prodOrder.lines);
+                        for (const childOrdNo of discoveredChildOrdNos) {
+                            if (!visitedProdOrders.has(childOrdNo)) {
+                                pendingChildOrdNos.push(childOrdNo);
+                            }
+                        }
+                    }
 
-                        for (const child of childSummaries) {
-                            if (!child || !child.ok || !child.data || child.data.error) continue;
-                            const lines = Array.isArray(child.data.lines) ? child.data.lines : [];
-                            for (const line of lines) {
-                                const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
-                                const prodNo = String(line.ProdNo || '').trim();
-                                const route = String(line.TrInf4 || '').trim();
-                                if (key !== '2' || !isLaserLProdNo(prodNo) || !route) continue;
-                                addLaserTarget(child.childOrdNo, prodNo);
+                    while (pendingChildOrdNos.length > 0) {
+                        const childOrdNo = Number(pendingChildOrdNos.shift() || 0);
+                        if (!childOrdNo || visitedProdOrders.has(childOrdNo)) continue;
+                        visitedProdOrders.add(childOrdNo);
+
+                        const childSummary = await fetchProductionSummarySafe(childOrdNo);
+                        if (!childSummary) continue;
+
+                        const discoveredChildOrdNos = collectLaserTargetsFromLines(childOrdNo, childSummary.lines);
+                        for (const nestedOrdNo of discoveredChildOrdNos) {
+                            if (!visitedProdOrders.has(nestedOrdNo)) {
+                                pendingChildOrdNos.push(nestedOrdNo);
                             }
                         }
                     }
@@ -1747,14 +1784,14 @@ app.get('/', (req, res) => {
                         requests.push(
                             fetch(endpoint)
                                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
-                                .then(({ ok, data }) => ({ ok, data, prodOrderNo: target.ordNo, requestedProdNo: target.prodNo, requestedRoute: null }))
+                                .then(({ ok, data }) => ({ ok, data, prodOrderNo: target.ordNo, requestedProdNo: target.prodNo, requestedRoute: null, requestedNestingCost: target.nestingCost }))
                                 .catch(() => null)
                         );
                     }
 
                     if (requests.length === 0) {
                         body.innerHTML = '<div>Ingen L-linjer fundet for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
@@ -1767,6 +1804,7 @@ app.get('/', (req, res) => {
                         for (const p of products) {
                             const expected = p.NWgtU_medio;
                             const effective = p.KgPerPezzoEffettivo;
+                            const resolvedNestCost = Number(item.requestedNestingCost || getLaserNestCostHint(item.prodOrderNo, p.ProdNo) || 0);
                             const extraPct = (expected !== null && expected !== undefined && expected > 0 && effective !== null && effective !== undefined)
                                 ? (((effective - expected) / expected) * 100)
                                 : null;
@@ -1780,7 +1818,7 @@ app.get('/', (req, res) => {
                                 oldNWgtU_medio: p.OldNWgtU_medio,
                                 expected,
                                 effective,
-                                costPerPiece: p.CostoPerPezzo,
+                                costPerPiece: resolvedNestCost > 0 ? resolvedNestCost : p.CostoPerPezzo,
                                 extraPct,
                                 imageItems: Array.isArray(p.ImageItems) ? p.ImageItems : []
                             });
@@ -1789,20 +1827,26 @@ app.get('/', (req, res) => {
 
                     if (rows.length === 0) {
                         body.innerHTML = '<div>Ingen laserberegninger tilgaengelige for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
                     let html = '<table>';
-                    html += '<tr><th>Prod.ordre</th><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>Kostpris pr. stk</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
+                    html += '<tr><th>Prod.ordre</th><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>NestKost pr. stk</th><th>Samlet kost</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
                     let totalKgUtilizzati = 0;
                     let totalKgPrevisti = 0;
+                    let totalLaserCost = 0;
                     for (const r of rows) {
                         const rowNoFin = Number(r.noFin || 0);
                         const rowExpected = Number(r.expected || 0);
                         const rowEffective = Number(r.effective || 0);
+                        const rowCostPerPiece = Number(r.costPerPiece || 0);
+                        const rowTotalCost = (r.costPerPiece === null || r.costPerPiece === undefined || r.noFin === null || r.noFin === undefined)
+                            ? null
+                            : (rowNoFin * rowCostPerPiece);
                         totalKgPrevisti += rowNoFin * rowExpected;
                         totalKgUtilizzati += rowNoFin * rowEffective;
+                        totalLaserCost += rowTotalCost || 0;
 
                         html += '<tr>';
                         html += '<td>' + (r.prodOrderNo || '-') + '</td>';
@@ -1814,6 +1858,7 @@ app.get('/', (req, res) => {
                         html += '<td>' + (r.expected === null || r.expected === undefined ? 'NULL' : formatNumber(r.expected)) + '</td>';
                         html += '<td>' + (r.effective === null || r.effective === undefined ? 'NULL' : formatNumber(r.effective)) + '</td>';
                         html += '<td>' + (r.costPerPiece === null || r.costPerPiece === undefined ? 'NULL' : formatNumber(r.costPerPiece)) + '</td>';
+                        html += '<td>' + (rowTotalCost === null ? 'NULL' : formatNumber(rowTotalCost)) + '</td>';
                         html += '<td>' + (r.extraPct === null || r.extraPct === undefined ? 'NULL' : (formatNumber(r.extraPct) + '%')) + '</td>';
                         if (Array.isArray(r.imageItems) && r.imageItems.length > 0) {
                             const imageKey = registerSummaryImageData('Billeder for ' + (r.prodNo || 'produkt') + ' / rute ' + (r.route || '-'), r.imageItems);
@@ -1830,6 +1875,7 @@ app.get('/', (req, res) => {
                     html += '</table>';
                     body.innerHTML = html;
                     totals.innerHTML = ''
+                        + '<div><strong>Samlet L-kost (NestKost):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
                         + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
                         + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
                         + '<div><strong>Afvigelse kg:</strong> ' + formatNumber(deltaKg) + ' kg</div>'
@@ -1952,20 +1998,27 @@ app.get('/', (req, res) => {
                         }
 
                         let html = '<table>';
-                        html += '<tr><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>Kostpris pr. stk</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
+                        html += '<tr><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>NestKost pr. stk</th><th>Samlet kost</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
                         let totalKgPrevisti = 0;
                         let totalKgUtilizzati = 0;
+                        let totalLaserCost = 0;
                         for (const rowProduct of products) {
                             const oldExpected = rowProduct ? rowProduct.OldNWgtU_medio : null;
                             const expected = rowProduct ? rowProduct.NWgtU_medio : null;
                             const effective = rowProduct ? rowProduct.KgPerPezzoEffettivo : null;
                             const noFin = rowProduct ? rowProduct.QtaPezzi : null;
-                            const costPerPiece = rowProduct ? rowProduct.CostoPerPezzo : null;
+                            const prodNoForCost = rowProduct ? (rowProduct.ProdNo || prodNo) : prodNo;
+                            const hintedNestCost = getLaserNestCostHint(effectiveOrdine, prodNoForCost);
+                            const costPerPiece = hintedNestCost !== null ? hintedNestCost : (rowProduct ? rowProduct.CostoPerPezzo : null);
                             const noFinNum = Number(noFin || 0);
                             const expectedNum = Number(expected || 0);
                             const effectiveNum = Number(effective || 0);
+                            const totalCost = (costPerPiece === null || costPerPiece === undefined || noFin === null || noFin === undefined)
+                                ? null
+                                : (noFinNum * Number(costPerPiece || 0));
                             totalKgPrevisti += noFinNum * expectedNum;
                             totalKgUtilizzati += noFinNum * effectiveNum;
+                            totalLaserCost += totalCost || 0;
                             const extraPct = (expected !== null && expected !== undefined && expected > 0 && effective !== null && effective !== undefined)
                                 ? (((effective - expected) / expected) * 100)
                                 : null;
@@ -1979,6 +2032,7 @@ app.get('/', (req, res) => {
                             html += '<td>' + formatNullable(expected) + '</td>';
                             html += '<td>' + formatNullable(effective) + '</td>';
                             html += '<td>' + formatNullable(costPerPiece) + '</td>';
+                            html += '<td>' + formatNullable(totalCost) + '</td>';
                             html += '<td>' + (extraPct === null ? 'NULL' : (formatNumber(extraPct) + '%')) + '</td>';
                             if (Array.isArray(rowProduct.ImageItems) && rowProduct.ImageItems.length > 0) {
                                 const imageKey = registerSummaryImageData('Billeder for ' + (rowProduct.ProdNo || 'produkt') + ' / rute ' + (rowProduct.Route || '-'), rowProduct.ImageItems);
@@ -1989,6 +2043,11 @@ app.get('/', (req, res) => {
                             html += '</tr>';
                         }
                         html += '</table>';
+                        html += '<div class="summary-box" style="margin-top:12px;">'
+                            + '<div><strong>Samlet L-kost (NestKost):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
+                            + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
+                            + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
+                            + '</div>';
                         body.innerHTML = html;
                     } catch (err) {
                         body.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
@@ -2076,8 +2135,13 @@ app.get('/', (req, res) => {
                 const title = document.getElementById('summaryModalTitle');
                 const body = document.getElementById('summaryModalBody');
 
-                summaryModalHistory = [];
-                updateSummaryModalBackBtn();
+                const modalWasOpen = modal.style.display === 'flex';
+                if (modalWasOpen) {
+                    pushSummaryModalState();
+                } else {
+                    summaryModalHistory = [];
+                    updateSummaryModalBackBtn();
+                }
                 closeSummaryImagePanel();
                 title.textContent = 'Produktoversigt for ordre ' + childOrdNo;
                 body.innerHTML = '<div class="modal-loading">Indlaeser...</div>';
@@ -2111,7 +2175,9 @@ app.get('/', (req, res) => {
                         html += '<tr>';
                         html += '<td>' + (line.LnNo || 0) + '</td>';
                         html += '<td>' + (line.ProdTp4 === null || line.ProdTp4 === undefined ? '-' : line.ProdTp4) + '</td>';
-                        if (line.ProdNo && String(line.ProdNo).trim().toUpperCase().endsWith('L')) {
+                        if (String(line.ProdTp4 || '') === '4' && Number(line.PurcNo || 0) > 0) {
+                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + warningFlagHtml + '</td>';
+                        } else if (line.ProdNo && String(line.ProdNo).trim().toUpperCase().endsWith('L')) {
                             const safeChildProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const trInf2FromLine = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : childOrdNo);
                             const trInf4FromLine = String(line.TrInf4 || '');
@@ -2124,10 +2190,15 @@ app.get('/', (req, res) => {
                         const displayQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
                             ? line.DisplayQuantity
                             : (line.NoFin || 0);
+                        const displayUnitCost = (Number(displayQty || 0) > 0 && displayLineCost !== undefined && displayLineCost !== null)
+                            ? ((displayLineCost || 0) / displayQty)
+                            : ((line.DisplayUnitCost !== undefined && line.DisplayUnitCost !== null)
+                                ? line.DisplayUnitCost
+                                : (line.CCstPr || 0));
                         html += '<td>' + (line.Descr || '') + '</td>';
                         html += '<td>' + formatNumber(displayQty) + '</td>';
                         html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
-                        html += '<td>' + formatNumber(line.CCstPr || 0) + '</td>';
+                        html += '<td>' + formatNumber(displayUnitCost) + '</td>';
                         html += '<td>' + formatNumber(line.NestingCost || 0) + '</td>';
                         html += '<td><strong>' + formatNumber(displayLineCost) + '</strong></td>';
                         html += '</tr>';
