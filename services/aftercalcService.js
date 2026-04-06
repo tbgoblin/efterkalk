@@ -11,7 +11,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 2;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 3;
 
     function buildLineWarnings(line, extraWarnings = []) {
         const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
@@ -32,6 +32,20 @@ function createAftercalcService({
         }
 
         return warnings;
+    }
+
+    function getInconsistentTubeFallbackCost(line) {
+        const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+        const prodNoKey = String((line && line.ProdNo) || '').trim().toUpperCase();
+        const noFinValue = Number((line && line.NoFin) || 0);
+        const noOrgValue = Number((line && line.NoOrg) || 0);
+        const unitCost = Number((line && line.CCstPr) || 0);
+
+        if (key === '2' && prodNoKey.startsWith('3') && noFinValue === 0 && noOrgValue > 0 && unitCost > 0) {
+            return Number(noOrgValue * unitCost);
+        }
+
+        return null;
     }
 
     async function getAfterCalc(ordNo) {
@@ -108,8 +122,9 @@ function createAftercalcService({
                 .filter(line => !isGloballyExcludedProdNo(line.ProdNo))
                 .map(line => {
                     const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
-                    const isDiscountLine = lineSalesPrice === 0;
-                    const effectiveLineCost = isDiscountLine ? 0 : (line.LineCost || 0);
+                    const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
+                    const isDiscountLine = lineSalesPrice === 0 && tubeFallbackCost === null;
+                    const effectiveLineCost = isDiscountLine ? 0 : (tubeFallbackCost !== null ? tubeFallbackCost : (line.LineCost || 0));
                     const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                     const warningMessages = buildLineWarnings(line);
                     const displayQuantity = Number(line.NoFin || 0) === 0 && Number(line.NoOrg || 0) > 0
@@ -131,8 +146,9 @@ function createAftercalcService({
                 .filter(line => !isGloballyExcludedProdNo(line.ProdNo))
                 .map(line => {
                     const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
-                    const isDiscountLine = lineSalesPrice === 0;
-                    const effectiveLineCost = isDiscountLine ? 0 : (line.LineCost || 0);
+                    const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
+                    const isDiscountLine = lineSalesPrice === 0 && tubeFallbackCost === null;
+                    const effectiveLineCost = isDiscountLine ? 0 : (tubeFallbackCost !== null ? tubeFallbackCost : (line.LineCost || 0));
                     const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                     const warningMessages = buildLineWarnings(line);
                     const displayQuantity = Number(line.NoFin || 0) === 0 && Number(line.NoOrg || 0) > 0
@@ -236,6 +252,9 @@ function createAftercalcService({
                             effectiveLineCost = hasNestingCost
                                 ? Number((line.NestingCost || 0) * (line.NoFin || 0))
                                 : Number(line.LineCost || 0);
+                        } else if (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0) {
+                            const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
+                            effectiveLineCost = tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0);
                         } else if (key === '4' && line.PurcNo && Number(line.PurcNo) !== 0) {
                             const childDetails = await loadProductionOrderDetails(Number(line.PurcNo), nextVisited);
                             childProductionTotalCost = Number(childDetails.totalCost || 0);
@@ -492,9 +511,10 @@ function createAftercalcService({
                     ? noOrgValue
                     : noFinValue;
                 const warningMessages = buildLineWarnings(line);
+                const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
                 const effectiveLineCost = key === '2' && isLaserLProduct(line.ProdNo)
                     ? (hasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0))
-                    : Number(line.LineCost || 0);
+                    : (tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0));
 
                 const roundedEffectiveLineCost = parseFloat(Number(effectiveLineCost).toFixed(2));
                 const displayUnitCost = Number(displayQuantity || 0) > 0
