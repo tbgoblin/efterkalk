@@ -1386,8 +1386,11 @@ app.get('/', (req, res) => {
                                 html += '<td>' + (line.ProdNo || '-') + salesWarningFlag + '</td>';
                             }
 
+                            const displaySalesQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
+                                ? line.DisplayQuantity
+                                : (line.NoFin || 0);
                             html += '<td>' + (line.Descr || '') + '</td>';
-                            html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
+                            html += '<td>' + formatNumber(displaySalesQty) + '</td>';
                             const productionTotalCost = Number(line.ProductionOrderTotalCost || 0);
                             const lineQty = Number(line.NoFin || 0);
                             const displayKostpris = (line.PurcNo && line.PurcNo !== 0)
@@ -1418,10 +1421,14 @@ app.get('/', (req, res) => {
                         html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th>' + (hasSalesLinesDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
                         
                         for (const line of data.salesLines) {
+                            const salesExtraWarningFlag = getWarningFlagHtml(line, 'Inkonsekvens på salgslinje.');
+                            const displaySalesExtraQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
+                                ? line.DisplayQuantity
+                                : (line.NoFin || 0);
                             html += '<tr>';
-                            html += '<td>' + (line.ProdNo || '-') + '</td>';
+                            html += '<td>' + (line.ProdNo || '-') + salesExtraWarningFlag + '</td>';
                             html += '<td>' + (line.Descr || '') + '</td>';
-                            html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
+                            html += '<td>' + formatNumber(displaySalesExtraQty) + '</td>';
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + formatNumber(line.CCstPr || 0) + '</td>';
                             html += '<td><strong>' + formatNumber(line.EffectiveLineCost || 0) + '</strong></td>';
