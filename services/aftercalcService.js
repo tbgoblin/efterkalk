@@ -5,13 +5,16 @@ function createAftercalcService({
     logEvent,
     getLatestDrawingByProdNo,
     isGloballyExcludedProdNo,
+    isExcludedOperationProdNo,
+    isEstimatedOperationMinutesFallback,
+    getEffectiveOperationMinutes,
     adjustOperationLinePricing,
     isLaserLProduct,
     orderListMaxRows,
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 7;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 11;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -54,6 +57,18 @@ function createAftercalcService({
         }
 
         return null;
+    }
+
+    function getOperationTimeInfo(line) {
+        const effectiveMinutes = Number(getEffectiveOperationMinutes(line) || 0);
+        const usesEstimatedMinutes = Boolean(isEstimatedOperationMinutesFallback(line));
+        return {
+            effectiveMinutes,
+            usesEstimatedMinutes,
+            infoText: usesEstimatedMinutes
+                ? 'Færdigmeldt minutter var 0; beregnet ud fra Stykliste Minutter.'
+                : ''
+        };
     }
 
     function normalizeExpectedWeight(value) {
@@ -346,7 +361,7 @@ function createAftercalcService({
             }
 
             const orderHeader = orderResult.recordset[0];
-            const useGr4SpecialLaserCost = Number(orderHeader.Gr4 || 0) === 3;
+            const useRouteSpecificLaserCost = true;
 
             const prodNosForDrawings = [
                 ...salesOrderLinesResult.recordset.map(r => r.ProdNo),
@@ -470,6 +485,7 @@ function createAftercalcService({
                     const lines = [];
                     let total = 0;
                     let hasWarnings = false;
+                    let hasEstimatedOperationTime = false;
 
                     for (const rawLine of prodLinesResult.recordset) {
                         if (isGloballyExcludedProdNo(rawLine.ProdNo)) continue;
@@ -477,21 +493,28 @@ function createAftercalcService({
                         const line = adjustOperationLinePricing({ ...rawLine });
                         const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
                         const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                        const excludeRProductsInSubOrders = Boolean(options.excludeRProductsInSubOrders);
+                        if (excludeRProductsInSubOrders && prodNoKey.startsWith('R')) continue;
+                        if (key === '1' && isExcludedOperationProdNo(line.ProdNo)) continue;
+                        if (key === '4' && prodNoKey.startsWith('R')) continue;
+
                         const noFinValue = Number(line.NoFin || 0);
                         const noOrgValue = Number(line.NoOrg || 0);
                         const isTubeMaterialLine = key === '2' && prodNoKey.startsWith('3');
-                        const displayQuantity = (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
-                            ? noOrgValue
-                            : noFinValue;
+                        const operationTimeInfo = key === '1'
+                            ? getOperationTimeInfo(line)
+                            : { effectiveMinutes: noFinValue, usesEstimatedMinutes: false, infoText: '' };
+                        const displayQuantity = key === '1'
+                            ? operationTimeInfo.effectiveMinutes
+                            : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                                ? noOrgValue
+                                : noFinValue);
                         let effectiveLineCost = Number(line.LineCost || 0);
                         let childProductionTotalCost = null;
                         const warningMessages = buildLineWarnings(line);
 
                         if (key === '1') {
-                            const pnUp = String(line.ProdNo || '').toUpperCase();
-                            if (pnUp === 'R6200') {
-                                effectiveLineCost = Number((line.NoOrg || 0) * (line.CCstPr || 0));
-                            }
+                            effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
                         } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
                             const specialLaserCostInfo = useSpecialLaserCost
                                 ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
@@ -509,7 +532,10 @@ function createAftercalcService({
                             const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
                             effectiveLineCost = tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0);
                         } else if (key === '4' && line.PurcNo && Number(line.PurcNo) !== 0) {
-                            const childDetails = await loadProductionOrderDetails(Number(line.PurcNo), nextVisited, options);
+                            const childDetails = await loadProductionOrderDetails(Number(line.PurcNo), nextVisited, {
+                                ...options,
+                                excludeRProductsInSubOrders: true
+                            });
                             childProductionTotalCost = Number(childDetails.totalCost || 0);
                             effectiveLineCost = childProductionTotalCost;
                             if (childDetails.hasWarnings) {
@@ -521,11 +547,17 @@ function createAftercalcService({
                             ? null
                             : parseFloat(Number(childProductionTotalCost).toFixed(2));
                         line.DisplayQuantity = parseFloat(Number(displayQuantity).toFixed(2));
+                        line.EffectiveOperationMinutes = key === '1'
+                            ? parseFloat(Number(operationTimeInfo.effectiveMinutes).toFixed(2))
+                            : null;
+                        line.UsesEstimatedOperationTime = Boolean(operationTimeInfo.usesEstimatedMinutes);
+                        line.EstimatedTimeText = operationTimeInfo.infoText;
                         line.HasWarning = warningMessages.length > 0;
                         line.ChildHasWarning = key === '4' && warningMessages.some(msg => msg.includes('Underliggende produktionsordre'));
                         line.WarningText = warningMessages.join(' ');
                         line.EffectiveLineCost = parseFloat(Number(effectiveLineCost || 0).toFixed(2));
                         if (line.HasWarning) hasWarnings = true;
+                        if (line.UsesEstimatedOperationTime) hasEstimatedOperationTime = true;
                         lines.push(line);
 
                         if (line.LnNo === 1 || key === '0' || key === '3' || key === '5') continue;
@@ -535,7 +567,8 @@ function createAftercalcService({
                     return {
                         lines,
                         totalCost: parseFloat(Number(total).toFixed(2)),
-                        hasWarnings
+                        hasWarnings,
+                        hasEstimatedOperationTime
                     };
                 })();
 
@@ -556,13 +589,13 @@ function createAftercalcService({
                                 JOIN Actor A ON O.CustNo = A.CustNo
                                 WHERE OrdNo = @purcNo
                             `),
-                        loadProductionOrderDetails(purcNo, new Set(), { useSpecialLaserCost: useGr4SpecialLaserCost })
+                        loadProductionOrderDetails(purcNo, new Set(), { useSpecialLaserCost: useRouteSpecificLaserCost })
                     ]);
 
                     if (prodOrderResult.recordset.length === 0) return null;
                     const prodOrder = prodOrderResult.recordset[0];
 
-                    if (useGr4SpecialLaserCost && Array.isArray(prodDetails.lines) && prodDetails.lines.length > 0) {
+                    if (useRouteSpecificLaserCost && Array.isArray(prodDetails.lines) && prodDetails.lines.length > 0) {
                         const specialLaserPricingData = await loadLaserRoutePricingData(pool, Number(purcNo)).catch(() => null);
                         if (specialLaserPricingData) {
                             let adjustedTotalCost = 0;
@@ -595,7 +628,8 @@ function createAftercalcService({
                         revenue: prodOrder.InvoAm || 0,
                         lines: prodDetails.lines,
                         totalCost: prodDetails.totalCost,
-                        hasWarnings: Boolean(prodDetails.hasWarnings)
+                        hasWarnings: Boolean(prodDetails.hasWarnings),
+                        hasEstimatedOperationTime: Boolean(prodDetails.hasEstimatedOperationTime)
                     };
                 })
             );
@@ -736,7 +770,7 @@ function createAftercalcService({
         const nextVisited = new Set(visited);
         nextVisited.add(numericOrdNo);
 
-        const useSpecialLaserCost = Number(options.orderGr4 || 0) === 3;
+        const useSpecialLaserCost = true;
         const summaryCacheKey = 'prod_summary_' + numericOrdNo + (useSpecialLaserCost ? '_gr4_3' : '');
         const cachedSummary = diskCache.get(summaryCacheKey);
         if (cachedSummary && cachedSummary.cacheSchemaVersion === PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION) {
@@ -791,14 +825,27 @@ function createAftercalcService({
             .map(rawLine => {
                 const line = adjustOperationLinePricing({ ...rawLine });
                 const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
-                const hasNestingCost = Number(line.NestingCost || 0) > 0;
                 const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                if (prodNoKey.startsWith('R')) {
+                    return null;
+                }
+                if (key === '1' && isExcludedOperationProdNo(line.ProdNo)) {
+                    return null;
+                }
+                if (key === '4' && prodNoKey.startsWith('R')) {
+                    return null;
+                }
                 const noFinValue = Number(line.NoFin || 0);
                 const noOrgValue = Number(line.NoOrg || 0);
                 const isTubeMaterialLine = key === '2' && prodNoKey.startsWith('3');
-                const displayQuantity = (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
-                    ? noOrgValue
-                    : noFinValue;
+                const operationTimeInfo = key === '1'
+                    ? getOperationTimeInfo(line)
+                    : { effectiveMinutes: noFinValue, usesEstimatedMinutes: false, infoText: '' };
+                const displayQuantity = key === '1'
+                    ? operationTimeInfo.effectiveMinutes
+                    : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                        ? noOrgValue
+                        : noFinValue);
                 const warningMessages = buildLineWarnings(line);
                 const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
                 const specialLaserCostInfo = (key === '2' && isLaserLProduct(line.ProdNo) && useSpecialLaserCost)
@@ -808,11 +855,13 @@ function createAftercalcService({
                     line.NestingCost = specialLaserCostInfo.unitCost;
                 }
                 const recalculatedHasNestingCost = Number(line.NestingCost || 0) > 0;
-                const effectiveLineCost = key === '2' && isLaserLProduct(line.ProdNo)
-                    ? ((specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
-                        ? Number(specialLaserCostInfo.totalCost)
-                        : (recalculatedHasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0)))
-                    : (tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0));
+                const effectiveLineCost = key === '1'
+                    ? Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0))
+                    : (key === '2' && isLaserLProduct(line.ProdNo)
+                        ? ((specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
+                            ? Number(specialLaserCostInfo.totalCost)
+                            : (recalculatedHasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0)))
+                        : (tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0)));
 
                 const roundedEffectiveLineCost = parseFloat(Number(effectiveLineCost).toFixed(2));
                 const displayUnitCost = Number(displayQuantity || 0) > 0
@@ -823,11 +872,17 @@ function createAftercalcService({
                     ...line,
                     DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
                     DisplayUnitCost: displayUnitCost,
+                    EffectiveOperationMinutes: key === '1'
+                        ? parseFloat(Number(operationTimeInfo.effectiveMinutes).toFixed(2))
+                        : null,
+                    UsesEstimatedOperationTime: Boolean(operationTimeInfo.usesEstimatedMinutes),
+                    EstimatedTimeText: operationTimeInfo.infoText,
                     HasWarning: warningMessages.length > 0,
                     WarningText: warningMessages.join(' '),
                     EffectiveLineCost: roundedEffectiveLineCost
                 };
-            });
+            })
+            .filter(Boolean);
 
         for (const line of lines) {
             const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
@@ -869,6 +924,7 @@ function createAftercalcService({
             cacheSchemaVersion: PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION,
             lines,
             hasWarnings: lines.some(line => line.HasWarning),
+            hasEstimatedOperationTime: lines.some(line => line.UsesEstimatedOperationTime),
             totalCost: roundedTotalCost
         };
         diskCache.set(summaryCacheKey, result, cacheTtlProductionSummaryMs);

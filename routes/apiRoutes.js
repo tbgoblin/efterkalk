@@ -11,6 +11,7 @@ function createApiRouter({
     getOrComputeOrderMargin,
     getProductionSummary,
     AFTERCALC_CACHE_KEY_PREFIX,
+    ORDER_MARGIN_CACHE_KEY_PREFIX,
     CACHE_TTL_ORDER_MARGIN_MS,
     CACHE_TTL_LASER_METRICS_MS,
     isHttpUrl,
@@ -60,7 +61,7 @@ function createApiRouter({
             if (Number.isNaN(ordNo)) {
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
-            const cacheKey = 'order_margin_v6_' + ordNo;
+            const cacheKey = ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo;
             const cached = diskCache.get(cacheKey);
             if (cached) return res.json({ ...cached, cached: true });
 
@@ -507,7 +508,7 @@ function createApiRouter({
                             totalCost: marginInfo.totalCost,
                             cached: true
                         };
-                        diskCache.set('order_margin_v6_' + ordNo, marginResult, CACHE_TTL_ORDER_MARGIN_MS);
+                        diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo, marginResult, CACHE_TTL_ORDER_MARGIN_MS);
                         logEvent('CACHE REFRESH ORDER: ordNo=' + ordNo + ' margin updated');
                         orderRefreshStatus.set(ordNo, { status: 'done', startedAt: Date.now(), finishedAt: Date.now() });
                     } else {
@@ -706,7 +707,7 @@ function createApiRouter({
                 }
 
                 if (!marginInfo) {
-                    const cachedMargin = diskCache.get('order_margin_v6_' + ordNoNum);
+                    const cachedMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNoNum);
                     if (cachedMargin && cachedMargin.totalCost !== null && cachedMargin.totalCost !== undefined) {
                         marginInfo = {
                             ordNo: ordNoNum,
@@ -720,7 +721,8 @@ function createApiRouter({
                 }
 
                 if (!marginInfo) {
-                    const staleMargin = diskCache.getStale('order_margin_v6_' + ordNoNum);
+                    const staleMargin = diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNoNum)
+                        || diskCache.getStale('order_margin_v6_' + ordNoNum);
                     if (staleMargin && staleMargin.totalCost !== null && staleMargin.totalCost !== undefined) {
                         marginInfo = {
                             ordNo: ordNoNum,

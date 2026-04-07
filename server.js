@@ -9,6 +9,9 @@ const { createLogger } = require('./utils/logger');
 const {
     isLaserLProduct,
     isGloballyExcludedProdNo,
+    isExcludedOperationProdNo,
+    isEstimatedOperationMinutesFallback,
+    getEffectiveOperationMinutes,
     adjustOperationLinePricing
 } = require('./utils/productRules');
 const {
@@ -26,8 +29,8 @@ const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v6_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v6_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v10_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v10_';
 
 const app = express();
 app.use(express.json({ limit: '256kb' }));
@@ -92,6 +95,9 @@ const {
     logEvent,
     getLatestDrawingByProdNo,
     isGloballyExcludedProdNo,
+    isExcludedOperationProdNo,
+    isEstimatedOperationMinutesFallback,
+    getEffectiveOperationMinutes,
     adjustOperationLinePricing,
     isLaserLProduct,
     orderListMaxRows: ORDER_LIST_MAX_ROWS,
@@ -379,6 +385,7 @@ app.use(createApiRouter({
     getOrComputeOrderMargin,
     getProductionSummary,
     AFTERCALC_CACHE_KEY_PREFIX,
+    ORDER_MARGIN_CACHE_KEY_PREFIX,
     CACHE_TTL_ORDER_MARGIN_MS,
     CACHE_TTL_LASER_METRICS_MS,
     isHttpUrl,
@@ -629,6 +636,11 @@ app.get('/', (req, res) => {
                 return String(prodNo || '').trim().toUpperCase().endsWith('L');
             }
 
+            function isExcludedOperationProdNo(prodNo) {
+                const normalized = String(prodNo || '').trim().toUpperCase();
+                return normalized === 'R1090' || normalized === 'R8200';
+            }
+
             function escapeHtml(value) {
                 return String(value || '')
                     .replace(/&/g, '&amp;')
@@ -642,6 +654,12 @@ app.get('/', (req, res) => {
                 if (!item || !item.HasWarning) return '';
                 const title = escapeHtml(item.WarningText || fallbackText || 'Kontroller denne linje');
                 return ' <span class="warning-flag" title="' + title + '">⚠️</span>';
+            }
+
+            function getTimeAdjustmentFlagHtml(item, fallbackText) {
+                if (!item || (!item.UsesEstimatedOperationTime && !item.hasEstimatedOperationTime)) return '';
+                const title = escapeHtml(item.EstimatedTimeText || item.estimatedTimeText || fallbackText || 'Færdigmeldt minutter var 0 og er beregnet ud fra Stykliste Minutter.');
+                return ' <span class="warning-flag" title="' + title + '">🕒</span>';
             }
 
             const laserNestCostHints = new Map();
@@ -1527,7 +1545,11 @@ app.get('/', (req, res) => {
                                 : '-';
 
                             html += '<div id="po-' + prodOrder.ordNo + '" data-order="' + prodOrder.ordNo + '" style="margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">';
-                            html += '<h4>Produktionsordre: ' + prodOrder.ordNo + getWarningFlagHtml({ HasWarning: !!prodOrder.hasWarnings, WarningText: 'Denne produktionsordre indeholder mindst en advarselslinje.' }) + '</h4>';
+                            const prodOrderTimeFlagHtml = getTimeAdjustmentFlagHtml({
+                                hasEstimatedOperationTime: !!prodOrder.hasEstimatedOperationTime,
+                                EstimatedTimeText: 'Mindst én operation er genberegnet ud fra Stykliste Minutter, fordi Færdigmeldt var 0.'
+                            });
+                            html += '<h4>Produktionsordre: ' + prodOrder.ordNo + prodOrderTimeFlagHtml + getWarningFlagHtml({ HasWarning: !!prodOrder.hasWarnings, WarningText: 'Denne produktionsordre indeholder mindst en advarselslinje.' }) + '</h4>';
                             html += '<div class="main-product-box">';
                             html += '<div class="value">' + mainProductText + '</div>';
                             html += '</div>';
@@ -1544,8 +1566,13 @@ app.get('/', (req, res) => {
                                 const normalizedKey = (rawKey === '3') ? '1' : rawKey;
                                 const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
 
-                                // R1090 must be fully excluded from Operations: no row and no cost contribution.
-                                if (normalizedKey === '1' && prodNoKey === 'R1090') {
+                                // R1090/R8200 must be fully excluded from Operations: no row and no cost contribution.
+                                if (normalizedKey === '1' && isExcludedOperationProdNo(prodNoKey)) {
+                                    continue;
+                                }
+
+                                // R-products under Produkt dele must never be shown or counted.
+                                if (normalizedKey === '4' && prodNoKey.startsWith('R')) {
                                     continue;
                                 }
 
@@ -1610,13 +1637,13 @@ app.get('/', (req, res) => {
                                         if (!isLaserLProdNo(line.ProdNo)) {
                                             return sum + (line.EffectiveLineCost || line.LineCost || 0);
                                         }
-                                        if (currentSalesOrderGr4 === 3 && line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null) {
+                                        if (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null) {
                                             return sum + (line.EffectiveLineCost || 0);
                                         }
                                         const hasNestingCost = Number(line.NestingCost || 0) > 0;
                                         return sum + (hasNestingCost
                                             ? ((line.NestingCost || 0) * (line.NoFin || 0))
-                                            : (line.EffectiveLineCost || line.LineCost || 0));
+                                            : (line.LineCost || 0));
                                     }, 0)
                                     : lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
                                         const pn = String(line.ProdNo || '').toUpperCase();
@@ -1647,42 +1674,38 @@ app.get('/', (req, res) => {
                                 for (const line of lines) {
                                     html += '<tr>';
                                     const warningFlagHtml = getWarningFlagHtml(line);
+                                    const timeAdjustFlagHtml = getTimeAdjustmentFlagHtml(line);
                                     const hasChildProductionOrder = Number(line.PurcNo || 0) > 0;
                                     if (String(key) === '1' && line.ProdNo) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span>' + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (String(key) === '2' && line.ProdNo && isLaserLProdNo(line.ProdNo)) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (hasChildProductionOrder) {
-                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + warningFlagHtml + '</td>';
+                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (line.ProdNo) {
-                                        html += '<td>' + (line.ProdNo || '-') + warningFlagHtml + '</td>';
+                                        html += '<td>' + (line.ProdNo || '-') + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else {
-                                        html += '<td>-' + warningFlagHtml + '</td>';
+                                        html += '<td>-' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     }
                                     html += '<td>' + (line.Descr || '') + '</td>';
                                     if (key === '1') {
-                                        const pn = String(line.ProdNo || '').toUpperCase();
-                                        const isNoRegProd = (pn === 'R6200');
-                                        // Stykliste Minutter: always NoOrg
+                                        const effectiveNoFin = (line.EffectiveOperationMinutes !== undefined && line.EffectiveOperationMinutes !== null)
+                                            ? (line.EffectiveOperationMinutes || 0)
+                                            : (line.UsesEstimatedOperationTime ? (line.NoOrg || 0) : (line.NoFin || 0));
                                         html += '<td>' + formatNumber(line.NoOrg || 0) + '</td>';
-                                        // Færdigmeldt minutter: for R6200 employees don't register hours → use NoOrg as estimated
-                                        const effectiveNoFin = isNoRegProd ? (line.NoOrg || 0) : (line.NoFin || 0);
                                         html += '<td>' + formatNumber(effectiveNoFin) + '</td>';
-                                        // Costs: use effectiveNoFin so R6200 shows estimated cost
                                         const displayUnitCost1 = (line.CCstPr || 0);
-                                        const displayTotalCost1 = isNoRegProd
-                                            ? (effectiveNoFin * (line.CCstPr || 0))
-                                            : (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null
-                                                ? (line.EffectiveLineCost || 0)
-                                                : (line.LineCost || 0));
+                                        const displayTotalCost1 = (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null)
+                                            ? (line.EffectiveLineCost || 0)
+                                            : (effectiveNoFin * (line.CCstPr || 0));
                                         html += '<td>' + formatNumber(displayUnitCost1) + '</td>';
                                         html += '<td><strong>' + formatNumber(displayTotalCost1) + '</strong></td>';
                                     } else {
@@ -1691,17 +1714,21 @@ app.get('/', (req, res) => {
                                     if (key === '2') {
                                         const isLaserLine = isLaserLProdNo(line.ProdNo);
                                         const hasNestingCost = Number(line.NestingCost || 0) > 0;
-                                        const useMultiNestPricing = currentSalesOrderGr4 === 3 && isLaserLine;
-                                        const nestingUnitCost = useMultiNestPricing
-                                            ? ((Number(line.NoFin || 0) > 0 && line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null)
+                                        const hasEffectiveLaserCost = Number(line.NoFin || 0) > 0
+                                            && line.EffectiveLineCost !== undefined
+                                            && line.EffectiveLineCost !== null;
+                                        const nestingUnitCost = isLaserLine
+                                            ? (hasEffectiveLaserCost
                                                 ? ((line.EffectiveLineCost || 0) / (line.NoFin || 0))
-                                                : (line.NestingCost || 0))
-                                            : (isLaserLine && hasNestingCost ? (line.NestingCost || 0) : (line.CCstPr || 0));
-                                        const nestingSamlet = useMultiNestPricing
-                                            ? (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null ? (line.EffectiveLineCost || 0) : (line.LineCost || 0))
-                                            : (isLaserLine && hasNestingCost
-                                                ? ((line.NestingCost || 0) * (line.NoFin || 0))
-                                                : (line.LineCost || 0));
+                                                : (hasNestingCost ? (line.NestingCost || 0) : (line.CCstPr || 0)))
+                                            : (line.CCstPr || 0);
+                                        const nestingSamlet = isLaserLine
+                                            ? (hasEffectiveLaserCost
+                                                ? (line.EffectiveLineCost || 0)
+                                                : (hasNestingCost
+                                                    ? ((line.NestingCost || 0) * (line.NoFin || 0))
+                                                    : (line.LineCost || 0)))
+                                            : (line.LineCost || 0);
                                         html += '<td>' + formatNumber(nestingUnitCost) + '</td>';
                                         html += '<td><strong>' + formatNumber(nestingSamlet) + '</strong></td>';
                                     } else if (key !== '1') {
@@ -1859,8 +1886,10 @@ app.get('/', (req, res) => {
                         for (const p of products) {
                             const expected = p.NWgtU_medio;
                             const effective = p.KgPerPezzoEffettivo;
-                            const resolvedNestCost = Number(item.requestedNestingCost || getLaserNestCostHint(item.prodOrderNo, p.ProdNo) || 0);
-                            const useRouteSpecificCosts = orderGr4 === 3;
+                            const hintedNestCost = getLaserNestCostHint(item.prodOrderNo, p.ProdNo);
+                            const routeSpecificCostPerPiece = (p.CostoPerPezzo !== null && p.CostoPerPezzo !== undefined)
+                                ? p.CostoPerPezzo
+                                : hintedNestCost;
                             const extraPct = (expected !== null && expected !== undefined && expected > 0 && effective !== null && effective !== undefined)
                                 ? (((effective - expected) / expected) * 100)
                                 : null;
@@ -1874,9 +1903,7 @@ app.get('/', (req, res) => {
                                 oldNWgtU_medio: p.OldNWgtU_medio,
                                 expected,
                                 effective,
-                                costPerPiece: useRouteSpecificCosts
-                                    ? p.CostoPerPezzo
-                                    : (resolvedNestCost > 0 ? resolvedNestCost : p.CostoPerPezzo),
+                                costPerPiece: routeSpecificCostPerPiece,
                                 quotaCost: p.QuotaCosto,
                                 extraPct,
                                 imageItems: Array.isArray(p.ImageItems) ? p.ImageItems : []
@@ -1903,8 +1930,8 @@ app.get('/', (req, res) => {
                         const rowExpected = Number(r.expected || 0);
                         const rowEffective = Number(r.effective || 0);
                         const rowCostPerPiece = Number(r.costPerPiece || 0);
-                        const rowTotalCost = orderGr4 === 3
-                            ? ((r.quotaCost === null || r.quotaCost === undefined) ? null : Number(r.quotaCost || 0))
+                        const rowTotalCost = (r.quotaCost !== null && r.quotaCost !== undefined)
+                            ? Number(r.quotaCost || 0)
                             : ((r.costPerPiece === null || r.costPerPiece === undefined || r.noFin === null || r.noFin === undefined)
                                 ? null
                                 : (rowNoFin * rowCostPerPiece));
@@ -2089,15 +2116,14 @@ app.get('/', (req, res) => {
                             const noFin = rowProduct ? rowProduct.QtaPezzi : null;
                             const prodNoForCost = rowProduct ? (rowProduct.ProdNo || prodNo) : prodNo;
                             const hintedNestCost = getLaserNestCostHint(effectiveOrdine, prodNoForCost);
-                            const useRouteSpecificCosts = currentSalesOrderGr4 === 3;
-                            const costPerPiece = useRouteSpecificCosts
-                                ? (rowProduct ? rowProduct.CostoPerPezzo : null)
-                                : (hintedNestCost !== null ? hintedNestCost : (rowProduct ? rowProduct.CostoPerPezzo : null));
+                            const costPerPiece = (rowProduct && rowProduct.CostoPerPezzo !== null && rowProduct.CostoPerPezzo !== undefined)
+                                ? rowProduct.CostoPerPezzo
+                                : hintedNestCost;
                             const noFinNum = Number(noFin || 0);
                             const expectedNum = Number(expected || 0);
                             const effectiveNum = Number(effective || 0);
-                            const totalCost = useRouteSpecificCosts
-                                ? (rowProduct ? rowProduct.QuotaCosto : null)
+                            const totalCost = (rowProduct && rowProduct.QuotaCosto !== null && rowProduct.QuotaCosto !== undefined)
+                                ? rowProduct.QuotaCosto
                                 : ((costPerPiece === null || costPerPiece === undefined || noFin === null || noFin === undefined)
                                     ? null
                                     : (noFinNum * Number(costPerPiece || 0)));
@@ -2256,8 +2282,12 @@ app.get('/', (req, res) => {
                         return;
                     }
 
-                    if (data.hasWarnings) {
-                        title.textContent = 'Produktoversigt for ordre ' + childOrdNo + ' ⚠️';
+                    const titleFlags = [
+                        data.hasEstimatedOperationTime ? '🕒' : '',
+                        data.hasWarnings ? '⚠️' : ''
+                    ].filter(Boolean).join(' ');
+                    if (titleFlags) {
+                        title.textContent = 'Produktoversigt for ordre ' + childOrdNo + ' ' + titleFlags;
                     }
 
                     let html = '';
@@ -2267,6 +2297,7 @@ app.get('/', (req, res) => {
                             ? Number(data.totalCost || 0)
                             : Number(line.EffectiveLineCost || 0);
                         const warningFlagHtml = getWarningFlagHtml(line);
+                        const timeAdjustmentFlagHtml = getTimeAdjustmentFlagHtml(line);
                         html += '<tr>';
                         html += '<td>' + (line.LnNo || 0) + '</td>';
                         html += '<td>' + (line.ProdTp4 === null || line.ProdTp4 === undefined ? '-' : line.ProdTp4) + '</td>';
@@ -2277,18 +2308,18 @@ app.get('/', (req, res) => {
                             const trInf4FromLine = String(line.TrInf4 || '');
                             const safeChildTrInf2 = trInf2FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="1" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '">' + safeChildProdNo + '</span>' + warningFlagHtml + '</td>';
+                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="1" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '">' + safeChildProdNo + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else if (line.ProdNo && String(line.ProdNo).trim().toUpperCase().endsWith('L')) {
                             const safeChildProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const trInf2FromLine = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : childOrdNo);
                             const trInf4FromLine = String(line.TrInf4 || '');
                             const safeChildTrInf2 = trInf2FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + warningFlagHtml + '</td>';
+                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else if (childHasPurcNo) {
-                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + warningFlagHtml + '</td>';
+                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else {
-                            html += '<td>' + (line.ProdNo || '-') + warningFlagHtml + '</td>';
+                            html += '<td>' + (line.ProdNo || '-') + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         }
                         const displayQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
                             ? line.DisplayQuantity

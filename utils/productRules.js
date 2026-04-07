@@ -1,13 +1,46 @@
+function normalizeProdNo(prodNo) {
+    return String(prodNo || '').trim().toUpperCase();
+}
+
 function isLaserLProduct(prodNo) {
-    return String(prodNo || '').trim().toUpperCase().endsWith('L');
+    return normalizeProdNo(prodNo).endsWith('L');
 }
 
 function isR1100Operation(prodNo) {
-    return String(prodNo || '').trim().toUpperCase() === 'R1100';
+    return normalizeProdNo(prodNo) === 'R1100';
 }
 
 function isGloballyExcludedProdNo(prodNo) {
-    return String(prodNo || '').trim().toUpperCase() === 'R1090';
+    return normalizeProdNo(prodNo) === 'R1090';
+}
+
+function isExcludedOperationProdNo(prodNo) {
+    const normalized = normalizeProdNo(prodNo);
+    return normalized === 'R1090' || normalized === 'R8200';
+}
+
+function isEstimatedOperationMinutesFallback(line) {
+    if (!line) return false;
+
+    const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+    const normalizedKey = key === '3' ? '1' : key;
+    const prodNoKey = normalizeProdNo(line.ProdNo);
+    const noFin = Number(line.NoFin || 0);
+    const noOrg = Number(line.NoOrg || 0);
+
+    return normalizedKey === '1'
+        && prodNoKey.startsWith('R')
+        && !isExcludedOperationProdNo(prodNoKey)
+        && noFin === 0
+        && noOrg > 0;
+}
+
+function getEffectiveOperationMinutes(line) {
+    if (!line) return 0;
+
+    return isEstimatedOperationMinutesFallback(line)
+        ? Number(line.NoOrg || 0)
+        : Number(line.NoFin || 0);
 }
 
 function isLaserEagleOperator(hvemNm) {
@@ -43,6 +76,9 @@ module.exports = {
     isLaserLProduct,
     isR1100Operation,
     isGloballyExcludedProdNo,
+    isExcludedOperationProdNo,
+    isEstimatedOperationMinutesFallback,
+    getEffectiveOperationMinutes,
     isLaserEagleOperator,
     shouldDoubleR1100Operation,
     adjustOperationLinePricing
