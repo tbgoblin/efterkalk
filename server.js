@@ -1971,7 +1971,7 @@ app.get('/', (req, res) => {
                 modal.style.display = 'flex';
 
                 if (String(prodTp4) === '1') {
-                    body.innerHTML = '<div class="modal-loading">Indlaeser transaktioner...</div>';
+                    body.innerHTML = '<div class="modal-loading">Indlæser transaktioner...</div>';
                     try {
                         const response = await fetch('/prodtr/' + ordNo + '/' + lnNo);
                         const rows = await response.json();
@@ -1984,12 +1984,22 @@ app.get('/', (req, res) => {
                             return;
                         }
                         let html = '<table>';
-                        html += '<tr><th>Færdigmeldingsdato</th><th>Færdigmeldingstid</th><th>Antal</th><th>Hvem</th></tr>';
+                        html += '<tr><th>Færdigmeldingsdato</th><th>Færdigmeldingstid</th><th>Minutter</th><th>Hvem</th></tr>';
                         for (const r of rows) {
-                            const finDt = String(r.FinDt || '').split('T')[0];
-                            const finTm = r.FinTm != null ? String(r.FinTm).padStart(4, '0').replace(/^(\d{2})(\d{2})$/, '$1:$2') : '-';
+                            const rawFinDt = String(r.FinDt || '').trim();
+                            const compactFinDt = rawFinDt.split('T')[0].replace(/-/g, '');
+                            let finDt = '-';
+                            if (/^\\d{8}$/.test(compactFinDt)) {
+                                finDt = compactFinDt.slice(6, 8) + '-' + compactFinDt.slice(4, 6) + '-' + compactFinDt.slice(0, 4);
+                            } else if (rawFinDt) {
+                                finDt = rawFinDt;
+                            }
+                            const rawFinTm = r.FinTm != null ? String(r.FinTm).trim() : '';
+                            const finTm = rawFinTm
+                                ? rawFinTm.padStart(4, '0').replace(/^(\\d{2})(\\d{2})$/, '$1:$2')
+                                : '-';
                             html += '<tr>';
-                            html += '<td>' + (finDt || '-') + '</td>';
+                            html += '<td>' + finDt + '</td>';
                             html += '<td>' + finTm + '</td>';
                             html += '<td>' + formatNumber(r.NoInvoAb || 0) + '</td>';
                             html += '<td>' + (r.HvemNm || '-') + '</td>';
@@ -2322,7 +2332,7 @@ app.get('/', (req, res) => {
                 const searchH = searchBox ? searchBox.offsetHeight : 0;
                 const extraGap = 14;
                 const targetTop = window.pageYOffset + el.getBoundingClientRect().top - headerH - searchH - extraGap;
-                window.scrollTo({ top: Math.max(targetTop, 0), behavior: 'smooth' });
+                window.scrollTo({ top: Math.max(targetTop, 0), behavior: 'auto' });
             }
 
             function openProduction(ordNo) {
@@ -2632,13 +2642,10 @@ app.get('/', (req, res) => {
 
             function selectOrder(ordNo) {
                 document.getElementById('orderInput').value = ordNo;
+                orderListVisible = false;
+                renderOrderList();
                 searchOrder();
-                setTimeout(() => {
-                    const resultEl = document.getElementById('result');
-                    if (resultEl) {
-                        scrollToElementWithStickyOffset(resultEl);
-                    }
-                }, 150);
+                window.scrollTo({ top: 0, behavior: 'auto' });
             }
 
             function goBackToList() {
