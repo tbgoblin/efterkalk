@@ -92,7 +92,6 @@ La lista:
 - può essere ordinata
 - si aggiorna automaticamente
 - usa cache locale per partire più velocemente
-- per i `MultiOrdre` (`Ord.Gr4 = 3`) mostra un badge tondo `M` con tooltip `MultiOrdre`
 
 ### 4.4 Dettaglio ordine
 Aprendo un ordine si vedono tipicamente:
@@ -102,10 +101,6 @@ Aprendo un ordine si vedono tipicamente:
 3. **ordini di produzione collegati**
 4. **operazioni** con subtotali `Delsum`
 5. **summary** finale con ricavo, costo totale e margine
-
-Note operative:
-- le righe `Ydelse` / righe con `PurcNo` collegato possono essere aperte per vedere l’ordine di produzione figlio
-- nei `MultiOrdre` compare anche la logica dedicata `NestMultiPris` nelle viste laser
 
 ### 4.5 Disegni e immagini
 Se per il prodotto esiste un disegno, appare il pulsante `Vis tegning`.
@@ -121,9 +116,6 @@ Sono presenti viste e metriche dedicate al laser:
 - endpoint `GET /laser-route-metrics`
 - riepilogo materiale/lastre/sfrido
 - dettaglio nesting per prodotto tramite `GET /nesting-detail/:ordno/:prodno`
-- per i `MultiOrdre` (`Ord.Gr4 = 3`) la colonna speciale si chiama `NestMultiPris`
-- nei `MultiOrdre`, il costo laser viene calcolato come **`kg forbrugt × media CstPr delle righe TrTp=5 della route`**
-- se lo stesso prodotto è distribuito su più `nestingordre`, il riepilogo li aggrega tutti
 
 ---
 
@@ -157,20 +149,6 @@ Questa logica serve per:
 - riportare il costo del figlio sul padre
 
 > Non rimuovere o “semplificare” questa parte senza testare i casi reali di produzione.
-
-### 5.5 MultiOrdre (`Ord.Gr4 = 3`)
-Per i soli ordini con `Ord.Gr4 = 3`:
-
-- nella lista ordini compare il badge `M` (`MultiOrdre`)
-- nella vista laser la colonna dedicata è `NestMultiPris`
-- il costo unitario usa la formula:
-
-```text
-kg forbrugt × media CstPr delle righe TrTp=5 della route
-```
-
-- se un prodotto appartiene a più `nestingordre`, il totale deve sommare tutti i nesting collegati
-- le altre tipologie ordine (`Gr4 = 1,2,4,5`) restano con la logica standard
 
 ---
 
@@ -289,7 +267,6 @@ L’app contiene accorgimenti specifici:
 - sandbox disattivata in alcuni casi RDS
 - auto-start saltato in ambiente RDS condiviso
 - porta locale calcolata usando utente/sessione/client per ridurre collisioni
-- `electron-main.js` usa `app.requestSingleInstanceLock()` per impedire aperture duplicate della stessa app
 
 Questo è importante se più utenti aprono l’app sullo stesso host.
 

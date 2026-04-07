@@ -1,0 +1,88 @@
+{
+  "name": "efterkalk",
+  "version": "1.0.45",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "electron .",
+    "postinstall": "electron-builder install-app-deps",
+    "pack": "electron-builder --dir",
+    "build:win": "electron-builder --win nsis",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Gantech",
+  "license": "ISC",
+  "type": "commonjs",
+  "description": "Desktop app for Gantech efterkalkulation and order margin analysis",
+  "dependencies": {
+    "electron-updater": "^6.1.8",
+    "express": "^5.2.1",
+    "msnodesqlv8": "^5.1.5",
+    "mssql": "^12.2.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.gantech.efterkalk",
+    "productName": "Gantech Efterkalk",
+    "artifactName": "Gantech-Efterkalk-Setup-${version}.${ext}",
+    "publish": {
+      "provider": "github",
+      "owner": "tbgoblin",
+      "repo": "efterkalk"
+    },
+    "files": [
+      "server.js",
+      "db.js",
+      "diskCache.js",
+      "utils/**/*.js",
+      "services/**/*.js",
+      "routes/**/*.js",
+      "users.json",
+      "electron-main.js",
+      "loading.html",
+      "package.json",
+      "node_modules/express/**/*",
+      "node_modules/mssql/**/*",
+      "node_modules/msnodesqlv8/**/*",
+      "node_modules/electron-updater/**/*",
+      "node_modules/builder-util-runtime/**/*",
+      "!**/node_modules/*/*.md",
+      "!**/node_modules/*/LICENSE",
+      "!**/node_modules/*/README*",
+      "!**/node_modules/*/{test,tests,spec}/**/*",
+      "!**/node_modules/*/{example,examples,doc,docs}/**/*",
+      "!**/node_modules/**/*.ts",
+      "!**/node_modules/**/*.map"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/msnodesqlv8/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "requestedExecutionLevel": "highestAvailable"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Gantech Efterkalk",
+      "uninstallDisplayName": "Gantech Efterkalk",
+      "installerLanguages": [
+        "da_DK",
+        "en_US"
+      ]
+    }
+  }
+}

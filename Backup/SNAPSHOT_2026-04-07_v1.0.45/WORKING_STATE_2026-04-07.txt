@@ -1,0 +1,9 @@
+Backup snapshot created: 2026-04-07
+Source version: 1.0.45
+Highlights:
+- Electron single-instance protection
+- PurcNo/Ydelse click-through fix
+- Laser UI cleanup + Salgspris/enhed
+- MultiOrdre (Gr4=3) badge + tooltip
+- NestMultiPris logic for MultiOrdre using kg forbrugt and TrTp=5 average CstPr
+- Laseroversigt and Produktionsordrer aligned across multiple nestingordrer

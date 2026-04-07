@@ -2,7 +2,7 @@
 
 App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso interno in ambiente produzione/fabbrica.
 
-**Versione attuale:** `1.0.45`
+**Versione attuale:** `1.0.36`
 
 ---
 
@@ -15,15 +15,6 @@ App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso i
 - apertura **tegning/PDF** con pulsante `Vis tegning`
 - cache locale + warmup automatico per velocizzare l’avvio
 - pacchetto desktop Windows con aggiornamento automatico via GitHub Releases
-
-### Aggiornamenti verificati (`2026-04-07`)
-
-- protezione **single-instance** in `electron-main.js` per evitare avvii duplicati della desktop app
-- righe `Ydelse` / `PurcNo` cliccabili verso l’ordine di produzione figlio
-- colonna `Salgspris/enhed` aggiunta nelle righe ordine vendita
-- supporto `MultiOrdre` (`Ord.Gr4 = 3`) con badge `M` e tooltip `MultiOrdre`
-- per i `MultiOrdre`, colonna **`NestMultiPris`** visibile solo in questi ordini
-- logica `MultiOrdre` verificata: costo laser basato su **`kg forbrugt × media CstPr delle righe TrTp=5`**, aggregando tutti i `nestingordre` collegati
 
 ---
 
