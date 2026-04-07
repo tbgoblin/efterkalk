@@ -539,7 +539,7 @@ app.get('/', (req, res) => {
                 <p>Indtast kode for at se ordreliste og detaljer.</p>
                 <div class="access-gate-row">
                     <input id="accessGateInput" type="password" placeholder="Kode" autocomplete="off" />
-                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Aabn</button>
+                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn</button>
                 </div>
                 <div id="accessGateError" class="access-gate-error"></div>
             </div>
@@ -551,11 +551,11 @@ app.get('/', (req, res) => {
                 <div id="warmupBarBg"><div id="warmupBarFill"></div></div>
                 <span id="warmupBarText">Forberegner...</span>
             </div>
-            <span class="header-status-badge" id="systemStatusBadge">System indlaeser...</span>
+            <span class="header-status-badge" id="systemStatusBadge">System indlæser...</span>
         </div>
         <div class="container">
             <div class="search-box" id="searchBox">
-                <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Aabn sogefelt og filtre">▼ Søg</button>
+                <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Åbn søgefelt og filtre">▼ Søg</button>
                 <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." />
                 <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret">Søg</button>
                 <select id="updateActionSelect" class="filter-select" onchange="handleUpdateActionSelection()" title="Vaelg hvad du vil opdatere">
@@ -708,7 +708,7 @@ app.get('/', (req, res) => {
                     if (url) {
                         window.open(url, '_blank');
                     } else {
-                        alert('Fejl ved aabning af tegning: ' + err.message);
+                        alert('Fejl ved åbning af tegning: ' + err.message);
                     }
                 });
             }
@@ -1043,7 +1043,7 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                setSystemStatus('System indlaeser... ' + completed + '/' + total, '#fff3cd', '#8a6d3b');
+                setSystemStatus('System indlæser... ' + completed + '/' + total, '#fff3cd', '#8a6d3b');
             }
 
             function getMarginModeLabel() {
@@ -1334,14 +1334,9 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                // Hide customer list when launching a direct order search.
-                if (orderListVisible) {
-                    orderListVisible = false;
-                    renderOrderList();
-                }
-                
+                // Keep customer list visible during direct order search.
                 const result = document.getElementById('result');
-                result.innerHTML = '<div class="loading">Indlaeser...</div>';
+                result.innerHTML = '<div class="loading">Indlæser...</div>';
                 
                 try {
                     const response = await fetch('/aftercalc/' + ordNo);
@@ -1354,6 +1349,30 @@ app.get('/', (req, res) => {
 
                     currentSalesOrderGr4 = Number((data.orderHeader && data.orderHeader.Gr4) || 0);
                     const orderMarginPercent = calculateOrderMarginPercent(data.summary.totalRevenue, data.summary.totalCost).toFixed(2);
+                    const productionOrderByOrdNo = new Map((Array.isArray(data.productionOrders) ? data.productionOrders : []).map(order => [Number(order.ordNo || 0), order]));
+                    const getSalesLineCostBreakdown = (purcNo) => {
+                        const prodOrder = productionOrderByOrdNo.get(Number(purcNo || 0));
+                        const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
+                        let operationTotal = 0;
+                        let laserTotal = 0;
+
+                        for (const line of lines) {
+                            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const lnNo = Number((line && line.LnNo) || 0);
+                            if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+                            const effectiveCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                            if (key === '1') {
+                                operationTotal += effectiveCost;
+                            } else if (key === '2' && isLaserLProdNo(line && line.ProdNo)) {
+                                laserTotal += effectiveCost;
+                            }
+                        }
+
+                        return {
+                            operationTotal,
+                            laserTotal
+                        };
+                    };
                     
                     let html = '<div class="order-header">';
                     html += '<h2>Salgsordre: ' + data.orderHeader.OrdNo + ' - ' + (data.orderHeader.CustomerName || '-') + '</h2>';
@@ -1368,10 +1387,10 @@ app.get('/', (req, res) => {
                     html += '<span>Laseroversigt (L-linjer)</span>';
                     html += '<button id="laserOrderSummaryToggleBtn" class="list-toggle-btn" style="padding:6px 10px;" onclick="toggleLaserOrderSummary()" title="Vis eller skjul detaljeret laseroversigt">Vis laseroversigt</button>';
                     html += '</h3>';
-                    html += '<div id="laserOrderSummaryTotals" class="summary-box"><div class="loading">Indlaeser totaler...</div></div>';
+                    html += '<div id="laserOrderSummaryTotals" class="summary-box"><div class="loading">Indlæser totaler...</div></div>';
                     html += '<div id="laserOrderSummaryPanel" style="display:none;">';
                     html += '<div class="laser-summary-layout">';
-                    html += '<div id="laserOrderSummaryBody" class="loading">Indlaeser laserdata...</div>';
+                    html += '<div id="laserOrderSummaryBody" class="loading">Indlæser laserdata...</div>';
                     html += '<aside id="laserImagePanel" class="laser-image-panel hidden"></aside>';
                     html += '</div>';
                     html += '</div>';
@@ -1380,6 +1399,7 @@ app.get('/', (req, res) => {
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
                         const hasSalesOrderDrawing = data.salesOrderLines.some(line => !!line.DrawingWebPg);
+                        const salesOrderColspan = hasSalesOrderDrawing ? 11 : 10;
                         html += '<div class="section"><h3>Salgsordrelinjer</h3>';
                         html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Salgspris/enhed</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
 
@@ -1391,6 +1411,11 @@ app.get('/', (req, res) => {
                             const lineMarginValue = calculateLineMarginPercent(lineSalesPrice, lineCost);
                             const isExactlyHundred = Math.abs(lineMarginValue - 100) < 0.0001;
                             const lineMarginPercent = lineMarginValue.toFixed(2);
+                            const hasProductionOrder = Boolean(line.PurcNo && line.PurcNo !== 0);
+                            const breakdownRowId = 'sales-line-breakdown-' + String(data.orderHeader.OrdNo || '0') + '-' + String(line.LnNo || 0);
+                            const breakdownInfo = hasProductionOrder
+                                ? getSalesLineCostBreakdown(line.PurcNo)
+                                : { operationTotal: 0, laserTotal: 0 };
                             const lineMarginBadge = !includeForMargin
                                 ? '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>'
                                 : lineSalesPrice === 0
@@ -1399,7 +1424,9 @@ app.get('/', (req, res) => {
                                     ? '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>'
                                     : getMarginBadge(lineMarginPercent));
                             html += '<tr>';
-                            html += '<td>' + (line.LnNo || 0) + '</td>';
+                            html += '<td>' + (hasProductionOrder
+                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\\'' + breakdownRowId + '\\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
+                                : '') + (line.LnNo || 0) + '</td>';
 
                             const salesWarningFlag = getWarningFlagHtml(line, 'Tilknyttet produktionsordre har en advarsel.');
                             if (line.PurcNo && line.PurcNo !== 0) {
@@ -1432,6 +1459,16 @@ app.get('/', (req, res) => {
                                 }
                             }
                             html += '</tr>';
+                            if (hasProductionOrder) {
+                                html += '<tr id="' + breakdownRowId + '" style="display:none; background:#f8fbff;">';
+                                html += '<td colspan="' + salesOrderColspan + '" style="padding:10px 16px; border-top:none;">';
+                                html += '<div style="display:grid; gap:6px; color:#1f2937;">';
+                                html += '<div><strong>Operation:</strong> ' + formatNumber(breakdownInfo.operationTotal || 0) + ' DKK</div>';
+                                html += '<div><strong>L:</strong> ' + formatNumber(breakdownInfo.laserTotal || 0) + ' DKK</div>';
+                                html += '</div>';
+                                html += '</td>';
+                                html += '</tr>';
+                            }
                         }
 
                         html += '</table></div>';
@@ -2161,6 +2198,14 @@ app.get('/', (req, res) => {
                 laserImagePanelEl.addEventListener('click', handlePreviewImageZoom);
             }
 
+            function toggleSalesLineBreakdown(rowId, buttonEl) {
+                const row = document.getElementById(rowId);
+                if (!row) return;
+                const isClosed = row.style.display === 'none';
+                row.style.display = isClosed ? 'table-row' : 'none';
+                if (buttonEl) buttonEl.textContent = isClosed ? '−' : '+';
+            }
+
             function toggleProdTp4Group(orderNo, prodTp4Key) {
                 const el = document.getElementById('po-' + orderNo + '-group-' + prodTp4Key);
                 const icon = document.getElementById('po-' + orderNo + '-group-' + prodTp4Key + '-icon');
@@ -2310,7 +2355,7 @@ app.get('/', (req, res) => {
 
                 const orders = getFilteredOrders();
                 if (orders.length === 0) {
-                    el.innerHTML = '<div class="order-list-section"><h3>Ingen kunder fundet</h3><div>Proev en anden soegning.</div></div>';
+                    el.innerHTML = '<div class="order-list-section"><h3>Ingen kunder fundet</h3><div>Prøv en anden søgning.</div></div>';
                     return;
                 }
 
@@ -2364,7 +2409,7 @@ app.get('/', (req, res) => {
                 if (!el) return;
 
                 const showOrderListError = (message) => {
-                    el.innerHTML = '<div class="order-list-section"><h3>Ordreliste kunne ikke indlaeses</h3><div>' + escapeHtml(message) + '</div><div style="margin-top:8px;"><button class="list-toggle-btn" onclick="refreshOrderList()">Proev igen</button></div></div>';
+                    el.innerHTML = '<div class="order-list-section"><h3>Ordreliste kunne ikke indlæses</h3><div>' + escapeHtml(message) + '</div><div style="margin-top:8px;"><button class="list-toggle-btn" onclick="refreshOrderList()">Prøv igen</button></div></div>';
                 };
 
                 if (orderListLoading && !forceRefresh) return;
@@ -2542,9 +2587,9 @@ app.get('/', (req, res) => {
                     } else if (d.status === 'up-to-date') {
                         alert('Du har allerede den nyeste version.');
                     } else if (d.status === 'busy') {
-                        alert('Opdateringskontrol koerer allerede. Proev igen om lidt.');
+                        alert('Opdateringskontrol kører allerede. Prøv igen om lidt.');
                     } else if (d.status === 'checking') {
-                        alert('Opdateringskontrol startet. Vent lidt og proev igen.');
+                        alert('Opdateringskontrol startet. Vent lidt og prøv igen.');
                     } else {
                         alert((d && d.message) ? d.message : 'Opdateringskontrol sendt.');
                     }
@@ -2587,8 +2632,6 @@ app.get('/', (req, res) => {
 
             function selectOrder(ordNo) {
                 document.getElementById('orderInput').value = ordNo;
-                orderListVisible = false;
-                renderOrderList();
                 searchOrder();
                 setTimeout(() => {
                     const resultEl = document.getElementById('result');
