@@ -123,7 +123,17 @@ Sono presenti viste e metriche dedicate al laser:
 - dettaglio nesting per prodotto tramite `GET /nesting-detail/:ordno/:prodno`
 - per i `MultiOrdre` (`Ord.Gr4 = 3`) la colonna speciale si chiama `NestMultiPris`
 - nei `MultiOrdre`, il costo laser viene calcolato come **`kg forbrugt × media CstPr delle righe TrTp=5 della route`**
+- il calcolo avviene **prima per singola `rute`**, poi i risultati vengono sommati su tutti i `nestingordre` collegati
 - se lo stesso prodotto è distribuito su più `nestingordre`, il riepilogo li aggrega tutti
+- anche negli ordini standard il popup laser può mostrare più righe (`nestingordre` / `rute`) per lo stesso prodotto
+
+### 4.7 Interpretazione dei costi laser
+Per evitare ambiguità durante i controlli:
+
+- `NestKost pr. stk` nel popup laser è il costo unitario della **riga/route mostrata**
+- `Samlet kost` nel popup è il costo totale della singola riga aggregata (`qta × costo unitario` oppure `QuotaCosto`)
+- la riga principale `Materiale Laser` può mostrare un prezzo unitario diverso dal popup anche quando il **totale** è lo stesso, perché la divisione può avvenire su una quantità diversa (solo la riga madre vs somma di più `nestingordre`)
+- `Ryd cache` forza il refresh dei dati memorizzati, ma non cambia le differenze dovute alla formula o alla quantità usata nel riparto
 
 ---
 
@@ -131,14 +141,15 @@ Sono presenti viste e metriche dedicate al laser:
 
 Queste regole sono già implementate e **non vanno cambiate senza validazione funzionale**.
 
-### 5.1 `R1090`
-- escluso globalmente dai costi e dalle operazioni rilevanti
-- motivo: il suo costo è già distribuito altrove
-- non deve falsare subtotali e totale costi
+### 5.1 `R1090` / `R8200`
+- `R1090` è escluso globalmente dai costi e dalle operazioni rilevanti
+- `R8200` va anch’esso escluso da visualizzazione e costo nelle operazioni
+- motivo: questi codici non devono falsare subtotali e totale costi
 
-### 5.2 `R6200`
+### 5.2 `R6200` e fallback minuti operativi
 - per alcune operazioni il costo effettivo usa `NoOrg * CCstPr`
-- utile dove i minuti pianificati sono il riferimento corretto
+- se una operazione `R*` ha `Færdigmeldt = 0` ma `NoOrg/Stykliste Minutter > 0`, il sistema usa quel valore come fallback
+- in questi casi i costi vengono ricalcolati e la UI mostra una piccola icona `🕒`
 
 ### 5.3 `R1100` + `LASER EAGLE`
 In `utils/productRules.js`:
@@ -148,7 +159,11 @@ In `utils/productRules.js`:
 
 allora costo/prezzo operativo viene raddoppiato.
 
-### 5.4 Logica ricorsiva ordini figli
+### 5.4 `R*` dentro `Produkt dele`
+- i prodotti `R*` contenuti in `Produkt dele` (`ProdTp4 = 4`) non devono essere mostrati né conteggiati
+- la regola vale anche per i sottoordini / ordini figli aperti ricorsivamente
+
+### 5.5 Logica ricorsiva ordini figli
 `services/aftercalcService.js` contiene la funzione ricorsiva `loadProductionOrderDetails(prodOrdNo, visited = new Set())`.
 
 Questa logica serve per:
@@ -158,7 +173,7 @@ Questa logica serve per:
 
 > Non rimuovere o “semplificare” questa parte senza testare i casi reali di produzione.
 
-### 5.5 MultiOrdre (`Ord.Gr4 = 3`)
+### 5.6 MultiOrdre (`Ord.Gr4 = 3`)
 Per i soli ordini con `Ord.Gr4 = 3`:
 
 - nella lista ordini compare il badge `M` (`MultiOrdre`)

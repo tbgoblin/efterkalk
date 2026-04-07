@@ -29,8 +29,8 @@ const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v10_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v10_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v14_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v14_';
 
 const app = express();
 app.use(express.json({ limit: '256kb' }));
@@ -650,10 +650,67 @@ app.get('/', (req, res) => {
                     .replace(/'/g, '&#39;');
             }
 
+            function collectWarningMessages(item, fallbackText) {
+                const unique = [];
+                const pushValue = (value) => {
+                    const chunks = String(value || '').split('|');
+                    for (const chunk of chunks) {
+                        const text = String(chunk || '').trim();
+                        if (text && !unique.includes(text)) unique.push(text);
+                    }
+                };
+
+                if (Array.isArray(item)) {
+                    for (const entry of item) {
+                        if (!entry) continue;
+                        if (entry.WarningText) pushValue(entry.WarningText);
+                        if (entry.warningText) pushValue(entry.warningText);
+                    }
+                } else if (item) {
+                    if (item.WarningText) pushValue(item.WarningText);
+                    if (item.warningText) pushValue(item.warningText);
+                }
+
+                if (unique.length === 0 && fallbackText) pushValue(fallbackText);
+                return unique;
+            }
+
+            function getWarningIconMeta(message) {
+                const text = String(message || '').trim().toLowerCase();
+                if (text.includes('faktura') || text.includes('noinvo')) {
+                    return { key: 'invoice', icon: '🧾' };
+                }
+                if (text.includes('tilknyttet produktionsordre') || text.includes('underliggende produktionsordre')) {
+                    return { key: 'linked-order', icon: '🏭' };
+                }
+                if (text.includes('inkonsekvens') || text.includes('afvig')) {
+                    return { key: 'consistency', icon: '⚠️' };
+                }
+                return { key: 'general', icon: '⚠️' };
+            }
+
             function getWarningFlagHtml(item, fallbackText) {
-                if (!item || !item.HasWarning) return '';
-                const title = escapeHtml(item.WarningText || fallbackText || 'Kontroller denne linje');
-                return ' <span class="warning-flag" title="' + title + '">⚠️</span>';
+                const hasWarning = Array.isArray(item)
+                    ? item.some(entry => entry && (entry.HasWarning || entry.hasWarnings || entry.WarningText || entry.warningText))
+                    : Boolean(item && (item.HasWarning || item.hasWarnings || item.WarningText || item.warningText));
+                if (!hasWarning) return '';
+
+                const messages = collectWarningMessages(item, fallbackText);
+                if (messages.length === 0) return '';
+
+                const grouped = new Map();
+                for (const message of messages) {
+                    const meta = getWarningIconMeta(message);
+                    if (!grouped.has(meta.key)) {
+                        grouped.set(meta.key, { icon: meta.icon, messages: [] });
+                    }
+                    grouped.get(meta.key).messages.push(message);
+                }
+
+                return Array.from(grouped.values()).map(group => {
+                    const title = escapeHtml(group.messages.join(' | '));
+                    return ' <span class="warning-flag" title="' + title + '">' + group.icon + '</span>';
+                }).join('');
             }
 
             function getTimeAdjustmentFlagHtml(item, fallbackText) {
@@ -1549,7 +1606,7 @@ app.get('/', (req, res) => {
                                 hasEstimatedOperationTime: !!prodOrder.hasEstimatedOperationTime,
                                 EstimatedTimeText: 'Mindst én operation er genberegnet ud fra Stykliste Minutter, fordi Færdigmeldt var 0.'
                             });
-                            html += '<h4>Produktionsordre: ' + prodOrder.ordNo + prodOrderTimeFlagHtml + getWarningFlagHtml({ HasWarning: !!prodOrder.hasWarnings, WarningText: 'Denne produktionsordre indeholder mindst en advarselslinje.' }) + '</h4>';
+                            html += '<h4>Produktionsordre: ' + prodOrder.ordNo + prodOrderTimeFlagHtml + getWarningFlagHtml({ HasWarning: !!prodOrder.hasWarnings, WarningText: prodOrder.warningText || '' }, 'Denne produktionsordre indeholder mindst en advarselslinje.') + '</h4>';
                             html += '<div class="main-product-box">';
                             html += '<div class="value">' + mainProductText + '</div>';
                             html += '</div>';
@@ -1654,10 +1711,11 @@ app.get('/', (req, res) => {
                                     }, 0);
                                 const isOpenByDefault = false;
                                 orderVisibleTotal += subtotal;
+                                const groupWarningFlagHtml = getWarningFlagHtml(lines, 'Denne gruppe indeholder mindst en advarselslinje.');
 
                                 html += '<div class="prodtp4-group">';
                                 html += '<div class="prodtp4-header" onclick="toggleProdTp4Group(' + prodOrder.ordNo + ', &quot;' + key + '&quot;)">';
-                                html += '<span class="prodtp4-label"><span id="po-' + prodOrder.ordNo + '-group-' + key + '-icon">' + (isOpenByDefault ? '▾' : '▸') + '</span> ' + key + ' - ' + (prodTp4Labels[key] || 'Altro') + '</span>';
+                                html += '<span class="prodtp4-label"><span id="po-' + prodOrder.ordNo + '-group-' + key + '-icon">' + (isOpenByDefault ? '▾' : '▸') + '</span> ' + key + ' - ' + (prodTp4Labels[key] || 'Altro') + groupWarningFlagHtml + '</span>';
                                 html += '<span class="prodtp4-subtotal">Delsum: ' + formatNumber(subtotal) + ' DKK</span>';
                                 html += '</div>';
 
@@ -1667,6 +1725,8 @@ app.get('/', (req, res) => {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>' + laserCostHeader + '</th><th>Samlet kost</th></tr>';
                                 } else if (key === '1') {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Stykliste Minutter</th><th>Færdigmeldt minutter</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
+                                } else if (key === '6') {
+                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Ydelse pris/enhed</th><th>Samlet kost</th></tr>';
                                 } else {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                                 }
@@ -1689,7 +1749,11 @@ app.get('/', (req, res) => {
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (hasChildProductionOrder) {
-                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+                                        const childSummaryArgs = String(key) === '6'
+                                            ? (Number(line.PurcNo || 0) + ', &quot;' + safeChildProdNoForSummary + '&quot;')
+                                            : Number(line.PurcNo || 0);
+                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + childSummaryArgs + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (line.ProdNo) {
                                         html += '<td>' + (line.ProdNo || '-') + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else {
@@ -1709,7 +1773,10 @@ app.get('/', (req, res) => {
                                         html += '<td>' + formatNumber(displayUnitCost1) + '</td>';
                                         html += '<td><strong>' + formatNumber(displayTotalCost1) + '</strong></td>';
                                     } else {
-                                        html += '<td>' + formatNumber(line.NoFin || 0) + '</td>';
+                                        const displayQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
+                                            ? line.DisplayQuantity
+                                            : (line.NoFin || 0);
+                                        html += '<td>' + formatNumber(displayQty) + '</td>';
                                     }
                                     if (key === '2') {
                                         const isLaserLine = isLaserLProdNo(line.ProdNo);
@@ -1732,9 +1799,14 @@ app.get('/', (req, res) => {
                                         html += '<td>' + formatNumber(nestingUnitCost) + '</td>';
                                         html += '<td><strong>' + formatNumber(nestingSamlet) + '</strong></td>';
                                     } else if (key !== '1') {
-                                        const displayUnitCost = Number(line.NoFin || 0) > 0 && line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null
-                                            ? ((line.EffectiveLineCost || 0) / (line.NoFin || 0))
-                                            : (line.CCstPr || 0);
+                                        const displayQtyNonOperation = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
+                                            ? Number(line.DisplayQuantity || 0)
+                                            : Number(line.NoFin || 0);
+                                        const displayUnitCost = (displayQtyNonOperation > 0 && line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null)
+                                            ? ((line.EffectiveLineCost || 0) / displayQtyNonOperation)
+                                            : ((line.DisplayUnitCost !== undefined && line.DisplayUnitCost !== null)
+                                                ? line.DisplayUnitCost
+                                                : (line.CCstPr || line.DPrice || 0));
                                         const displayTotalCost = line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null
                                             ? (line.EffectiveLineCost || 0)
                                             : (line.LineCost || 0);
@@ -2251,7 +2323,7 @@ app.get('/', (req, res) => {
                 if (icon) icon.textContent = isClosed ? '▾' : '▸';
             }
 
-            async function showChildProductionSummary(childOrdNo) {
+            async function showChildProductionSummary(childOrdNo, targetProdNo) {
                 const modal = document.getElementById('summaryModal');
                 const title = document.getElementById('summaryModalTitle');
                 const body = document.getElementById('summaryModalBody');
@@ -2264,7 +2336,10 @@ app.get('/', (req, res) => {
                     updateSummaryModalBackBtn();
                 }
                 closeSummaryImagePanel();
-                title.textContent = 'Produktoversigt for ordre ' + childOrdNo;
+                const normalizedTargetProdNo = String(targetProdNo || '').trim();
+                title.textContent = normalizedTargetProdNo
+                    ? ('Produktoversigt for ordre ' + childOrdNo + ' - ' + normalizedTargetProdNo)
+                    : ('Produktoversigt for ordre ' + childOrdNo);
                 body.innerHTML = '<div class="modal-loading">Indlaeser...</div>';
                 modal.style.display = 'flex';
 
@@ -2282,20 +2357,37 @@ app.get('/', (req, res) => {
                         return;
                     }
 
+                    const filteredLines = normalizedTargetProdNo
+                        ? data.lines.filter(line => String(line && line.ProdNo || '').trim().toUpperCase() === normalizedTargetProdNo.toUpperCase())
+                        : data.lines;
+
+                    if (!filteredLines || filteredLines.length === 0) {
+                        body.innerHTML = '<div>Det valgte produkt blev ikke fundet i denne produktionsordre.</div>';
+                        return;
+                    }
+
+                    const baseTitleText = normalizedTargetProdNo
+                        ? ('Produktoversigt for ordre ' + childOrdNo + ' - ' + normalizedTargetProdNo)
+                        : ('Produktoversigt for ordre ' + childOrdNo);
                     const titleFlags = [
                         data.hasEstimatedOperationTime ? '🕒' : '',
                         data.hasWarnings ? '⚠️' : ''
                     ].filter(Boolean).join(' ');
-                    if (titleFlags) {
-                        title.textContent = 'Produktoversigt for ordre ' + childOrdNo + ' ' + titleFlags;
-                    }
+                    title.textContent = titleFlags
+                        ? (baseTitleText + ' ' + titleFlags)
+                        : baseTitleText;
+
+                    const isYdelseFilteredView = !!normalizedTargetProdNo;
+                    const modalTotalCost = normalizedTargetProdNo
+                        ? filteredLines.reduce((sum, line) => sum + Number(line && line.EffectiveLineCost || 0), 0)
+                        : Number(data.totalCost || 0);
 
                     let html = '';
-                    html += '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Nesting/enhed</th><th>Samlet kost (beregnet)</th></tr>';
-                    for (const line of data.lines) {
-                        const displayLineCost = Number(line.LnNo || 0) === 1
-                            ? Number(data.totalCost || 0)
-                            : Number(line.EffectiveLineCost || 0);
+                    html += isYdelseFilteredView
+                        ? '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Ydelse pris/enhed</th><th>Samlet kost (beregnet)</th></tr>'
+                        : '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Nesting/enhed</th><th>Samlet kost (beregnet)</th></tr>';
+                    for (const line of filteredLines) {
+                        const displayLineCost = Number(line.EffectiveLineCost || 0);
                         const warningFlagHtml = getWarningFlagHtml(line);
                         const timeAdjustmentFlagHtml = getTimeAdjustmentFlagHtml(line);
                         html += '<tr>';
@@ -2317,7 +2409,11 @@ app.get('/', (req, res) => {
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else if (childHasPurcNo) {
-                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + Number(line.PurcNo || 0) + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
+                            const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+                            const childSummaryArgs = String(line.ProdTp4 || '') === '6'
+                                ? (Number(line.PurcNo || 0) + ', &quot;' + safeChildProdNoForSummary + '&quot;')
+                                : Number(line.PurcNo || 0);
+                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + childSummaryArgs + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else {
                             html += '<td>' + (line.ProdNo || '-') + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         }
@@ -2332,13 +2428,19 @@ app.get('/', (req, res) => {
                         const isLaserProdLine = isLaserLProdNo(line.ProdNo);
                         html += '<td>' + (line.Descr || '') + '</td>';
                         html += '<td>' + formatNumber(displayQty) + '</td>';
-                        html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
-                        html += '<td>' + (isLaserProdLine ? '-' : formatNumber(displayUnitCost)) + '</td>';
-                        html += '<td>' + formatNumber(line.NestingCost || 0) + '</td>';
+                        if (isYdelseFilteredView) {
+                            html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
+                        } else {
+                            html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
+                            html += '<td>' + (isLaserProdLine ? '-' : formatNumber(displayUnitCost)) + '</td>';
+                            html += '<td>' + formatNumber(line.NestingCost || 0) + '</td>';
+                        }
                         html += '<td><strong>' + formatNumber(displayLineCost) + '</strong></td>';
                         html += '</tr>';
                     }
-                    html += '<tr class="summary-row"><td colspan="8">Total beregnet kost:</td><td><strong>' + formatNumber(data.totalCost || 0) + ' DKK</strong></td></tr>';
+                    html += isYdelseFilteredView
+                        ? '<tr class="summary-row"><td colspan="6">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>'
+                        : '<tr class="summary-row"><td colspan="8">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>';
                     html += '</table>';
                     body.innerHTML = html;
                 } catch (err) {

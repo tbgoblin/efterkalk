@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 11;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 15;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -29,8 +29,12 @@ function createAftercalcService({
 
         if (prodNoKey.startsWith('3') && noFinValue === 0 && noOrgValue > 0) {
             warnings.push(key === '2'
-                ? 'Inkonsekvens: materiale/tubo med NoFin=0 men NoOrg>0.'
-                : 'Inkonsekvens på salgsordre: produkt/tubo med NoFin=0 men NoOrg>0.');
+                ? 'Inkonsekvens: materiale/rør med NoFin=0 men NoOrg>0.'
+                : 'Inkonsekvens på salgsordre: produkt/rør med NoFin=0 men NoOrg>0.');
+        }
+
+        if (key === '6' && noInvoValue === 0 && noFinValue > 0) {
+            warnings.push('Mangler faktura: NoInvo er 0, bruger NoFin til kostberegning.');
         }
 
         if (key === '6' && purcNoValue > 0 && noInvoAbValue > noInvoValue) {
@@ -43,6 +47,18 @@ function createAftercalcService({
         }
 
         return warnings;
+    }
+
+    function joinWarningMessages(messages = []) {
+        const unique = [];
+        for (const message of messages || []) {
+            const chunks = String(message || '').split('|');
+            for (const chunk of chunks) {
+                const text = String(chunk || '').trim();
+                if (text && !unique.includes(text)) unique.push(text);
+            }
+        }
+        return unique.join(' | ');
     }
 
     function getInconsistentTubeFallbackCost(line) {
@@ -69,6 +85,33 @@ function createAftercalcService({
                 ? 'Færdigmeldt minutter var 0; beregnet ud fra Stykliste Minutter.'
                 : ''
         };
+    }
+
+    function getYdelseCostInfo(line, invoiceSourceLine = null) {
+        const sourceLine = invoiceSourceLine || line || {};
+        const noInvoValue = Number(sourceLine.NoInvo || 0);
+        const noFinValue = Number(sourceLine.NoFin || 0);
+        const usesNoFinFallback = noInvoValue === 0 && noFinValue > 0;
+        const effectiveQuantity = noInvoValue > 0 ? noInvoValue : noFinValue;
+        const sourceSuffix = invoiceSourceLine ? ' på indkøbsordre' : '';
+
+        return {
+            effectiveQuantity,
+            usesNoFinFallback,
+            infoText: usesNoFinFallback
+                ? ('Mangler faktura: NoInvo er 0' + sourceSuffix + ', bruger NoFin til kostberegning.')
+                : ''
+        };
+    }
+
+    function findMatchingChildYdelseLine(lines, prodNo) {
+        if (!Array.isArray(lines)) return null;
+        const prodKey = String(prodNo || '').trim().toUpperCase();
+        if (!prodKey) return lines.find(line => Number(line.LnNo || 0) === 1) || null;
+
+        return lines.find(line => String(line.ProdNo || '').trim().toUpperCase() === prodKey)
+            || lines.find(line => Number(line.LnNo || 0) === 1)
+            || null;
     }
 
     function normalizeExpectedWeight(value) {
@@ -386,7 +429,7 @@ function createAftercalcService({
                         IsDiscountLine: isDiscountLine,
                         DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
                         HasWarning: warningMessages.length > 0,
-                        WarningText: warningMessages.join(' '),
+                        WarningText: joinWarningMessages(warningMessages),
                         EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2)),
                         DrawingWebPg: drawingByProdNo.get(prodNoKey) || null
                     };
@@ -410,7 +453,7 @@ function createAftercalcService({
                         IsDiscountLine: isDiscountLine,
                         DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
                         HasWarning: warningMessages.length > 0,
-                        WarningText: warningMessages.join(' '),
+                        WarningText: joinWarningMessages(warningMessages),
                         EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2)),
                         DrawingWebPg: drawingByProdNo.get(prodNoKey) || null
                     };
@@ -504,17 +547,38 @@ function createAftercalcService({
                         const operationTimeInfo = key === '1'
                             ? getOperationTimeInfo(line)
                             : { effectiveMinutes: noFinValue, usesEstimatedMinutes: false, infoText: '' };
+                        let ydelseInvoiceSourceLine = null;
+                        if (key === '6' && line.PurcNo && Number(line.PurcNo) !== 0 && !nextVisited.has(Number(line.PurcNo))) {
+                            const childYdelseDetails = await loadProductionOrderDetails(Number(line.PurcNo), nextVisited, {
+                                ...options,
+                                excludeRProductsInSubOrders: true
+                            });
+                            ydelseInvoiceSourceLine = findMatchingChildYdelseLine(childYdelseDetails && childYdelseDetails.lines, line.ProdNo);
+                        }
+                        const ydelseCostInfo = key === '6'
+                            ? getYdelseCostInfo(line, ydelseInvoiceSourceLine)
+                            : { effectiveQuantity: noFinValue, usesNoFinFallback: false, infoText: '' };
+                        const ydelseSourceQuantity = Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.DisplayQuantity ?? ydelseInvoiceSourceLine.NoFin)) || 0);
+                        const ydelseSourceUnitCost = key === '6'
+                            ? ((ydelseSourceQuantity > 0 && ydelseInvoiceSourceLine && ydelseInvoiceSourceLine.EffectiveLineCost !== undefined && ydelseInvoiceSourceLine.EffectiveLineCost !== null)
+                                ? (Number(ydelseInvoiceSourceLine.EffectiveLineCost || 0) / ydelseSourceQuantity)
+                                : Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.CCstPr ?? ydelseInvoiceSourceLine.DPrice ?? ydelseInvoiceSourceLine.DisplayUnitCost)) ?? (line.CCstPr ?? line.DPrice ?? 0)))
+                            : Number(line.CCstPr || 0);
                         const displayQuantity = key === '1'
                             ? operationTimeInfo.effectiveMinutes
-                            : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
-                                ? noOrgValue
-                                : noFinValue);
+                            : (key === '6'
+                                ? ydelseCostInfo.effectiveQuantity
+                                : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                                    ? noOrgValue
+                                    : noFinValue));
                         let effectiveLineCost = Number(line.LineCost || 0);
                         let childProductionTotalCost = null;
-                        const warningMessages = buildLineWarnings(line);
+                        const warningMessages = buildLineWarnings(line, ydelseCostInfo.usesNoFinFallback ? [ydelseCostInfo.infoText] : []);
 
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
+                        } else if (key === '6') {
+                            effectiveLineCost = Number(ydelseCostInfo.effectiveQuantity * ydelseSourceUnitCost);
                         } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
                             const specialLaserCostInfo = useSpecialLaserCost
                                 ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
@@ -539,7 +603,7 @@ function createAftercalcService({
                             childProductionTotalCost = Number(childDetails.totalCost || 0);
                             effectiveLineCost = childProductionTotalCost;
                             if (childDetails.hasWarnings) {
-                                warningMessages.push('Underliggende produktionsordre har en advarsel.');
+                                warningMessages.push(childDetails.warningText || 'Underliggende produktionsordre har en advarsel.');
                             }
                         }
 
@@ -552,9 +616,11 @@ function createAftercalcService({
                             : null;
                         line.UsesEstimatedOperationTime = Boolean(operationTimeInfo.usesEstimatedMinutes);
                         line.EstimatedTimeText = operationTimeInfo.infoText;
+                        line.UsesMissingInvoiceFallback = Boolean(ydelseCostInfo.usesNoFinFallback);
+                        line.MissingInvoiceText = ydelseCostInfo.infoText;
                         line.HasWarning = warningMessages.length > 0;
                         line.ChildHasWarning = key === '4' && warningMessages.some(msg => msg.includes('Underliggende produktionsordre'));
-                        line.WarningText = warningMessages.join(' ');
+                        line.WarningText = joinWarningMessages(warningMessages);
                         line.EffectiveLineCost = parseFloat(Number(effectiveLineCost || 0).toFixed(2));
                         if (line.HasWarning) hasWarnings = true;
                         if (line.UsesEstimatedOperationTime) hasEstimatedOperationTime = true;
@@ -568,7 +634,8 @@ function createAftercalcService({
                         lines,
                         totalCost: parseFloat(Number(total).toFixed(2)),
                         hasWarnings,
-                        hasEstimatedOperationTime
+                        hasEstimatedOperationTime,
+                        warningText: joinWarningMessages(lines.map(line => line.WarningText))
                     };
                 })();
 
@@ -629,7 +696,8 @@ function createAftercalcService({
                         lines: prodDetails.lines,
                         totalCost: prodDetails.totalCost,
                         hasWarnings: Boolean(prodDetails.hasWarnings),
-                        hasEstimatedOperationTime: Boolean(prodDetails.hasEstimatedOperationTime)
+                        hasEstimatedOperationTime: Boolean(prodDetails.hasEstimatedOperationTime),
+                        warningText: String(prodDetails.warningText || '')
                     };
                 })
             );
@@ -641,16 +709,17 @@ function createAftercalcService({
             const productionWarningByOrdNo = new Map(
                 productionOrders.map(po => [Number(po.ordNo), Boolean(po.hasWarnings)])
             );
+            const productionWarningTextByOrdNo = new Map(
+                productionOrders.map(po => [Number(po.ordNo), String(po.warningText || '')])
+            );
 
             const salesOrderLinesWithProductionTotal = salesOrderLines.map(line => {
                 const purcNo = line.PurcNo ? Number(line.PurcNo) : 0;
                 const productionTotal = purcNo ? productionTotalByOrdNo.get(purcNo) : undefined;
                 const productionHasWarning = purcNo ? Boolean(productionWarningByOrdNo.get(purcNo)) : false;
-                const combinedWarnings = [];
-                if (line.HasWarning && line.WarningText) combinedWarnings.push(line.WarningText);
-                if (productionHasWarning) combinedWarnings.push('Tilknyttet produktionsordre har en advarsel.');
-                const warningText = Array.from(new Set(combinedWarnings)).join(' ');
-                const hasWarning = warningText.length > 0;
+                const productionWarningText = purcNo ? String(productionWarningTextByOrdNo.get(purcNo) || '') : '';
+                const warningText = joinWarningMessages([line.WarningText]);
+                const hasWarning = Boolean(line.HasWarning) && warningText.length > 0;
 
                 if (productionTotal !== undefined && !line.IsDiscountLine) {
                     const roundedTotal = parseFloat(Number(productionTotal).toFixed(2));
@@ -658,6 +727,8 @@ function createAftercalcService({
                         ...line,
                         ProductionOrderTotalCost: roundedTotal,
                         EffectiveLineCost: roundedTotal,
+                        LinkedProductionHasWarning: productionHasWarning,
+                        LinkedProductionWarningText: productionWarningText,
                         HasWarning: hasWarning,
                         WarningText: warningText
                     };
@@ -666,6 +737,8 @@ function createAftercalcService({
                 return {
                     ...line,
                     ProductionOrderTotalCost: productionTotal !== undefined ? parseFloat(Number(productionTotal).toFixed(2)) : null,
+                    LinkedProductionHasWarning: productionHasWarning,
+                    LinkedProductionWarningText: productionWarningText,
                     HasWarning: hasWarning,
                     WarningText: warningText
                 };
@@ -695,7 +768,13 @@ function createAftercalcService({
             return {
                 orderHeader,
                 hasWarnings,
-                warningText: hasWarnings ? 'Ordren indeholder mindst én advarsel.' : '',
+                warningText: hasWarnings
+                    ? joinWarningMessages([
+                        ...salesOrderLinesWithProductionTotal.map(line => line.WarningText),
+                        ...salesLines.map(line => line.WarningText),
+                        ...productionOrders.map(order => order.warningText)
+                    ])
+                    : '',
                 salesOrderLines: salesOrderLinesWithProductionTotal,
                 salesLines,
                 salesLinesTotalCost: parseFloat(salesLinesTotalCost.toFixed(2)),
@@ -816,7 +895,7 @@ function createAftercalcService({
                     ) AS NestingCost
                 FROM OrdLn
                 WHERE OrdNo = @ordNo
-                  AND (LnNo = 1 OR NoFin > 0 OR NoOrg > 0)
+                  AND (LnNo = 1 OR NoFin > 0 OR NoOrg > 0 OR NoInvo > 0)
                 ORDER BY LnNo
             `);
 
@@ -841,11 +920,16 @@ function createAftercalcService({
                 const operationTimeInfo = key === '1'
                     ? getOperationTimeInfo(line)
                     : { effectiveMinutes: noFinValue, usesEstimatedMinutes: false, infoText: '' };
+                const ydelseCostInfo = key === '6'
+                    ? getYdelseCostInfo(line)
+                    : { effectiveQuantity: noFinValue, usesNoFinFallback: false, infoText: '' };
                 const displayQuantity = key === '1'
                     ? operationTimeInfo.effectiveMinutes
-                    : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
-                        ? noOrgValue
-                        : noFinValue);
+                    : (key === '6'
+                        ? ydelseCostInfo.effectiveQuantity
+                        : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                            ? noOrgValue
+                            : noFinValue));
                 const warningMessages = buildLineWarnings(line);
                 const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
                 const specialLaserCostInfo = (key === '2' && isLaserLProduct(line.ProdNo) && useSpecialLaserCost)
@@ -857,11 +941,13 @@ function createAftercalcService({
                 const recalculatedHasNestingCost = Number(line.NestingCost || 0) > 0;
                 const effectiveLineCost = key === '1'
                     ? Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0))
-                    : (key === '2' && isLaserLProduct(line.ProdNo)
-                        ? ((specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
-                            ? Number(specialLaserCostInfo.totalCost)
-                            : (recalculatedHasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0)))
-                        : (tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0)));
+                    : (key === '6'
+                        ? Number(ydelseCostInfo.effectiveQuantity * (line.CCstPr || 0))
+                        : (key === '2' && isLaserLProduct(line.ProdNo)
+                            ? ((specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
+                                ? Number(specialLaserCostInfo.totalCost)
+                                : (recalculatedHasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0)))
+                            : (tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0))));
 
                 const roundedEffectiveLineCost = parseFloat(Number(effectiveLineCost).toFixed(2));
                 const displayUnitCost = Number(displayQuantity || 0) > 0
@@ -878,7 +964,7 @@ function createAftercalcService({
                     UsesEstimatedOperationTime: Boolean(operationTimeInfo.usesEstimatedMinutes),
                     EstimatedTimeText: operationTimeInfo.infoText,
                     HasWarning: warningMessages.length > 0,
-                    WarningText: warningMessages.join(' '),
+                    WarningText: joinWarningMessages(warningMessages),
                     EffectiveLineCost: roundedEffectiveLineCost
                 };
             })
@@ -887,7 +973,31 @@ function createAftercalcService({
         for (const line of lines) {
             const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
             const childOrdNo = Number(line.PurcNo || 0);
-            if (key !== '4' || !Number.isFinite(childOrdNo) || childOrdNo <= 0 || nextVisited.has(childOrdNo)) {
+            if (!Number.isFinite(childOrdNo) || childOrdNo <= 0 || nextVisited.has(childOrdNo)) {
+                continue;
+            }
+
+            if (key === '6') {
+                const childSummary = await getProductionSummary(childOrdNo, nextVisited, options);
+                const matchedChildLine = findMatchingChildYdelseLine(childSummary && childSummary.lines, line.ProdNo);
+                if (matchedChildLine) {
+                    const ydelseCostInfo = getYdelseCostInfo(line, matchedChildLine);
+                    const matchedChildQty = Number((matchedChildLine.DisplayQuantity !== undefined && matchedChildLine.DisplayQuantity !== null)
+                        ? matchedChildLine.DisplayQuantity
+                        : (matchedChildLine.NoFin || 0));
+                    const matchedChildUnitCost = matchedChildQty > 0 && matchedChildLine.EffectiveLineCost !== undefined && matchedChildLine.EffectiveLineCost !== null
+                        ? Number(matchedChildLine.EffectiveLineCost || 0) / matchedChildQty
+                        : Number(matchedChildLine.CCstPr || matchedChildLine.DPrice || matchedChildLine.DisplayUnitCost || line.CCstPr || 0);
+                    line.DisplayQuantity = parseFloat(Number(ydelseCostInfo.effectiveQuantity).toFixed(2));
+                    line.EffectiveLineCost = parseFloat(Number((ydelseCostInfo.effectiveQuantity || 0) * matchedChildUnitCost).toFixed(2));
+                    line.DisplayUnitCost = Number(line.DisplayQuantity || 0) > 0
+                        ? parseFloat(Number(line.EffectiveLineCost / line.DisplayQuantity).toFixed(2))
+                        : parseFloat(Number(matchedChildUnitCost || 0).toFixed(2));
+                }
+                continue;
+            }
+
+            if (key !== '4') {
                 continue;
             }
 
@@ -903,9 +1013,10 @@ function createAftercalcService({
             if (childSummary && childSummary.hasWarnings) {
                 line.HasWarning = true;
                 line.ChildHasWarning = true;
-                line.WarningText = [line.WarningText, 'Underliggende produktionsordre har en advarsel.']
-                    .filter(Boolean)
-                    .join(' ');
+                line.WarningText = joinWarningMessages([
+                    line.WarningText,
+                    childSummary.warningText || 'Underliggende produktionsordre har en advarsel.'
+                ]);
             }
         }
 
@@ -915,7 +1026,7 @@ function createAftercalcService({
         const roundedTotalCost = parseFloat(Number(totalCost).toFixed(2));
 
         const mainLine = lines.find(line => Number(line.LnNo || 0) === 1);
-        if (mainLine && Number(mainLine.DisplayQuantity || 0) > 0) {
+        if (mainLine && Number(mainLine.DisplayQuantity || 0) > 0 && Number(roundedTotalCost || 0) > 0) {
             mainLine.DisplayUnitCost = parseFloat(Number(roundedTotalCost / mainLine.DisplayQuantity).toFixed(2));
         }
 
@@ -924,6 +1035,7 @@ function createAftercalcService({
             cacheSchemaVersion: PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION,
             lines,
             hasWarnings: lines.some(line => line.HasWarning),
+            warningText: joinWarningMessages(lines.map(line => line.WarningText)),
             hasEstimatedOperationTime: lines.some(line => line.UsesEstimatedOperationTime),
             totalCost: roundedTotalCost
         };

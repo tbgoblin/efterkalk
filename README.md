@@ -2,7 +2,7 @@
 
 App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso interno in ambiente produzione/fabbrica.
 
-**Versione attuale:** `1.0.45`
+**Versione attuale:** `1.0.50`
 
 ---
 
@@ -23,7 +23,10 @@ App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso i
 - colonna `Salgspris/enhed` aggiunta nelle righe ordine vendita
 - supporto `MultiOrdre` (`Ord.Gr4 = 3`) con badge `M` e tooltip `MultiOrdre`
 - per i `MultiOrdre`, colonna **`NestMultiPris`** visibile solo in questi ordini
-- logica `MultiOrdre` verificata: costo laser basato su **`kg forbrugt × media CstPr delle righe TrTp=5`**, aggregando tutti i `nestingordre` collegati
+- logica `MultiOrdre` verificata: costo laser basato su **`kg forbrugt × media CstPr delle righe TrTp=5`**, calcolato **per singola `rute`** e poi aggregato su tutti i `nestingordre` collegati
+- il popup laser può aggregare più `nestingordre`/`rute` dello stesso prodotto: per questo il prezzo unitario mostrato nel popup può differire da quello della riga principale se il medesimo totale viene ripartito su quantità diverse
+- `R8200` è escluso dai costi/righe operazione; se una operazione `R*` ha `Færdigmeldt = 0`, l’app usa `Stykliste Minutter`, ricalcola i costi e mostra l’icona `🕒`
+- i prodotti `R*` dentro `Produkt dele` (anche nei sottoordini) non devono essere mostrati né conteggiati
 
 ---
 
@@ -98,9 +101,12 @@ Il codice di accesso attuale è un **blocco lato client/UI**, non una vera sicur
 
 ## 📌 Regole business da preservare
 
-- `R1090` è escluso dai calcoli costo/operazioni.
+- `R1090` e `R8200` sono esclusi dai calcoli costo/operazioni rilevanti.
 - `R6200` usa `NoOrg` come base minuti/costo effettivo.
+- se una operazione `R*` ha `Færdigmeldt = 0` ma `NoOrg/Stykliste Minutter > 0`, il costo viene ricalcolato usando quel valore e la UI mostra `🕒`
+- i prodotti `R*` dentro `Produkt dele` e nei sottoordini collegati vanno esclusi da vista e costi
 - `R1100` con operatore `LASER EAGLE` e `ProdTp4=1` ha logica speciale di raddoppio.
+- nelle viste laser aggregate, differenze tra prezzo unitario del popup e della riga principale possono dipendere dalla diversa quantità su cui viene ripartito lo stesso totale
 - La risoluzione ricorsiva dei costi degli ordini figli è intenzionale e non va rimossa senza analisi funzionale.
 
 ---
