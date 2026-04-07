@@ -1858,9 +1858,11 @@ app.get('/', (req, res) => {
                     html += '<tr><th>Prod.ordre</th><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>' + multiNestHeader + '</th><th>Samlet kost</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
                     let totalKgUtilizzati = 0;
                     let totalKgPrevisti = 0;
+                    let totalKgIcon = 0;
                     let totalLaserCost = 0;
                     for (const r of rows) {
                         const rowNoFin = Number(r.noFin || 0);
+                        const rowIcon = Number(r.oldNWgtU_medio || 0);
                         const rowExpected = Number(r.expected || 0);
                         const rowEffective = Number(r.effective || 0);
                         const rowCostPerPiece = Number(r.costPerPiece || 0);
@@ -1869,6 +1871,7 @@ app.get('/', (req, res) => {
                             : ((r.costPerPiece === null || r.costPerPiece === undefined || r.noFin === null || r.noFin === undefined)
                                 ? null
                                 : (rowNoFin * rowCostPerPiece));
+                        totalKgIcon += rowNoFin * rowIcon;
                         totalKgPrevisti += rowNoFin * rowExpected;
                         totalKgUtilizzati += rowNoFin * rowEffective;
                         totalLaserCost += rowTotalCost || 0;
@@ -1901,6 +1904,7 @@ app.get('/', (req, res) => {
                     body.innerHTML = html;
                     totals.innerHTML = ''
                         + '<div><strong>Samlet L-kost (' + (orderGr4 === 3 ? 'NestMultiPris' : 'NestKost') + '):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
+                        + '<div><strong>Ordre icon kg:</strong> ' + formatNumber(totalKgIcon) + ' kg</div>'
                         + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
                         + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
                         + '<div><strong>Afvigelse kg:</strong> ' + formatNumber(deltaKg) + ' kg</div>'
@@ -2029,6 +2033,7 @@ app.get('/', (req, res) => {
                         html += '<tr><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>' + multiNestHeader + '</th><th>Samlet kost</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
                         let totalKgPrevisti = 0;
                         let totalKgUtilizzati = 0;
+                        let totalKgIcon = 0;
                         let totalLaserCost = 0;
                         for (const rowProduct of products) {
                             const oldExpected = rowProduct ? rowProduct.OldNWgtU_medio : null;
@@ -2049,6 +2054,7 @@ app.get('/', (req, res) => {
                                 : ((costPerPiece === null || costPerPiece === undefined || noFin === null || noFin === undefined)
                                     ? null
                                     : (noFinNum * Number(costPerPiece || 0)));
+                            totalKgIcon += noFinNum * Number(oldExpected || 0);
                             totalKgPrevisti += noFinNum * expectedNum;
                             totalKgUtilizzati += noFinNum * effectiveNum;
                             totalLaserCost += totalCost || 0;
@@ -2078,6 +2084,7 @@ app.get('/', (req, res) => {
                         html += '</table>';
                         html += '<div class="summary-box" style="margin-top:12px;">'
                             + '<div><strong>Samlet L-kost (NestKost):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
+                            + '<div><strong>Ordre icon kg:</strong> ' + formatNumber(totalKgIcon) + ' kg</div>'
                             + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
                             + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
                             + '</div>';
