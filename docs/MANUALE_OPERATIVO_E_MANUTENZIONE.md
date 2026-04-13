@@ -137,55 +137,316 @@ Per evitare ambiguità durante i controlli:
 
 ---
 
-## 5. Regole business importanti
+## 5. Regole di calcolo complete (fonti, formule, manipolazioni)
 
-Queste regole sono già implementate e **non vanno cambiate senza validazione funzionale**.
+Questa sezione descrive **come viene calcolato ogni importo visualizzato**, da quali campi DB arriva e in quali casi il valore viene **modificato / ricalcolato / sostituito**.
 
-### 5.1 `R1090` / `R8200`
-- `R1090` è escluso globalmente dai costi e dalle operazioni rilevanti
-- `R8200` va anch’esso escluso da visualizzazione e costo nelle operazioni
-- motivo: questi codici non devono falsare subtotali e totale costi
+> Tutte le formule sotto sono allineate alla logica attuale in `services/aftercalcService.js`, `server.js` e `utils/productRules.js`.
 
-### 5.2 `R6200` e fallback minuti operativi
-- per alcune operazioni il costo effettivo usa `NoOrg * CCstPr`
-- se una operazione `R*` ha `Færdigmeldt = 0` ma `NoOrg/Stykliste Minutter > 0`, il sistema usa quel valore come fallback
-- in questi casi i costi vengono ricalcolati e la UI mostra una piccola icona `🕒`
+### 5.1 Campi sorgente usati dal sistema
 
-### 5.3 `R1100` + `LASER EAGLE`
-In `utils/productRules.js`:
-- se `ProdNo = R1100`
-- e `ProdTp4 = 1`
-- e operatore contiene `LASER EAGLE`
+| Campo | Provenienza | Significato operativo | Uso nel calcolo |
+|---|---|---|---|
+| `Ord.InvoAm` | testata ordine | totale fatturato ordine vendita | base del ricavo totale |
+| `Ord.Gr4` | testata ordine | tipo ordine (`MultiOrdre` ecc.) | cambia la logica laser |
+| `OrdLn.NoFin` | riga ordine | quantità / minuti dichiarati come finiti | base standard per quantità e costi |
+| `OrdLn.NoOrg` | riga ordine | quantità originale / `Stykliste Minutter` | fallback quando `NoFin = 0` |
+| `OrdLn.NoInvo` | riga ordine | quantità fatturata / fatturabile | base prioritaria per `Ydelse` |
+| `OrdLn.NoInvoAb` | riga ordine | quantità acquistata/fatturata lato acquisto | usata per warning di fattura mancante |
+| `OrdLn.DPrice` | riga ordine | prezzo unitario della riga | usato come prezzo vendita oppure riferimento esterno |
+| `OrdLn.CCstPr` | riga ordine | costo unitario standard | base per `LineCost` e molti fallback |
+| `OrdLn.PurcNo` | riga ordine | ordine figlio collegato | collega ordini vendita/produzione |
+| `OrdLn.ProdTp4` | riga ordine | gruppo logico (`1`, `2`, `4`, `6`...) | decide la formula da usare |
+| `OrdLn.TrInf2` / `TrInf4` | riga ordine | riferimenti ordine/ruta | usati soprattutto nel laser |
+| `OrdLn.CstPr` | righe nesting/laser | costo materia sulla route | usato per media `CstPr` nel laser |
+| `OrdLn.Free3` | righe nesting/laser | peso storico/unitario | usato per stimare kg attesi nel laser |
+| `Struct.NoPerStr` | distinta base | peso atteso per struttura | supporto al calcolo kg laser |
 
-allora costo/prezzo operativo viene raddoppiato.
+### 5.2 Grandezze derivate interne
 
-### 5.4 `R*` dentro `Produkt dele`
-- i prodotti `R*` contenuti in `Produkt dele` (`ProdTp4 = 4`) non devono essere mostrati né conteggiati
-- la regola vale anche per i sottoordini / ordini figli aperti ricorsivamente
+L’app costruisce e visualizza alcune grandezze derivate, non sempre presenti direttamente nel DB:
 
-### 5.5 Logica ricorsiva ordini figli
-`services/aftercalcService.js` contiene la funzione ricorsiva `loadProductionOrderDetails(prodOrdNo, visited = new Set())`.
+- `LineCost` = **`NoFin × CCstPr`**
+  - è il costo “grezzo” di partenza della riga
+- `EffectiveLineCost`
+  - è il **vero costo usato in UI e totali** dopo tutte le regole speciali
+- `DisplayQuantity`
+  - è la quantità/minuti mostrata in tabella dopo eventuali fallback (`NoOrg`, `NoInvo`, child order ecc.)
+- `DisplayUnitCost`
+  - quando possibile = **`EffectiveLineCost / DisplayQuantity`**
+  - viene usato per mostrare un costo unitario coerente col totale
 
-Questa logica serve per:
-- seguire ordini di produzione collegati
-- evitare loop con `visited`
-- riportare il costo del figlio sul padre
+### 5.3 Esclusioni e filtri globali
 
-> Non rimuovere o “semplificare” questa parte senza testare i casi reali di produzione.
+Queste regole vengono applicate **prima** dei totali:
 
-### 5.6 MultiOrdre (`Ord.Gr4 = 3`)
-Per i soli ordini con `Ord.Gr4 = 3`:
+- i prodotti globalmente esclusi via `isGloballyExcludedProdNo(...)` non entrano nei calcoli
+- nelle **operazioni** (`ProdTp4 = 1`) i codici **`R1090`** e **`R8200`** sono esclusi da costo e visualizzazione
+- in **`Produkt dele`** (`ProdTp4 = 4`) tutti i prodotti che iniziano per **`R`** sono nascosti e non conteggiati
+- la stessa esclusione `R*` vale anche ricorsivamente nei sottoordini
+- nelle somme ordine di produzione, la riga **`LnNo = 1`** è trattata come riga principale del prodotto e **non entra nei subtotali di gruppo**
 
-- nella lista ordini compare il badge `M` (`MultiOrdre`)
-- nella vista laser la colonna dedicata è `NestMultiPris`
-- il costo unitario usa la formula:
+### 5.4 `Salgsordrelinjer` (righe ordine vendita)
+
+Per ogni riga ordine vendita la UI mostra:
+
+| Colonna UI | Formula / sorgente | Note |
+|---|---|---|
+| `Færdigmeldt` | `DisplayQuantity` | normalmente `NoFin`; se `NoFin = 0` e `NoOrg > 0`, mostra `NoOrg` |
+| `Kostpris` | se c’è `PurcNo`: `ProductionOrderTotalCost / NoFin`; altrimenti `CCstPr` | nelle righe collegate a produzione mostra il costo unitario del figlio |
+| `Samlet kost` | `EffectiveLineCost` | è il costo effettivo finale |
+| `Salgspris/enhed` | `DPrice` | prezzo vendita unitario |
+| `Salgspris` | `DPrice × NoFin` | totale vendita della riga |
+| `Margin (%)` | dipende dalla modalità margine scelta in UI | vedi § 5.11 |
+| `Prod.ordre` | `PurcNo` | se presente, apre l’ordine di produzione collegato |
+
+Regole aggiuntive sulle righe vendita:
+
+1. **Riga sconto / riga a zero**
+   - se `DPrice × NoFin = 0` **e** non esiste fallback materiale/tubo, la riga viene trattata come `IsDiscountLine = true`
+   - in questo caso `EffectiveLineCost = 0`
+
+2. **Sostituzione costo con ordine di produzione**
+   - se la riga ha `PurcNo` valorizzato e non è una riga sconto, il costo mostrato **non è più il costo grezzo della riga vendita**
+   - viene sostituito da:
 
 ```text
-kg forbrugt × media CstPr delle righe TrTp=5 della route
+ProductionOrderTotalCost = totalCost dell’ordine di produzione figlio
+EffectiveLineCost = ProductionOrderTotalCost
 ```
 
-- se un prodotto appartiene a più `nestingordre`, il totale deve sommare tutti i nesting collegati
-- le altre tipologie ordine (`Gr4 = 1,2,4,5`) restano con la logica standard
+3. **Fallback tubo/materiale incoerente**
+   - se il prodotto inizia per `3`, `NoFin = 0` e `NoOrg > 0`, il costo può essere ricalcolato con:
+
+```text
+NoOrg × CCstPr
+```
+
+### 5.5 Ordini di produzione e `Delsum`
+
+Le righe dell’ordine di produzione vengono raggruppate per `ProdTp4`:
+
+| Chiave | Significato UI |
+|---|---|
+| `1` | Operation |
+| `2` | Materiale Laser |
+| `4` | Produkt dele |
+| `5` | Rute |
+| `6` | Ydelse |
+| `7` | Underleverandør |
+| `8` | Materiale fast antal |
+| `NA` | non classificato |
+
+Regole di aggregazione:
+
+- le righe `ProdTp4 = 3` vengono **accorpate al gruppo `1 - Operation`**
+- le righe `LnNo = 1`, `ProdTp4 = 0`, `3`, `5` **non entrano** nei subtotali gruppo
+- `Delsum` è la somma dei `EffectiveLineCost` delle righe visibili del gruppo
+- `Total ordre` è la somma di tutti i `Delsum` visibili del blocco produzione
+
+### 5.6 `1 - Operation` (operazioni)
+
+Formula base:
+
+```text
+EffectiveLineCost = EffectiveOperationMinutes × CCstPr
+```
+
+Dove:
+
+- `Stykliste Minutter` mostrato in UI = `NoOrg`
+- `Færdigmeldt minutter` mostrato in UI = `EffectiveOperationMinutes`
+
+Regole speciali:
+
+1. **Fallback minuti con icona `🕒`**
+   - se una operazione `R*` ha `NoFin = 0` ma `NoOrg > 0`, il sistema usa `NoOrg` come minuti effettivi
+   - la UI mostra l’icona `🕒`
+
+2. **Esclusioni**
+   - `R1090` e `R8200` non vengono conteggiati
+
+3. **`R6200`**
+   - nei subtotali operazioni viene trattato come:
+
+```text
+NoOrg × CCstPr
+```
+
+4. **`R1100` + `LASER EAGLE`**
+   - se `ProdNo = R1100`, `ProdTp4 = 1` e l’operatore contiene `LASER EAGLE`, il costo operativo viene raddoppiato da `adjustOperationLinePricing(...)`
+
+### 5.7 `2 - Materiale Laser`
+
+Per i prodotti laser (`ProdNo` che termina con `L`) il costo non viene letto solo da `CCstPr`, ma può essere ricalcolato per route.
+
+#### Formula laser specializzata
+Per ogni `route`:
+
+```text
+Costo unitario laser = kg forbrugt per pezzo × media CstPr delle righe TrTp = 5 della stessa route
+```
+
+Poi:
+
+```text
+EffectiveLineCost = costo unitario laser × quantità finita
+```
+
+Dettagli importanti:
+
+- `kg forbrugt` è ricostruito dai dati `TrTp = 5/7`, `Free3` e, quando serve, `Struct.NoPerStr`
+- se il prodotto compare su più `nestingordre` / `route`, il sistema aggrega i costi
+- per `MultiOrdre` (`Ord.Gr4 = 3`) la colonna viene etichettata `NestMultiPris`
+- per ordini standard la colonna resta `Kostpris nesting`
+
+Se non esiste un costo laser specializzato valido, il fallback è:
+
+- `NestingCost × NoFin`, se `NestingCost > 0`
+- altrimenti `LineCost`
+
+#### Incoerenza materiale/tubo
+Se `ProdTp4 = 2`, il prodotto inizia per `3`, `NoFin = 0` e `NoOrg > 0`, il costo viene ricalcolato come:
+
+```text
+NoOrg × CCstPr
+```
+
+con warning di incoerenza.
+
+### 5.8 `4 - Produkt dele`
+
+Questo gruppo rappresenta componenti / sottoordini.
+
+Regole:
+
+- tutti i `R*` vengono esclusi
+- se la riga ha `PurcNo`, l’app apre ricorsivamente l’ordine figlio e usa il suo totale:
+
+```text
+EffectiveLineCost = childSummary.totalCost
+```
+
+- gli eventuali warning del figlio vengono propagati al padre
+
+### 5.9 `6 - Ydelse` (lavorazioni esterne / ordine di acquisto)
+
+Questa è la regola più importante da preservare.
+
+**Interpretazione funzionale:** `Ydelse` non è una vendita; rappresenta una **lavorazione esterna / acquisto esterno sul prodotto**.
+
+Per questo motivo in UI:
+
+- la colonna dedicata è `Ydelse pris/enhed`
+- non vanno mostrate colonne `Kostpris/enhed` o `Nesting/enhed` nel popup filtrato `Ydelse`
+- il popup deve mostrare **solo il prodotto cliccato**
+
+#### Quantità usata per il costo `Ydelse`
+La quantità effettiva è:
+
+```text
+NoInvo, se NoInvo > 0
+altrimenti NoFin
+```
+
+Se `NoInvo = 0` e si usa `NoFin`, la UI mostra warning `🧾`.
+
+#### Sorgente autoritativa del costo unitario `Ydelse`
+Se la riga `Ydelse` ha un `PurcNo` verso un child order, la sorgente corretta del costo è la **riga figlia corrispondente nel child order**, non il valore grezzo del parent.
+
+Formula attuale:
+
+```text
+matchedChildLine = riga del child order con stesso ProdNo
+matchedChildUnitCost = matchedChildLine.EffectiveLineCost / matchedChildLine.DisplayQuantity
+EffectiveLineCost = effectiveQuantity × matchedChildUnitCost
+DisplayUnitCost = EffectiveLineCost / DisplayQuantity
+```
+
+Fallback se il child non fornisce tutto:
+
+- prima `matchedChildLine.CCstPr`
+- poi `matchedChildLine.DPrice`
+- poi `matchedChildLine.DisplayUnitCost`
+- infine `line.CCstPr`
+
+Questo è il motivo per cui il valore corretto di `Ydelse pris/enhed` può essere diverso dal `DPrice` grezzo della riga padre.
+
+### 5.10 `7 - Underleverandør`, `8 - Materiale fast antal` e altri gruppi
+
+Se non entra una regola speciale (`Operation`, `Laser`, `Produkt dele`, `Ydelse`), il calcolo standard è:
+
+```text
+EffectiveLineCost = LineCost
+DisplayUnitCost = EffectiveLineCost / DisplayQuantity   (se la quantità > 0)
+altrimenti fallback a CCstPr
+```
+
+### 5.11 Warning, icone e testo mostrato in UI
+
+Le icone visualizzate nella UI hanno il seguente significato:
+
+| Icona | Significato |
+|---|---|
+| `🕒` | `Færdigmeldt` era 0 e il sistema ha usato `Stykliste Minutter / NoOrg` |
+| `🧾` | fattura mancante / `NoInvo = 0`, quindi è stato usato `NoFin` |
+| `⚠️` | incoerenza generica (es. materiale/rør con `NoFin = 0` ma `NoOrg > 0`) |
+| `🏭` | warning proveniente da ordine di produzione collegato (solo se esposto in UI) |
+
+Il testo tooltip non è generico: viene costruito da `WarningText` / `warningText` e descrive il motivo reale.
+
+### 5.12 Totali finali ordine e margine
+
+#### Costo totale ordine
+Il totale finale mostrato nella testata ordine viene calcolato così:
+
+```text
+salesNoPOTotalCost = somma EffectiveLineCost delle righe vendita senza PurcNo
+productionTotalCost = somma totalCost degli ordini di produzione collegati a righe vendita non-sconto
+totalCost = salesNoPOTotalCost + productionTotalCost
+```
+
+#### Ricavo totale ordine
+
+```text
+totalRevenue = Ord.InvoAm
+```
+
+#### Margine in DKK
+
+```text
+margin = totalRevenue - totalCost
+```
+
+#### Percentuale margine
+La UI supporta due modalità:
+
+1. **Klassisk**
+```text
+((Salg - Kost) / Salg) × 100
+```
+
+2. **Ny**
+```text
+(Salg / Kost) × 100
+```
+
+La stessa logica viene usata sia per il margine ordine sia per il badge margine sulle singole righe.
+
+### 5.13 Regola di manutenzione documentale
+
+Ogni volta che si modifica una formula in:
+
+- `services/aftercalcService.js`
+- `server.js`
+- `utils/productRules.js`
+
+deve essere aggiornato anche questo capitolo, specificando:
+
+- **campo sorgente**
+- **formula finale**
+- **eventuale fallback / manipolazione**
+- **icona warning associata**
 
 ---
 

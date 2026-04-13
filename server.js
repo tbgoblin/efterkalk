@@ -29,8 +29,8 @@ const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v14_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v14_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v20_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v20_';
 
 const app = express();
 app.use(express.json({ limit: '256kb' }));
@@ -49,11 +49,11 @@ const { logEvent } = createLogger(APP_VERSION);
 const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
 const ORDER_LIST_MAX_ROWS = 150;
 const ORDER_LIST_DAYS_BACK = 30;
-const STARTUP_MARGIN_WARM_COUNT = 150;
+const STARTUP_MARGIN_WARM_COUNT = 0;
 const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = 150;
-const BACKGROUND_WARM_DELAY_MS = 50;  // 50ms delay tra calcoli warmup (faster for startup)
-const MAX_DB_CALC_CONCURRENCY = 2;
+const BACKGROUND_AFTERCALC_WARM_COUNT = 0;
+const BACKGROUND_WARM_DELAY_MS = 200;  // throttle warmup to protect the Visma SQL server during startup
+const MAX_DB_CALC_CONCURRENCY = 1;
 
 const orderListCache = {
     data: [],
@@ -217,6 +217,7 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
 }
 
 function warmMarginsInBackground(ordNos) {
+    if (!Array.isArray(ordNos) || ordNos.length === 0) return;
     logEvent('WARM-MARGIN: queueing ' + ordNos.length + ' orders');
     for (const ordNo of ordNos) {
         const numericOrdNo = Number(ordNo);
@@ -226,6 +227,7 @@ function warmMarginsInBackground(ordNos) {
 }
 
 async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKGROUND_WARM_DELAY_MS) {
+    if (!Array.isArray(ordNos) || ordNos.length === 0) return;
     if (backgroundAftercalcWarmRunning) {
         logEvent('WARM-AFTERCALC: skipped (' + sourceLabel + ') because previous run is still active');
         return;
@@ -537,6 +539,10 @@ app.get('/', (req, res) => {
             .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
             .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
             .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
+            .allocation-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#b26a00; font-size:16px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; }
+            .invoice-status-banner { margin: 0 0 10px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+            .invoice-status-banner.ok { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
+            .invoice-status-banner.warn { background: #fff8e1; color: #8d6e00; border: 1px solid #ffe082; }
         </style>
     </head>
     <body>
@@ -636,6 +642,24 @@ app.get('/', (req, res) => {
                 return String(prodNo || '').trim().toUpperCase().endsWith('L');
             }
 
+            function isInvoiceTrackedProdNo(prodNo) {
+                return String(prodNo || '').trim().toUpperCase().startsWith('U');
+            }
+
+            function shouldFilterChildSummary(prodTp4, prodNo, purcNo) {
+                const displayKey = getDisplayProdTp4Key(prodTp4, prodNo, purcNo);
+                return displayKey === '6' || displayKey === '9' || isInvoiceTrackedProdNo(prodNo);
+            }
+
+            function getDisplayProdTp4Key(prodTp4, prodNo, purcNo) {
+                const rawKey = (prodTp4 === null || prodTp4 === undefined) ? 'NA' : String(prodTp4);
+                if (rawKey === '3') return '1';
+                if (rawKey === '2' && !isLaserLProdNo(prodNo)) {
+                    return Number(purcNo || 0) > 0 ? '9' : '4';
+                }
+                return rawKey;
+            }
+
             function isExcludedOperationProdNo(prodNo) {
                 const normalized = String(prodNo || '').trim().toUpperCase();
                 return normalized === 'R1090' || normalized === 'R8200';
@@ -717,6 +741,53 @@ app.get('/', (req, res) => {
                 if (!item || (!item.UsesEstimatedOperationTime && !item.hasEstimatedOperationTime)) return '';
                 const title = escapeHtml(item.EstimatedTimeText || item.estimatedTimeText || fallbackText || 'Færdigmeldt minutter var 0 og er beregnet ud fra Stykliste Minutter.');
                 return ' <span class="warning-flag" title="' + title + '">🕒</span>';
+            }
+
+            function getInvoiceStatusFlagHtml(item, forceShow = false) {
+                if (!item) return '';
+                const isTracked = Boolean(forceShow || item.IsInvoiceTracked || item.isInvoiceTracked || isInvoiceTrackedProdNo(item.ProdNo));
+                if (!isTracked) return '';
+                const noInvoValue = Number(item.NoInvo || 0);
+                const noFinValue = Number(item.NoFin || 0);
+                const hasMissing = Boolean(item.UsesMissingInvoiceFallback || item.usesMissingInvoiceFallback || String(item.MissingInvoiceText || item.missingInvoiceText || '').trim() || (noInvoValue === 0 && noFinValue > 0));
+                const hasInvoice = item.HasInvoice === true || item.hasInvoice === true || noInvoValue > 0;
+                const warningText = String(item.WarningText || item.warningText || '').toLowerCase();
+                if (hasMissing && (warningText.includes('faktura') || warningText.includes('noinvo'))) {
+                    return '';
+                }
+                const title = escapeHtml(item.InvoiceStatusText || item.invoiceStatusText || item.MissingInvoiceText || item.missingInvoiceText || (hasMissing
+                    ? 'Mangler faktura; NoInvo er 0 og NoFin bruges til kostberegning.'
+                    : (hasInvoice ? ('Faktura registreret: NoInvo = ' + noInvoValue + '.') : 'Ingen fakturainfo fundet.')));
+                const icon = hasMissing ? '🧾' : (hasInvoice ? '📄' : '❔');
+                return ' <span class="warning-flag" title="' + title + '">' + icon + '</span>';
+            }
+
+            function getInvoiceStatusSummaryHtml(lines, forceShow = false) {
+                if (!Array.isArray(lines) || lines.length === 0) return '';
+                const trackedLines = lines.filter(line => line && (forceShow || line.IsInvoiceTracked || line.isInvoiceTracked || isInvoiceTrackedProdNo(line.ProdNo)));
+                if (trackedLines.length === 0) return '';
+                const missingLine = trackedLines.find(line => {
+                    if (!line) return false;
+                    if (line.UsesMissingInvoiceFallback || line.usesMissingInvoiceFallback) return true;
+                    const noInvoValue = Number(line.NoInvo || 0);
+                    const noFinValue = Number(line.NoFin || 0);
+                    return noInvoValue === 0 && noFinValue > 0;
+                });
+                const referenceLine = missingLine || trackedLines[0];
+                const noInvoValue = Number((referenceLine && referenceLine.NoInvo) || 0);
+                const hasInvoice = Boolean((referenceLine && (referenceLine.HasInvoice === true || referenceLine.hasInvoice === true)) || noInvoValue > 0);
+                const cssClass = missingLine ? 'warn' : 'ok';
+                const icon = missingLine ? '🧾' : (hasInvoice ? '📄' : '❔');
+                const text = escapeHtml((referenceLine && (referenceLine.InvoiceStatusText || referenceLine.invoiceStatusText || referenceLine.MissingInvoiceText || referenceLine.missingInvoiceText)) || (missingLine
+                    ? 'Mangler faktura; NoInvo er 0 og NoFin bruges til kostberegning.'
+                    : (hasInvoice ? ('Faktura registreret: NoInvo = ' + noInvoValue + '.') : 'Ingen fakturainfo fundet.')));
+                return '<div class="invoice-status-banner ' + cssClass + '">' + icon + ' ' + text + '</div>';
+            }
+
+            function getLaserAllocationFlagHtml(item, fallbackText) {
+                if (!item || (!item.UsesLaserAllocationSpread && !item.usesLaserAllocationSpread)) return '';
+                const title = escapeHtml(item.LaserAllocationText || item.laserAllocationText || fallbackText || 'Laserkosten er fordelt på et andet antal stk end denne ordrelinje, så pris pr. stk kan afvige.');
+                return ' <span class="allocation-flag" title="' + title + '">*</span>';
             }
 
             const laserNestCostHints = new Map();
@@ -1592,6 +1663,7 @@ app.get('/', (req, res) => {
                             '6': 'Ydelse',
                             '7': 'Underleverandor',
                             '8': 'Materiale fast antal',
+                            '9': 'Indkøbt dele',
                             'NA': 'Ikke sat'
                         };
                         
@@ -1620,8 +1692,9 @@ app.get('/', (req, res) => {
                                 if (rawKey === '0' || rawKey === '5') continue;
 
                                 // Merge operation rows where ProdTp4 is 1 or 3 and ProdNo is the same.
-                                const normalizedKey = (rawKey === '3') ? '1' : rawKey;
                                 const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                                const normalizedKey = getDisplayProdTp4Key(rawKey, prodNoKey, line.PurcNo);
+
 
                                 // R1090/R8200 must be fully excluded from Operations: no row and no cost contribution.
                                 if (normalizedKey === '1' && isExcludedOperationProdNo(prodNoKey)) {
@@ -1725,8 +1798,8 @@ app.get('/', (req, res) => {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>' + laserCostHeader + '</th><th>Samlet kost</th></tr>';
                                 } else if (key === '1') {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Stykliste Minutter</th><th>Færdigmeldt minutter</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
-                                } else if (key === '6') {
-                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Ydelse pris/enhed</th><th>Samlet kost</th></tr>';
+                                } else if (key === '6' || key === '9') {
+                                    html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Pris/enhed</th><th>Samlet kost</th></tr>';
                                 } else {
                                     html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                                 }
@@ -1734,28 +1807,30 @@ app.get('/', (req, res) => {
                                 for (const line of lines) {
                                     html += '<tr>';
                                     const warningFlagHtml = getWarningFlagHtml(line);
+                                    const invoiceStatusFlagHtml = getInvoiceStatusFlagHtml(line);
                                     const timeAdjustFlagHtml = getTimeAdjustmentFlagHtml(line);
+                                    const laserAllocationFlagHtml = getLaserAllocationFlagHtml(line);
                                     const hasChildProductionOrder = Number(line.PurcNo || 0) > 0;
                                     if (String(key) === '1' && line.ProdNo) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (String(key) === '2' && line.ProdNo && isLaserLProdNo(line.ProdNo)) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (hasChildProductionOrder) {
                                         const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        const childSummaryArgs = String(key) === '6'
-                                            ? (Number(line.PurcNo || 0) + ', &quot;' + safeChildProdNoForSummary + '&quot;')
+                                        const childSummaryArgs = shouldFilterChildSummary(key, line.ProdNo, line.PurcNo)
+                                            ? (Number(line.PurcNo || 0) + ', &quot;' + safeChildProdNoForSummary + '&quot;, true')
                                             : Number(line.PurcNo || 0);
-                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + childSummaryArgs + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + childSummaryArgs + ')">' + (line.ProdNo || '-') + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (line.ProdNo) {
-                                        html += '<td>' + (line.ProdNo || '-') + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td>' + (line.ProdNo || '-') + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else {
                                         html += '<td>-' + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     }
@@ -2323,7 +2398,7 @@ app.get('/', (req, res) => {
                 if (icon) icon.textContent = isClosed ? '▾' : '▸';
             }
 
-            async function showChildProductionSummary(childOrdNo, targetProdNo) {
+            async function showChildProductionSummary(childOrdNo, targetProdNo, forceInvoiceStatus) {
                 const modal = document.getElementById('summaryModal');
                 const title = document.getElementById('summaryModalTitle');
                 const body = document.getElementById('summaryModalBody');
@@ -2382,17 +2457,23 @@ app.get('/', (req, res) => {
                         ? filteredLines.reduce((sum, line) => sum + Number(line && line.EffectiveLineCost || 0), 0)
                         : Number(data.totalCost || 0);
 
+                    const shouldShowInvoiceStatus = Boolean(forceInvoiceStatus) || filteredLines.some(line => line && (line.IsInvoiceTracked || line.isInvoiceTracked || isInvoiceTrackedProdNo(line.ProdNo)));
+
                     let html = '';
+                    html += getInvoiceStatusSummaryHtml(filteredLines, shouldShowInvoiceStatus);
                     html += isYdelseFilteredView
-                        ? '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Ydelse pris/enhed</th><th>Samlet kost (beregnet)</th></tr>'
+                        ? '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Pris/enhed</th><th>Samlet kost (beregnet)</th></tr>'
                         : '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Nesting/enhed</th><th>Samlet kost (beregnet)</th></tr>';
                     for (const line of filteredLines) {
                         const displayLineCost = Number(line.EffectiveLineCost || 0);
                         const warningFlagHtml = getWarningFlagHtml(line);
+                        const invoiceStatusFlagHtml = getInvoiceStatusFlagHtml(line, shouldShowInvoiceStatus);
                         const timeAdjustmentFlagHtml = getTimeAdjustmentFlagHtml(line);
+                        const laserAllocationFlagHtml = getLaserAllocationFlagHtml(line);
                         html += '<tr>';
                         html += '<td>' + (line.LnNo || 0) + '</td>';
-                        html += '<td>' + (line.ProdTp4 === null || line.ProdTp4 === undefined ? '-' : line.ProdTp4) + '</td>';
+                        const displayProdTp4 = getDisplayProdTp4Key(line.ProdTp4, line.ProdNo, line.PurcNo);
+                        html += '<td>' + (displayProdTp4 === 'NA' ? '-' : displayProdTp4) + '</td>';
                         const childHasPurcNo = Number(line.PurcNo || 0) > 0;
                         if (String(line.ProdTp4 || '') === '1' && line.ProdNo) {
                             const safeChildProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
@@ -2400,22 +2481,22 @@ app.get('/', (req, res) => {
                             const trInf4FromLine = String(line.TrInf4 || '');
                             const safeChildTrInf2 = trInf2FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="1" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '">' + safeChildProdNo + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
+                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="1" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '">' + safeChildProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else if (line.ProdNo && String(line.ProdNo).trim().toUpperCase().endsWith('L')) {
                             const safeChildProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const trInf2FromLine = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : childOrdNo);
                             const trInf4FromLine = String(line.TrInf4 || '');
                             const safeChildTrInf2 = trInf2FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
+                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else if (childHasPurcNo) {
                             const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            const childSummaryArgs = String(line.ProdTp4 || '') === '6'
-                                ? (Number(line.PurcNo || 0) + ', &quot;' + safeChildProdNoForSummary + '&quot;')
+                            const childSummaryArgs = shouldFilterChildSummary(displayProdTp4, line.ProdNo, line.PurcNo)
+                                ? (Number(line.PurcNo || 0) + ', &quot;' + safeChildProdNoForSummary + '&quot;, true')
                                 : Number(line.PurcNo || 0);
-                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + childSummaryArgs + ')">' + (line.ProdNo || '-') + '</span>' + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
+                            html += '<td><span class="inline-link" onclick="showChildProductionSummary(' + childSummaryArgs + ')">' + (line.ProdNo || '-') + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else {
-                            html += '<td>' + (line.ProdNo || '-') + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
+                            html += '<td>' + (line.ProdNo || '-') + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         }
                         const displayQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
                             ? line.DisplayQuantity

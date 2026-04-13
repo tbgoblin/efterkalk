@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 15;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 21;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -25,6 +25,7 @@ function createAftercalcService({
         const purcNoValue = Number((line && line.PurcNo) || 0);
         const noInvoValue = Number((line && line.NoInvo) || 0);
         const noInvoAbValue = Number((line && line.NoInvoAb) || 0);
+        const isYdelseLikeLine = isInvoiceTrackedLine(line);
         const warnings = [];
 
         if (prodNoKey.startsWith('3') && noFinValue === 0 && noOrgValue > 0) {
@@ -33,11 +34,11 @@ function createAftercalcService({
                 : 'Inkonsekvens på salgsordre: produkt/rør med NoFin=0 men NoOrg>0.');
         }
 
-        if (key === '6' && noInvoValue === 0 && noFinValue > 0) {
+        if (isYdelseLikeLine && noInvoValue === 0 && noFinValue > 0) {
             warnings.push('Mangler faktura: NoInvo er 0, bruger NoFin til kostberegning.');
         }
 
-        if (key === '6' && purcNoValue > 0 && noInvoAbValue > noInvoValue) {
+        if (isYdelseLikeLine && purcNoValue > 0 && noInvoAbValue > noInvoValue) {
             warnings.push('manglede indkøbsfaktura');
         }
 
@@ -93,15 +94,40 @@ function createAftercalcService({
         const noFinValue = Number(sourceLine.NoFin || 0);
         const usesNoFinFallback = noInvoValue === 0 && noFinValue > 0;
         const effectiveQuantity = noInvoValue > 0 ? noInvoValue : noFinValue;
-        const sourceSuffix = invoiceSourceLine ? ' på indkøbsordre' : '';
+        const hasInvoice = noInvoValue > 0;
+        const statusText = hasInvoice
+            ? ('Faktura registreret: NoInvo = ' + noInvoValue + '.')
+            : (usesNoFinFallback
+                ? 'Mangler faktura: NoInvo er 0, bruger NoFin til kostberegning.'
+                : 'Ingen fakturainfo fundet.');
 
         return {
             effectiveQuantity,
             usesNoFinFallback,
+            hasInvoice,
+            statusText,
             infoText: usesNoFinFallback
-                ? ('Mangler faktura: NoInvo er 0' + sourceSuffix + ', bruger NoFin til kostberegning.')
+                ? 'Mangler faktura: NoInvo er 0, bruger NoFin til kostberegning.'
                 : ''
         };
+    }
+
+    function isUProduct(prodNo) {
+        return String(prodNo || '').trim().toUpperCase().startsWith('U');
+    }
+
+    function isPurchasedPartLine(line) {
+        if (!line) return false;
+        const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+        const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+        const purcNoValue = Number(line.PurcNo || 0);
+        return key === '2' && purcNoValue > 0 && prodNoKey && !isLaserLProduct(prodNoKey);
+    }
+
+    function isInvoiceTrackedLine(line) {
+        if (!line) return false;
+        const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+        return key === '6' || isPurchasedPartLine(line) || isUProduct(line.ProdNo);
     }
 
     function findMatchingChildYdelseLine(lines, prodNo) {
@@ -127,7 +153,8 @@ function createAftercalcService({
                 avgSheetCstPrByRoute: new Map(),
                 kgPerPieceByProdRoute: new Map(),
                 unitCostByProd: new Map(),
-                totalCostByProd: new Map()
+                totalCostByProd: new Map(),
+                qtyByProd: new Map()
             };
         }
 
@@ -157,7 +184,8 @@ function createAftercalcService({
                     avgSheetCstPrByRoute: new Map(),
                     kgPerPieceByProdRoute: new Map(),
                     unitCostByProd: new Map(),
-                    totalCostByProd: new Map()
+                    totalCostByProd: new Map(),
+                    qtyByProd: new Map()
                 };
             }
 
@@ -254,6 +282,7 @@ function createAftercalcService({
             const kgPerPieceByProdRoute = new Map();
             const unitCostByProd = new Map();
             const totalCostByProd = new Map();
+            const qtyByProd = new Map();
             const unitCostStatsByProd = new Map();
             for (const [key, stats] of prodRouteKgStats.entries()) {
                 if (stats.qtySum <= 0) continue;
@@ -278,6 +307,7 @@ function createAftercalcService({
                 if (stats.qtySum > 0) {
                     totalCostByProd.set(prodKey, Number(stats.costSum));
                     unitCostByProd.set(prodKey, Number(stats.costSum / stats.qtySum));
+                    qtyByProd.set(prodKey, Number(stats.qtySum));
                 }
             }
 
@@ -285,7 +315,8 @@ function createAftercalcService({
                 avgSheetCstPrByRoute,
                 kgPerPieceByProdRoute,
                 unitCostByProd,
-                totalCostByProd
+                totalCostByProd,
+                qtyByProd
             };
         })().catch(err => {
             laserRoutePricingCache.delete(numericOrdNo);
@@ -303,6 +334,14 @@ function createAftercalcService({
         const qty = Number(line.NoFin || 0);
         if (!prodKey) return null;
 
+        const allocatedQty = Number((pricingData.qtyByProd && pricingData.qtyByProd.get(prodKey)) || 0);
+        const qtyMismatch = qty > 0 && allocatedQty > 0 && Math.abs(allocatedQty - qty) > 0.0001;
+        const allocationInfoText = qtyMismatch
+            ? (allocatedQty > qty
+                ? ('Der er registreret flere stk i nestingdata (' + allocatedQty + ') end på denne ordrelinje (' + qty + '), så laserkosten bliver fordelt og pris pr. stk kan afvige.')
+                : ('Der er registreret færre stk i nestingdata (' + allocatedQty + ') end på denne ordrelinje (' + qty + '), så laserkosten bliver fordelt og pris pr. stk kan afvige.'))
+            : '';
+
         if (routeKey) {
             const avgSheetCstPr = Number(pricingData.avgSheetCstPrByRoute.get(routeKey) || 0);
             const kgPerPiece = Number(pricingData.kgPerPieceByProdRoute.get(routeKey + '|' + prodKey) || 0);
@@ -310,7 +349,10 @@ function createAftercalcService({
                 const unitCost = parseFloat(Number(avgSheetCstPr * kgPerPiece).toFixed(6));
                 return {
                     unitCost,
-                    totalCost: qty > 0 ? parseFloat(Number(unitCost * qty).toFixed(2)) : null
+                    totalCost: qty > 0 ? parseFloat(Number(unitCost * qty).toFixed(2)) : null,
+                    allocatedQty,
+                    usesAllocationSpread: qtyMismatch,
+                    infoText: allocationInfoText
                 };
             }
         }
@@ -322,7 +364,10 @@ function createAftercalcService({
                 : Number(pricingData.unitCostByProd.get(prodKey) || 0);
             return {
                 unitCost: parseFloat(Number(fallbackUnitCost).toFixed(6)),
-                totalCost: parseFloat(Number(aggregatedTotalCost).toFixed(2))
+                totalCost: parseFloat(Number(aggregatedTotalCost).toFixed(2)),
+                allocatedQty,
+                usesAllocationSpread: qtyMismatch,
+                infoText: allocationInfoText
             };
         }
 
@@ -330,7 +375,10 @@ function createAftercalcService({
         if (aggregatedUnitCost > 0) {
             return {
                 unitCost: parseFloat(Number(aggregatedUnitCost).toFixed(6)),
-                totalCost: qty > 0 ? parseFloat(Number(aggregatedUnitCost * qty).toFixed(2)) : null
+                totalCost: qty > 0 ? parseFloat(Number(aggregatedUnitCost * qty).toFixed(2)) : null,
+                allocatedQty,
+                usesAllocationSpread: qtyMismatch,
+                infoText: allocationInfoText
             };
         }
 
@@ -482,28 +530,24 @@ function createAftercalcService({
                 nextVisited.add(numericProdOrdNo);
 
                 const detailsPromise = (async () => {
-                    const specialLaserPricingData = useSpecialLaserCost
-                        ? await loadLaserRoutePricingData(pool, numericProdOrdNo).catch(() => null)
-                        : null;
-
                     const prodLinesResult = await pool.request()
                         .input('purcNo', sql.Numeric, numericProdOrdNo)
                         .query(`
                             SELECT 
-                                OrdNo, 
-                                LnNo, 
-                                ProdNo, 
-                                Descr, 
-                                DPrice,
-                                NoOrg,
-                                NoFin,
-                                NoInvo,
-                                NoInvoAb,
-                                CCstPr,
-                                PurcNo,
-                                TrInf2,
-                                TrInf4,
-                                ProdTp4,
+                                OrdLn.OrdNo, 
+                                OrdLn.LnNo, 
+                                OrdLn.ProdNo, 
+                                OrdLn.Descr, 
+                                OrdLn.DPrice,
+                                OrdLn.NoOrg,
+                                OrdLn.NoFin,
+                                OrdLn.NoInvo,
+                                OrdLn.NoInvoAb,
+                                OrdLn.CCstPr,
+                                OrdLn.PurcNo,
+                                OrdLn.TrInf2,
+                                OrdLn.TrInf4,
+                                OrdLn.ProdTp4,
                                 (
                                     SELECT TOP 1 A.Nm
                                     FROM ProdTr P
@@ -512,7 +556,7 @@ function createAftercalcService({
                                       AND P.OrdLnNo = OrdLn.LnNo
                                     ORDER BY P.FinDt DESC, P.FinTm DESC
                                 ) AS HvemNm,
-                                CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost,
+                                CAST(OrdLn.NoFin * OrdLn.CCstPr AS DECIMAL(10,2)) AS LineCost,
                                 (
                                     SELECT SUM(CAST(n.CstPr AS DECIMAL(18,6)) * CAST(n.NoFin AS DECIMAL(18,6)))
                                          / NULLIF(SUM(CAST(n.NoFin AS DECIMAL(18,6))), 0)
@@ -521,9 +565,17 @@ function createAftercalcService({
                                       AND n.ProdNo = OrdLn.ProdNo
                                 ) AS NestingCost
                             FROM OrdLn
-                            WHERE OrdNo = @purcNo
+                            WHERE OrdLn.OrdNo = @purcNo
                             ORDER BY LnNo
                         `);
+
+                    const needsSpecialLaserPricing = Boolean(useSpecialLaserCost) && (prodLinesResult.recordset || []).some(row => {
+                        const key = (row.ProdTp4 === null || row.ProdTp4 === undefined) ? 'NA' : String(row.ProdTp4);
+                        return key === '2' && isLaserLProduct(row.ProdNo);
+                    });
+                    const specialLaserPricingData = needsSpecialLaserPricing
+                        ? await loadLaserRoutePricingData(pool, numericProdOrdNo).catch(() => null)
+                        : null;
 
                     const lines = [];
                     let total = 0;
@@ -544,43 +596,45 @@ function createAftercalcService({
                         const noFinValue = Number(line.NoFin || 0);
                         const noOrgValue = Number(line.NoOrg || 0);
                         const isTubeMaterialLine = key === '2' && prodNoKey.startsWith('3');
+                        const isInvoiceTracked = isInvoiceTrackedLine(line);
                         const operationTimeInfo = key === '1'
                             ? getOperationTimeInfo(line)
                             : { effectiveMinutes: noFinValue, usesEstimatedMinutes: false, infoText: '' };
                         let ydelseInvoiceSourceLine = null;
-                        if (key === '6' && line.PurcNo && Number(line.PurcNo) !== 0 && !nextVisited.has(Number(line.PurcNo))) {
+                        if (isInvoiceTracked && line.PurcNo && Number(line.PurcNo) !== 0 && !nextVisited.has(Number(line.PurcNo))) {
                             const childYdelseDetails = await loadProductionOrderDetails(Number(line.PurcNo), nextVisited, {
                                 ...options,
                                 excludeRProductsInSubOrders: true
                             });
                             ydelseInvoiceSourceLine = findMatchingChildYdelseLine(childYdelseDetails && childYdelseDetails.lines, line.ProdNo);
                         }
-                        const ydelseCostInfo = key === '6'
+                        const ydelseCostInfo = isInvoiceTracked
                             ? getYdelseCostInfo(line, ydelseInvoiceSourceLine)
-                            : { effectiveQuantity: noFinValue, usesNoFinFallback: false, infoText: '' };
+                            : { effectiveQuantity: noFinValue, usesNoFinFallback: false, hasInvoice: false, statusText: '', infoText: '' };
                         const ydelseSourceQuantity = Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.DisplayQuantity ?? ydelseInvoiceSourceLine.NoFin)) || 0);
-                        const ydelseSourceUnitCost = key === '6'
+                        const ydelseSourceUnitCost = isInvoiceTracked
                             ? ((ydelseSourceQuantity > 0 && ydelseInvoiceSourceLine && ydelseInvoiceSourceLine.EffectiveLineCost !== undefined && ydelseInvoiceSourceLine.EffectiveLineCost !== null)
                                 ? (Number(ydelseInvoiceSourceLine.EffectiveLineCost || 0) / ydelseSourceQuantity)
                                 : Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.CCstPr ?? ydelseInvoiceSourceLine.DPrice ?? ydelseInvoiceSourceLine.DisplayUnitCost)) ?? (line.CCstPr ?? line.DPrice ?? 0)))
                             : Number(line.CCstPr || 0);
                         const displayQuantity = key === '1'
                             ? operationTimeInfo.effectiveMinutes
-                            : (key === '6'
+                            : (isInvoiceTracked
                                 ? ydelseCostInfo.effectiveQuantity
                                 : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
                                     ? noOrgValue
                                     : noFinValue));
                         let effectiveLineCost = Number(line.LineCost || 0);
                         let childProductionTotalCost = null;
+                        let specialLaserCostInfo = null;
                         const warningMessages = buildLineWarnings(line, ydelseCostInfo.usesNoFinFallback ? [ydelseCostInfo.infoText] : []);
 
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
-                        } else if (key === '6') {
+                        } else if (isInvoiceTracked) {
                             effectiveLineCost = Number(ydelseCostInfo.effectiveQuantity * ydelseSourceUnitCost);
                         } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
-                            const specialLaserCostInfo = useSpecialLaserCost
+                            specialLaserCostInfo = useSpecialLaserCost
                                 ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
                                 : null;
                             if (specialLaserCostInfo && specialLaserCostInfo.unitCost !== null) {
@@ -616,8 +670,13 @@ function createAftercalcService({
                             : null;
                         line.UsesEstimatedOperationTime = Boolean(operationTimeInfo.usesEstimatedMinutes);
                         line.EstimatedTimeText = operationTimeInfo.infoText;
-                        line.UsesMissingInvoiceFallback = Boolean(ydelseCostInfo.usesNoFinFallback);
-                        line.MissingInvoiceText = ydelseCostInfo.infoText;
+                        line.IsInvoiceTracked = Boolean(isInvoiceTracked);
+                        line.HasInvoice = isInvoiceTracked ? Boolean(ydelseCostInfo.hasInvoice) : null;
+                        line.InvoiceStatusText = isInvoiceTracked ? String(ydelseCostInfo.statusText || '') : '';
+                        line.UsesMissingInvoiceFallback = Boolean(isInvoiceTracked && ydelseCostInfo.usesNoFinFallback);
+                        line.MissingInvoiceText = isInvoiceTracked ? ydelseCostInfo.infoText : '';
+                        line.UsesLaserAllocationSpread = Boolean(specialLaserCostInfo && specialLaserCostInfo.usesAllocationSpread);
+                        line.LaserAllocationText = specialLaserCostInfo ? String(specialLaserCostInfo.infoText || '') : '';
                         line.HasWarning = warningMessages.length > 0;
                         line.ChildHasWarning = key === '4' && warningMessages.some(msg => msg.includes('Underliggende produktionsordre'));
                         line.WarningText = joinWarningMessages(warningMessages);
@@ -643,64 +702,71 @@ function createAftercalcService({
                 return detailsPromise;
             }
 
-            const productionOrderResults = await Promise.all(
-                productionLinesResult.recordset.map(async (prodLine) => {
-                    const purcNo = prodLine.PurcNo;
+            const productionOrderResults = [];
+            for (const prodLine of productionLinesResult.recordset) {
+                const purcNo = prodLine.PurcNo;
 
-                    const [prodOrderResult, prodDetails] = await Promise.all([
-                        pool.request()
-                            .input('purcNo', sql.Numeric, purcNo)
-                            .query(`
-                                SELECT O.OrdNo, A.Nm, O.TrTp, O.InvoAm
-                                FROM Ord O
-                                JOIN Actor A ON O.CustNo = A.CustNo
-                                WHERE OrdNo = @purcNo
-                            `),
-                        loadProductionOrderDetails(purcNo, new Set(), { useSpecialLaserCost: useRouteSpecificLaserCost })
-                    ]);
+                const [prodOrderResult, prodDetails] = await Promise.all([
+                    pool.request()
+                        .input('purcNo', sql.Numeric, purcNo)
+                        .query(`
+                            SELECT O.OrdNo, A.Nm, O.TrTp, O.InvoAm
+                            FROM Ord O
+                            JOIN Actor A ON O.CustNo = A.CustNo
+                            WHERE OrdNo = @purcNo
+                        `),
+                    loadProductionOrderDetails(purcNo, new Set(), { useSpecialLaserCost: useRouteSpecificLaserCost })
+                ]);
 
-                    if (prodOrderResult.recordset.length === 0) return null;
-                    const prodOrder = prodOrderResult.recordset[0];
+                if (prodOrderResult.recordset.length === 0) {
+                    productionOrderResults.push(null);
+                    continue;
+                }
+                const prodOrder = prodOrderResult.recordset[0];
 
-                    if (useRouteSpecificLaserCost && Array.isArray(prodDetails.lines) && prodDetails.lines.length > 0) {
-                        const specialLaserPricingData = await loadLaserRoutePricingData(pool, Number(purcNo)).catch(() => null);
-                        if (specialLaserPricingData) {
-                            let adjustedTotalCost = 0;
-                            prodDetails.lines = prodDetails.lines.map(rawLine => {
-                                const line = { ...rawLine };
-                                const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
-                                if (key === '2' && isLaserLProduct(line.ProdNo)) {
-                                    const specialLaserCostInfo = getSpecialGr4LaserCostInfo(specialLaserPricingData, line);
-                                    if (specialLaserCostInfo && Number(specialLaserCostInfo.unitCost) > 0) {
-                                        line.NestingCost = parseFloat(Number(specialLaserCostInfo.unitCost).toFixed(6));
-                                        line.EffectiveLineCost = parseFloat(Number(
-                                            specialLaserCostInfo.totalCost !== null
-                                                ? specialLaserCostInfo.totalCost
-                                                : (specialLaserCostInfo.unitCost * Number(line.NoFin || 0))
-                                        ).toFixed(2));
-                                    }
+                if (useRouteSpecificLaserCost && Array.isArray(prodDetails.lines) && prodDetails.lines.some(line => {
+                    const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+                    return key === '2' && isLaserLProduct(line.ProdNo);
+                })) {
+                    const specialLaserPricingData = await loadLaserRoutePricingData(pool, Number(purcNo)).catch(() => null);
+                    if (specialLaserPricingData) {
+                        let adjustedTotalCost = 0;
+                        prodDetails.lines = prodDetails.lines.map(rawLine => {
+                            const line = { ...rawLine };
+                            const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+                            if (key === '2' && isLaserLProduct(line.ProdNo)) {
+                                const specialLaserCostInfo = getSpecialGr4LaserCostInfo(specialLaserPricingData, line);
+                                line.UsesLaserAllocationSpread = Boolean(specialLaserCostInfo && specialLaserCostInfo.usesAllocationSpread);
+                                line.LaserAllocationText = specialLaserCostInfo ? String(specialLaserCostInfo.infoText || '') : '';
+                                if (specialLaserCostInfo && Number(specialLaserCostInfo.unitCost) > 0) {
+                                    line.NestingCost = parseFloat(Number(specialLaserCostInfo.unitCost).toFixed(6));
+                                    line.EffectiveLineCost = parseFloat(Number(
+                                        specialLaserCostInfo.totalCost !== null
+                                            ? specialLaserCostInfo.totalCost
+                                            : (specialLaserCostInfo.unitCost * Number(line.NoFin || 0))
+                                    ).toFixed(2));
                                 }
-                                if (!(Number(line.LnNo || 0) === 1 || key === '0' || key === '3' || key === '5')) {
-                                    adjustedTotalCost += Number(line.EffectiveLineCost || 0);
-                                }
-                                return line;
-                            });
-                            prodDetails.totalCost = parseFloat(Number(adjustedTotalCost).toFixed(2));
-                        }
+                            }
+                            if (!(Number(line.LnNo || 0) === 1 || key === '0' || key === '3' || key === '5')) {
+                                adjustedTotalCost += Number(line.EffectiveLineCost || 0);
+                            }
+                            return line;
+                        });
+                        prodDetails.totalCost = parseFloat(Number(adjustedTotalCost).toFixed(2));
                     }
+                }
 
-                    return {
-                        ordNo: purcNo,
-                        trTp: prodOrder.TrTp,
-                        revenue: prodOrder.InvoAm || 0,
-                        lines: prodDetails.lines,
-                        totalCost: prodDetails.totalCost,
-                        hasWarnings: Boolean(prodDetails.hasWarnings),
-                        hasEstimatedOperationTime: Boolean(prodDetails.hasEstimatedOperationTime),
-                        warningText: String(prodDetails.warningText || '')
-                    };
-                })
-            );
+                productionOrderResults.push({
+                    ordNo: purcNo,
+                    trTp: prodOrder.TrTp,
+                    revenue: prodOrder.InvoAm || 0,
+                    lines: prodDetails.lines,
+                    totalCost: prodDetails.totalCost,
+                    hasWarnings: Boolean(prodDetails.hasWarnings),
+                    hasEstimatedOperationTime: Boolean(prodDetails.hasEstimatedOperationTime),
+                    warningText: String(prodDetails.warningText || '')
+                });
+            }
             const productionOrders = productionOrderResults.filter(Boolean);
 
             const productionTotalByOrdNo = new Map(
@@ -857,26 +923,23 @@ function createAftercalcService({
         }
 
         const pool = await getConnection();
-        const specialLaserPricingData = useSpecialLaserCost
-            ? await loadLaserRoutePricingData(pool, numericOrdNo).catch(() => null)
-            : null;
         const linesResult = await pool.request()
             .input('ordNo', sql.Numeric, numericOrdNo)
             .query(`
                 SELECT
-                    LnNo,
-                    ProdNo,
-                    Descr,
-                    NoOrg,
-                    NoFin,
-                    NoInvo,
-                    NoInvoAb,
-                    DPrice,
-                    CCstPr,
-                    TrInf2,
-                    TrInf4,
-                    ProdTp4,
-                    PurcNo,
+                    OrdLn.LnNo,
+                    OrdLn.ProdNo,
+                    OrdLn.Descr,
+                    OrdLn.NoOrg,
+                    OrdLn.NoFin,
+                    OrdLn.NoInvo,
+                    OrdLn.NoInvoAb,
+                    OrdLn.DPrice,
+                    OrdLn.CCstPr,
+                    OrdLn.TrInf2,
+                    OrdLn.TrInf4,
+                    OrdLn.ProdTp4,
+                    OrdLn.PurcNo,
                     (
                         SELECT TOP 1 A.Nm
                         FROM ProdTr P
@@ -894,10 +957,18 @@ function createAftercalcService({
                           AND n.ProdNo = OrdLn.ProdNo
                     ) AS NestingCost
                 FROM OrdLn
-                WHERE OrdNo = @ordNo
-                  AND (LnNo = 1 OR NoFin > 0 OR NoOrg > 0 OR NoInvo > 0)
+                WHERE OrdLn.OrdNo = @ordNo
+                  AND (OrdLn.LnNo = 1 OR OrdLn.NoFin > 0 OR OrdLn.NoOrg > 0 OR OrdLn.NoInvo > 0)
                 ORDER BY LnNo
             `);
+
+        const needsSpecialLaserPricing = Boolean(useSpecialLaserCost) && (linesResult.recordset || []).some(row => {
+            const key = (row.ProdTp4 === null || row.ProdTp4 === undefined) ? 'NA' : String(row.ProdTp4);
+            return key === '2' && isLaserLProduct(row.ProdNo);
+        });
+        const specialLaserPricingData = needsSpecialLaserPricing
+            ? await loadLaserRoutePricingData(pool, numericOrdNo).catch(() => null)
+            : null;
 
         const lines = linesResult.recordset
             .filter(rawLine => !isGloballyExcludedProdNo(rawLine.ProdNo))
@@ -917,15 +988,16 @@ function createAftercalcService({
                 const noFinValue = Number(line.NoFin || 0);
                 const noOrgValue = Number(line.NoOrg || 0);
                 const isTubeMaterialLine = key === '2' && prodNoKey.startsWith('3');
+                const isInvoiceTracked = isInvoiceTrackedLine(line);
                 const operationTimeInfo = key === '1'
                     ? getOperationTimeInfo(line)
                     : { effectiveMinutes: noFinValue, usesEstimatedMinutes: false, infoText: '' };
-                const ydelseCostInfo = key === '6'
+                const ydelseCostInfo = isInvoiceTracked
                     ? getYdelseCostInfo(line)
-                    : { effectiveQuantity: noFinValue, usesNoFinFallback: false, infoText: '' };
+                    : { effectiveQuantity: noFinValue, usesNoFinFallback: false, hasInvoice: false, statusText: '', infoText: '' };
                 const displayQuantity = key === '1'
                     ? operationTimeInfo.effectiveMinutes
-                    : (key === '6'
+                    : (isInvoiceTracked
                         ? ydelseCostInfo.effectiveQuantity
                         : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
                             ? noOrgValue
@@ -941,7 +1013,7 @@ function createAftercalcService({
                 const recalculatedHasNestingCost = Number(line.NestingCost || 0) > 0;
                 const effectiveLineCost = key === '1'
                     ? Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0))
-                    : (key === '6'
+                    : (isInvoiceTracked
                         ? Number(ydelseCostInfo.effectiveQuantity * (line.CCstPr || 0))
                         : (key === '2' && isLaserLProduct(line.ProdNo)
                             ? ((specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
@@ -963,6 +1035,13 @@ function createAftercalcService({
                         : null,
                     UsesEstimatedOperationTime: Boolean(operationTimeInfo.usesEstimatedMinutes),
                     EstimatedTimeText: operationTimeInfo.infoText,
+                    IsInvoiceTracked: Boolean(isInvoiceTracked),
+                    HasInvoice: isInvoiceTracked ? Boolean(ydelseCostInfo.hasInvoice) : null,
+                    InvoiceStatusText: isInvoiceTracked ? String(ydelseCostInfo.statusText || '') : '',
+                    UsesMissingInvoiceFallback: Boolean(isInvoiceTracked && ydelseCostInfo.usesNoFinFallback),
+                    MissingInvoiceText: isInvoiceTracked ? ydelseCostInfo.infoText : '',
+                    UsesLaserAllocationSpread: Boolean(specialLaserCostInfo && specialLaserCostInfo.usesAllocationSpread),
+                    LaserAllocationText: specialLaserCostInfo ? String(specialLaserCostInfo.infoText || '') : '',
                     HasWarning: warningMessages.length > 0,
                     WarningText: joinWarningMessages(warningMessages),
                     EffectiveLineCost: roundedEffectiveLineCost
@@ -977,7 +1056,8 @@ function createAftercalcService({
                 continue;
             }
 
-            if (key === '6') {
+            const isInvoiceTracked = isInvoiceTrackedLine(line);
+            if (isInvoiceTracked) {
                 const childSummary = await getProductionSummary(childOrdNo, nextVisited, options);
                 const matchedChildLine = findMatchingChildYdelseLine(childSummary && childSummary.lines, line.ProdNo);
                 if (matchedChildLine) {

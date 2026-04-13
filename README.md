@@ -2,7 +2,7 @@
 
 App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso interno in ambiente produzione/fabbrica.
 
-**Versione attuale:** `1.0.50`
+**Versione attuale:** `1.0.52`
 
 ---
 
@@ -70,7 +70,7 @@ Output in `dist/`.
 
 Per la guida completa vedi:
 
-- [`docs/MANUALE_OPERATIVO_E_MANUTENZIONE.md`](docs/MANUALE_OPERATIVO_E_MANUTENZIONE.md)
+- [`docs/MANUALE_OPERATIVO_E_MANUTENZIONE.md`](docs/MANUALE_OPERATIVO_E_MANUTENZIONE.md) — contiene ora anche il capitolo completo **"Regole di calcolo complete (fonti, formule, manipolazioni)"**
 - [`DESKTOP_DEPLOY.md`](DESKTOP_DEPLOY.md)
 - [`AUTO_UPDATE_SETUP.md`](AUTO_UPDATE_SETUP.md)
 

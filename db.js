@@ -8,10 +8,10 @@ const config = {
     database: DATABASE,
     server: SERVER,
     driver: 'msnodesqlv8',
-    connectionTimeout: 15000,
-    requestTimeout: 45000,
+    connectionTimeout: 30000,
+    requestTimeout: 90000,
     pool: {
-        max: 10,
+        max: 20,
         min: 0,
         idleTimeoutMillis: 30000
     },
