@@ -463,6 +463,33 @@ function createApiRouter({
     router.get('/warmup-status', (req, res) => {
         const done = warmupProgress.cached + warmupProgress.loaded + warmupProgress.failed;
         const pct = warmupProgress.total > 0 ? Math.round((done / warmupProgress.total) * 100) : 100;
+
+        const marginOrdNos = (Array.isArray(orderListCache.data) ? orderListCache.data : [])
+            .map(row => Number(row && row.OrdNo))
+            .filter(ordNo => Number.isFinite(ordNo));
+        let marginDone = 0;
+        for (const ordNo of marginOrdNos) {
+            if (orderMarginCache.has(ordNo)) {
+                marginDone += 1;
+                continue;
+            }
+            const cachedMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo)
+                || diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo)
+                || diskCache.getStale('order_margin_v6_' + ordNo);
+            if (cachedMargin && cachedMargin.totalCost !== null && cachedMargin.totalCost !== undefined) {
+                marginDone += 1;
+            }
+        }
+        const marginTotal = marginOrdNos.length;
+
+        const combinedTotal = (warmupProgress.total || 0) + marginTotal;
+        const combinedDone = done + marginDone;
+        const combinedPct = combinedTotal > 0 ? Math.round((combinedDone / combinedTotal) * 100) : 100;
+        const ready = !orderListCache.loading
+            && !warmupProgress.running
+            && (warmupProgress.total === 0 || done >= warmupProgress.total)
+            && (marginTotal === 0 || marginDone >= marginTotal);
+
         res.json({
             running: warmupProgress.running,
             total: warmupProgress.total,
@@ -471,7 +498,13 @@ function createApiRouter({
             failed: warmupProgress.failed,
             done,
             pct,
-            current: warmupProgress.current
+            current: warmupProgress.current,
+            marginDone,
+            marginTotal,
+            combinedDone,
+            combinedTotal,
+            combinedPct,
+            ready
         });
     });
 

@@ -31,6 +31,7 @@ const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v20_';
 const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v20_';
+const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
 app.use(express.json({ limit: '256kb' }));
@@ -49,10 +50,10 @@ const { logEvent } = createLogger(APP_VERSION);
 const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
 const ORDER_LIST_MAX_ROWS = 150;
 const ORDER_LIST_DAYS_BACK = 30;
-const STARTUP_MARGIN_WARM_COUNT = 0;
+const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
 const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = 0;
-const BACKGROUND_WARM_DELAY_MS = 200;  // throttle warmup to protect the Visma SQL server during startup
+const BACKGROUND_AFTERCALC_WARM_COUNT = 30;  // Smart warmup: load last 30 orders in background at startup
+const BACKGROUND_WARM_DELAY_MS = 500;  // 500ms between warmup queries = ~15 sec for 30 orders, protects Visma SQL server
 const MAX_DB_CALC_CONCURRENCY = 1;
 
 const orderListCache = {
@@ -145,6 +146,28 @@ function pumpDbCalcQueue() {
     }
 }
 
+function getAftercalcCacheWithFallback(ordNo, promoteToCurrent = false) {
+    const numericOrdNo = Number(ordNo);
+    if (!Number.isFinite(numericOrdNo)) return null;
+
+    const currentKey = AFTERCALC_CACHE_KEY_PREFIX + numericOrdNo;
+    const currentCached = diskCache.get(currentKey);
+    if (currentCached) return currentCached;
+
+    for (const prefix of LEGACY_AFTERCALC_CACHE_KEY_PREFIXES) {
+        const legacyKey = prefix + numericOrdNo;
+        const legacyCached = diskCache.get(legacyKey);
+        if (legacyCached) {
+            if (promoteToCurrent) {
+                diskCache.set(currentKey, legacyCached, CACHE_TTL_AFTERCALC_MS);
+            }
+            return legacyCached;
+        }
+    }
+
+    return null;
+}
+
 async function getOrComputeAftercalc(ordNo, options = {}) {
     const priority = options.priority || 'normal';
     const key = Number(ordNo);
@@ -153,7 +176,7 @@ async function getOrComputeAftercalc(ordNo, options = {}) {
     }
 
     const cacheKey = AFTERCALC_CACHE_KEY_PREFIX + key;
-    const cached = diskCache.get(cacheKey);
+    const cached = getAftercalcCacheWithFallback(key, true);
     if (cached) {
         return cached;
     }
@@ -185,6 +208,22 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
 
     if (!forceRefresh && orderMarginCache.has(key)) {
         return orderMarginCache.get(key);
+    }
+
+    if (!forceRefresh) {
+        const diskMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
+            || diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
+            || diskCache.getStale('order_margin_v6_' + key);
+        if (diskMargin && diskMargin.totalCost !== null && diskMargin.totalCost !== undefined) {
+            const marginInfo = {
+                ordNo: key,
+                totalRevenue: Number(diskMargin.totalRevenue || 0),
+                totalCost: Number(diskMargin.totalCost || 0),
+                computedAt: Date.now()
+            };
+            orderMarginCache.set(key, marginInfo);
+            return marginInfo;
+        }
     }
 
     if (!forceRefresh && orderMarginInFlight.has(key)) {
@@ -227,9 +266,12 @@ function warmMarginsInBackground(ordNos) {
 }
 
 async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKGROUND_WARM_DELAY_MS) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) return;
+    if (!Array.isArray(ordNos) || ordNos.length === 0) {
+        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (empty array)');
+        return;
+    }
     if (backgroundAftercalcWarmRunning) {
-        logEvent('WARM-AFTERCALC: skipped (' + sourceLabel + ') because previous run is still active');
+        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (previous run is still active)');
         return;
     }
 
@@ -256,7 +298,7 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
             if (!Number.isFinite(numericOrdNo)) continue;
             total += 1;
 
-            if (diskCache.get(AFTERCALC_CACHE_KEY_PREFIX + numericOrdNo)) {
+            if (getAftercalcCacheWithFallback(numericOrdNo, false)) {
                 alreadyCached += 1;
                 warmupProgress.cached += 1;
                 warmupProgress.current = numericOrdNo;
@@ -318,7 +360,7 @@ function preloadMarginsAndDetailsFromCache(ordNos) {
             }
             
             // Preload aftercalc details
-            const detailsCached = diskCache.get(AFTERCALC_CACHE_KEY_PREFIX + key);
+            const detailsCached = getAftercalcCacheWithFallback(key, false);
             if (detailsCached) {
                 detailsLoaded += 1;
             }
@@ -360,8 +402,15 @@ async function refreshOrderListCache(force = false) {
 
             const warmOrdNos = rows.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
             warmMarginsInBackground(warmOrdNos);
-            const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-            warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', 50);
+            // On force refresh, allow new warmup even if one is running (interrupts the previous one)
+            if (force) {
+                backgroundAftercalcWarmRunning = false;
+            }
+            // Trigger warmup if not already running (avoid double-start during initial DB refresh)
+            if (!backgroundAftercalcWarmRunning) {
+                const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
+                warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', 50);
+            }
         } catch (err) {
             orderListCache.lastError = err.message;
             logEvent('ORDER-LIST-REFRESH ERROR: ' + err.message);
@@ -3000,7 +3049,7 @@ function ensureServerStarted() {
                     const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
                     preloadMarginsAndDetailsFromCache(preloadOrdNos);
                     const warmAftercalcOrdNos = cachedList.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-                    warmAftercalcInBackground(warmAftercalcOrdNos, 'startup-cached-list', 25);
+                    warmAftercalcInBackground(warmAftercalcOrdNos, 'startup-cached-list', BACKGROUND_WARM_DELAY_MS);
                     
                     // Warm up margins in background (will check disk first, then refresh if needed)
                     warmMarginsInBackground(preloadOrdNos);

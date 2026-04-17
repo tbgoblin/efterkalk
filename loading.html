@@ -128,7 +128,7 @@
         }, 1400);
 
         // Phase 1: Poll /health — wait for server
-        // Phase 2: Poll /warmup-status — show real progress, navigate when done
+        // Phase 2: Poll /warmup-status — show real startup progress and navigate only when fully ready
         let pollCount = 0;
         let serverReady = false;
         let warmupPollCount = 0;
@@ -154,34 +154,32 @@
                         txt.textContent = 'Forberegner ordrer...';
                     }
                 } else {
-                    // Phase 2: show real warmup progress
+                    // Phase 2: show real startup progress (aftercalc + margin prefetch)
                     warmupPollCount++;
                     const r = await fetch(appUrl + '/warmup-status', { cache: 'no-store' });
                     if (r.ok) {
                         const data = await r.json();
-                        const cached = Number(data.cached || 0);
-                        const loaded = Number(data.loaded || 0);
-                        const failed = Number(data.failed || 0);
-                        const total = Number(data.total || 0);
-                        const done = cached + loaded + failed;
+                        const combinedDone = Number(data.combinedDone || 0);
+                        const combinedTotal = Number(data.combinedTotal || 0);
+                        const combinedPct = Number(data.combinedPct || 0);
+                        const marginDone = Number(data.marginDone || 0);
+                        const marginTotal = Number(data.marginTotal || 0);
 
-                        if (total > 0) {
-                            const pct = Math.round(30 + (done / total) * 65);
+                        if (combinedTotal > 0) {
+                            const pct = Math.round(30 + (combinedPct / 100) * 65);
                             bar.style.width = Math.min(pct, 95) + '%';
-                            txt.textContent = 'Ordini: ' + done + '/' + total + ' (cache ' + cached + ', db ' + loaded + ', fejl ' + failed + ')';
+                            txt.textContent = 'Forberegner: ' + combinedDone + '/' + combinedTotal + ' (margin ' + marginDone + '/' + marginTotal + ')';
                         } else {
-                            bar.style.width = '40%';
+                            bar.style.width = '35%';
                             txt.textContent = 'Forbereder ordreliste...';
                         }
 
-                        const warmupFinished = total > 0 && done >= total && !data.running;
-                        const noWarmupDetected = total === 0 && !data.running && warmupPollCount > 6;
-
-                        if (warmupFinished || noWarmupDetected || warmupPollCount > 240) {
+                        const warmupFinished = Boolean(data.ready);
+                        if (warmupFinished) {
                             navigateToApp();
                         }
                     } else {
-                        navigateToApp();
+                        txt.textContent = 'Venter pa startup-status...';
                     }
                 }
             } catch(e) {

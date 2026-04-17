@@ -268,14 +268,8 @@ function bootDesktopApp() {
     ensureServerStarted().then(() => {
         writeDesktopLog('ensureServerStarted resolved appUrl=' + APP_URL);
         global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
-        // loading.html will navigate on its own via polling — no need to loadURL here
-        // but as a safety net, navigate after a short delay if window is still on loading page
-        setTimeout(() => {
-            if (mainWindow && mainWindow.webContents.getURL().startsWith('file://')) {
-                writeDesktopLog('fallback loadURL ' + APP_URL);
-                mainWindow.loadURL(APP_URL);
-            }
-        }, 1000);
+        // loading.html controls navigation timing via /health and /warmup-status polling.
+        // Do not force a fallback loadURL here, otherwise the app can open before warmup is done.
         setupAutoUpdater();
     }).catch(err => {
         console.error('Server start failed:', err.message);
