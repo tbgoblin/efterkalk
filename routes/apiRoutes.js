@@ -37,13 +37,11 @@ function createApiRouter({
         try {
             const ordNo = parseInt(req.params.ordno);
             logEvent('SEARCH: OrdNo=' + ordNo);
-            const cached = diskCache.get(AFTERCALC_CACHE_KEY_PREFIX + ordNo);
-            if (cached) {
-                logEvent('  -> Cache hit: OrdNo=' + ordNo);
-                return res.json(cached);
+            const data = await getOrComputeAftercalc(ordNo, { priority: 'high' });
+            if (!data || data.error) {
+                return res.json(data);
             }
 
-            const data = await getOrComputeAftercalc(ordNo, { priority: 'high' });
             if (!data.error) {
                 logEvent('  -> Found: Revenue=' + data.summary.totalRevenue + ', Margin=' + data.summary.marginPercentage + '%');
             }
