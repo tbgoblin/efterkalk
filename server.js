@@ -178,11 +178,16 @@ async function getOrComputeAftercalc(ordNo, options = {}) {
     const cacheKey = AFTERCALC_CACHE_KEY_PREFIX + key;
     const cached = getAftercalcCacheWithFallback(key, true);
     if (cached) {
+        logEvent('AFTERCALC CACHE HIT: ordNo=' + key);
         return cached;
     }
 
     let computePromise = afterCalcInFlight.get(key);
+    if (computePromise) {
+        logEvent('AFTERCALC IN-FLIGHT REUSE: ordNo=' + key);
+    }
     if (!computePromise) {
+        logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
         computePromise = runWithDbCalcLimit(async () => {
             const data = await getAfterCalc(key);
             if (!data.error) {
@@ -402,10 +407,6 @@ async function refreshOrderListCache(force = false) {
 
             const warmOrdNos = rows.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
             warmMarginsInBackground(warmOrdNos);
-            // On force refresh, allow new warmup even if one is running (interrupts the previous one)
-            if (force) {
-                backgroundAftercalcWarmRunning = false;
-            }
             // Trigger warmup if not already running (avoid double-start during initial DB refresh)
             if (!backgroundAftercalcWarmRunning) {
                 const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
@@ -1978,8 +1979,21 @@ app.get('/', (req, res) => {
                     const requests = [];
                     const targetDedupe = new Set();
                     const visitedProdOrders = new Set();
+                    const productionOrderLinesByOrdNo = new Map();
                     const productionOrders = Array.isArray(orderData.productionOrders) ? orderData.productionOrders : [];
                     const laserTargets = [];
+
+                    function getOperationCostFromLines(lines) {
+                        let total = 0;
+                        for (const line of (Array.isArray(lines) ? lines : [])) {
+                            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const lnNo = Number((line && line.LnNo) || 0);
+                            if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+                            if (key !== '1') continue;
+                            total += Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                        }
+                        return total;
+                    }
 
                     function addLaserTarget(targetOrdNo, prodNo, nestingCost) {
                         const cleanedOrdNo = Number(targetOrdNo || 0);
@@ -2029,6 +2043,7 @@ app.get('/', (req, res) => {
                         const currentOrdNo = Number(prodOrder && prodOrder.ordNo || 0);
                         if (!currentOrdNo || visitedProdOrders.has(currentOrdNo)) continue;
                         visitedProdOrders.add(currentOrdNo);
+                        productionOrderLinesByOrdNo.set(currentOrdNo, Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : []);
                         const discoveredChildOrdNos = collectLaserTargetsFromLines(currentOrdNo, prodOrder.lines);
                         for (const childOrdNo of discoveredChildOrdNos) {
                             if (!visitedProdOrders.has(childOrdNo)) {
@@ -2044,6 +2059,8 @@ app.get('/', (req, res) => {
 
                         const childSummary = await fetchProductionSummarySafe(childOrdNo);
                         if (!childSummary) continue;
+
+                        productionOrderLinesByOrdNo.set(childOrdNo, Array.isArray(childSummary.lines) ? childSummary.lines : []);
 
                         const discoveredChildOrdNos = collectLaserTargetsFromLines(childOrdNo, childSummary.lines);
                         for (const nestedOrdNo of discoveredChildOrdNos) {
@@ -2069,7 +2086,7 @@ app.get('/', (req, res) => {
 
                     if (requests.length === 0) {
                         body.innerHTML = '<div>Ingen L-linjer fundet for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
@@ -2109,7 +2126,7 @@ app.get('/', (req, res) => {
 
                     if (rows.length === 0) {
                         body.innerHTML = '<div>Ingen laserberegninger tilgaengelige for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
@@ -2160,10 +2177,15 @@ app.get('/', (req, res) => {
                     const deltaPct = totalKgPrevisti > 0
                         ? ((deltaKg / totalKgPrevisti) * 100)
                         : null;
+                    let totalOperationCost = 0;
+                    for (const lines of productionOrderLinesByOrdNo.values()) {
+                        totalOperationCost += getOperationCostFromLines(lines);
+                    }
                     html += '</table>';
                     body.innerHTML = html;
                     totals.innerHTML = ''
                         + '<div><strong>Samlet L-kost (' + (orderGr4 === 3 ? 'NestMultiPris' : 'NestKost') + '):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
+                        + '<div><strong>Samlet Operation kost:</strong> ' + formatNumber(totalOperationCost) + ' DKK</div>'
                         + '<div><strong>Ordre icon kg:</strong> ' + formatNumber(totalKgIcon) + ' kg</div>'
                         + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
                         + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
@@ -2972,17 +2994,6 @@ app.get('/', (req, res) => {
                         if (field) setOrderListSort(field);
                     });
 
-                    // Prefetch on hover: start loading order data before the user clicks
-                    const prefetchInFlight = new Set();
-                    orderListEl.addEventListener('mouseover', function(e) {
-                        const tr = e.target.closest('tr[data-ordno]');
-                        if (!tr) return;
-                        const ordNo = Number(tr.dataset.ordno);
-                        if (!ordNo || prefetchInFlight.has(ordNo)) return;
-                        prefetchInFlight.add(ordNo);
-                        fetch('/aftercalc/' + ordNo).catch(() => {});
-                    });
-
                     orderListEl.addEventListener('click', function(e) {
                         const sortHeader = e.target.closest('.order-sortable-header');
                         if (sortHeader) {
@@ -3048,9 +3059,7 @@ function ensureServerStarted() {
                     // Preload margins AND aftercalc details from disk (instant load)
                     const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
                     preloadMarginsAndDetailsFromCache(preloadOrdNos);
-                    const warmAftercalcOrdNos = cachedList.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-                    warmAftercalcInBackground(warmAftercalcOrdNos, 'startup-cached-list', BACKGROUND_WARM_DELAY_MS);
-                    
+
                     // Warm up margins in background (will check disk first, then refresh if needed)
                     warmMarginsInBackground(preloadOrdNos);
                     
