@@ -2046,7 +2046,7 @@ app.get('/', (req, res) => {
 
                     if (rows.length === 0) {
                         body.innerHTML = '<div>Ingen operationer fundet for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>TOT minutter ind i stykliste:</strong> 0,00</div><div><strong>TOT færdigmeldt minutter:</strong> 0,00</div><div><strong>Afvigelse minutter:</strong> 0,00</div><div><strong>Samlet afvigelse i %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>Ordre stykliste minutter:</strong> 0,00</div><div><strong>Ordre færdigmeldt minutter:</strong> 0,00</div><div><strong>Afvigelse minutter:</strong> 0,00</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
@@ -2072,10 +2072,10 @@ app.get('/', (req, res) => {
                         : null;
                     totals.innerHTML = ''
                         + '<div><strong>Samlet Operation kost:</strong> ' + formatNumber(totalOperationCost) + ' DKK</div>'
-                        + '<div><strong>TOT minutter ind i stykliste:</strong> ' + formatNumber(totalStyklisteMinutes) + '</div>'
-                        + '<div><strong>TOT færdigmeldt minutter:</strong> ' + formatNumber(totalFinishedMinutes) + '</div>'
+                        + '<div><strong>Ordre stykliste minutter:</strong> ' + formatNumber(totalStyklisteMinutes) + '</div>'
+                        + '<div><strong>Ordre færdigmeldt minutter:</strong> ' + formatNumber(totalFinishedMinutes) + '</div>'
                         + '<div><strong>Afvigelse minutter:</strong> ' + formatNumber(deltaMinutes) + '</div>'
-                        + '<div><strong>Samlet afvigelse i %:</strong> ' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + '</div>';
+                        + '<div><strong>Samlet afvigelse %:</strong> ' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + '</div>';
                 } catch (err) {
                     body.innerHTML = '<div class="error">Fejl operationsoversigt: ' + err.message + '</div>';
                     totals.innerHTML = '<div class="error">Fejl i samlet operationsoversigt: ' + err.message + '</div>';
