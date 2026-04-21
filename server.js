@@ -925,6 +925,15 @@ app.get('/', (req, res) => {
                 btn.textContent = isClosed ? 'Skjul laseroversigt' : 'Vis laseroversigt';
             }
 
+            function toggleOperationOrderSummary() {
+                const panel = document.getElementById('operationOrderSummaryPanel');
+                const btn = document.getElementById('operationOrderSummaryToggleBtn');
+                if (!panel || !btn) return;
+                const isClosed = panel.style.display === 'none';
+                panel.style.display = isClosed ? '' : 'none';
+                btn.textContent = isClosed ? 'Skjul operationer' : 'Vis operationer';
+            }
+
             let currentMarginMode = 'classic';
             let orderListData = [];
             let orderListVisible = true;
@@ -1592,6 +1601,17 @@ app.get('/', (req, res) => {
                     html += '</div>';
                     html += '</div>';
 
+                    html += '<div class="section">';
+                    html += '<h3 style="display:flex; align-items:center; justify-content:space-between; gap:10px;">';
+                    html += '<span>Operation Oversigt</span>';
+                    html += '<button id="operationOrderSummaryToggleBtn" class="list-toggle-btn" style="padding:6px 10px;" onclick="toggleOperationOrderSummary()" title="Vis eller skjul detaljeret operationsoversigt">Vis operationer</button>';
+                    html += '</h3>';
+                    html += '<div id="operationOrderSummaryTotals" class="summary-box"><div class="loading">Indlæser totaler...</div></div>';
+                    html += '<div id="operationOrderSummaryPanel" style="display:none;">';
+                    html += '<div id="operationOrderSummaryBody" class="loading">Indlæser operationsdata...</div>';
+                    html += '</div>';
+                    html += '</div>';
+
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
                         const hasSalesOrderDrawing = data.salesOrderLines.some(line => !!line.DrawingWebPg);
@@ -1964,8 +1984,101 @@ app.get('/', (req, res) => {
                     
                     result.innerHTML = html;
                     loadSalesOrderLaserSummary(data);
+                    loadSalesOrderOperationSummary(data);
                 } catch (err) {
                     result.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
+                }
+            }
+
+            function loadSalesOrderOperationSummary(orderData) {
+                const body = document.getElementById('operationOrderSummaryBody');
+                const totals = document.getElementById('operationOrderSummaryTotals');
+                if (!body || !totals) return;
+
+                try {
+                    const productionOrders = Array.isArray(orderData && orderData.productionOrders) ? orderData.productionOrders : [];
+                    const groupedRows = new Map();
+                    let totalOperationCost = 0;
+                    let totalStyklisteMinutes = 0;
+                    let totalFinishedMinutes = 0;
+
+                    for (const prodOrder of productionOrders) {
+                        const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
+
+                        for (const line of lines) {
+                            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const lnNo = Number((line && line.LnNo) || 0);
+                            if (lnNo === 1 || key !== '1') continue;
+
+                            const prodNo = String((line && line.ProdNo) || '').trim();
+                            if (!prodNo) continue;
+                            const totalCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                            const qty = Number((line && (line.DisplayQuantity ?? line.NoFin)) || 0);
+                            const styklisteMinutes = Number((line && line.NoOrg) || 0);
+                            const effectiveMinutes = Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
+
+                            totalOperationCost += totalCost;
+                            totalStyklisteMinutes += styklisteMinutes;
+                            totalFinishedMinutes += effectiveMinutes;
+                            if (!groupedRows.has(prodNo)) {
+                                groupedRows.set(prodNo, {
+                                    prodNo,
+                                    descr: String((line && line.Descr) || '').trim(),
+                                    styklisteQty: 0,
+                                    qty: 0,
+                                    totalCost: 0,
+                                    occurrences: 0
+                                });
+                            }
+
+                            const group = groupedRows.get(prodNo);
+                            group.styklisteQty += Number((line && line.NoOrg) || 0);
+                            group.qty += qty;
+                            group.totalCost += totalCost;
+                            group.occurrences += 1;
+                            if ((!group.descr || group.descr === '-') && line && line.Descr) {
+                                group.descr = String(line.Descr).trim();
+                            }
+                        }
+                    }
+
+                    const rows = Array.from(groupedRows.values()).sort((a, b) => a.prodNo.localeCompare(b.prodNo));
+
+                    if (rows.length === 0) {
+                        body.innerHTML = '<div>Ingen operationer fundet for denne salgsordre.</div>';
+                        totals.innerHTML = '<div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>TOT minutter ind i stykliste:</strong> 0,00</div><div><strong>TOT færdigmeldt minutter:</strong> 0,00</div><div><strong>Afvigelse minutter:</strong> 0,00</div><div><strong>Samlet afvigelse i %:</strong> NULL</div>';
+                        return;
+                    }
+
+                    let html = '<table>';
+                    html += '<tr><th>Operation</th><th>Beskrivelse</th><th>Antal linjer</th><th>Stykliste antal</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
+                    for (const row of rows) {
+                        const unitCost = row.qty > 0 ? (row.totalCost / row.qty) : 0;
+                        html += '<tr>';
+                        html += '<td>' + (row.prodNo || '-') + '</td>';
+                        html += '<td>' + (row.descr || '-') + '</td>';
+                        html += '<td>' + formatNumber(row.occurrences || 0) + '</td>';
+                        html += '<td>' + formatNumber(row.styklisteQty || 0) + '</td>';
+                        html += '<td>' + formatNumber(row.qty || 0) + '</td>';
+                        html += '<td>' + formatNumber(unitCost || 0) + '</td>';
+                        html += '<td><strong>' + formatNumber(row.totalCost || 0) + '</strong></td>';
+                        html += '</tr>';
+                    }
+                    html += '</table>';
+                    body.innerHTML = html;
+                    const deltaMinutes = totalFinishedMinutes - totalStyklisteMinutes;
+                    const deltaPct = totalStyklisteMinutes > 0
+                        ? ((deltaMinutes / totalStyklisteMinutes) * 100)
+                        : null;
+                    totals.innerHTML = ''
+                        + '<div><strong>Samlet Operation kost:</strong> ' + formatNumber(totalOperationCost) + ' DKK</div>'
+                        + '<div><strong>TOT minutter ind i stykliste:</strong> ' + formatNumber(totalStyklisteMinutes) + '</div>'
+                        + '<div><strong>TOT færdigmeldt minutter:</strong> ' + formatNumber(totalFinishedMinutes) + '</div>'
+                        + '<div><strong>Afvigelse minutter:</strong> ' + formatNumber(deltaMinutes) + '</div>'
+                        + '<div><strong>Samlet afvigelse i %:</strong> ' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + '</div>';
+                } catch (err) {
+                    body.innerHTML = '<div class="error">Fejl operationsoversigt: ' + err.message + '</div>';
+                    totals.innerHTML = '<div class="error">Fejl i samlet operationsoversigt: ' + err.message + '</div>';
                 }
             }
 
@@ -2086,7 +2199,7 @@ app.get('/', (req, res) => {
 
                     if (requests.length === 0) {
                         body.innerHTML = '<div>Ingen L-linjer fundet for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
@@ -2126,7 +2239,7 @@ app.get('/', (req, res) => {
 
                     if (rows.length === 0) {
                         body.innerHTML = '<div>Ingen laserberegninger tilgaengelige for denne salgsordre.</div>';
-                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
+                        totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
                         return;
                     }
 
@@ -2177,15 +2290,10 @@ app.get('/', (req, res) => {
                     const deltaPct = totalKgPrevisti > 0
                         ? ((deltaKg / totalKgPrevisti) * 100)
                         : null;
-                    let totalOperationCost = 0;
-                    for (const lines of productionOrderLinesByOrdNo.values()) {
-                        totalOperationCost += getOperationCostFromLines(lines);
-                    }
                     html += '</table>';
                     body.innerHTML = html;
                     totals.innerHTML = ''
                         + '<div><strong>Samlet L-kost (' + (orderGr4 === 3 ? 'NestMultiPris' : 'NestKost') + '):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
-                        + '<div><strong>Samlet Operation kost:</strong> ' + formatNumber(totalOperationCost) + ' DKK</div>'
                         + '<div><strong>Ordre icon kg:</strong> ' + formatNumber(totalKgIcon) + ' kg</div>'
                         + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
                         + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
