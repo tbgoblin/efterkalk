@@ -377,12 +377,12 @@ function createApiRouter({
                     ? r
                     : filteredFinishedRows.find(fr => String(fr.TrInf4 || '').trim() === routeKey);
 
+                const prodKey = String(r.ProdNo || '').trim().toUpperCase();
                 const candidateLookupKey = String(r.OrdNo || '').trim() + '_' + routeKey + '_' + prodKey;
                 const candidateNoFin = candidateNoFinMap.has(candidateLookupKey) ? candidateNoFinMap.get(candidateLookupKey) : null;
                 const qtaPezzi = candidateNoFin !== null && candidateNoFin > 0
                     ? candidateNoFin
                     : (refFinished ? toNumber(refFinished.NoFin) : null);
-                const prodKey = String(r.ProdNo || '').trim().toUpperCase();
                 const structNoPerStr = structMap.get(prodKey) || null;
                 const oldExpectedUnitWeight = refFinished ? normalizeExpectedWeight(refFinished.Free3) : null;
                 const expectedUnitWeight = (structNoPerStr !== null && structNoPerStr > 0)
