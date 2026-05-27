@@ -175,7 +175,7 @@ function createApiRouter({
             const candidateResult = await pool.request()
                 .input('ordine', sql.VarChar, ordine)
                 .query(`
-                    SELECT OrdNo, TrInf4, ProdNo
+                    SELECT OrdNo, TrInf4, ProdNo, NoFin
                     FROM OrdLn
                     WHERE TrInf2 = @ordine
                       AND TrTp = 7
@@ -227,6 +227,15 @@ function createApiRouter({
                     .filter(Boolean)
             ));
             const effectiveRoute = showAllRoutes ? '' : String(selectedCandidates[0].TrInf4 || '').trim();
+
+            // Mappa OrdNo_TrInf4_ProdNo → NoFin dalla produzione: contiene il vero Færdigmeldt per rotta.
+            // I nesting order rows hanno spesso NoFin=totale (es. 40 per tutte le rotte),
+            // mentre questi record (TrInf2=produzione) hanno il valore corretto per singola rotta.
+            const candidateNoFinMap = new Map();
+            for (const c of candidates) {
+                const k = String(c.OrdNo || '').trim() + '_' + String(c.TrInf4 || '').trim() + '_' + String(c.ProdNo || '').trim().toUpperCase();
+                if (!candidateNoFinMap.has(k)) candidateNoFinMap.set(k, Number(c.NoFin || 0));
+            }
 
             if (nestingOrdNos.length === 0 || (!showAllRoutes && !effectiveRoute)) {
                 return res.json({
@@ -368,7 +377,11 @@ function createApiRouter({
                     ? r
                     : filteredFinishedRows.find(fr => String(fr.TrInf4 || '').trim() === routeKey);
 
-                const qtaPezzi = refFinished ? toNumber(refFinished.NoFin) : null;
+                const candidateLookupKey = String(r.OrdNo || '').trim() + '_' + routeKey + '_' + prodKey;
+                const candidateNoFin = candidateNoFinMap.has(candidateLookupKey) ? candidateNoFinMap.get(candidateLookupKey) : null;
+                const qtaPezzi = candidateNoFin !== null && candidateNoFin > 0
+                    ? candidateNoFin
+                    : (refFinished ? toNumber(refFinished.NoFin) : null);
                 const prodKey = String(r.ProdNo || '').trim().toUpperCase();
                 const structNoPerStr = structMap.get(prodKey) || null;
                 const oldExpectedUnitWeight = refFinished ? normalizeExpectedWeight(refFinished.Free3) : null;
