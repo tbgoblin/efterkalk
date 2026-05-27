@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 21;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 22;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -359,12 +359,16 @@ function createAftercalcService({
 
         const aggregatedTotalCost = Number(pricingData.totalCostByProd.get(prodKey) || 0);
         if (aggregatedTotalCost > 0) {
-            const fallbackUnitCost = qty > 0
-                ? (aggregatedTotalCost / qty)
+            const allocationBaseQty = allocatedQty > 0 ? allocatedQty : qty;
+            const fallbackUnitCost = allocationBaseQty > 0
+                ? (aggregatedTotalCost / allocationBaseQty)
                 : Number(pricingData.unitCostByProd.get(prodKey) || 0);
+            const allocatedTotalCost = (allocationBaseQty > 0 && qty > 0)
+                ? (aggregatedTotalCost * (qty / allocationBaseQty))
+                : aggregatedTotalCost;
             return {
                 unitCost: parseFloat(Number(fallbackUnitCost).toFixed(6)),
-                totalCost: parseFloat(Number(aggregatedTotalCost).toFixed(2)),
+                totalCost: parseFloat(Number(allocatedTotalCost).toFixed(2)),
                 allocatedQty,
                 usesAllocationSpread: qtyMismatch,
                 infoText: allocationInfoText
@@ -393,7 +397,7 @@ function createAftercalcService({
                 pool.request()
                     .input('ordNo', sql.Numeric, ordNo)
                     .query(`
-                        SELECT O.OrdNo, O.TrTp, O.InvoAm, O.Gr4, A.Nm as CustomerName
+                        SELECT O.OrdNo, O.TrTp, O.InvoAm, O.DInvoIF, O.Gr4, A.Nm as CustomerName
                         FROM Ord O
                         LEFT JOIN Actor A ON O.CustNo = A.CustNo
                         WHERE O.OrdNo = @ordNo
@@ -463,10 +467,10 @@ function createAftercalcService({
             const salesLines = salesLinesResult.recordset
                 .filter(line => !isGloballyExcludedProdNo(line.ProdNo))
                 .map(line => {
-                    const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
                     const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
-                    const isDiscountLine = lineSalesPrice === 0 && tubeFallbackCost === null;
-                    const effectiveLineCost = isDiscountLine ? 0 : (tubeFallbackCost !== null ? tubeFallbackCost : (line.LineCost || 0));
+                    // Rabat/IsDiscountLine-logikken er fjernet: linjer med salgspris=0 (typisk underlinjer
+                    // af et hovedprodukt) skal stadig medregne deres kostpris i ordrens totalkost.
+                    const effectiveLineCost = tubeFallbackCost !== null ? tubeFallbackCost : (line.LineCost || 0);
                     const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                     const warningMessages = buildLineWarnings(line);
                     const displayQuantity = Number(line.NoFin || 0) === 0 && Number(line.NoOrg || 0) > 0
@@ -474,7 +478,7 @@ function createAftercalcService({
                         : Number(line.NoFin || 0);
                     return {
                         ...line,
-                        IsDiscountLine: isDiscountLine,
+                        IsDiscountLine: false,
                         DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
                         HasWarning: warningMessages.length > 0,
                         WarningText: joinWarningMessages(warningMessages),
@@ -487,10 +491,10 @@ function createAftercalcService({
             const salesOrderLines = salesOrderLinesResult.recordset
                 .filter(line => !isGloballyExcludedProdNo(line.ProdNo))
                 .map(line => {
-                    const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
                     const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
-                    const isDiscountLine = lineSalesPrice === 0 && tubeFallbackCost === null;
-                    const effectiveLineCost = isDiscountLine ? 0 : (tubeFallbackCost !== null ? tubeFallbackCost : (line.LineCost || 0));
+                    // Rabat/IsDiscountLine-logikken er fjernet: linjer med salgspris=0 (typisk underlinjer
+                    // af et hovedprodukt) skal stadig medregne deres kostpris i ordrens totalkost.
+                    const effectiveLineCost = tubeFallbackCost !== null ? tubeFallbackCost : (line.LineCost || 0);
                     const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                     const warningMessages = buildLineWarnings(line);
                     const displayQuantity = Number(line.NoFin || 0) === 0 && Number(line.NoOrg || 0) > 0
@@ -498,7 +502,7 @@ function createAftercalcService({
                         : Number(line.NoFin || 0);
                     return {
                         ...line,
-                        IsDiscountLine: isDiscountLine,
+                        IsDiscountLine: false,
                         DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
                         HasWarning: warningMessages.length > 0,
                         WarningText: joinWarningMessages(warningMessages),
@@ -508,6 +512,36 @@ function createAftercalcService({
                 });
 
             const productionOrderDetailsCache = new Map();
+
+            // Cache dei prezzi DPrice dagli ordini di acquisto (TrTp=6).
+            // Serve per usare il prezzo reale pagato al fornitore invece del CCstPr standard.
+            const purchaseOrderDPriceCache = new Map();
+
+            async function getPurchaseOrderDPriceMap(purcNo) {
+                const cacheKey = String(purcNo);
+                if (purchaseOrderDPriceCache.has(cacheKey)) {
+                    return purchaseOrderDPriceCache.get(cacheKey);
+                }
+                const promise = pool.request()
+                    .input('poNo', sql.Numeric, purcNo)
+                    .query(`
+                        SELECT L.ProdNo, L.DPrice
+                        FROM OrdLn L
+                        INNER JOIN Ord O ON O.OrdNo = L.OrdNo AND O.TrTp = 6
+                        WHERE L.OrdNo = @poNo AND L.DPrice > 0
+                    `)
+                    .then(res => {
+                        const map = new Map();
+                        for (const row of res.recordset) {
+                            const k = String(row.ProdNo || '').trim().toUpperCase();
+                            if (!map.has(k)) map.set(k, Number(row.DPrice));
+                        }
+                        return map;
+                    })
+                    .catch(() => new Map());
+                purchaseOrderDPriceCache.set(cacheKey, promise);
+                return promise;
+            }
 
             async function loadProductionOrderDetails(prodOrdNo, visited = new Set(), options = {}) {
                 const numericProdOrdNo = Number(prodOrdNo);
@@ -612,10 +646,15 @@ function createAftercalcService({
                             ? getYdelseCostInfo(line, ydelseInvoiceSourceLine)
                             : { effectiveQuantity: noFinValue, usesNoFinFallback: false, hasInvoice: false, statusText: '', infoText: '' };
                         const ydelseSourceQuantity = Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.DisplayQuantity ?? ydelseInvoiceSourceLine.NoFin)) || 0);
+                        // Per "purchased part" (ProdTp4=2 con PurcNo → ordine acquisto):
+                        // usa DPrice dall'ordine acquisto (prezzo reale) invece di CCstPr (standard con overhead ~42%).
+                        // Per ydelse/servizi: mantiene la logica basata su fattura (NoInvo × CCstPr fonte).
                         const ydelseSourceUnitCost = isInvoiceTracked
-                            ? ((ydelseSourceQuantity > 0 && ydelseInvoiceSourceLine && ydelseInvoiceSourceLine.EffectiveLineCost !== undefined && ydelseInvoiceSourceLine.EffectiveLineCost !== null)
-                                ? (Number(ydelseInvoiceSourceLine.EffectiveLineCost || 0) / ydelseSourceQuantity)
-                                : Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.CCstPr ?? ydelseInvoiceSourceLine.DPrice ?? ydelseInvoiceSourceLine.DisplayUnitCost)) ?? (line.CCstPr ?? line.DPrice ?? 0)))
+                            ? (isPurchasedPartLine(line) && ydelseInvoiceSourceLine && Number(ydelseInvoiceSourceLine.DPrice || 0) > 0
+                                ? Number(ydelseInvoiceSourceLine.DPrice)
+                                : ((ydelseSourceQuantity > 0 && ydelseInvoiceSourceLine && ydelseInvoiceSourceLine.EffectiveLineCost !== undefined && ydelseInvoiceSourceLine.EffectiveLineCost !== null)
+                                    ? (Number(ydelseInvoiceSourceLine.EffectiveLineCost || 0) / ydelseSourceQuantity)
+                                    : Number((ydelseInvoiceSourceLine && (ydelseInvoiceSourceLine.CCstPr ?? ydelseInvoiceSourceLine.DPrice ?? ydelseInvoiceSourceLine.DisplayUnitCost)) ?? (line.CCstPr ?? line.DPrice ?? 0))))
                             : Number(line.CCstPr || 0);
                         const displayQuantity = key === '1'
                             ? operationTimeInfo.effectiveMinutes
@@ -659,6 +698,19 @@ function createAftercalcService({
                             if (childDetails.hasWarnings) {
                                 warningMessages.push(childDetails.warningText || 'Underliggende produktionsordre har en advarsel.');
                             }
+                        } else if (line.PurcNo && Number(line.PurcNo) !== 0) {
+                            // Riga materiale allocata a un ordine di acquisto (TrTp=6):
+                            // usa il prezzo effettivo DPrice dall'ordine allocato invece del CCstPr standard.
+                            // Funziona ricorsivamente: ogni sotto-produzione che ha materiali allocati
+                            // usa anch'essa questo percorso.
+                            const priceMap = await getPurchaseOrderDPriceMap(Number(line.PurcNo));
+                            const actualDPrice = priceMap.get(prodNoKey);
+                            if (actualDPrice !== undefined && actualDPrice > 0) {
+                                const qty = noFinValue > 0 ? noFinValue : noOrgValue;
+                                effectiveLineCost = parseFloat(Number(actualDPrice * qty).toFixed(2));
+                            }
+                            // Se DPrice non disponibile (ordine non è acquisto, o prodotto non trovato):
+                            // rimane l'effectiveLineCost = LineCost (CCstPr × NoFin) come fallback
                         }
 
                         line.ChildProductionTotalCost = childProductionTotalCost === null
@@ -824,7 +876,7 @@ function createAftercalcService({
                 return sum + (ord.totalCost || 0);
             }, 0);
             const totalCost = salesNoPOTotalCost + productionTotalCost;
-            const totalRevenue = orderHeader.InvoAm || 0;
+            const totalRevenue = Number(orderHeader.InvoAm || 0) + Number(orderHeader.DInvoIF || 0);
             const margin = totalRevenue - totalCost;
             const marginPercentage = totalCost > 0 ? ((totalRevenue / totalCost) * 100).toFixed(2) : 0;
             const hasWarnings = salesOrderLinesWithProductionTotal.some(line => line.HasWarning)

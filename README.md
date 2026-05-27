@@ -2,7 +2,7 @@
 
 App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso interno in ambiente produzione/fabbrica.
 
-**Versione attuale:** `1.0.52`
+**Versione attuale:** `1.0.59`
 
 ---
 
@@ -27,6 +27,28 @@ App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso i
 - il popup laser può aggregare più `nestingordre`/`rute` dello stesso prodotto: per questo il prezzo unitario mostrato nel popup può differire da quello della riga principale se il medesimo totale viene ripartito su quantità diverse
 - `R8200` è escluso dai costi/righe operazione; se una operazione `R*` ha `Færdigmeldt = 0`, l’app usa `Stykliste Minutter`, ricalcola i costi e mostra l’icona `🕒`
 - i prodotti `R*` dentro `Produkt dele` (anche nei sottoordini) non devono essere mostrati né conteggiati
+
+### Aggiornamenti recenti (`2026-04-22`)
+
+- startup/warmup rivisto: la schermata rossa `loading.html` resta attiva finché il backend non segnala `ready=true` (aftercalc + margin warmup completati)
+- endpoint `/warmup-status` esteso con `marginDone`, `marginTotal`, `combinedDone`, `combinedTotal`, `combinedPct`, `ready`
+- rimosso il fallback timeout che bypassava il gate startup; l’ingresso avviene solo a warmup completo
+- eliminato il prefetch su `mouseover` nella lista ordini per ridurre query inutili e carico DB
+- logging cache aftercalc migliorato: eventi espliciti `AFTERCALC CACHE HIT`, `AFTERCALC IN-FLIGHT REUSE`, `AFTERCALC FRESH COMPUTE`
+- route `/aftercalc/:ordno` allineata al percorso unico `getOrComputeAftercalc(...)` con fallback cache coerenti
+- prevenuta doppia esecuzione warmup startup (de-duplicazione processo in background)
+- revenue ordine aggiornata a: `Ord.InvoAm + Ord.DInvoIF` (importo fatturato + da fatturare)
+- nuova sezione UI **Operation Oversigt** con toggle dedicato, raggruppamento per `R-kode`, quantità/minuti/costi e riepilogo totale
+- in `Laseroversigt`, il totale non include più la vecchia voce “Samlet Operation kost” (spostata in `Operation Oversigt`)
+- stato fatturazione ordine aggiunto nel banner:
+   - `I produktion` se `InvoAm = 0`
+   - `Delvist faktureret` se `InvoAm > 0` e `DInvoIF > 0`
+   - `Komplet faktureret` se `DInvoIF = 0`
+- per ordini `I produktion`, il banner mostra `Kost til dato (estimat)` e prognosi coerente con importi previsti
+- `Kost til dato` impostato come somma dei `totalCost` dei `productionOrders` collegati
+- chiarita la semantica di `Gr4` come **tipo ordine** (es. Multiordre) con rinomina variabili/UI note, senza modificare la logica business
+- fix allocazione laser nel fallback aggregato: se il nesting totale è registrato su quantità maggiori della singola riga (es. 200 vs 100), il costo viene ripartito proporzionalmente evitando raddoppi su singolo articolo
+- mantenuta e documentata la nota di divergenza prezzo unitario quando il totale laser viene redistribuito su quantità diverse (`allocation spread`)
 
 ---
 

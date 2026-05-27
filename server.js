@@ -29,9 +29,9 @@ const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v20_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v21_';
 const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v20_';
-const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
+const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
 app.use(express.json({ limit: '256kb' }));
@@ -497,6 +497,10 @@ app.get('/', (req, res) => {
             .order-header-item { display: flex; flex-direction: column; }
             .order-header-label { font-size: 12px; font-weight: 600; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
             .order-header-value { font-size: 22px; font-weight: 700; color: #fff; }
+            .invoice-status-badge { display: inline-block; font-size: 14px; font-weight: 700; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
+            .status-in-production { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.4); }
+            .status-partial-invoiced { background: #e65100; color: #fff; }
+            .status-fully-invoiced { background: #2e7d32; color: #fff; }
             h3 { color: #333; margin-bottom: 15px; border-bottom: 2px solid #2196F3; padding-bottom: 10px; }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; }
             th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
@@ -1552,9 +1556,23 @@ app.get('/', (req, res) => {
                         return;
                     }
 
+                    // NOTE: Gr4 is order type (e.g., Multiordre). Do not change Gr4 logic here.
                     currentSalesOrderGr4 = Number((data.orderHeader && data.orderHeader.Gr4) || 0);
                     const orderMarginPercent = calculateOrderMarginPercent(data.summary.totalRevenue, data.summary.totalCost).toFixed(2);
+                    const _invoAm = Number(data.orderHeader.InvoAm || 0);
+                    const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
+                    let invoiceStatusBadge, invoiceStatusSub = '';
+                    if (_invoAm === 0) {
+                        invoiceStatusBadge = '<span class="invoice-status-badge status-in-production">🔧 I produktion</span>';
+                    } else if (_dInvoIF <= 0) {
+                        invoiceStatusBadge = '<span class="invoice-status-badge status-fully-invoiced">✅ Komplet faktureret</span>';
+                    } else {
+                        invoiceStatusBadge = '<span class="invoice-status-badge status-partial-invoiced">⏳ Delvist faktureret</span>';
+                        invoiceStatusSub = '<div style="font-size:12px; opacity:0.85; margin-top:5px;">Faktureret: ' + formatNumber(_invoAm) + ' | Mangler: ' + formatNumber(_dInvoIF) + '</div>';
+                    }
                     const productionOrderByOrdNo = new Map((Array.isArray(data.productionOrders) ? data.productionOrders : []).map(order => [Number(order.ordNo || 0), order]));
+                    const costToDateFromProduction = (Array.isArray(data.productionOrders) ? data.productionOrders : [])
+                        .reduce((sum, order) => sum + Number((order && order.totalCost) || 0), 0);
                     const getSalesLineCostBreakdown = (purcNo) => {
                         const prodOrder = productionOrderByOrdNo.get(Number(purcNo || 0));
                         const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
@@ -1582,9 +1600,24 @@ app.get('/', (req, res) => {
                     let html = '<div class="order-header">';
                     html += '<h2>Salgsordre: ' + data.orderHeader.OrdNo + ' - ' + (data.orderHeader.CustomerName || '-') + '</h2>';
                     html += '<div class="order-header-row">';
-                    html += '<div class="order-header-item"><div class="order-header-label">Faktureret beløb</div><div class="order-header-value">' + formatNumber(data.summary.totalRevenue) + ' DKK</div></div>';
-                    html += '<div class="order-header-item"><div class="order-header-label">Kostpris</div><div class="order-header-value">' + formatNumber(data.summary.totalCost) + ' DKK</div></div>';
-                    html += '<div class="order-header-item"><div class="order-header-label">Margin (' + getMarginModeLabel() + ')</div><div class="order-header-value">' + getMarginBadge(orderMarginPercent) + '</div></div>';
+                    if (_invoAm === 0) {
+                        // I Produktion: show cost to date + projected margin if DInvoIF available
+                        html += '<div class="order-header-item"><div class="order-header-label">Kost til dato (estimat)</div><div class="order-header-value">' + formatNumber(costToDateFromProduction) + ' DKK</div></div>';
+                        if (_dInvoIF > 0) {
+                            const projectedMargin = _dInvoIF - costToDateFromProduction;
+                            const projectedMarginPct = costToDateFromProduction > 0 ? calculateOrderMarginPercent(_dInvoIF, costToDateFromProduction).toFixed(2) : '0.00';
+                            html += '<div class="order-header-item"><div class="order-header-label">Forventet salgsbeløb</div><div class="order-header-value">' + formatNumber(_dInvoIF) + ' DKK</div></div>';
+                            html += '<div class="order-header-item"><div class="order-header-label">Forventet margin (prognose)</div><div class="order-header-value">' + getMarginBadge(projectedMarginPct) + '<div style="font-size:13px; opacity:0.85; margin-top:4px;">' + formatNumber(projectedMargin) + ' DKK</div></div></div>';
+                        } else {
+                            html += '<div class="order-header-item"><div class="order-header-label">Forventet salgsbeløb</div><div class="order-header-value" style="opacity:0.6; font-size:16px;">— (ukendt)</div></div>';
+                            html += '<div class="order-header-item"><div class="order-header-label">Margin</div><div class="order-header-value"><span style="background:rgba(255,255,255,0.15); color:#fff; font-weight:bold; padding:2px 8px; border-radius:4px; font-size:14px;">— Ingen data</span></div></div>';
+                        }
+                    } else {
+                        html += '<div class="order-header-item"><div class="order-header-label">Faktureret beløb</div><div class="order-header-value">' + formatNumber(data.summary.totalRevenue) + ' DKK</div></div>';
+                        html += '<div class="order-header-item"><div class="order-header-label">Kostpris</div><div class="order-header-value">' + formatNumber(data.summary.totalCost) + ' DKK</div></div>';
+                        html += '<div class="order-header-item"><div class="order-header-label">Margin (' + getMarginModeLabel() + ')</div><div class="order-header-value">' + getMarginBadge(orderMarginPercent) + '</div></div>';
+                    }
+                    html += '<div class="order-header-item"><div class="order-header-label">Fakturastatus</div><div class="order-header-value">' + invoiceStatusBadge + invoiceStatusSub + '</div></div>';
                     html += '</div></div>';
 
                     html += '<div class="section">';
@@ -1632,13 +1665,10 @@ app.get('/', (req, res) => {
                             const breakdownInfo = hasProductionOrder
                                 ? getSalesLineCostBreakdown(line.PurcNo)
                                 : { operationTotal: 0, laserTotal: 0 };
-                            const lineMarginBadge = !includeForMargin
+                            // Rabat-badge fjernet: linjer med salgspris=0 (underlinjer af hovedprodukt) vises som N/A.
+                            const lineMarginBadge = (!includeForMargin || lineSalesPrice === 0 || isExactlyHundred)
                                 ? '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>'
-                                : lineSalesPrice === 0
-                                ? '<span style="background:#757575; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">Rabatt</span>'
-                                : (isExactlyHundred
-                                    ? '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>'
-                                    : getMarginBadge(lineMarginPercent));
+                                : getMarginBadge(lineMarginPercent);
                             html += '<tr>';
                             html += '<td>' + (hasProductionOrder
                                 ? ('<button type="button" onclick="toggleSalesLineBreakdown(\\'' + breakdownRowId + '\\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
@@ -1892,7 +1922,7 @@ app.get('/', (req, res) => {
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1">' + safeProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1" data-nofin="' + Number(line.NoFin || 0) + '" data-nestingcost="' + Number(line.NestingCost || 0) + '">' + safeProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (hasChildProductionOrder) {
                                         const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const childSummaryArgs = shouldFilterChildSummary(key, line.ProdNo, line.PurcNo)
@@ -2086,6 +2116,7 @@ app.get('/', (req, res) => {
                 const body = document.getElementById('laserOrderSummaryBody');
                 const totals = document.getElementById('laserOrderSummaryTotals');
                 if (!body || !totals) return;
+                // NOTE: Preserve existing Gr4 branching exactly; Gr4=3 indicates Multiordre type.
                 const orderGr4 = Number((orderData && orderData.orderHeader && orderData.orderHeader.Gr4) || currentSalesOrderGr4 || 0);
 
                 try {
@@ -2213,9 +2244,12 @@ app.get('/', (req, res) => {
                             const expected = p.NWgtU_medio;
                             const effective = p.KgPerPezzoEffettivo;
                             const hintedNestCost = getLaserNestCostHint(item.prodOrderNo, p.ProdNo);
-                            const routeSpecificCostPerPiece = (p.CostoPerPezzo !== null && p.CostoPerPezzo !== undefined)
-                                ? p.CostoPerPezzo
-                                : hintedNestCost;
+                            const hasHintedNestCost = hintedNestCost !== null && hintedNestCost !== undefined && Number(hintedNestCost) > 0;
+                            const routeSpecificCostPerPiece = hasHintedNestCost
+                                ? hintedNestCost
+                                : ((p.CostoPerPezzo !== null && p.CostoPerPezzo !== undefined)
+                                    ? p.CostoPerPezzo
+                                    : null);
                             const extraPct = (expected !== null && expected !== undefined && expected > 0 && effective !== null && effective !== undefined)
                                 ? (((effective - expected) / expected) * 100)
                                 : null;
@@ -2256,8 +2290,8 @@ app.get('/', (req, res) => {
                         const rowExpected = Number(r.expected || 0);
                         const rowEffective = Number(r.effective || 0);
                         const rowCostPerPiece = Number(r.costPerPiece || 0);
-                        const rowTotalCost = (r.quotaCost !== null && r.quotaCost !== undefined)
-                            ? Number(r.quotaCost || 0)
+                        const rowTotalCost = (r.costPerPiece !== null && r.costPerPiece !== undefined && rowNoFin > 0)
+                            ? (rowNoFin * rowCostPerPiece)
                             : ((r.costPerPiece === null || r.costPerPiece === undefined || r.noFin === null || r.noFin === undefined)
                                 ? null
                                 : (rowNoFin * rowCostPerPiece));
@@ -2305,7 +2339,7 @@ app.get('/', (req, res) => {
                 }
             }
 
-            async function onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes) {
+            async function onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, clickedNoFin, clickedNestingCost) {
                 const modal = document.getElementById('summaryModal');
                 const title = document.getElementById('summaryModalTitle');
                 const body = document.getElementById('summaryModalBody');
@@ -2435,24 +2469,33 @@ app.get('/', (req, res) => {
                         let totalKgUtilizzati = 0;
                         let totalKgIcon = 0;
                         let totalLaserCost = 0;
+                        const clickedNoFinNum = Number(clickedNoFin || 0);
+                        const clickedNestingCostNum = Number(clickedNestingCost || 0);
                         for (const rowProduct of products) {
                             const oldExpected = rowProduct ? rowProduct.OldNWgtU_medio : null;
                             const expected = rowProduct ? rowProduct.NWgtU_medio : null;
                             const effective = rowProduct ? rowProduct.KgPerPezzoEffettivo : null;
-                            const noFin = rowProduct ? rowProduct.QtaPezzi : null;
+                            const routeNoFin = rowProduct ? rowProduct.QtaPezzi : null;
                             const prodNoForCost = rowProduct ? (rowProduct.ProdNo || prodNo) : prodNo;
+                            const isClickedProd = String(prodNoForCost || '').trim().toUpperCase() === String(prodNo || '').trim().toUpperCase();
+                            const hasClickedNestCost = isClickedProd && clickedNestingCostNum > 0;
+                            const noFin = (hasClickedNestCost && clickedNoFinNum > 0) ? clickedNoFinNum : routeNoFin;
                             const hintedNestCost = getLaserNestCostHint(effectiveOrdine, prodNoForCost);
-                            const costPerPiece = (rowProduct && rowProduct.CostoPerPezzo !== null && rowProduct.CostoPerPezzo !== undefined)
-                                ? rowProduct.CostoPerPezzo
-                                : hintedNestCost;
+                            const costPerPiece = hasClickedNestCost
+                                ? clickedNestingCostNum
+                                : ((rowProduct && rowProduct.CostoPerPezzo !== null && rowProduct.CostoPerPezzo !== undefined)
+                                    ? rowProduct.CostoPerPezzo
+                                    : hintedNestCost);
                             const noFinNum = Number(noFin || 0);
                             const expectedNum = Number(expected || 0);
                             const effectiveNum = Number(effective || 0);
-                            const totalCost = (rowProduct && rowProduct.QuotaCosto !== null && rowProduct.QuotaCosto !== undefined)
-                                ? rowProduct.QuotaCosto
+                            const totalCost = hasClickedNestCost
+                                ? (noFinNum > 0 ? (noFinNum * Number(costPerPiece || 0)) : null)
+                                : ((rowProduct && rowProduct.QuotaCosto !== null && rowProduct.QuotaCosto !== undefined)
+                                    ? rowProduct.QuotaCosto
                                 : ((costPerPiece === null || costPerPiece === undefined || noFin === null || noFin === undefined)
                                     ? null
-                                    : (noFinNum * Number(costPerPiece || 0)));
+                                    : (noFinNum * Number(costPerPiece || 0))));
                             totalKgIcon += noFinNum * Number(oldExpected || 0);
                             totalKgPrevisti += noFinNum * expectedNum;
                             totalKgUtilizzati += noFinNum * effectiveNum;
@@ -2504,7 +2547,9 @@ app.get('/', (req, res) => {
                 const trInf2 = span.dataset.trinf2;
                 const trInf4 = span.dataset.trinf4;
                 const showAllRoutes = span.dataset.showallroutes === '1';
-                if (prodNo) onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes);
+                const noFin = span.dataset.nofin;
+                const nestingCost = span.dataset.nestingcost;
+                if (prodNo) onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, noFin, nestingCost);
             }
 
             function handleImagePreviewClick(e) {
@@ -2667,7 +2712,7 @@ app.get('/', (req, res) => {
                             const trInf4FromLine = String(line.TrInf4 || '');
                             const safeChildTrInf2 = trInf2FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const safeChildTrInf4 = trInf4FromLine.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1">' + safeChildProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
+                            html += '<td><span class="prod-no-link" data-prodno="' + safeChildProdNo + '" data-ordno="' + childOrdNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="2" data-trinf2="' + safeChildTrInf2 + '" data-trinf4="' + safeChildTrInf4 + '" data-showallroutes="1" data-nofin="' + Number(line.NoFin || 0) + '" data-nestingcost="' + Number(line.NestingCost || 0) + '">' + safeChildProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustmentFlagHtml + warningFlagHtml + '</td>';
                         } else if (childHasPurcNo) {
                             const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                             const childSummaryArgs = shouldFilterChildSummary(displayProdTp4, line.ProdNo, line.PurcNo)
@@ -2785,12 +2830,13 @@ app.get('/', (req, res) => {
                     const d = String(o.LstInvDt || '');
                     const invDate = d.length === 8 ? d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8) : (d || '-');
                     const orderWarningFlag = getWarningFlagHtml(o, 'Ordren indeholder mindst én advarsel.');
-                    const gr4ManualBadge = Number(o.Gr4 || 0) === 3
-                        ? '<span title="MultiOrdre" aria-label="MultiOrdre" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#1565c0;color:#fff;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle;">M</span>'
+                    // NOTE: Visual badge only. No logic change: Gr4=3 => Multiordre order type.
+                    const gr4TypeBadge = Number(o.Gr4 || 0) === 3
+                        ? '<span title="Ordretype: Multiordre (Gr4=3)" aria-label="Ordretype: Multiordre" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#1565c0;color:#fff;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle;">M</span>'
                         : '';
                     html += '<tr data-ordno="' + o.OrdNo + '" class="order-list-row">'
                     html += '<td>' + (o.SellerUsr || '-') + '</td>';
-                    html += '<td><strong>' + o.OrdNo + '</strong>' + gr4ManualBadge + orderWarningFlag + '</td>';
+                    html += '<td><strong>' + o.OrdNo + '</strong>' + gr4TypeBadge + orderWarningFlag + '</td>';
                     html += '<td>' + (o.CustomerName || '-') + '</td>';
                     html += '<td>' + invDate + '</td>';
                     html += '<td>' + formatNumber(o.InvoAm || 0) + ' DKK</td>';
