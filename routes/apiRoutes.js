@@ -166,7 +166,7 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ugyldige parametre: ordine er paakraevet' });
             }
 
-            const laserCacheKey = 'laser_v2_' + ordine + '_' + (route || 'all') + '_' + (prodNoFilter || 'all') + '_' + (showAllRoutes ? '1' : '0') + '_gr4_' + (useSpecialLaserCost ? '3' : '0');
+            const laserCacheKey = 'laser_v3_' + ordine + '_' + (route || 'all') + '_' + (prodNoFilter || 'all') + '_' + (showAllRoutes ? '1' : '0') + '_gr4_' + (useSpecialLaserCost ? '3' : '0');
             const cachedLaser = diskCache.get(laserCacheKey);
             if (cachedLaser) return res.json(cachedLaser);
 
@@ -437,6 +437,12 @@ function createApiRouter({
                 };
             });
 
+            const _debugLookups = filteredNestingRows.map(r => {
+                const rk = String(r.TrInf4 || '').trim();
+                const pk = String(r.ProdNo || '').trim().toUpperCase();
+                const lk = String(r.OrdNo || '').trim() + '_' + rk + '_' + pk;
+                return { OrdNo: r.OrdNo, TrInf4: r.TrInf4, ProdNo: r.ProdNo, TrTp: r.TrTp, NoFin_row: r.NoFin, lookupKey: lk, found: candidateNoFinMap.has(lk), candidateNoFin: candidateNoFinMap.get(lk) };
+            });
             const laserResult = {
                 ordine,
                 route: showAllRoutes ? null : effectiveRoute,
@@ -453,7 +459,12 @@ function createApiRouter({
                     SfridoKg: round(sfridoKg),
                     SfridoPct: sfridoPct === null ? null : round(sfridoPct)
                 },
-                products
+                products,
+                _debug: {
+                    candidates: candidates.map(c => ({ OrdNo: c.OrdNo, TrInf4: c.TrInf4, ProdNo: c.ProdNo, NoFin: c.NoFin })),
+                    candidateNoFinMapEntries: Array.from(candidateNoFinMap.entries()).map(([k, v]) => ({ key: k, noFin: v })),
+                    lookups: _debugLookups
+                }
             };
             diskCache.set(laserCacheKey, laserResult, CACHE_TTL_LASER_METRICS_MS);
             return res.json(laserResult);
