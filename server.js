@@ -2478,7 +2478,8 @@ app.get('/', (req, res) => {
                             const routeNoFin = rowProduct ? rowProduct.QtaPezzi : null;
                             const prodNoForCost = rowProduct ? (rowProduct.ProdNo || prodNo) : prodNo;
                             const isClickedProd = String(prodNoForCost || '').trim().toUpperCase() === String(prodNo || '').trim().toUpperCase();
-                            const hasClickedNestCost = isClickedProd && clickedNestingCostNum > 0;
+                            // In showAllRoutes mode use per-route API data; clickedNestCost/clickedNoFin are order-level totals and must not override per-route values.
+                            const hasClickedNestCost = !showAllRoutes && isClickedProd && clickedNestingCostNum > 0;
                             const noFin = (hasClickedNestCost && clickedNoFinNum > 0) ? clickedNoFinNum : routeNoFin;
                             const hintedNestCost = getLaserNestCostHint(effectiveOrdine, prodNoForCost);
                             const costPerPiece = hasClickedNestCost
