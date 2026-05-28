@@ -443,6 +443,9 @@ function createApiRouter({
                 const lk = String(r.OrdNo || '').trim() + '_' + rk + '_' + pk;
                 return { OrdNo: r.OrdNo, TrInf4: r.TrInf4, ProdNo: r.ProdNo, TrTp: r.TrTp, NoFin_row: r.NoFin, lookupKey: lk, found: candidateNoFinMap.has(lk), candidateNoFin: candidateNoFinMap.get(lk) };
             });
+            logEvent('LASER_DEBUG ordine=' + ordine + ' candidates=' + JSON.stringify(candidates.map(c => ({ OrdNo: c.OrdNo, TrInf4: c.TrInf4, ProdNo: c.ProdNo, NoFin: c.NoFin }))));
+            logEvent('LASER_DEBUG mapEntries=' + JSON.stringify(Array.from(candidateNoFinMap.entries()).map(([k, v]) => ({ key: k, noFin: v }))));
+            logEvent('LASER_DEBUG lookups=' + JSON.stringify(_debugLookups));
             const laserResult = {
                 ordine,
                 route: showAllRoutes ? null : effectiveRoute,
