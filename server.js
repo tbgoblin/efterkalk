@@ -1865,7 +1865,7 @@ app.get('/', (req, res) => {
                                 const subtotal = key === '2'
                                     ? lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
                                         if (!isLaserLProdNo(line.ProdNo)) {
-                                            return sum + (line.EffectiveLineCost || line.LineCost || 0);
+                                            return sum + (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null ? (line.EffectiveLineCost || 0) : (line.LineCost || 0));
                                         }
                                         if (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null) {
                                             return sum + (line.EffectiveLineCost || 0);
@@ -1880,7 +1880,7 @@ app.get('/', (req, res) => {
                                         if (pn === 'R6200' && String(key) === '1') {
                                             return sum + ((line.NoOrg || 0) * (line.CCstPr || 0));
                                         }
-                                        return sum + (line.EffectiveLineCost || line.LineCost || 0);
+                                        return sum + (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null ? (line.EffectiveLineCost || 0) : (line.LineCost || 0));
                                     }, 0);
                                 const isOpenByDefault = false;
                                 orderVisibleTotal += subtotal;
