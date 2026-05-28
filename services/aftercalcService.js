@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 22;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 23;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -658,11 +658,13 @@ function createAftercalcService({
                             : Number(line.CCstPr || 0);
                         const displayQuantity = key === '1'
                             ? operationTimeInfo.effectiveMinutes
-                            : (isInvoiceTracked
-                                ? ydelseCostInfo.effectiveQuantity
-                                : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
-                                    ? noOrgValue
-                                    : noFinValue));
+                            : (isPurchasedPartLine(line)
+                                ? (noFinValue || noOrgValue)
+                                : (isInvoiceTracked
+                                    ? ydelseCostInfo.effectiveQuantity
+                                    : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
+                                        ? noOrgValue
+                                        : noFinValue)));
                         let effectiveLineCost = Number(line.LineCost || 0);
                         let childProductionTotalCost = null;
                         let specialLaserCostInfo = null;
@@ -671,7 +673,8 @@ function createAftercalcService({
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
                         } else if (isInvoiceTracked) {
-                            effectiveLineCost = Number(ydelseCostInfo.effectiveQuantity * ydelseSourceUnitCost);
+                            const costQty = isPurchasedPartLine(line) ? (noFinValue || noOrgValue) : ydelseCostInfo.effectiveQuantity;
+                            effectiveLineCost = Number(costQty * ydelseSourceUnitCost);
                         } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
                             specialLaserCostInfo = useSpecialLaserCost
                                 ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
