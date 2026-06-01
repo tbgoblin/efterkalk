@@ -1,4 +1,5 @@
 const express = require('express');
+const orderNotesService = require('../services/orderNotesService');
 
 function createApiRouter({
     getConnection,
@@ -820,6 +821,33 @@ function createApiRouter({
             logEvent('ERROR order-list: ' + err.message);
             res.status(500).json({ error: err.message });
         }
+    });
+
+    // ── ORDER NOTES ─────────────────────────────────────────────────────────
+    router.get('/order-note/:ordno', (req, res) => {
+        const ordNo = parseInt(req.params.ordno);
+        if (Number.isNaN(ordNo)) return res.status(400).json({ error: 'Ugyldigt ordrenummer' });
+        const note = orderNotesService.getNote(ordNo);
+        res.json(note || { status: '', text: '', updatedAt: null });
+    });
+
+    router.get('/order-notes-all', (req, res) => {
+        res.json(orderNotesService.getAllNotes());
+    });
+
+    router.post('/order-note/:ordno', express.json(), (req, res) => {
+        const ordNo = parseInt(req.params.ordno);
+        if (Number.isNaN(ordNo)) return res.status(400).json({ error: 'Ugyldigt ordrenummer' });
+        const { status = '', text = '' } = req.body || {};
+        const note = orderNotesService.setNote(ordNo, { status, text });
+        res.json(note || { status: '', text: '', updatedAt: null });
+    });
+
+    router.delete('/order-note/:ordno', (req, res) => {
+        const ordNo = parseInt(req.params.ordno);
+        if (Number.isNaN(ordNo)) return res.status(400).json({ error: 'Ugyldigt ordrenummer' });
+        orderNotesService.deleteNote(ordNo);
+        res.json({ ok: true });
     });
 
     return router;

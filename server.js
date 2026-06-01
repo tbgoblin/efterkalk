@@ -586,6 +586,30 @@ app.get('/', (req, res) => {
             .order-list-table th { background: #1565C0; color: #fff; padding: 8px 10px; text-align: left; }
             .order-list-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; cursor: pointer; }
             .order-list-table tr:hover td { background: #e3f2fd; }
+            .note-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; border:1px solid; cursor:pointer; white-space:nowrap; }
+            .note-badge.ok  { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
+            .note-badge.error { background:#ffebee; color:#b71c1c; border-color:#ef9a9a; }
+            .note-badge.check { background:#fff8e1; color:#f57f17; border-color:#ffe082; }
+            .note-badge.text { background:#f3e5f5; color:#4a148c; border-color:#ce93d8; }
+            .note-popup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:14000; display:flex; align-items:center; justify-content:center; }
+            .note-popup { background:#fff; border-radius:10px; padding:22px; width:min(480px,92vw); box-shadow:0 18px 42px rgba(0,0,0,0.28); }
+            .note-popup h3 { margin:0 0 14px 0; font-size:16px; color:#1f2937; }
+            .note-popup label { font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:4px; }
+            .note-popup select, .note-popup textarea { width:100%; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; font-family:inherit; }
+            .note-popup textarea { resize:vertical; min-height:80px; margin-bottom:12px; }
+            .note-popup select { margin-bottom:12px; }
+            .note-popup-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+            .note-popup-actions button { border:none; border-radius:6px; padding:8px 16px; font-weight:700; font-size:13px; cursor:pointer; }
+            .btn-note-save { background:#1565c0; color:#fff; }
+            .btn-note-delete { background:#b71c1c; color:#fff; }
+            .btn-note-cancel { background:#e0e0e0; color:#333; }
+            .order-note-banner { margin:0 0 14px 0; padding:10px 14px; border-radius:8px; font-size:13px; display:flex; align-items:flex-start; gap:10px; cursor:pointer; }
+            .order-note-banner.ok    { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; }
+            .order-note-banner.error { background:#ffebee; border:1px solid #ef9a9a; color:#b71c1c; }
+            .order-note-banner.check { background:#fff8e1; border:1px solid #ffe082; color:#e65100; }
+            .order-note-banner.text  { background:#f3e5f5; border:1px solid #ce93d8; color:#4a148c; }
+            .order-note-banner .note-icon { font-size:18px; flex-shrink:0; }
+            .order-note-banner .note-body { flex:1; }
             .access-gate-overlay { position: fixed; inset: 0; background: rgba(20, 26, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 12000; }
             .access-gate-box { width: min(430px, 92vw); background: #ffffff; border-radius: 10px; padding: 22px; box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
             .access-gate-box h3 { margin: 0 0 10px 0; border: none; padding: 0; color: #1f2937; }
@@ -954,6 +978,116 @@ app.get('/', (req, res) => {
             let orderListSortField = 'date';
             let orderListSortDir = 'desc';
             let marginSortRefreshTimer = null;
+
+            // ── ORDER NOTES ────────────────────────────────────────────────
+            let orderNotesCache = {};  // ordNo(string) -> { status, text, updatedAt }
+
+            async function loadAllNotes() {
+                try {
+                    const r = await fetch('/order-notes-all');
+                    if (r.ok) orderNotesCache = await r.json();
+                } catch {}
+            }
+
+            function getOrderNoteHtml(ordNo) {
+                const note = orderNotesCache[String(ordNo)];
+                if (!note || (!note.status && !note.text)) return '<span style="color:#bbb;font-size:12px;">-</span>';
+                const icons = { ok: '✅', error: '❌', check: '⚠️' };
+                const icon = icons[note.status] || '📝';
+                const cls = note.status || 'text';
+                const preview = note.text ? escapeHtmlFE(note.text.slice(0, 40)) + (note.text.length > 40 ? '…' : '') : '';
+                return '<span class="note-badge ' + cls + '" onclick="event.stopPropagation();openNotePopup(' + Number(ordNo) + ')">'
+                    + icon + (preview ? ' ' + preview : '') + '</span>';
+            }
+
+            function escapeHtmlFE(s) {
+                return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+
+            function openNotePopup(ordNo, fromOrderDetail = false) {
+                const note = orderNotesCache[String(ordNo)] || { status: '', text: '' };
+                const existing = document.getElementById('notePopupOverlay');
+                if (existing) existing.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = 'notePopupOverlay';
+                overlay.className = 'note-popup-overlay';
+                overlay.innerHTML =
+                    '<div class="note-popup">' +
+                    '<h3>📝 Note for ordre <strong>' + ordNo + '</strong></h3>' +
+                    '<label>Status</label>' +
+                    '<select id="noteStatusSel">' +
+                    '<option value="">— ingen status —</option>' +
+                    '<option value="ok">✅ OK</option>' +
+                    '<option value="error">❌ Fejl</option>' +
+                    '<option value="check">⚠️ Tjek</option>' +
+                    '</select>' +
+                    '<label>Note</label>' +
+                    '<textarea id="noteTextArea" placeholder="Skriv en note til denne ordre...">' + escapeHtmlFE(note.text || '') + '</textarea>' +
+                    (note.updatedAt ? '<div style="font-size:11px;color:#888;margin-bottom:10px;">Sidst opdateret: ' + note.updatedAt.slice(0,16).replace('T',' ') + '</div>' : '') +
+                    '<div class="note-popup-actions">' +
+                    '<button class="btn-note-delete" onclick="deleteOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Slet</button>' +
+                    '<button class="btn-note-cancel" onclick="document.getElementById(\'notePopupOverlay\').remove()">Annuller</button>' +
+                    '<button class="btn-note-save" onclick="saveOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Gem</button>' +
+                    '</div></div>';
+
+                document.body.appendChild(overlay);
+                overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+                document.getElementById('noteStatusSel').value = note.status || '';
+            }
+
+            async function saveOrderNote(ordNo, fromOrderDetail) {
+                const status = document.getElementById('noteStatusSel').value;
+                const text = document.getElementById('noteTextArea').value.trim();
+                try {
+                    const r = await fetch('/order-note/' + ordNo, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status, text })
+                    });
+                    if (r.ok) {
+                        const note = await r.json();
+                        orderNotesCache[String(ordNo)] = note;
+                    }
+                } catch {}
+                document.getElementById('notePopupOverlay').remove();
+                updateOrderNoteCell(ordNo);
+                if (fromOrderDetail) renderOrderNoteBanner(ordNo);
+            }
+
+            async function deleteOrderNote(ordNo, fromOrderDetail) {
+                try {
+                    await fetch('/order-note/' + ordNo, { method: 'DELETE' });
+                    delete orderNotesCache[String(ordNo)];
+                } catch {}
+                document.getElementById('notePopupOverlay').remove();
+                updateOrderNoteCell(ordNo);
+                if (fromOrderDetail) renderOrderNoteBanner(ordNo);
+            }
+
+            function updateOrderNoteCell(ordNo) {
+                const listEl = document.getElementById('orderList');
+                if (!listEl) return;
+                const cells = listEl.querySelectorAll('.order-note-cell[data-ordno="' + ordNo + '"]');
+                const html = getOrderNoteHtml(ordNo);
+                for (const cell of cells) { cell.innerHTML = html; }
+            }
+
+            function renderOrderNoteBanner(ordNo) {
+                const el = document.getElementById('order-note-banner-' + ordNo);
+                if (!el) return;
+                const note = orderNotesCache[String(ordNo)];
+                if (!note || (!note.status && !note.text)) { el.style.display = 'none'; return; }
+                const icons = { ok: '✅', error: '❌', check: '⚠️' };
+                const icon = icons[note.status] || '📝';
+                const cls = note.status || 'text';
+                el.className = 'order-note-banner ' + cls;
+                el.style.display = 'flex';
+                el.innerHTML = '<span class="note-icon">' + icon + '</span><div class="note-body"><strong>' +
+                    (note.status === 'ok' ? 'OK' : note.status === 'error' ? 'Fejl' : note.status === 'check' ? 'Tjek' : 'Note') +
+                    '</strong>' + (note.text ? ': ' + escapeHtmlFE(note.text) : '') + '</div>' +
+                    '<span style="font-size:11px;opacity:0.7;margin-left:auto;cursor:pointer;" onclick="openNotePopup(' + ordNo + ',true)">✏️ Rediger</span>';
+            }
             let summaryModalHistory = [];
             let summaryImageRegistry = {};
             let summaryImageRegistryCounter = 0;
@@ -1620,6 +1754,18 @@ app.get('/', (req, res) => {
                     
                     let html = '<div class="order-header">';
                     html += '<h2>Salgsordre: ' + data.orderHeader.OrdNo + ' - ' + (data.orderHeader.CustomerName || '-') + '</h2>';
+                    const _noteOrdNo = Number(data.orderHeader.OrdNo);
+                    const _existingNote = orderNotesCache[String(_noteOrdNo)];
+                    const _noteIcons = { ok: '✅', error: '❌', check: '⚠️' };
+                    const _noteIcon = _existingNote && _existingNote.status ? (_noteIcons[_existingNote.status] || '📝') : '📝';
+                    const _noteCls = _existingNote && _existingNote.status ? _existingNote.status : 'text';
+                    const _noteDisplay = _existingNote && (_existingNote.status || _existingNote.text) ? 'flex' : 'none';
+                    html += '<div id="order-note-banner-' + _noteOrdNo + '" class="order-note-banner ' + _noteCls + '" style="display:' + _noteDisplay + ';" onclick="openNotePopup(' + _noteOrdNo + ',true)">';
+                    if (_existingNote && (_existingNote.status || _existingNote.text)) {
+                        html += '<span class="note-icon">' + _noteIcon + '</span><div class="note-body"><strong>' + (_existingNote.status === 'ok' ? 'OK' : _existingNote.status === 'error' ? 'Fejl' : _existingNote.status === 'check' ? 'Tjek' : 'Note') + '</strong>' + (_existingNote.text ? ': ' + escapeHtml(_existingNote.text) : '') + '</div><span style="font-size:11px;opacity:0.7;margin-left:auto;">✏️ Rediger</span>';
+                    }
+                    html += '</div>';
+                    html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text) ? 'Rediger note' : 'Tilføj note') + '</button>';
                     html += '<div class="order-header-row">';
                     if (_invoAm === 0) {
                         // I Produktion: show cost to date + projected margin if DInvoIF available
@@ -2845,6 +2991,7 @@ app.get('/', (req, res) => {
                 html += '<th class="order-sortable-header" data-sort-field="belob" style="cursor:pointer; user-select:none;">Fakturabelob' + sortMark('belob') + '</th>';
                 html += '<th class="order-sortable-header" data-sort-field="margin" style="cursor:pointer; user-select:none;">Margin' + sortMark('margin') + '</th>';
                 html += '<th>Faktura</th>';
+                html += '<th>Note</th>';
                 html += '<th>Opdater</th>';
                 html += '</tr>';
                 for (const o of orders) {
@@ -2865,6 +3012,7 @@ app.get('/', (req, res) => {
                     html += '<td>' + formatNumber(o.InvoAm || 0) + ' DKK</td>';
                     html += '<td class="order-margin-cell" data-ordno="' + o.OrdNo + '">' + marginHtml + '</td>';
                     html += '<td class="order-invoice-cell" data-ordno="' + o.OrdNo + '">' + getOrderInvoiceStatusHtml(o.OrdNo) + '</td>';
+                    html += '<td class="order-note-cell" data-ordno="' + o.OrdNo + '" onclick="event.stopPropagation();openNotePopup(' + o.OrdNo + ')">' + getOrderNoteHtml(o.OrdNo) + '</td>';
                     html += '<td class="order-refresh-cell"><button class="list-toggle-btn order-refresh-one-btn" data-ordno="' + o.OrdNo + '" style="padding:4px 8px; margin-left:0; background:#00695c !important;" title="Opdater cache for denne ordre">Opdater</button></td>';
                     html += '</tr>';
                 }
@@ -2924,6 +3072,7 @@ app.get('/', (req, res) => {
                     orderListData = orders;
                     hydrateMarginStateFromOrderList(orders);
                     populateBrugerFilterOptions();
+                    await loadAllNotes();
                     renderOrderList();
                     checkOrderListFreshness();
                 } catch (err) {
