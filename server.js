@@ -591,6 +591,7 @@ app.get('/', (req, res) => {
             .note-badge.error { background:#ffebee; color:#b71c1c; border-color:#ef9a9a; }
             .note-badge.check { background:#fff8e1; color:#f57f17; border-color:#ffe082; }
             .note-badge.text { background:#f3e5f5; color:#4a148c; border-color:#ce93d8; }
+            .note-badge.credit { background:#e3f2fd; color:#0d47a1; border-color:#90caf9; }
             .note-popup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:14000; display:flex; align-items:center; justify-content:center; }
             .note-popup { background:#fff; border-radius:10px; padding:22px; width:min(480px,92vw); box-shadow:0 18px 42px rgba(0,0,0,0.28); }
             .note-popup h3 { margin:0 0 14px 0; font-size:16px; color:#1f2937; }
@@ -608,8 +609,11 @@ app.get('/', (req, res) => {
             .order-note-banner.error { background:#ffebee; border:1px solid #ef9a9a; color:#b71c1c; }
             .order-note-banner.check { background:#fff8e1; border:1px solid #ffe082; color:#e65100; }
             .order-note-banner.text  { background:#f3e5f5; border:1px solid #ce93d8; color:#4a148c; }
+            .order-note-banner.credit { background:#e3f2fd; border:1px solid #90caf9; color:#0d47a1; }
             .order-note-banner .note-icon { font-size:18px; flex-shrink:0; }
             .order-note-banner .note-body { flex:1; }
+            .order-list-summary { margin-top:12px; background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; font-size:13px; color:#0f3560; }
+            .order-list-summary strong { color:#0d47a1; }
             .access-gate-overlay { position: fixed; inset: 0; background: rgba(20, 26, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 12000; }
             .access-gate-box { width: min(430px, 92vw); background: #ffffff; border-radius: 10px; padding: 22px; box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
             .access-gate-box h3 { margin: 0 0 10px 0; border: none; padding: 0; color: #1f2937; }
@@ -1007,13 +1011,18 @@ app.get('/', (req, res) => {
 
             function getOrderNoteHtml(ordNo) {
                 const note = orderNotesCache[String(ordNo)];
-                if (!note || (!note.status && !note.text)) return '<span style="color:#bbb;font-size:12px;">-</span>';
-                const icons = { ok: '✅', error: '❌', check: '⚠️' };
-                const icon = icons[note.status] || '📝';
-                const cls = note.status || 'text';
+                if (!note || (!note.status && !note.text && !note.isCreditNote)) return '<span style="color:#bbb;font-size:12px;">-</span>';
+                const icons = { ok: '✅', error: '❌', check: '⚠️', credit: '🧾' };
+                const icon = note.isCreditNote ? icons.credit : (icons[note.status] || '📝');
+                const cls = note.isCreditNote ? 'credit' : (note.status || 'text');
                 const preview = note.text ? escapeHtmlFE(note.text.slice(0, 40)) + (note.text.length > 40 ? '…' : '') : '';
                 return '<span class="note-badge ' + cls + '" onclick="event.stopPropagation();openNotePopup(' + Number(ordNo) + ')">'
-                    + icon + (preview ? ' ' + preview : '') + '</span>';
+                    + icon + (note.isCreditNote ? ' Kreditnota' : '') + (preview ? ' ' + preview : '') + '</span>';
+            }
+
+            function isOrderMarkedCreditNote(ordNo) {
+                const note = orderNotesCache[String(ordNo)];
+                return Boolean(note && note.isCreditNote === true);
             }
 
             function escapeHtmlFE(s) {
@@ -1038,6 +1047,10 @@ app.get('/', (req, res) => {
                     '<option value="error">❌ Fejl</option>' +
                     '<option value="check">⚠️ Tjek</option>' +
                     '</select>' +
+                    '<label style="display:flex;align-items:center;gap:8px;margin:-2px 0 10px 0;font-weight:600;">' +
+                    '<input id="noteCreditChk" type="checkbox" ' + (note.isCreditNote ? 'checked' : '') + ' style="width:16px;height:16px;" />' +
+                    'Kreditnota (udeluk fra samlet resoconto)' +
+                    '</label>' +
                     '<label>Note</label>' +
                     '<textarea id="noteTextArea" placeholder="Skriv en note til denne ordre...">' + escapeHtmlFE(note.text || '') + '</textarea>' +
                     (note.updatedAt ? '<div style="font-size:11px;color:#888;margin-bottom:10px;">Sidst opdateret: ' + note.updatedAt.slice(0,16).replace('T',' ') + '</div>' : '') +
@@ -1055,11 +1068,12 @@ app.get('/', (req, res) => {
             async function saveOrderNote(ordNo, fromOrderDetail) {
                 const status = document.getElementById('noteStatusSel').value;
                 const text = document.getElementById('noteTextArea').value.trim();
+                const isCreditNote = Boolean(document.getElementById('noteCreditChk') && document.getElementById('noteCreditChk').checked);
                 try {
                     const r = await fetch('/order-note/' + ordNo, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status, text })
+                        body: JSON.stringify({ status, text, isCreditNote })
                     });
                     if (r.ok) {
                         const note = await r.json();
@@ -1069,6 +1083,7 @@ app.get('/', (req, res) => {
                 document.getElementById('notePopupOverlay').remove();
                 updateOrderNoteCell(ordNo);
                 if (fromOrderDetail) renderOrderNoteBanner(ordNo);
+                if (orderListVisible) renderOrderList();
             }
 
             async function deleteOrderNote(ordNo, fromOrderDetail) {
@@ -1079,6 +1094,7 @@ app.get('/', (req, res) => {
                 document.getElementById('notePopupOverlay').remove();
                 updateOrderNoteCell(ordNo);
                 if (fromOrderDetail) renderOrderNoteBanner(ordNo);
+                if (orderListVisible) renderOrderList();
             }
 
             function updateOrderNoteCell(ordNo) {
@@ -1087,20 +1103,24 @@ app.get('/', (req, res) => {
                 const cells = listEl.querySelectorAll('.order-note-cell[data-ordno="' + ordNo + '"]');
                 const html = getOrderNoteHtml(ordNo);
                 for (const cell of cells) { cell.innerHTML = html; }
+                updateOrderListSummaryPanel();
             }
 
             function renderOrderNoteBanner(ordNo) {
                 const el = document.getElementById('order-note-banner-' + ordNo);
                 if (!el) return;
                 const note = orderNotesCache[String(ordNo)];
-                if (!note || (!note.status && !note.text)) { el.style.display = 'none'; return; }
-                const icons = { ok: '✅', error: '❌', check: '⚠️' };
-                const icon = icons[note.status] || '📝';
-                const cls = note.status || 'text';
+                if (!note || (!note.status && !note.text && !note.isCreditNote)) { el.style.display = 'none'; return; }
+                const icons = { ok: '✅', error: '❌', check: '⚠️', credit: '🧾' };
+                const icon = note.isCreditNote ? icons.credit : (icons[note.status] || '📝');
+                const cls = note.isCreditNote ? 'credit' : (note.status || 'text');
                 el.className = 'order-note-banner ' + cls;
                 el.style.display = 'flex';
+                const label = note.isCreditNote
+                    ? 'Kreditnota'
+                    : (note.status === 'ok' ? 'OK' : note.status === 'error' ? 'Fejl' : note.status === 'check' ? 'Tjek' : 'Note');
                 el.innerHTML = '<span class="note-icon">' + icon + '</span><div class="note-body"><strong>' +
-                    (note.status === 'ok' ? 'OK' : note.status === 'error' ? 'Fejl' : note.status === 'check' ? 'Tjek' : 'Note') +
+                    label +
                     '</strong>' + (note.text ? ': ' + escapeHtmlFE(note.text) : '') + '</div>' +
                     '<span style="font-size:11px;opacity:0.7;margin-left:auto;cursor:pointer;" onclick="openNotePopup(' + ordNo + ',true)">✏️ Rediger</span>';
             }
@@ -1504,6 +1524,7 @@ app.get('/', (req, res) => {
                 for (const cell of cells) {
                     cell.innerHTML = marginHtml;
                 }
+                updateOrderListSummaryPanel();
             }
 
             function refreshOrderListStatus() {
@@ -1727,6 +1748,60 @@ app.get('/', (req, res) => {
                 return '<span style="background:#d32f2f; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">❌ ' + marginPercent + '%</span>';
             }
 
+            function getFilteredOrderSummary(orders) {
+                const safeOrders = Array.isArray(orders) ? orders : [];
+                let considered = 0;
+                let excludedCredit = 0;
+                let pendingMargin = 0;
+                let totalRevenue = 0;
+                let totalCost = 0;
+
+                for (const o of safeOrders) {
+                    if (isOrderMarkedCreditNote(o.OrdNo)) {
+                        excludedCredit += 1;
+                        continue;
+                    }
+                    const state = getMarginState(o.OrdNo);
+                    if (!state || state.status !== 'success') {
+                        pendingMargin += 1;
+                        continue;
+                    }
+                    considered += 1;
+                    totalRevenue += Number(state.totalRevenue || 0);
+                    totalCost += Number(state.totalCost || 0);
+                }
+
+                const marginAmount = totalRevenue - totalCost;
+                const marginPct = totalCost > 0 ? calculateOrderMarginPercent(totalRevenue, totalCost).toFixed(2) : '0.00';
+                return {
+                    considered,
+                    excludedCredit,
+                    pendingMargin,
+                    totalRevenue,
+                    totalCost,
+                    marginAmount,
+                    marginPct
+                };
+            }
+
+            function buildOrderListSummaryHtml(orders) {
+                const listSummary = getFilteredOrderSummary(orders);
+                let html = '<div><strong>Resoconto lista filtrata</strong> (viste: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + listSummary.excludedCredit + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
+                html += '<div style="margin-top:6px;display:flex;gap:18px;flex-wrap:wrap;">';
+                html += '<span>Totale ricavo: <strong>' + formatNumber(listSummary.totalRevenue) + ' DKK</strong></span>';
+                html += '<span>Totale costo: <strong>' + formatNumber(listSummary.totalCost) + ' DKK</strong></span>';
+                html += '<span>Margine: <strong>' + formatNumber(listSummary.marginAmount) + ' DKK (' + listSummary.marginPct + '%)</strong></span>';
+                html += '</div>';
+                return html;
+            }
+
+            function updateOrderListSummaryPanel() {
+                const summaryEl = document.getElementById('orderListSummary');
+                if (!summaryEl || !orderListVisible) return;
+                const orders = getFilteredOrders();
+                summaryEl.innerHTML = buildOrderListSummaryHtml(orders);
+            }
+
             async function searchOrder() {
                 const ordNo = document.getElementById('orderInput').value;
                 if (!ordNo) {
@@ -1792,16 +1867,20 @@ app.get('/', (req, res) => {
                     html += '<h2>Salgsordre: ' + data.orderHeader.OrdNo + ' - ' + (data.orderHeader.CustomerName || '-') + '</h2>';
                     const _noteOrdNo = Number(data.orderHeader.OrdNo);
                     const _existingNote = orderNotesCache[String(_noteOrdNo)];
-                    const _noteIcons = { ok: '✅', error: '❌', check: '⚠️' };
-                    const _noteIcon = _existingNote && _existingNote.status ? (_noteIcons[_existingNote.status] || '📝') : '📝';
-                    const _noteCls = _existingNote && _existingNote.status ? _existingNote.status : 'text';
-                    const _noteDisplay = _existingNote && (_existingNote.status || _existingNote.text) ? 'flex' : 'none';
+                    const _noteIcons = { ok: '✅', error: '❌', check: '⚠️', credit: '🧾' };
+                    const _noteIcon = _existingNote && _existingNote.isCreditNote
+                        ? _noteIcons.credit
+                        : (_existingNote && _existingNote.status ? (_noteIcons[_existingNote.status] || '📝') : '📝');
+                    const _noteCls = _existingNote && _existingNote.isCreditNote
+                        ? 'credit'
+                        : (_existingNote && _existingNote.status ? _existingNote.status : 'text');
+                    const _noteDisplay = _existingNote && (_existingNote.status || _existingNote.text || _existingNote.isCreditNote) ? 'flex' : 'none';
                     html += '<div id="order-note-banner-' + _noteOrdNo + '" class="order-note-banner ' + _noteCls + '" style="display:' + _noteDisplay + ';" onclick="openNotePopup(' + _noteOrdNo + ',true)">';
-                    if (_existingNote && (_existingNote.status || _existingNote.text)) {
-                        html += '<span class="note-icon">' + _noteIcon + '</span><div class="note-body"><strong>' + (_existingNote.status === 'ok' ? 'OK' : _existingNote.status === 'error' ? 'Fejl' : _existingNote.status === 'check' ? 'Tjek' : 'Note') + '</strong>' + (_existingNote.text ? ': ' + escapeHtml(_existingNote.text) : '') + '</div><span style="font-size:11px;opacity:0.7;margin-left:auto;">✏️ Rediger</span>';
+                    if (_existingNote && (_existingNote.status || _existingNote.text || _existingNote.isCreditNote)) {
+                        html += '<span class="note-icon">' + _noteIcon + '</span><div class="note-body"><strong>' + (_existingNote.isCreditNote ? 'Kreditnota' : (_existingNote.status === 'ok' ? 'OK' : _existingNote.status === 'error' ? 'Fejl' : _existingNote.status === 'check' ? 'Tjek' : 'Note')) + '</strong>' + (_existingNote.text ? ': ' + escapeHtml(_existingNote.text) : '') + '</div><span style="font-size:11px;opacity:0.7;margin-left:auto;">✏️ Rediger</span>';
                     }
                     html += '</div>';
-                    html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text) ? 'Rediger note' : 'Tilføj note') + '</button>';
+                    html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text || _existingNote.isCreditNote) ? 'Rediger note' : 'Tilføj note') + '</button>';
                     loadOrderNote(_noteOrdNo).catch(() => {});
                     html += '<div class="order-header-row">';
                     if (_invoAm === 0) {
@@ -3053,7 +3132,13 @@ app.get('/', (req, res) => {
                     html += '<td class="order-refresh-cell"><button class="list-toggle-btn order-refresh-one-btn" data-ordno="' + o.OrdNo + '" style="padding:4px 8px; margin-left:0; background:#00695c !important;" title="Opdater cache for denne ordre">Opdater</button></td>';
                     html += '</tr>';
                 }
-                html += '</table></div>';
+                html += '</table>';
+
+                html += '<div id="orderListSummary" class="order-list-summary">';
+                html += buildOrderListSummaryHtml(orders);
+                html += '</div>';
+
+                html += '</div>';
                 el.innerHTML = html;
 
                 // Carica i margini in coda per tutti gli ordini visibili.

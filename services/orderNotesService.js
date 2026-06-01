@@ -3,7 +3,7 @@
  * Persistent notes per order. Stored in order_notes.json next to the executable.
  * Never deleted by "Ryd cache" — survives all cache clears.
  *
- * Schema: { "403668": { status: "ok"|"error"|"check"|"", text: "...", updatedAt: "ISO8601" } }
+ * Schema: { "403668": { status: "ok"|"error"|"check"|"", text: "...", isCreditNote: bool, updatedAt: "ISO8601" } }
  */
 const fs = require('fs');
 const path = require('path');
@@ -44,15 +44,17 @@ function getAllNotes() {
     return { ..._notes };
 }
 
-function setNote(ordNo, { status = '', text = '' } = {}) {
+function setNote(ordNo, { status = '', text = '', isCreditNote = false } = {}) {
     _load();
     const key = String(ordNo);
-    if (!status && !text.trim()) {
+    const creditFlag = Boolean(isCreditNote);
+    if (!status && !text.trim() && !creditFlag) {
         delete _notes[key];
     } else {
         _notes[key] = {
             status: status || '',
             text: String(text || '').slice(0, 2000),
+            isCreditNote: creditFlag,
             updatedAt: new Date().toISOString()
         };
     }
