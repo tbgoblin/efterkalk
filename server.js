@@ -989,6 +989,22 @@ app.get('/', (req, res) => {
                 } catch {}
             }
 
+            async function loadOrderNote(ordNo) {
+                const numericOrdNo = Number(ordNo || 0);
+                if (!numericOrdNo) return null;
+                try {
+                    const r = await fetch('/order-note/' + numericOrdNo);
+                    if (!r.ok) return null;
+                    const note = await r.json();
+                    orderNotesCache[String(numericOrdNo)] = note || { status: '', text: '', updatedAt: null };
+                    renderOrderNoteBanner(numericOrdNo);
+                    updateOrderNoteCell(numericOrdNo);
+                    return note;
+                } catch {
+                    return null;
+                }
+            }
+
             function getOrderNoteHtml(ordNo) {
                 const note = orderNotesCache[String(ordNo)];
                 if (!note || (!note.status && !note.text)) return '<span style="color:#bbb;font-size:12px;">-</span>';
@@ -1766,6 +1782,7 @@ app.get('/', (req, res) => {
                     }
                     html += '</div>';
                     html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text) ? 'Rediger note' : 'Tilføj note') + '</button>';
+                    loadOrderNote(_noteOrdNo).catch(() => {});
                     html += '<div class="order-header-row">';
                     if (_invoAm === 0) {
                         // I Produktion: show cost to date + projected margin if DInvoIF available
@@ -3072,7 +3089,9 @@ app.get('/', (req, res) => {
                     orderListData = orders;
                     hydrateMarginStateFromOrderList(orders);
                     populateBrugerFilterOptions();
-                    await loadAllNotes();
+                    loadAllNotes().then(() => {
+                        if (orderListVisible) renderOrderList();
+                    }).catch(() => {});
                     renderOrderList();
                     checkOrderListFreshness();
                 } catch (err) {
