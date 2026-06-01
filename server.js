@@ -1139,6 +1139,7 @@ app.get('/', (req, res) => {
             function submitAccessCode() {
                 const input = document.getElementById('accessGateInput');
                 const err = document.getElementById('accessGateError');
+                const btn = document.getElementById('accessGateBtn');
                 const value = input ? String(input.value || '').trim() : '';
                 if (value !== ACCESS_CODE) {
                     if (err) err.textContent = 'Forkert kode.';
@@ -1149,9 +1150,28 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                accessGranted = true;
-                hideAccessGate();
-                initializeAfterAccess();
+                if (err) err.textContent = 'Åbner...';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Åbner...';
+                }
+
+                setTimeout(() => {
+                    try {
+                        accessGranted = true;
+                        hideAccessGate();
+                        initializeAfterAccess();
+                    } catch (e) {
+                        accessGranted = false;
+                        showAccessGate();
+                        if (err) err.textContent = 'Fejl ved åbning: ' + (e && e.message ? e.message : 'ukendt fejl');
+                    } finally {
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = 'Åbn';
+                        }
+                    }
+                }, 0);
             }
 
             function initializeAfterAccess() {
@@ -3309,6 +3329,7 @@ app.get('/', (req, res) => {
             window.onload = function() {
                 showAccessGate();
                 const orderInput = document.getElementById('orderInput');
+                const accessGateBtn = document.getElementById('accessGateBtn');
                 if (orderInput) {
                     orderInput.addEventListener('keydown', function(event) {
                         if (event.key === 'Enter') {
@@ -3319,6 +3340,12 @@ app.get('/', (req, res) => {
                             }
                             searchOrder();
                         }
+                    });
+                }
+                if (accessGateBtn) {
+                    accessGateBtn.addEventListener('click', function(event) {
+                        event.preventDefault();
+                        submitAccessCode();
                     });
                 }
                 const accessGateInput = document.getElementById('accessGateInput');
