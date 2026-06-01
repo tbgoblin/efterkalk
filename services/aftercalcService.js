@@ -904,7 +904,8 @@ function createAftercalcService({
                     totalRevenue: parseFloat(totalRevenue.toFixed(2)),
                     totalCost: parseFloat(totalCost.toFixed(2)),
                     margin: parseFloat(margin.toFixed(2)),
-                    marginPercentage
+                    marginPercentage,
+                    hasInvoiceWarning: productionOrders.some(ord => Array.isArray(ord.lines) && ord.lines.some(line => line.UsesMissingInvoiceFallback))
                 }
             };
         } catch (err) {

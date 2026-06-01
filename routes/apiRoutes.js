@@ -68,6 +68,7 @@ function createApiRouter({
                 ordNo: marginInfo.ordNo,
                 totalRevenue: marginInfo.totalRevenue,
                 totalCost: marginInfo.totalCost,
+                hasInvoiceWarning: Boolean(marginInfo.hasInvoiceWarning),
                 cached: true
             };
             diskCache.set(cacheKey, result, CACHE_TTL_ORDER_MARGIN_MS);

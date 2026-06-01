@@ -30,7 +30,7 @@ const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v21_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v20_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v21_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
@@ -224,6 +224,7 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
                 ordNo: key,
                 totalRevenue: Number(diskMargin.totalRevenue || 0),
                 totalCost: Number(diskMargin.totalCost || 0),
+                hasInvoiceWarning: diskMargin.hasInvoiceWarning === true,
                 computedAt: Date.now()
             };
             orderMarginCache.set(key, marginInfo);
@@ -245,6 +246,7 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
             ordNo: key,
             totalRevenue: Number(data.summary.totalRevenue || 0),
             totalCost: Number(data.summary.totalCost || 0),
+            hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning),
             computedAt: Date.now()
         };
 
@@ -1294,6 +1296,23 @@ app.get('/', (req, res) => {
                 return marginStateByOrdNo[String(ordNo)] || null;
             }
 
+            function getOrderInvoiceStatusHtml(ordNo) {
+                const marginState = getMarginState(ordNo);
+                if (!marginState || marginState.status !== 'success') return '<span style="color:#999;">-</span>';
+                if (marginState.hasInvoiceWarning) {
+                    return '<span title="En eller flere linjer mangler faktura (NoInvo=0); kostberegning bruger NoFin som fallback." style="display:inline-flex;align-items:center;gap:4px;background:#fff3e0;color:#e65100;font-size:12px;font-weight:600;padding:2px 7px;border-radius:10px;border:1px solid #ffcc80;">🧾 Mangler</span>';
+                }
+                return '<span style="color:#388e3c;font-size:13px;" title="Alle fakturaer registreret.">✓</span>';
+            }
+
+            function updateOrderInvoiceCell(ordNo) {
+                const listEl = document.getElementById('orderList');
+                if (!listEl) return;
+                const cells = listEl.querySelectorAll('.order-invoice-cell[data-ordno="' + ordNo + '"]');
+                const html = getOrderInvoiceStatusHtml(ordNo);
+                for (const cell of cells) { cell.innerHTML = html; }
+            }
+
             function getOrderMarginHtml(ordNo) {
                 const marginState = getMarginState(ordNo);
                 let marginHtml = '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>';
@@ -1387,9 +1406,11 @@ app.get('/', (req, res) => {
                     marginStateByOrdNo[key] = {
                         status: 'success',
                         totalRevenue: Number(data.totalRevenue || 0),
-                        totalCost: Number(data.totalCost || 0)
+                        totalCost: Number(data.totalCost || 0),
+                        hasInvoiceWarning: Boolean(data.hasInvoiceWarning)
                     };
                     updateOrderMarginCell(ordNo);
+                    updateOrderInvoiceCell(ordNo);
                     refreshOrderListStatus();
                     scheduleMarginSortRefresh();
                 } catch (err) {
@@ -2823,6 +2844,7 @@ app.get('/', (req, res) => {
                 html += '<th class="order-sortable-header" data-sort-field="date" style="cursor:pointer; user-select:none;">Fakturadato' + sortMark('date') + '</th>';
                 html += '<th class="order-sortable-header" data-sort-field="belob" style="cursor:pointer; user-select:none;">Fakturabelob' + sortMark('belob') + '</th>';
                 html += '<th class="order-sortable-header" data-sort-field="margin" style="cursor:pointer; user-select:none;">Margin' + sortMark('margin') + '</th>';
+                html += '<th>Faktura</th>';
                 html += '<th>Opdater</th>';
                 html += '</tr>';
                 for (const o of orders) {
@@ -2842,6 +2864,7 @@ app.get('/', (req, res) => {
                     html += '<td>' + invDate + '</td>';
                     html += '<td>' + formatNumber(o.InvoAm || 0) + ' DKK</td>';
                     html += '<td class="order-margin-cell" data-ordno="' + o.OrdNo + '">' + marginHtml + '</td>';
+                    html += '<td class="order-invoice-cell" data-ordno="' + o.OrdNo + '">' + getOrderInvoiceStatusHtml(o.OrdNo) + '</td>';
                     html += '<td class="order-refresh-cell"><button class="list-toggle-btn order-refresh-one-btn" data-ordno="' + o.OrdNo + '" style="padding:4px 8px; margin-left:0; background:#00695c !important;" title="Opdater cache for denne ordre">Opdater</button></td>';
                     html += '</tr>';
                 }
