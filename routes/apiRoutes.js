@@ -309,7 +309,7 @@ function createApiRouter({
                 .sort((a, b) => toNumber(a.LnNo) - toNumber(b.LnNo));
 
             const filteredNestingRows = (prodNoFilter
-                ? inScopeRows.filter(r => String(r.ProdNo || '').trim().toUpperCase() === normalizedProdNoFilter)
+                ? finishedRows.filter(r => String(r.ProdNo || '').trim().toUpperCase() === normalizedProdNoFilter)
                 : finishedRows)
                 .sort((a, b) => toNumber(a.LnNo) - toNumber(b.LnNo));
 

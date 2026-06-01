@@ -735,6 +735,12 @@ app.get('/', (req, res) => {
                 return displayKey === '6' || displayKey === '9' || isInvoiceTrackedProdNo(prodNo);
             }
 
+            function isProductionSummaryExcludedLine(line) {
+                if (!line) return false;
+                const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+                return Number(line.LnNo || 0) === 1 || key === '0' || key === '3' || key === '5';
+            }
+
             function getDisplayProdTp4Key(prodTp4, prodNo, purcNo) {
                 const rawKey = (prodTp4 === null || prodTp4 === undefined) ? 'NA' : String(prodTp4);
                 if (rawKey === '3') return '1';
@@ -2973,7 +2979,10 @@ app.get('/', (req, res) => {
                         ? '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Pris/enhed</th><th>Samlet kost (beregnet)</th></tr>'
                         : '<table><tr><th>Linje</th><th>ProdTp4</th><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Nesting/enhed</th><th>Samlet kost (beregnet)</th></tr>';
                     for (const line of filteredLines) {
-                        const displayLineCost = Number(line.EffectiveLineCost || 0);
+                        const lineExcludedFromTotal = !isYdelseFilteredView && isProductionSummaryExcludedLine(line);
+                        const displayLineCost = lineExcludedFromTotal
+                            ? null
+                            : Number(line.EffectiveLineCost || 0);
                         const warningFlagHtml = getWarningFlagHtml(line);
                         const invoiceStatusFlagHtml = getInvoiceStatusFlagHtml(line, shouldShowInvoiceStatus);
                         const timeAdjustmentFlagHtml = getTimeAdjustmentFlagHtml(line);
@@ -3024,7 +3033,7 @@ app.get('/', (req, res) => {
                             html += '<td>' + (isLaserProdLine ? '-' : formatNumber(displayUnitCost)) + '</td>';
                             html += '<td>' + formatNumber(line.NestingCost || 0) + '</td>';
                         }
-                        html += '<td><strong>' + formatNumber(displayLineCost) + '</strong></td>';
+                        html += '<td><strong>' + (displayLineCost === null ? '-' : formatNumber(displayLineCost)) + '</strong></td>';
                         html += '</tr>';
                     }
                     html += isYdelseFilteredView
