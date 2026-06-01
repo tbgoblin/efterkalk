@@ -382,9 +382,12 @@ function createApiRouter({
                 const prodKey = String(r.ProdNo || '').trim().toUpperCase();
                 const candidateLookupKey = String(r.OrdNo || '').trim() + '_' + routeKey + '_' + prodKey;
                 const candidateNoFin = candidateNoFinMap.has(candidateLookupKey) ? candidateNoFinMap.get(candidateLookupKey) : null;
-                const qtaPezzi = candidateNoFin !== null && candidateNoFin > 0
-                    ? candidateNoFin
-                    : (refFinished ? toNumber(refFinished.NoFin) : null);
+                const rowNoFin = refFinished ? toNumber(refFinished.NoFin) : null;
+                // Multiordre can have multiple finished rows with same ProdNo/Route but different quantities.
+                // Keep row-level NoFin when present; only fallback to candidate map if row quantity is missing.
+                const qtaPezzi = rowNoFin !== null && rowNoFin > 0
+                    ? rowNoFin
+                    : (candidateNoFin !== null && candidateNoFin > 0 ? candidateNoFin : null);
                 const structNoPerStr = structMap.get(prodKey) || null;
                 const oldExpectedUnitWeight = refFinished ? normalizeExpectedWeight(refFinished.Free3) : null;
                 const expectedUnitWeight = (structNoPerStr !== null && structNoPerStr > 0)
