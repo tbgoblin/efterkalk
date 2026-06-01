@@ -626,7 +626,7 @@ app.get('/', (req, res) => {
         </style>
     </head>
     <body>
-        <div id="accessGateOverlay" class="access-gate-overlay">
+        <div id="accessGateOverlay" class="access-gate-overlay" style="display:flex;">
             <div class="access-gate-box">
                 <h3>Adgangskode</h3>
                 <p>Indtast kode for at se ordreliste og detaljer.</p>

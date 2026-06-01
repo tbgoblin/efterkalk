@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 let mainWindow = null;
+let autoUpdaterConfigured = false;
 
 // RDS / virtual desktop compatibility: disable GPU acceleration
 // These must be set BEFORE app is ready
@@ -152,6 +153,9 @@ async function triggerManualUpdateCheck() {
 }
 
 function setupAutoUpdater() {
+    if (autoUpdaterConfigured) return;
+    autoUpdaterConfigured = true;
+
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
         console.warn('Update check failed:', err.message);
     });
@@ -258,6 +262,8 @@ function bootDesktopApp() {
 
     // Show loading screen immediately — don't wait for server
     createMainWindow();
+    setupAutoUpdater();
+
     const pkgVersion = (() => { try { return require('./package.json').version; } catch(e) { return ''; } })();
     const loadingPath = path.join(__dirname, 'loading.html');
     writeDesktopLog('load loading screen path=' + loadingPath + ' port=' + USER_PORT);
@@ -270,7 +276,6 @@ function bootDesktopApp() {
         global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
         // loading.html controls navigation timing via /health and /warmup-status polling.
         // Do not force a fallback loadURL here, otherwise the app can open before warmup is done.
-        setupAutoUpdater();
     }).catch(err => {
         console.error('Server start failed:', err.message);
         if (err && err.code) console.error('Server start failed code:', err.code);
