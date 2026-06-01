@@ -1,6 +1,7 @@
 /**
  * orderNotesService.js
- * Persistent notes per order. Stored in order_notes.json next to the executable.
+ * Persistent notes per order. Stored in order_notes.json in a stable user-writable path
+ * (GANTECH_NOTES_DIR or LOCALAPPDATA\Gantech Efterkalk) with legacy migration.
  * Never deleted by "Ryd cache" — survives all cache clears.
  *
  * Schema: { "403668": { status: "ok"|"error"|"check"|"", text: "...", isCreditNote: bool, updatedAt: "ISO8601" } }
@@ -8,15 +9,56 @@
 const fs = require('fs');
 const path = require('path');
 
-const NOTES_FILE = path.join(require('process').env.PORTABLE_EXECUTABLE_DIR || __dirname, '..', 'order_notes.json');
+function resolveLegacyNotesFile() {
+    return path.join(require('process').env.PORTABLE_EXECUTABLE_DIR || __dirname, '..', 'order_notes.json');
+}
+
+function resolveNotesBaseDir() {
+    const explicitDir = String(process.env.GANTECH_NOTES_DIR || '').trim();
+    if (explicitDir) return explicitDir;
+
+    const localAppData = String(process.env.LOCALAPPDATA || '').trim();
+    if (localAppData) return path.join(localAppData, 'Gantech Efterkalk');
+
+    const portableDir = String(process.env.PORTABLE_EXECUTABLE_DIR || '').trim();
+    if (portableDir) return portableDir;
+
+    return path.join(__dirname, '..');
+}
+
+function resolveNotesFile() {
+    return path.join(resolveNotesBaseDir(), 'order_notes.json');
+}
+
+function ensureNotesDir(notesFile) {
+    try {
+        fs.mkdirSync(path.dirname(notesFile), { recursive: true });
+    } catch {
+        // Ignore directory create errors; save/load will handle failures.
+    }
+}
+
+function migrateLegacyNotesIfNeeded(notesFile) {
+    const legacyFile = resolveLegacyNotesFile();
+    if (path.resolve(legacyFile) === path.resolve(notesFile)) return;
+    if (!fs.existsSync(legacyFile) || fs.existsSync(notesFile)) return;
+    try {
+        ensureNotesDir(notesFile);
+        fs.copyFileSync(legacyFile, notesFile);
+    } catch {
+        // Ignore migration failures and continue with normal load behavior.
+    }
+}
 
 let _notes = null;
 
 function _load() {
     if (_notes !== null) return;
+    const notesFile = resolveNotesFile();
+    migrateLegacyNotesIfNeeded(notesFile);
     try {
-        if (fs.existsSync(NOTES_FILE)) {
-            const raw = fs.readFileSync(NOTES_FILE, 'utf8');
+        if (fs.existsSync(notesFile)) {
+            const raw = fs.readFileSync(notesFile, 'utf8');
             _notes = JSON.parse(raw);
         } else {
             _notes = {};
@@ -27,8 +69,10 @@ function _load() {
 }
 
 function _save() {
+    const notesFile = resolveNotesFile();
     try {
-        fs.writeFileSync(NOTES_FILE, JSON.stringify(_notes, null, 2), 'utf8');
+        ensureNotesDir(notesFile);
+        fs.writeFileSync(notesFile, JSON.stringify(_notes, null, 2), 'utf8');
     } catch (err) {
         console.error('[orderNotes] save error:', err.message);
     }
