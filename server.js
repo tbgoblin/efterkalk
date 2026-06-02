@@ -849,6 +849,7 @@ app.get('/', (req, res) => {
             @media (max-width: 900px) {
                 .modal-box { width: 99vw; max-height: 93vh; padding: 12px; }
                 .modal-box th, .modal-box td { padding: 8px 6px; font-size: 13px; }
+                .dashboard-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
                 .modal-content-wrap { grid-template-columns: 1fr; }
                 .summary-image-panel { width: 100%; min-width: 0; max-height: 52vh; border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; }
                 .laser-summary-layout { flex-direction: column; }
@@ -864,6 +865,7 @@ app.get('/', (req, res) => {
                 .oversigt-details table { min-width:0; }
             }
             @media (max-width: 640px) {
+                .dashboard-grid { grid-template-columns:1fr; }
                 .order-detail-modal-overlay { padding: 6px; }
                 .order-detail-modal-shell { border-radius: 10px; }
                 .order-detail-modal-header { padding: 10px 12px; }
@@ -922,6 +924,18 @@ app.get('/', (req, res) => {
             .access-gate-row input { flex: 1; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 16px; }
             .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
             .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
+            .main-dashboard { display:none; margin-bottom:16px; }
+            .dashboard-shell { background:linear-gradient(160deg, #ffffff 0%, #f3f8ff 62%, #edf4ff 100%); border:1px solid #d7e6fb; border-radius:16px; box-shadow:0 14px 30px rgba(15,53,96,0.10); padding:16px; }
+            .dashboard-head h2 { margin:0; color:#0f3560; font-size:26px; letter-spacing:0.01em; }
+            .dashboard-head p { margin:6px 0 0 0; color:#4d6680; font-size:13px; }
+            .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+            .dash-card { border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; }
+            .dash-card h4 { margin:0; color:#0f3560; font-size:15px; }
+            .dash-card p { margin:0; color:#5d7590; font-size:12px; line-height:1.35; }
+            .dash-card .dash-chip { align-self:flex-start; font-size:11px; font-weight:700; color:#0f3560; background:#eaf3ff; border:1px solid #d0e2f9; border-radius:999px; padding:3px 8px; }
+            .dash-card button { margin-top:auto; border:none; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; }
+            .dash-card button[disabled] { opacity:0.6; cursor:not-allowed; background:linear-gradient(180deg,#8aa6c5 0%,#5f7f9e 100%); }
+            #mainWorkspace { display:none; }
             .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
             .allocation-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#b26a00; font-size:16px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; }
             .invoice-status-banner { margin: 0 0 10px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; }
@@ -942,7 +956,7 @@ app.get('/', (req, res) => {
             </div>
         </div>
         <div class="header-banner-wrapper">
-            <button id="homeBtn" onclick="goBackToList()" title="Tilbage til ordreliste" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
+            <button id="homeBtn" onclick="goToDashboard()" title="Tilbage til dashboard" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
             <div class="header-brand">
                 <img class="header-brand-logo" src="/assets/brand/logo-gantech.png" alt="Gantech logo" />
                 <span class="header-brand-text">${APP_VERSION}</span>
@@ -953,7 +967,42 @@ app.get('/', (req, res) => {
             </div>
             <span class="header-status-badge" id="systemStatusBadge">System indlæser...</span>
         </div>
-        <div class="container">
+        <div class="container main-dashboard" id="mainDashboard">
+            <section class="dashboard-shell">
+                <div class="dashboard-head">
+                    <h2>Gantech Operations Hub</h2>
+                    <p>Vælg modul for at gå videre. Efterkalk er aktiv nu, de øvrige klargøres til næste fase.</p>
+                </div>
+                <div class="dashboard-grid">
+                    <article class="dash-card">
+                        <span class="dash-chip">Aktiv</span>
+                        <h4>Efterkalkulation</h4>
+                        <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
+                        <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
+                    </article>
+                    <article class="dash-card">
+                        <span class="dash-chip">Planlagt</span>
+                        <h4>Belastning</h4>
+                        <p>Kapacitetsbelastning, ressourcer, ordreflyt og planlægningsudsving.</p>
+                        <button onclick="openModule('belastning')" disabled>Kommer snart</button>
+                    </article>
+                    <article class="dash-card">
+                        <span class="dash-chip">Planlagt</span>
+                        <h4>Omsætning</h4>
+                        <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
+                        <button onclick="openModule('omsaetning')" disabled>Kommer snart</button>
+                    </article>
+                    <article class="dash-card">
+                        <span class="dash-chip">Planlagt</span>
+                        <h4>Faktura</h4>
+                        <p>Fakturaflow, status, opfølgning og administration af økonomidata.</p>
+                        <button onclick="openModule('faktura')" disabled>Kommer snart</button>
+                    </article>
+                </div>
+            </section>
+        </div>
+
+        <div class="container" id="mainWorkspace">
             <div class="search-box" id="searchBox">
                 <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Åbn søgefelt og filtre">▼ Søg</button>
                 <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." style="display:none;" />
@@ -1753,8 +1802,35 @@ app.get('/', (req, res) => {
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('ord')) {
                     document.getElementById('orderInput').value = params.get('ord');
+                    openModule('efterkalk');
                     searchOrder();
+                    return;
                 }
+                goToDashboard();
+            }
+
+            function openModule(moduleKey) {
+                if (moduleKey !== 'efterkalk') {
+                    alert('Dette modul er klar til næste fase. Når du sender logikken, bygger vi det visuelt og funktionelt.');
+                    return;
+                }
+                const dashboard = document.getElementById('mainDashboard');
+                const workspace = document.getElementById('mainWorkspace');
+                if (dashboard) dashboard.style.display = 'none';
+                if (workspace) workspace.style.display = 'block';
+                goBackToList();
+            }
+
+            function goToDashboard() {
+                const dashboard = document.getElementById('mainDashboard');
+                const workspace = document.getElementById('mainWorkspace');
+                if (workspace) workspace.style.display = 'none';
+                if (dashboard) dashboard.style.display = 'block';
+                const detailModal = document.getElementById('orderDetailModal');
+                const detailBody = document.getElementById('orderDetailModalBody');
+                if (detailModal) detailModal.style.display = 'none';
+                if (detailBody) detailBody.innerHTML = '';
+                document.body.classList.remove('report-modal-open');
             }
 
             async function checkOrderListFreshness() {

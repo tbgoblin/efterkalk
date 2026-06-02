@@ -242,6 +242,9 @@
             { pct: 92, text: 'Næsten klar...' },
         ];
         let step = 0;
+        const LOADING_MIN_MS = 5000;
+        const loadingStartedAt = Date.now();
+        let navigationRequested = false;
         const bar = document.getElementById('progressBar');
         const txt = document.getElementById('statusText');
         const pctEl = document.getElementById('statusPct');
@@ -270,12 +273,17 @@
         let warmupPollCount = 0;
 
         function navigateToApp() {
+            if (navigationRequested) return;
+            navigationRequested = true;
             clearInterval(pollTimer);
             clearInterval(timer);
             document.getElementById('progressBar').style.width = '100%';
             document.getElementById('statusText').textContent = 'Klar! Åbner...';
             document.getElementById('statusPct').textContent = '100%';
-            setTimeout(() => { window.location.href = appUrl; }, 300);
+
+            const elapsedMs = Date.now() - loadingStartedAt;
+            const waitMs = Math.max(0, LOADING_MIN_MS - elapsedMs);
+            setTimeout(() => { window.location.href = appUrl; }, waitMs + 300);
         }
 
         const pollTimer = setInterval(async () => {
