@@ -506,12 +506,29 @@ function createApiRouter({
         }
     });
 
+    router.get('/omsaetning/customers', async (req, res) => {
+        try {
+            const queryText = String(req.query.q || '').trim();
+            const limit = Number(req.query.limit || 20);
+            const customers = await omsaetningService.searchCustomers({ queryText, limit });
+
+            return res.json({
+                ok: true,
+                customers
+            });
+        } catch (err) {
+            logEvent('ERROR omsaetning/customers: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
     router.get('/omsaetning/summary', async (req, res) => {
         try {
             const fra = String(req.query.fra || '').trim();
             const til = String(req.query.til || '').trim();
             const accountCsv = String(req.query.accounts || '').trim();
-            const summary = await omsaetningService.getSummary({ fra, til, accountCsv });
+            const customerCsv = String(req.query.customers || '').trim();
+            const summary = await omsaetningService.getSummary({ fra, til, accountCsv, customerCsv });
 
             return res.json({
                 ok: true,

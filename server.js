@@ -852,6 +852,7 @@ app.get('/', (req, res) => {
                 .dashboard-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
                 .omsaetning-filters { grid-template-columns:1fr 1fr; }
                 .omsaetning-field.omsaetning-accounts-field,
+                .omsaetning-field.omsaetning-customer-field,
                 .omsaetning-field.omsaetning-threshold-field,
                 .omsaetning-actions { grid-column:span 2; }
                 .omsaetning-kpis { grid-template-columns:1fr; }
@@ -954,7 +955,7 @@ app.get('/', (req, res) => {
             .omsaetning-year-note { margin:-2px 0 10px 0; color:#4f6d8c; font-size:12px; }
             .omsaetning-year-btn { border:1px solid #c9ddf8; background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); color:#0f3560; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
             .omsaetning-year-btn.active { background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; border-color:#0f3560; }
-            .omsaetning-filters { display:grid; grid-template-columns:160px 160px 1fr 220px auto; gap:10px; align-items:end; }
+            .omsaetning-filters { display:grid; grid-template-columns:160px 160px minmax(260px,1fr) minmax(260px,1fr) 220px auto; gap:10px; align-items:end; }
             .omsaetning-field label { display:block; font-size:12px; color:#3f5875; font-weight:700; margin-bottom:4px; }
             .omsaetning-field input, .omsaetning-field select { width:100%; border:1px solid #cfe0f7; border-radius:8px; padding:8px 10px; font-size:13px; }
             .omsaetning-threshold-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -966,6 +967,19 @@ app.get('/', (req, res) => {
             .omsaetning-account-item:hover { background:#ecf4ff; }
             .omsaetning-account-item input { width:15px; height:15px; }
             .omsaetning-account-item span { font-size:12px; color:#244766; }
+            .omsaetning-customer-results { border:1px solid #d3e4f8; border-radius:10px; background:#f9fcff; max-height:176px; overflow:auto; margin-top:6px; }
+            .omsaetning-customer-empty { padding:7px 9px; font-size:12px; color:#6b7f95; }
+            .omsaetning-customer-item { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 9px; border-bottom:1px solid #e3eefb; cursor:pointer; }
+            .omsaetning-customer-item:last-child { border-bottom:none; }
+            .omsaetning-customer-item:hover { background:#ecf4ff; }
+            .omsaetning-customer-item .meta { display:flex; flex-direction:column; gap:2px; min-width:0; }
+            .omsaetning-customer-item .meta strong { font-size:12px; color:#214867; }
+            .omsaetning-customer-item .meta span { font-size:11px; color:#5f7892; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }
+            .omsaetning-customer-item .pick { border:none; border-radius:999px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
+            .omsaetning-customer-item .pick.remove { background:linear-gradient(180deg,#8aa6c5 0%,#5f7f9e 100%); }
+            .omsaetning-selected-customers { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+            .omsaetning-selected-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid #c9ddf8; border-radius:999px; background:#eef5ff; color:#0f3560; padding:4px 10px; font-size:11px; font-weight:700; }
+            .omsaetning-selected-chip button { border:none; background:transparent; color:#0f3560; font-size:12px; cursor:pointer; font-weight:800; }
             .omsaetning-actions button { border:none; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
             .omsaetning-kpis { margin-top:12px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
             .omsaetning-kpi { border:1px solid #d6e7fb; border-radius:10px; background:#f8fbff; padding:10px; }
@@ -1089,6 +1103,14 @@ app.get('/', (req, res) => {
                             </div>
                             <div id="omsaetningAccountsList" class="omsaetning-accounts-list"></div>
                         </div>
+                    </div>
+                    <div class="omsaetning-field omsaetning-customer-field">
+                        <label for="omsaetningCustomerSearch">Kunde (prefix)</label>
+                        <input id="omsaetningCustomerSearch" type="text" placeholder="Søg kunde fx logitr..." oninput="scheduleOmsaetningCustomerSearch()" />
+                        <div id="omsaetningCustomerResults" class="omsaetning-customer-results">
+                            <div class="omsaetning-customer-empty">Skriv mindst 2 tegn for at søge kunde.</div>
+                        </div>
+                        <div id="omsaetningSelectedCustomers" class="omsaetning-selected-customers"></div>
                     </div>
                     <div class="omsaetning-field omsaetning-threshold-field">
                         <label>Soglie (Mio)</label>
@@ -1870,6 +1892,10 @@ app.get('/', (req, res) => {
             let omsaetningInitialized = false;
             let omsaetningAccounts = [];
             let omsaetningSelectedAccounts = new Set();
+            let omsaetningCustomerResults = [];
+            let omsaetningSelectedCustomers = new Map();
+            let omsaetningCustomerSearchToken = 0;
+            let omsaetningCustomerSearchTimer = null;
             let omsaetningSelectedFiscalYears = new Set();
 
             function formatMio(value) {
@@ -2032,6 +2058,115 @@ app.get('/', (req, res) => {
                 if (!value) return;
                 if (inputEl.checked) omsaetningSelectedAccounts.add(value);
                 else omsaetningSelectedAccounts.delete(value);
+            }
+
+            function renderOmsaetningSelectedCustomers() {
+                const wrap = document.getElementById('omsaetningSelectedCustomers');
+                if (!wrap) return;
+
+                const entries = Array.from(omsaetningSelectedCustomers.entries());
+                if (entries.length === 0) {
+                    wrap.innerHTML = '';
+                    return;
+                }
+
+                wrap.innerHTML = entries.map(([custNo, name]) => (
+                    '<span class="omsaetning-selected-chip">' +
+                    escapeHtmlFE(String(custNo) + ' - ' + String(name || '')) +
+                    '<button type="button" title="Fjern kunde" onclick="removeOmsaetningCustomer(' + Number(custNo) + ')">×</button>' +
+                    '</span>'
+                )).join('');
+            }
+
+            function removeOmsaetningCustomer(custNo) {
+                const key = String(custNo || '').trim();
+                if (!key) return;
+                omsaetningSelectedCustomers.delete(key);
+                renderOmsaetningSelectedCustomers();
+            }
+
+            function toggleOmsaetningCustomer(custNo, name) {
+                const key = String(custNo || '').trim();
+                if (!key) return;
+                if (omsaetningSelectedCustomers.has(key)) {
+                    omsaetningSelectedCustomers.delete(key);
+                } else {
+                    omsaetningSelectedCustomers.set(key, String(name || '').trim());
+                }
+                renderOmsaetningSelectedCustomers();
+                renderOmsaetningCustomerResults();
+            }
+
+            function toggleOmsaetningCustomerByButton(buttonEl) {
+                if (!buttonEl) return;
+                const custNo = String(buttonEl.getAttribute('data-custno') || '').trim();
+                const custName = String(buttonEl.getAttribute('data-custname') || '').trim();
+                toggleOmsaetningCustomer(custNo, custName);
+            }
+
+            function renderOmsaetningCustomerResults() {
+                const wrap = document.getElementById('omsaetningCustomerResults');
+                if (!wrap) return;
+                const qEl = document.getElementById('omsaetningCustomerSearch');
+                const q = String((qEl && qEl.value) || '').trim();
+
+                if (q.length < 2) {
+                    wrap.innerHTML = '<div class="omsaetning-customer-empty">Skriv mindst 2 tegn for at søge kunde.</div>';
+                    return;
+                }
+
+                if (!Array.isArray(omsaetningCustomerResults) || omsaetningCustomerResults.length === 0) {
+                    wrap.innerHTML = '<div class="omsaetning-customer-empty">Ingen kunder matcher søgningen.</div>';
+                    return;
+                }
+
+                wrap.innerHTML = omsaetningCustomerResults.map(row => {
+                    const custNo = String(row.custNo || '').trim();
+                    const custName = String(row.name || '').trim();
+                    const selected = omsaetningSelectedCustomers.has(custNo);
+                    return '<div class="omsaetning-customer-item">' +
+                        '<div class="meta"><strong>' + escapeHtmlFE(custName || '(uden navn)') + '</strong><span>' + escapeHtmlFE(custNo) + '</span></div>' +
+                        '<button type="button" class="pick' + (selected ? ' remove' : '') + '" data-custno="' + escapeHtmlFE(custNo) + '" data-custname="' + escapeHtmlFE(custName) + '" onclick="toggleOmsaetningCustomerByButton(this)">' + (selected ? 'Valgt' : 'Vælg') + '</button>' +
+                        '</div>';
+                }).join('');
+            }
+
+            function scheduleOmsaetningCustomerSearch() {
+                if (omsaetningCustomerSearchTimer) {
+                    clearTimeout(omsaetningCustomerSearchTimer);
+                }
+                omsaetningCustomerSearchTimer = setTimeout(() => {
+                    searchOmsaetningCustomers();
+                }, 220);
+            }
+
+            async function searchOmsaetningCustomers() {
+                const qEl = document.getElementById('omsaetningCustomerSearch');
+                const q = String((qEl && qEl.value) || '').trim();
+                const token = ++omsaetningCustomerSearchToken;
+
+                if (q.length < 2) {
+                    omsaetningCustomerResults = [];
+                    renderOmsaetningCustomerResults();
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/omsaetning/customers?q=' + encodeURIComponent(q) + '&limit=25');
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const payload = await response.json();
+                    if (token !== omsaetningCustomerSearchToken) return;
+                    const rows = Array.isArray(payload.customers) ? payload.customers : [];
+                    omsaetningCustomerResults = rows;
+                    renderOmsaetningCustomerResults();
+                } catch (err) {
+                    if (token !== omsaetningCustomerSearchToken) return;
+                    omsaetningCustomerResults = [];
+                    const wrap = document.getElementById('omsaetningCustomerResults');
+                    if (wrap) {
+                        wrap.innerHTML = '<div class="omsaetning-customer-empty">Fejl ved kundesøgning.</div>';
+                    }
+                }
             }
 
             function getOmsaetningStatusClass(valueMio, warnThreshold, goodThreshold) {
@@ -2349,6 +2484,7 @@ app.get('/', (req, res) => {
                     alert('Vælg mindst én konto.');
                     return;
                 }
+                const selectedCustomers = Array.from(omsaetningSelectedCustomers.keys()).filter(Boolean);
 
                 const warnThreshold = Math.max(0, Number((warnThresholdInput && warnThresholdInput.value) || 3));
                 const goodThreshold = Math.max(warnThreshold, Number((goodThresholdInput && goodThresholdInput.value) || 5));
@@ -2362,7 +2498,8 @@ app.get('/', (req, res) => {
                     const query = new URLSearchParams({
                         fra,
                         til,
-                        accounts: selected.join(',')
+                        accounts: selected.join(','),
+                        customers: selectedCustomers.join(',')
                     });
 
                     const response = await fetch('/omsaetning/summary?' + query.toString());
@@ -2414,7 +2551,7 @@ app.get('/', (req, res) => {
                     thresholdHtml += '</tbody></table>';
 
                     let html = '<table class="omsaetning-table"><thead><tr>' +
-                        '<th>Måned</th><th>Konto</th><th>Navn</th><th style="text-align:right;">Omsætning (Mio)</th>' +
+                        '<th>Måned</th><th>Konto</th><th>Navn</th><th>Kunde</th><th>Kundenavn</th><th style="text-align:right;">Omsætning (Mio)</th>' +
                         '</tr></thead><tbody>';
 
                     for (const row of rows) {
@@ -2424,6 +2561,8 @@ app.get('/', (req, res) => {
                             '<td>' + escapeHtmlFE(formatMonthDa(row.date)) + '</td>' +
                             '<td>' + escapeHtmlFE(String(row.acNo || '')) + '</td>' +
                             '<td>' + escapeHtmlFE(String(row.name || '')) + '</td>' +
+                            '<td>' + escapeHtmlFE(row.custNo === null || row.custNo === undefined ? '' : String(row.custNo)) + '</td>' +
+                            '<td>' + escapeHtmlFE(String(row.customerName || '')) + '</td>' +
                             '<td style="text-align:right;" title="' + escapeHtmlFE(rowDkkLabel + ' DKK') + '">' + escapeHtmlFE(rowMioLabel) + '</td>' +
                             '</tr>';
                     }
