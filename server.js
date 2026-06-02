@@ -900,7 +900,7 @@ app.get('/', (req, res) => {
             .note-badge.check { background:#fff8e1; color:#f57f17; border-color:#ffe082; }
             .note-badge.text { background:#f3e5f5; color:#4a148c; border-color:#ce93d8; }
             .note-badge.credit { background:#e3f2fd; color:#0d47a1; border-color:#90caf9; }
-            .note-popup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:14000; display:flex; align-items:center; justify-content:center; }
+            .note-popup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:15450; display:flex; align-items:center; justify-content:center; }
             .note-popup { background:#fff; border-radius:10px; padding:22px; width:min(480px,92vw); box-shadow:0 18px 42px rgba(0,0,0,0.28); }
             .note-popup h3 { margin:0 0 14px 0; font-size:16px; color:#1f2937; }
             .note-popup label { font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:4px; }
@@ -1877,6 +1877,11 @@ app.get('/', (req, res) => {
                 return numeric.toLocaleString('da-DK', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
             }
 
+            function formatDkkFromMio(valueMio) {
+                const numeric = Number(valueMio || 0) * 1000000;
+                return numeric.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
             function formatMonthDa(dateValue) {
                 if (!dateValue) return '-';
                 const dt = new Date(dateValue);
@@ -2114,7 +2119,8 @@ app.get('/', (req, res) => {
                         if (value === 0) return;
                         const h = Math.max(1, (value / maxTotal) * innerHeight);
                         stackedTop -= h;
-                        stackedSvgHtml += '<rect x="' + x + '" y="' + stackedTop + '" width="' + barWidth + '" height="' + h + '" fill="' + getOmsaetningColor(accIndex) + '" rx="2" />';
+                        const titleText = formatMonthDa(monthKey) + ' - ' + String(acc.acNo) + ' ' + String(acc.name || '') + ': ' + formatMio(value) + ' Mio DKK (' + formatDkkFromMio(value) + ' DKK)';
+                        stackedSvgHtml += '<rect x="' + x + '" y="' + stackedTop + '" width="' + barWidth + '" height="' + h + '" fill="' + getOmsaetningColor(accIndex) + '" rx="2"><title>' + escapeHtmlFE(titleText) + '</title></rect>';
                     });
                     stackedSvgHtml += '<text x="' + (x + barWidth / 2) + '" y="' + (topPad + innerHeight + 14) + '" text-anchor="middle" font-size="10" fill="#47617c">' + escapeHtmlFE(formatMonthDa(monthKey)) + '</text>';
                 });
@@ -2154,7 +2160,8 @@ app.get('/', (req, res) => {
                 trendSvgHtml += '<path d="' + areaPath + '" fill="rgba(21,101,192,0.12)" />';
                 trendSvgHtml += '<path d="' + linePath + '" fill="none" stroke="#1565c0" stroke-width="3" />';
                 points.forEach(p => {
-                    trendSvgHtml += '<circle cx="' + p.x + '" cy="' + p.y + '" r="3.5" fill="#0f3560" />';
+                    const pointTitle = formatMonthDa(p.monthKey) + ': ' + formatMio(p.total) + ' Mio DKK (' + formatDkkFromMio(p.total) + ' DKK)';
+                    trendSvgHtml += '<circle cx="' + p.x + '" cy="' + p.y + '" r="3.5" fill="#0f3560"><title>' + escapeHtmlFE(pointTitle) + '</title></circle>';
                 });
                 trendSvgHtml += '</g>';
 
@@ -2396,9 +2403,11 @@ app.get('/', (req, res) => {
                         '</tr></thead><tbody>';
                     for (const [monthKey, amountMio] of sortedMonths) {
                         const statusClass = getOmsaetningStatusClass(amountMio, warnThreshold, goodThreshold);
+                        const monthMioLabel = formatMio(amountMio);
+                        const monthDkkLabel = formatDkkFromMio(amountMio);
                         thresholdHtml += '<tr>' +
                             '<td>' + escapeHtmlFE(formatMonthDa(monthKey)) + '</td>' +
-                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatMio(amountMio)) + '</td>' +
+                            '<td class="omsaetning-cell-right" title="' + escapeHtmlFE(monthDkkLabel + ' DKK') + '">' + escapeHtmlFE(monthMioLabel) + '</td>' +
                             '<td><span class="omsaetning-status ' + statusClass + '">' + escapeHtmlFE(getOmsaetningStatusLabel(statusClass)) + '</span></td>' +
                             '</tr>';
                     }
@@ -2409,11 +2418,13 @@ app.get('/', (req, res) => {
                         '</tr></thead><tbody>';
 
                     for (const row of rows) {
+                        const rowMioLabel = formatMio(row.revenueMio || 0);
+                        const rowDkkLabel = formatDkkFromMio(row.revenueMio || 0);
                         html += '<tr>' +
                             '<td>' + escapeHtmlFE(formatMonthDa(row.date)) + '</td>' +
                             '<td>' + escapeHtmlFE(String(row.acNo || '')) + '</td>' +
                             '<td>' + escapeHtmlFE(String(row.name || '')) + '</td>' +
-                            '<td style="text-align:right;">' + escapeHtmlFE(formatMio(row.revenueMio || 0)) + '</td>' +
+                            '<td style="text-align:right;" title="' + escapeHtmlFE(rowDkkLabel + ' DKK') + '">' + escapeHtmlFE(rowMioLabel) + '</td>' +
                             '</tr>';
                     }
 
