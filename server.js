@@ -1008,6 +1008,7 @@ app.get('/', (req, res) => {
             let currentMarginMode = 'classic';
             let orderListData = [];
             let orderListVisible = true;
+            const ORDER_LIST_DAYS_BACK_CLIENT = 30;
             let currentSearchOrderData = null;
             let orderListFilter = '';
             let orderListBrugerFilter = '';
@@ -1847,6 +1848,13 @@ app.get('/', (req, res) => {
                 let totalOperationCost = 0;
                 let totalLaserCost = 0;
                 const rows = [];
+                const exceptionRows = [];
+
+                const pushException = (type, ref, message) => {
+                    const text = String(message || '').trim();
+                    if (!text) return;
+                    exceptionRows.push({ type, ref, message: text });
+                };
 
                 for (const prodOrder of productionOrders) {
                     const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
@@ -1872,6 +1880,16 @@ app.get('/', (req, res) => {
                         } else if (key === '2' && isLaserLProdNo(line && line.ProdNo)) {
                             laserCost += totalCost;
                         }
+
+                        if (line && line.HasWarning && line.WarningText) {
+                            pushException('Advarsel', String(line.ProdNo || line.LnNo || prodOrder.ordNo || '-'), line.WarningText);
+                        }
+                        if (line && line.IsInvoiceTracked && line.UsesMissingInvoiceFallback) {
+                            pushException('Faktura', String(line.ProdNo || line.LnNo || prodOrder.ordNo || '-'), line.MissingInvoiceText || 'Mangler faktura');
+                        }
+                        if (line && line.UsesEstimatedOperationTime) {
+                            pushException('Tid', String(line.ProdNo || line.LnNo || prodOrder.ordNo || '-'), line.EstimatedTimeText || 'Færdigmeldt minutter var 0 og blev estimeret');
+                        }
                     }
 
                     totalPlannedMinutes += plannedMinutes;
@@ -1888,6 +1906,24 @@ app.get('/', (req, res) => {
                         laserCost,
                         totalCost: Number(prodOrder && prodOrder.totalCost) || 0
                     });
+                }
+
+                for (const line of salesOrderLines) {
+                    if (line && line.HasWarning && line.WarningText) {
+                        pushException('Salgsordre', String(line.ProdNo || line.LnNo || orderHeader.OrdNo || '-'), line.WarningText);
+                    }
+                    if (line && line.IsInvoiceTracked && line.UsesMissingInvoiceFallback) {
+                        pushException('Faktura', String(line.ProdNo || line.LnNo || orderHeader.OrdNo || '-'), line.MissingInvoiceText || 'Mangler faktura');
+                    }
+                    if (line && line.UsesEstimatedOperationTime) {
+                        pushException('Tid', String(line.ProdNo || line.LnNo || orderHeader.OrdNo || '-'), line.EstimatedTimeText || 'Færdigmeldt minutter var 0 og blev estimeret');
+                    }
+                }
+
+                for (const line of salesLines) {
+                    if (line && line.HasWarning && line.WarningText) {
+                        pushException('Ekstra linje', String(line.ProdNo || line.LnNo || orderHeader.OrdNo || '-'), line.WarningText);
+                    }
                 }
 
                 const marginAmount = Number((orderData && orderData.summary && orderData.summary.margin) || 0);
@@ -1940,6 +1976,24 @@ app.get('/', (req, res) => {
                 html += '<div class="order-report-card"><div class="label">Ekstra salgslinjer</div><div class="value">' + formatNumber(salesLines.length) + '</div></div>';
                 html += '<div class="order-report-card"><div class="label">Kost til dato</div><div class="value">' + formatNumber(costToDateFromProduction || 0) + ' DKK</div></div>';
                 html += '<div class="order-report-card"><div class="label">Marginprocent</div><div class="value">' + marginPct + '%</div></div>';
+                html += '</div>';
+
+                html += '<div class="order-report-card" style="margin-top:12px;">';
+                html += '<div class="label">Exceptioner og spor</div>';
+                html += '<div class="value" style="font-size:14px; font-weight:600; margin-bottom:8px;">Advarsler: ' + formatNumber(exceptionRows.length) + '</div>';
+                if (exceptionRows.length > 0) {
+                    html += '<table class="order-report-table" style="margin-top:0;">';
+                    html += '<tr><th>Type</th><th>Reference</th><th>Beskrivelse</th></tr>';
+                    for (const ex of exceptionRows.slice(0, 12)) {
+                        html += '<tr><td>' + escapeHtml(ex.type || '-') + '</td><td>' + escapeHtml(ex.ref || '-') + '</td><td>' + escapeHtml(ex.message || '-') + '</td></tr>';
+                    }
+                    if (exceptionRows.length > 12) {
+                        html += '<tr><td colspan="3">Viser de første 12 af ' + formatNumber(exceptionRows.length) + ' elementer.</td></tr>';
+                    }
+                    html += '</table>';
+                } else {
+                    html += '<div style="color:#4b5563; font-size:13px;">Ingen ekceptioner fundet i den aktuelle ordre.</div>';
+                }
                 html += '</div>';
                 html += '</div>';
                 return html;
@@ -3293,7 +3347,7 @@ app.get('/', (req, res) => {
                 html += '<div id="orderListSummary" class="order-list-summary">';
                 html += buildOrderListSummaryHtml(orders);
                 html += '</div>';
-                html += '<h3>Seneste fakturerede ordrer (' + ORDER_LIST_DAYS_BACK + ' dage) &mdash; ' + orders.length + ' af ' + orderListData.length + ' ordrer</h3>';
+                html += '<h3>Seneste fakturerede ordrer (' + ORDER_LIST_DAYS_BACK_CLIENT + ' dage) &mdash; ' + orders.length + ' af ' + orderListData.length + ' ordrer</h3>';
                 const sortMark = (field) => {
                     if (orderListSortField !== field) return ' <span style="opacity:0.4;">^v</span>';
                     return orderListSortDir === 'asc'
