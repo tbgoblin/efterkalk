@@ -1,539 +1,30 @@
-const express = require('express');
-const sql = require('mssql/msnodesqlv8');
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
-const getConnection = require('./db');
-const diskCache = require('./diskCache');
-const { createLogger } = require('./utils/logger');
-const {
-    isLaserLProduct,
-    isGloballyExcludedProdNo,
-    isExcludedOperationProdNo,
-    isEstimatedOperationMinutesFallback,
-    getEffectiveOperationMinutes,
-    adjustOperationLinePricing
-} = require('./utils/productRules');
-const {
-    isHttpUrl,
-    isAbsoluteWindowsPath,
-    normalizeWindowsPath,
-    buildImageItems,
-    isSupportedImagePath,
-    getLatestDrawingByProdNo
-} = require('./services/drawingService');
-const { createAftercalcService } = require('./services/aftercalcService');
-const { createApiRouter } = require('./routes/apiRoutes');
 
-const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
-const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
-const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
-const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v21_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v21_';
-const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
-
-const app = express();
-app.use(express.json({ limit: '256kb' }));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-
-// Read version from package.json
-let pkgVersion = '1.0.0';
-try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-    pkgVersion = pkg.version || '1.0.0';
-} catch (e) {
-    console.warn('Could not read package.json version');
-}
-const APP_VERSION = 'Gantech Efterkalkulation - v' + pkgVersion;
-
-const { logEvent } = createLogger(APP_VERSION);
-const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
-const ORDER_LIST_MAX_ROWS = 150;
-const ORDER_LIST_DAYS_BACK = 30;
-const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
-const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = ORDER_LIST_MAX_ROWS;  // Warm all visible orders to reduce slow first-open on non-warm orders
-const BACKGROUND_WARM_DELAY_MS = 100;  // Controlled warmup pace: faster coverage with single-query concurrency
-const MAX_DB_CALC_CONCURRENCY = 1;
-const AFTERCALC_QUERY_TIMEOUT_MS = 45 * 1000;
-
-const orderListCache = {
-    data: [],
-    loadedAt: 0,
-    loading: false,
-    refreshPromise: null,
-    lastError: null,
-    lastModifiedTime: 0
-};
-
-const orderMarginCache = new Map();
-const orderMarginInFlight = new Map();
-const afterCalcInFlight = new Map();
-const orderRefreshInFlight = new Map();
-const orderRefreshStatus = new Map();
-const dbCalcQueue = [];
-let activeDbCalcs = 0;
-let backgroundAftercalcWarmRunning = false;
-
-const warmupProgress = {
-    running: false,
-    total: 0,
-    cached: 0,
-    loaded: 0,
-    failed: 0,
-    current: null,
-    startedAt: null,
-    completedAt: null
-};
-
-const {
-    getAfterCalc,
-    fetchOrderListBase,
-    getProductionSummary
-} = createAftercalcService({
-    getConnection,
-    sql,
-    diskCache,
-    logEvent,
-    getLatestDrawingByProdNo,
-    isGloballyExcludedProdNo,
-    isExcludedOperationProdNo,
-    isEstimatedOperationMinutesFallback,
-    getEffectiveOperationMinutes,
-    adjustOperationLinePricing,
-    isLaserLProduct,
-    orderListMaxRows: ORDER_LIST_MAX_ROWS,
-    orderListDaysBack: ORDER_LIST_DAYS_BACK,
-    cacheTtlProductionSummaryMs: CACHE_TTL_PRODUCTION_SUMMARY_MS
-});
-
-// Evita cache lato browser durante lo sviluppo: forza sempre il fetch dell'ultima UI/API.
-app.use((req, res, next) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    next();
-});
-
-
-function isOrderListCacheFresh() {
-    return orderListCache.loadedAt > 0 && (Date.now() - orderListCache.loadedAt) < ORDER_LIST_CACHE_TTL_MS;
-}
-
-function runWithDbCalcLimit(task, priority = 'normal') {
-    return new Promise((resolve, reject) => {
-        const job = { task, resolve, reject };
-        if (priority === 'high') {
-            dbCalcQueue.unshift(job);
-        } else {
-            dbCalcQueue.push(job);
-        }
-        pumpDbCalcQueue();
-    });
-}
-
-function pumpDbCalcQueue() {
-    while (activeDbCalcs < MAX_DB_CALC_CONCURRENCY && dbCalcQueue.length > 0) {
-        const job = dbCalcQueue.shift();
-        activeDbCalcs += 1;
-        Promise.resolve()
-            .then(job.task)
-            .then(job.resolve)
-            .catch(job.reject)
-            .finally(() => {
-                activeDbCalcs -= 1;
-                pumpDbCalcQueue();
-            });
-    }
-}
-
-function withTimeout(promise, timeoutMs, timeoutMessage) {
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-    });
-
-    return Promise.race([promise, timeoutPromise]).finally(() => {
-        clearTimeout(timeoutId);
-    });
-}
-
-function getAftercalcCacheWithFallback(ordNo, promoteToCurrent = false) {
-    const numericOrdNo = Number(ordNo);
-    if (!Number.isFinite(numericOrdNo)) return null;
-
-    const currentKey = AFTERCALC_CACHE_KEY_PREFIX + numericOrdNo;
-    const currentCached = diskCache.get(currentKey);
-    if (currentCached) return currentCached;
-
-    for (const prefix of LEGACY_AFTERCALC_CACHE_KEY_PREFIXES) {
-        const legacyKey = prefix + numericOrdNo;
-        const legacyCached = diskCache.get(legacyKey);
-        if (legacyCached) {
-            if (promoteToCurrent) {
-                diskCache.set(currentKey, legacyCached, CACHE_TTL_AFTERCALC_MS);
-            }
-            return legacyCached;
-        }
-    }
-
-    return null;
-}
-
-async function getOrComputeAftercalc(ordNo, options = {}) {
-    const priority = options.priority || 'normal';
-    const key = Number(ordNo);
-    if (!Number.isFinite(key)) {
-        throw new Error('Ordrenummer ugyldigt');
-    }
-
-    const cacheKey = AFTERCALC_CACHE_KEY_PREFIX + key;
-    const cached = getAftercalcCacheWithFallback(key, true);
-    if (cached) {
-        logEvent('AFTERCALC CACHE HIT: ordNo=' + key);
-        return cached;
-    }
-
-    let computePromise = afterCalcInFlight.get(key);
-    if (computePromise) {
-        logEvent('AFTERCALC IN-FLIGHT REUSE: ordNo=' + key);
-    }
-    if (!computePromise) {
-        logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
-        computePromise = runWithDbCalcLimit(async () => {
-            const data = await withTimeout(
-                getAfterCalc(key),
-                AFTERCALC_QUERY_TIMEOUT_MS,
-                'Aftercalc timeout for ordNo=' + key
-            );
-            if (!data.error) {
-                diskCache.set(cacheKey, data, CACHE_TTL_AFTERCALC_MS);
-            }
-            return data;
-        }, priority).finally(() => {
-            afterCalcInFlight.delete(key);
-        });
-        afterCalcInFlight.set(key, computePromise);
-    }
-
-    return computePromise;
-}
-
-
-async function getOrComputeOrderMargin(ordNo, options = {}) {
-    const forceRefresh = Boolean(options.forceRefresh);
-    const key = Number(ordNo);
-    if (!Number.isFinite(key)) {
-        throw new Error('Ordrenummer ugyldigt');
-    }
-
-    if (!forceRefresh && orderMarginCache.has(key)) {
-        return orderMarginCache.get(key);
-    }
-
-    if (!forceRefresh) {
-        const diskMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
-            || diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
-            || diskCache.getStale('order_margin_v6_' + key);
-        if (diskMargin && diskMargin.totalCost !== null && diskMargin.totalCost !== undefined) {
-            const marginInfo = {
-                ordNo: key,
-                totalRevenue: Number(diskMargin.totalRevenue || 0),
-                totalCost: Number(diskMargin.totalCost || 0),
-                hasInvoiceWarning: diskMargin.hasInvoiceWarning === true,
-                computedAt: Date.now()
-            };
-            orderMarginCache.set(key, marginInfo);
-            return marginInfo;
-        }
-    }
-
-    if (!forceRefresh && orderMarginInFlight.has(key)) {
-        return orderMarginInFlight.get(key);
-    }
-
-    const computePromise = runWithDbCalcLimit(async () => {
-        const data = await withTimeout(
-            getAfterCalc(key),
-            AFTERCALC_QUERY_TIMEOUT_MS,
-            'Aftercalc timeout for ordNo=' + key
-        );
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        const marginInfo = {
-            ordNo: key,
-            totalRevenue: Number(data.summary.totalRevenue || 0),
-            totalCost: Number(data.summary.totalCost || 0),
-            hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning),
-            computedAt: Date.now()
-        };
-
-        orderMarginCache.set(key, marginInfo);
-        // Also save to persistent disk cache (24 hours) for faster startup next time
-        diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + key, marginInfo, 24 * 60 * 60 * 1000);
-        return marginInfo;
-    }).finally(() => {
-        orderMarginInFlight.delete(key);
-    });
-
-    orderMarginInFlight.set(key, computePromise);
-    return computePromise;
-}
-
-function warmMarginsInBackground(ordNos) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) return;
-    logEvent('WARM-MARGIN: queueing ' + ordNos.length + ' orders');
-    for (const ordNo of ordNos) {
-        const numericOrdNo = Number(ordNo);
-        if (!Number.isFinite(numericOrdNo)) continue;
-        getOrComputeOrderMargin(numericOrdNo).catch(() => {});
-    }
-}
-
-async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKGROUND_WARM_DELAY_MS) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) {
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (empty array)');
-        return;
-    }
-    if (backgroundAftercalcWarmRunning) {
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (previous run is still active)');
-        return;
-    }
-
-    backgroundAftercalcWarmRunning = true;
-    const startMs = Date.now();
-    let total = 0;
-    let alreadyCached = 0;
-    let warmed = 0;
-    let failed = 0;
-
-    // Reset global progress tracker
-    warmupProgress.running = true;
-    warmupProgress.total = ordNos.filter(o => Number.isFinite(Number(o))).length;
-    warmupProgress.cached = 0;
-    warmupProgress.loaded = 0;
-    warmupProgress.failed = 0;
-    warmupProgress.current = null;
-    warmupProgress.startedAt = Date.now();
-    warmupProgress.completedAt = null;
-
-    try {
-        for (const ordNo of ordNos) {
-            const numericOrdNo = Number(ordNo);
-            if (!Number.isFinite(numericOrdNo)) continue;
-            total += 1;
-
-            if (getAftercalcCacheWithFallback(numericOrdNo, false)) {
-                alreadyCached += 1;
-                warmupProgress.cached += 1;
-                warmupProgress.current = numericOrdNo;
-                continue;
-            }
-
-            warmupProgress.current = numericOrdNo;
-            try {
-                await getOrComputeAftercalc(numericOrdNo, { priority: 'normal' });
-                warmed += 1;
-                warmupProgress.loaded += 1;
-            } catch (err) {
-                failed += 1;
-                warmupProgress.failed += 1;
-                logEvent('WARM-AFTERCALC ERROR ordNo=' + numericOrdNo + ': ' + err.message);
-            }
-
-            if (maxDelayMs > 0) {
-                await new Promise(resolve => setTimeout(resolve, maxDelayMs));
-            }
-        }
-    } finally {
-        backgroundAftercalcWarmRunning = false;
-        warmupProgress.running = false;
-        warmupProgress.current = null;
-        warmupProgress.completedAt = Date.now();
-        const sec = ((Date.now() - startMs) / 1000).toFixed(1);
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): total=' + total + ', cached=' + alreadyCached + ', warmed=' + warmed + ', failed=' + failed + ', time=' + sec + 's');
-    }
-}
-
-function tryLoadOrderListFromCache() {
-    try {
-        const cached = diskCache.get('order_list');
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-            logEvent('ORDER-LIST: loaded ' + cached.length + ' rows from diskCache');
-            return cached;
-        }
-    } catch (e) {
-        logEvent('ORDER-LIST-CACHE READ ERROR: ' + e.message);
-    }
-    return null;
-}
-
-function preloadMarginsAndDetailsFromCache(ordNos) {
-    let marginsLoaded = 0;
-    let detailsLoaded = 0;
-    
-    for (const ordNo of ordNos) {
-        try {
-            const key = Number(ordNo);
-            if (!Number.isFinite(key)) continue;
-            
-            // Preload margins
-            const marginCached = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key);
-            if (marginCached) {
-                orderMarginCache.set(key, marginCached);
-                marginsLoaded += 1;
-            }
-            
-            // Preload aftercalc details
-            const detailsCached = getAftercalcCacheWithFallback(key, false);
-            if (detailsCached) {
-                detailsLoaded += 1;
-            }
-        } catch (e) {
-            // Silently skip errors during preload
-        }
-    }
-    
-    if (marginsLoaded > 0 || detailsLoaded > 0) {
-        logEvent('PRELOAD: loaded ' + marginsLoaded + ' margins + ' + detailsLoaded + ' details from diskCache');
-    }
-}
-
-async function refreshOrderListCache(force = false) {
-    if (!force && isOrderListCacheFresh()) {
-        return;
-    }
-
-    if (orderListCache.loading) {
-        if (orderListCache.refreshPromise) {
-            await orderListCache.refreshPromise;
-        }
-        return;
-    }
-
-    orderListCache.loading = true;
-    logEvent('ORDER-LIST-REFRESH: start force=' + (force ? '1' : '0'));
-    orderListCache.refreshPromise = (async () => {
-        try {
-            const rows = await fetchOrderListBase();
-            logEvent('ORDER-LIST-REFRESH: fetched ' + rows.length + ' rows from DB');
-            orderListCache.data = rows;
-            orderListCache.loadedAt = Date.now();
-            orderListCache.lastError = null;
-
-            // Save to persistent disk cache (TTL: 24 hours) for startup speedup
-            diskCache.set('order_list', rows, 24 * 60 * 60 * 1000);
-            logEvent('ORDER-LIST-REFRESH: saved ' + rows.length + ' rows to diskCache');
-
-            const warmOrdNos = rows.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
-            warmMarginsInBackground(warmOrdNos);
-            // Trigger warmup if not already running (avoid double-start during initial DB refresh)
-            if (!backgroundAftercalcWarmRunning) {
-                const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-                warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', 50);
-            }
-        } catch (err) {
-            orderListCache.lastError = err.message;
-            logEvent('ORDER-LIST-REFRESH ERROR: ' + err.message);
-            throw err;
-        } finally {
-            orderListCache.loading = false;
-            orderListCache.refreshPromise = null;
-            logEvent('ORDER-LIST-REFRESH: done force=' + (force ? '1' : '0'));
-        }
-    })();
-
-    await orderListCache.refreshPromise;
-}
-
-app.use(createApiRouter({
-    getConnection,
-    sql,
-    fs,
-    spawn,
-    diskCache,
-    logEvent,
-    getOrComputeAftercalc,
-    getOrComputeOrderMargin,
-    getProductionSummary,
-    AFTERCALC_CACHE_KEY_PREFIX,
-    ORDER_MARGIN_CACHE_KEY_PREFIX,
-    CACHE_TTL_ORDER_MARGIN_MS,
-    CACHE_TTL_LASER_METRICS_MS,
-    isHttpUrl,
-    normalizeWindowsPath,
-    isAbsoluteWindowsPath,
-    isSupportedImagePath,
-    buildImageItems,
-    orderListCache,
-    orderMarginCache,
-    orderRefreshInFlight,
-    orderRefreshStatus,
-    orderMarginInFlight,
-    afterCalcInFlight,
-    warmupProgress,
-    refreshOrderListCache,
-    isOrderListCacheFresh,
-    ORDER_LIST_DAYS_BACK,
-    pkgVersion
-}));
-
-// Endpoint per HTML
-app.get('/', (req, res) => {
-    logEvent('HTTP GET /');
-    res.send(`
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
         <title>Efterkalkulation</title>
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');
-            :root {
-                --ink-900: #0f3560;
-                --ink-800: #123f6f;
-                --ink-700: #1f4f7f;
-                --sky-050: #f7fbff;
-                --sky-100: #eef5ff;
-                --sky-200: #d8e7fb;
-                --line-soft: #dce8f7;
-                --text-900: #13253e;
-                --text-700: #456383;
-                --radius-m: 12px;
-                --radius-l: 16px;
-                --elev-soft: 0 10px 24px rgba(15,53,96,0.10);
-            }
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Sora', 'Segoe UI Variable', 'Segoe UI', sans-serif; background: radial-gradient(circle at 8% 0%, #f4f8ff 0%, #edf3fb 32%, #e8eef8 100%); padding: 20px; }
-            .container { max-width: 1320px; margin: 0 auto; }
-            .header-banner-wrapper { background: linear-gradient(135deg, #0f3560 0%, #14577e 62%, #123f6f 100%); color: #fff; font-weight: 800; font-size: 25px; padding: 10px 12px; border-radius: 10px; margin-bottom: 16px; letter-spacing: 0.2px; width: 100%; position: sticky; top: 0; z-index: 1200; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 12px 28px rgba(15,53,96,0.24); }
-            .header-brand { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
-            .header-brand-logo { width:38px; height:38px; border-radius:8px; background:#ffffff; padding:5px; object-fit:contain; border:1px solid rgba(255,255,255,0.35); box-shadow:0 6px 16px rgba(4,16,30,0.25); flex-shrink:0; }
-            .header-brand-text { min-width:0; font-size:20px; font-weight:800; letter-spacing:0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+            body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+            .container { max-width: 1200px; margin: 0 auto; }
+            .header-banner-wrapper { background: #c0392b; color: #fff; font-weight: 800; font-size: 25px; padding: 10px 12px; border-radius: 6px; margin-bottom: 20px; letter-spacing: 0.2px; width: 100%; position: sticky; top: 0; z-index: 1200; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
             .header-status-badge { display: inline-block; font-size: 12px; font-weight: 700; color: #8a6d3b; background: #fff3cd; border: 1px solid #fff3cd; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
             #warmupBarWrap { display:none; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }
             #warmupBarWrap.active { display:flex; }
             #warmupBarBg { background:rgba(255,255,255,0.25); border-radius:999px; height:6px; width:110px; overflow:hidden; flex-shrink:0; }
             #warmupBarFill { background:#fff; height:100%; border-radius:999px; width:0%; transition:width 0.35s ease; }
-            .search-box { background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%); padding: 14px; margin-bottom: 18px; border-radius: 12px; box-shadow: 0 10px 24px rgba(15,53,96,0.10); border: 1px solid #d9e8f9; position: sticky; top: 58px; z-index: 1100; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+            .search-box { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 58px; z-index: 1100; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
             .search-box.collapsed { padding: 8px 12px; height: 36px; }
             .search-box.collapsed > * { display: none; }
             .search-box.collapsed > #collapseToggleBtn { display: inline-block; }
-            #collapseToggleBtn { background: linear-gradient(180deg, #5ca646 0%, #3f8d31 100%); color: #fff; border: 1px solid rgba(255,255,255,0.28); padding: 8px 12px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 12px; box-shadow: 0 6px 14px rgba(63,141,49,0.28); }
+            #collapseToggleBtn { background: #1976d2; color: #fff; border: none; padding: 8px 12px; border-radius: 3px; cursor: pointer; font-weight: 600; font-size: 12px; }
             .build-badge { display: inline-block; font-size: 12px; color: #444; background: #f1f1f1; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; }
             .build-banner { display: none; }
-            .search-box input { padding: 8px 12px; font-size: 14px; width: 200px; border: 1px solid #c7d7ea; border-radius: 8px; }
-            .search-box button { padding: 8px 14px; background: linear-gradient(180deg, #1565c0 0%, #0f3560 100%); color: white; border: 1px solid rgba(255,255,255,0.10); border-radius: 999px; cursor: pointer; margin-left: 0; font-weight: 700; letter-spacing: 0.01em; }
+            .search-box input { padding: 8px 12px; font-size: 14px; width: 200px; border: 1px solid #ddd; border-radius: 3px; }
+            .search-box button { padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; margin-left: 10px; }
             .mode-btn { background: linear-gradient(180deg, #0f3560 0%, #0d2f53 100%) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.08); }
             .list-toggle-btn { background: linear-gradient(180deg, #123f6f 0%, #0f3560 100%) !important; color: #fff !important; border:1px solid rgba(255,255,255,0.08); }
-            .search-box button:hover { filter: brightness(1.04); }
-            .search-box button:disabled { opacity: 0.55; cursor: not-allowed; }
-            .report-open-btn { position: relative; padding-left: 36px !important; }
-            .report-open-btn::before { content: '↗'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #5ca646; color: #fff; font-size: 11px; box-shadow: 0 4px 10px rgba(92,166,70,0.40); }
-            .report-open-btn:disabled::before { background: #9ca3af; box-shadow: none; }
             .filter-input { width: 260px !important; margin-left: 10px; }
             .filter-select { width: 180px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 3px; background: #fff; }
             .section { background: white; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; }
@@ -547,20 +38,15 @@ app.get('/', (req, res) => {
             .status-in-production { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.4); }
             .status-partial-invoiced { background: #e65100; color: #fff; }
             .status-fully-invoiced { background: #2e7d32; color: #fff; }
-            h3 { color: var(--ink-900); margin-bottom: 14px; border-bottom: 2px solid #7eb1e6; padding-bottom: 10px; font-size: clamp(15px, 1.5vw, 19px); letter-spacing: 0.01em; }
-            table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; background: #fff; border: 1px solid var(--line-soft); border-radius: var(--radius-m); overflow: hidden; box-shadow: 0 6px 16px rgba(15,53,96,0.05); }
-            th, td { padding: 10px 11px; text-align: left; border-bottom: 1px solid #e8eff8; font-size: 13px; color: var(--text-900); }
-            th { position: sticky; top: 0; z-index: 1; background: linear-gradient(180deg, #f4f9ff 0%, #eaf2ff 100%); font-weight: 700; color: var(--ink-900); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
-            tr:last-child td { border-bottom: none; }
-            tr:nth-child(even) td { background: #fcfdff; }
-            tr:hover td { background: #f3f8ff; }
-            .micro-grid-table th,
-            .micro-grid-table td { padding: 7px 10px; }
-            .micro-grid-table td { line-height: 1.26; }
-            .summary-row { font-weight: bold; background: #f2f7ff; }
-            .summary-box { background: linear-gradient(160deg, #f9fbff 0%, #eef4ff 54%, #e8f0ff 100%); border: 1px solid #d4e3fb; box-shadow: 0 10px 24px rgba(15,53,96,0.10); padding: 16px 18px; border-radius: 14px; margin-top: 15px; }
-            .summary-box div { margin: 8px 0; font-size: 14px; color: #0e2f4c; }
-            .summary-box .total { font-size: 18px; color: #0f3560; font-weight: 800; }
+            h3 { color: #333; margin-bottom: 15px; border-bottom: 2px solid #2196F3; padding-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background: #f0f0f0; font-weight: bold; }
+            tr:hover { background: #fafafa; }
+            .summary-row { font-weight: bold; background: #f9f9f9; }
+            .summary-box { background: #e8f5e9; padding: 15px; border-radius: 4px; margin-top: 15px; }
+            .summary-box div { margin: 8px 0; font-size: 14px; }
+            .summary-box .total { font-size: 18px; color: #2196F3; font-weight: bold; }
             .order-list-summary-actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; flex-wrap:wrap; }
             .order-detail-report { margin-top:16px; background:#fff; border:1px solid #d6e9ff; border-radius:8px; padding:14px 14px 16px 14px; }
             .order-report-toolbar { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
@@ -591,14 +77,14 @@ app.get('/', (req, res) => {
             .order-detail-modal-shell { width:min(1540px, 100%); height:100%; background:linear-gradient(180deg, #0f3560 0%, #123f6f 56%, #0e2f4c 100%); border-radius:18px; box-shadow:0 24px 72px rgba(0,0,0,0.42); display:flex; flex-direction:column; overflow:hidden; }
             .order-detail-modal-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid rgba(255,255,255,0.10); color:#fff; }
             .order-detail-modal-title { display:flex; flex-direction:column; gap:4px; }
-            .order-detail-modal-title strong { font-size:clamp(16px, 1.45vw, 21px); letter-spacing:0.2px; }
+            .order-detail-modal-title strong { font-size:18px; letter-spacing:0.2px; }
             .order-detail-modal-title span { font-size:12px; color:rgba(255,255,255,0.76); }
             .order-detail-modal-actions { display:flex; gap:10px; flex-wrap:wrap; }
             .order-detail-modal-actions .list-toggle-btn { background:linear-gradient(180deg, #5ca646 0%, #4e9440 100%) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.16) !important; box-shadow:0 10px 20px rgba(92,166,70,0.18); }
             .order-detail-modal-actions .list-toggle-btn:hover { filter:brightness(1.04); }
             .order-detail-modal-body { flex:1; overflow:auto; background:linear-gradient(180deg, #f5f8fd 0%, #edf2f8 100%); padding:18px; }
             .order-detail-modal-body .order-detail-report { display:block !important; margin:0 auto; max-width:1480px; }
-            .order-detail-modal-body .order-report-actions { display:flex !important; justify-content:flex-end; margin:8px 0 14px 0; }
+            .order-detail-modal-body .order-report-actions { display:none !important; }
             .order-detail-modal-body .order-report-toolbar { position:sticky; top:0; z-index:2; backdrop-filter:blur(10px); background:linear-gradient(135deg, rgba(7,18,35,0.92), rgba(19,45,79,0.92)); border:1px solid rgba(255,255,255,0.08); border-radius:18px; padding:18px 20px; margin-bottom:16px; box-shadow:0 18px 40px rgba(15,53,96,0.16); }
             .order-detail-modal-body .order-report-meta { display:flex; flex-direction:column; gap:8px; color:#fff; }
             .order-detail-modal-body .order-report-meta strong { font-size:24px; line-height:1.15; letter-spacing:0.2px; }
@@ -611,7 +97,7 @@ app.get('/', (req, res) => {
             .order-detail-modal-body .report-hero-top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
             .order-detail-modal-body .report-hero-title { display:flex; flex-direction:column; gap:6px; }
             .order-detail-modal-body .report-hero-title .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:#bfe2b5; font-weight:800; }
-            .order-detail-modal-body .report-hero-title h1 { margin:0; font-size:clamp(22px, 2.35vw, 32px); line-height:1.12; color:#ffffff; }
+            .order-detail-modal-body .report-hero-title h1 { margin:0; font-size:28px; line-height:1.15; color:#ffffff; }
             .order-detail-modal-body .report-hero-title .context { font-size:13px; color:rgba(255,255,255,0.82); max-width:960px; }
             .order-detail-modal-body .report-hero-meta { display:flex; flex-direction:column; align-items:flex-end; gap:8px; min-width:220px; }
             .order-detail-modal-body .report-hero-meta .stamp { font-size:12px; color:#ffffff; text-align:right; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.16); border-radius:999px; padding:6px 10px; }
@@ -635,60 +121,6 @@ app.get('/', (req, res) => {
             .order-detail-modal-body .order-report-table td { background:#fff; }
             .order-detail-modal-body .order-report-table tr:nth-child(even) td { background:#fafcff; }
             .order-detail-modal-body .order-report-table .summary-row td { background:#eff6ff; }
-            .oversigt-launcher-section { background:linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border:1px solid #d8e8fb; }
-            .oversigt-launcher-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-            .oversigt-launcher-card { background:#ffffff; border:1px solid #d8e8fb; border-radius:16px; padding:14px; box-shadow:0 10px 24px rgba(15,53,96,0.06); display:flex; flex-direction:column; gap:10px; min-height:160px; }
-            .oversigt-launcher-card h4 { margin:0; color:#0f3560; font-size:15px; }
-            .oversigt-launcher-card .desc { color:#5c7590; font-size:12px; }
-            .oversigt-launcher-kpi { background:linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%); border:1px solid #d9e8fa; border-radius:12px; padding:10px 12px; font-size:13px; color:#0f3560; min-height:52px; display:flex; align-items:center; }
-            .oversigt-launcher-card .list-toggle-btn { align-self:flex-start; margin-top:auto; }
-            .oversigt-modal-overlay { position:fixed; inset:0; z-index:15160; display:none; align-items:center; justify-content:center; background:rgba(7,18,35,0.70); backdrop-filter:blur(4px); padding:14px; }
-            .oversigt-modal-shell { width:min(1520px, 99vw); max-height:94vh; background:linear-gradient(180deg, #f5f9ff 0%, #edf3fb 100%); border-radius:18px; box-shadow:0 24px 72px rgba(0,0,0,0.42); overflow:hidden; display:flex; flex-direction:column; border:1px solid rgba(255,255,255,0.24); }
-            .oversigt-modal-header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px; background:linear-gradient(135deg, #0f3560 0%, #123f6f 56%, #0e2f4c 100%); color:#fff; }
-            .oversigt-modal-title-wrap { display:flex; flex-direction:column; gap:4px; }
-            .oversigt-modal-title-wrap strong { font-size:17px; letter-spacing:0.2px; }
-            .oversigt-modal-title-wrap span { font-size:12px; color:rgba(255,255,255,0.82); }
-            .oversigt-modal-actions { display:flex; gap:8px; flex-wrap:wrap; }
-            .oversigt-modal-body { overflow:auto; padding:clamp(10px, 1.6vw, 18px); }
-            .oversigt-modal-layout { display:grid; grid-template-columns:minmax(210px, 280px) minmax(0, 1fr); gap:10px; align-items:start; }
-            .oversigt-panel { background:#fff; border:1px solid #dce9f7; border-radius:14px; box-shadow:0 8px 20px rgba(15,53,96,0.07); padding:12px; }
-            .oversigt-panel h5 { margin:0 0 8px 0; font-size:13px; color:#0f3560; text-transform:uppercase; letter-spacing:0.05em; }
-            .oversigt-panel.oversigt-kpi { padding:10px; }
-            .oversigt-panel.oversigt-kpi .summary-box { padding:10px 12px; border-radius:10px; }
-            .oversigt-panel.oversigt-kpi .summary-box div { margin:3px 0; font-size:12px; line-height:1.25; }
-            .oversigt-panel .summary-box { margin:0; }
-            .oversigt-panel table { margin-top:0; }
-            .oversigt-details { overflow-x:hidden; overflow-y:auto; min-width:0; }
-            .oversigt-details table { min-width:0; width:100%; table-layout:fixed; }
-            .oversigt-details th,
-            .oversigt-details td { padding:6px 8px; font-size:12px; white-space:normal; word-break:break-word; }
-            .oversigt-details td:nth-child(3) { font-weight:700; color:#153b63; }
-            .oversigt-details td:nth-child(n+5):nth-child(-n+11) { font-variant-numeric: tabular-nums; }
-            .oversigt-table-laser th:nth-child(1) { width:10%; }
-            .oversigt-table-laser th:nth-child(2) { width:10%; }
-            .oversigt-table-laser th:nth-child(3) { width:16%; }
-            .oversigt-table-laser th:nth-child(4) { width:6%; }
-            .oversigt-table-laser th:nth-child(5) { width:7%; }
-            .oversigt-table-laser th:nth-child(6),
-            .oversigt-table-laser th:nth-child(7),
-            .oversigt-table-laser th:nth-child(8),
-            .oversigt-table-laser th:nth-child(9),
-            .oversigt-table-laser th:nth-child(10),
-            .oversigt-table-laser th:nth-child(11) { width:7%; }
-            .oversigt-table-laser th:nth-child(12) { width:5%; }
-            .oversigt-table-operation th:nth-child(1) { width:15%; }
-            .oversigt-table-operation th:nth-child(2) { width:27%; }
-            .oversigt-table-operation th:nth-child(3),
-            .oversigt-table-operation th:nth-child(4),
-            .oversigt-table-operation th:nth-child(5),
-            .oversigt-table-operation th:nth-child(6),
-            .oversigt-table-operation th:nth-child(7) { width:11%; }
-            .order-margin-wrap { display:inline-flex; align-items:center; gap:6px; }
-            .order-kpi-tone { width:18px; height:18px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:800; box-shadow:0 4px 10px rgba(15,53,96,0.20); }
-            .order-kpi-tone.ok { background:#5ca646; }
-            .order-kpi-tone.warn { background:#f59e0b; }
-            .order-kpi-tone.bad { background:#d32f2f; }
-            .order-kpi-tone.na { background:#607d8b; }
             body.report-modal-open { overflow:hidden; }
             @media print {
                 @page { size: A4 portrait; margin: 12mm; }
@@ -723,55 +155,52 @@ app.get('/', (req, res) => {
             }
             .margin-positive { color: green; }
             .margin-negative { color: red; }
-            .error { color: #9f1239; padding: 14px 16px; background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%); border: 1px solid #fecdd3; border-radius: 12px; font-weight: 600; }
-            .loading { color: #0f3560; padding: 14px 16px; border-radius: 12px; border: 1px solid #d7e6fb; background: linear-gradient(110deg, #f8fbff 8%, #edf4ff 34%, #f8fbff 60%); background-size: 220% 100%; animation: softLoadingWave 1.25s ease-in-out infinite; font-weight: 600; }
+            .error { color: red; padding: 20px; background: #ffebee; border-radius: 4px; }
+            .loading { color: #666; padding: 20px; }
             .prod-link { color: #1976D2; text-decoration: underline; cursor: pointer; }
             .prod-link:hover { color: #0D47A1; }
             .po-highlight { box-shadow: 0 0 0 3px #90CAF9; }
             .prodtp4-group { border: 1px solid #e5e5e5; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
-            .prodtp4-header { background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); padding: 10px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
-            .prodtp4-header:hover { background: linear-gradient(180deg, #eff6ff 0%, #e5efff 100%); }
+            .prodtp4-header { background: #f7f9fc; padding: 10px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+            .prodtp4-header:hover { background: #eef4fb; }
             .prodtp4-label { color: #2b2b2b; }
             .prodtp4-subtotal { color: #1976D2; font-weight: 700; }
             .prodtp4-body { padding: 8px 12px 12px; }
-            .po-total-row { margin-top: 10px; padding: 10px 12px; border-top: 1px solid #d8e5f7; font-weight: 800; text-align: right; background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%); color: var(--ink-900); }
+            .po-total-row { margin-top: 10px; padding: 10px 12px; border-top: 1px solid #ddd; font-weight: 700; text-align: right; background: #fafafa; }
             .prodtp4-hint { color: #555; margin: 6px 0 10px; font-size: 13px; }
-            .main-product-box { background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%); border: 1px solid #bdd8f6; border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; box-shadow: 0 8px 20px rgba(15,53,96,0.08); }
+            .main-product-box { background: #eef6ff; border: 2px solid #90caf9; border-radius: 6px; padding: 10px 12px; margin: 8px 0 12px; }
             .main-product-box .value { font-size: 20px; font-weight: 800; color: #0d47a1; margin-top: 3px; }
             .inline-link { color: #1565c0; text-decoration: underline; cursor: pointer; }
             .inline-link:hover { color: #0d47a1; }
             .prod-no-link { color: #1565c0; text-decoration: underline; cursor: pointer; }
             .prod-no-link:hover { color: #0d47a1; }
-            .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 15220; }
-            .modal-box { width: min(1400px, 97vw); max-height: 90vh; overflow: auto; background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%); border: 1px solid #d9e8fb; border-radius: 14px; box-shadow: 0 18px 42px rgba(6,26,48,0.24); padding: 16px; }
+            .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 9999; }
+            .modal-box { width: min(1280px, 96vw); max-height: 88vh; overflow: auto; background: #fff; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); padding: 16px; }
             .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
             .modal-header-left { display: flex; align-items: center; gap: 8px; }
-            .modal-content-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 32vw); gap: 16px; align-items: start; }
+            .modal-content-wrap { display: flex; gap: 16px; align-items: flex-start; }
             #summaryModalBody { flex: 1; min-width: 0; }
-            .modal-back { border: 1px solid #c9dcf9; background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-weight: 700; color: #0f3560; letter-spacing: 0.01em; }
+            .modal-back { border: none; background: #efefef; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-weight: 700; }
             .modal-back.hidden { display: none; }
-            .modal-close { border: 1px solid #c9dcf9; background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%); border-radius: 999px; padding: 6px 12px; cursor: pointer; color: #0f3560; letter-spacing: 0.01em; }
-            .modal-loading { color: #0f3560; padding: 10px 12px; border-radius: 10px; border: 1px solid #d8e7fb; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); font-weight: 600; }
-            .summary-image-panel { width: 100%; min-width: 0; max-height: calc(90vh - 140px); overflow: auto; border-left: 1px solid #e0e0e0; padding-left: 16px; position: sticky; top: 0; background: #fff; }
+            .modal-close { border: none; background: #efefef; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+            .modal-loading { color: #666; padding: 8px 0; }
+            .summary-image-panel { width: min(380px, 32vw); min-width: 320px; max-height: 76vh; overflow: auto; border-left: 1px solid #e0e0e0; padding-left: 16px; position: sticky; top: 0; background: #fff; }
             .summary-image-panel.hidden { display: none; }
-            .modal-content-wrap.image-focus { grid-template-columns: 1fr; }
-            .modal-content-wrap.image-focus #summaryModalBody { display: none; }
-            .modal-content-wrap.image-focus .summary-image-panel { border-left: none; padding-left: 0; max-height: calc(90vh - 160px); position: relative; top: auto; }
             .laser-summary-layout { display: flex; gap: 12px; align-items: flex-start; }
-            .laser-image-panel { width: min(360px, 32vw); min-width: 240px; max-height: 70vh; overflow: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; position: sticky; top: 12px; background: #fff; }
+            .laser-image-panel { width: min(290px, 28vw); min-width: 220px; max-height: 68vh; overflow: auto; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; position: sticky; top: 12px; background: #fff; }
             .laser-image-panel.hidden { display: none; }
             .summary-image-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
             .summary-image-panel-title { font-size: 16px; font-weight: 700; color: #1f2937; }
             .summary-image-close { border: none; background: #efefef; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
-            .image-preview-btn { padding: 6px 11px; border: 1px solid rgba(255,255,255,0.15); border-radius: 999px; background: linear-gradient(180deg, #1565c0 0%, #0f3560 100%); color: #fff; cursor: pointer; font-size: 12px; font-weight: 700; }
-            .image-preview-btn:hover { filter: brightness(1.05); }
+            .image-preview-btn { padding: 6px 10px; border: none; border-radius: 4px; background: #1565c0; color: #fff; cursor: pointer; font-size: 12px; }
+            .image-preview-btn:hover { background: #0d47a1; }
             .image-preview-gallery { display: grid; gap: 12px; }
-            .image-preview-card { border: 1px solid #dae8fb; border-radius: 10px; padding: 10px; background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); }
+            .image-preview-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; background: #fafafa; }
             .image-preview-card img { display: block; width: 100%; max-height: 240px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid #e5e7eb; cursor: zoom-in; }
             .image-preview-label { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 8px; }
             .image-preview-path { font-size: 11px; color: #6b7280; word-break: break-all; margin-top: 8px; }
             .image-preview-empty { font-size: 13px; color: #6b7280; padding: 8px 0; }
-            .image-lightbox { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.88); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 15300; }
+            .image-lightbox { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.88); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 11000; }
             .image-lightbox.hidden { display: none; }
             .image-lightbox-dialog { width: min(1200px, 96vw); max-height: 92vh; background: #111827; color: #f9fafb; border-radius: 10px; box-shadow: 0 18px 40px rgba(0,0,0,0.35); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
             .image-lightbox-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -781,96 +210,16 @@ app.get('/', (req, res) => {
             .image-lightbox-body { display: flex; align-items: center; justify-content: center; min-height: 0; overflow: auto; }
             .image-lightbox-body img { display: block; max-width: 100%; max-height: calc(92vh - 110px); object-fit: contain; border-radius: 6px; background: #fff; }
             .image-lightbox-path { font-size: 12px; color: #d1d5db; word-break: break-all; }
-            .compact-image-modal { position: fixed; inset: 0; background: rgba(7,18,35,0.72); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 15320; }
-            .compact-image-modal.show { display: flex; }
-            .compact-image-dialog { width: min(1080px, 95vw); max-height: 92vh; background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%); border: 1px solid #d6e5fa; border-radius: 14px; box-shadow: 0 24px 52px rgba(5,23,42,0.36); display: flex; flex-direction: column; overflow: hidden; }
-            .compact-image-header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid #d9e6f8; background:linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); }
-            .compact-image-title { font-size:17px; font-weight:800; color:#0f3560; }
-            .compact-image-subtitle { font-size:12px; color:#4f6b86; margin-top:2px; }
-            .compact-image-close { border:1px solid #c9dcf9; background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); color:#0f3560; border-radius:999px; padding:6px 12px; cursor:pointer; font-weight:700; }
-            .compact-image-body { padding:12px; overflow:auto; }
-            .compact-image-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-            .compact-image-card { border:1px solid #dce8f8; border-radius:10px; padding:10px; background:#fff; }
-            .compact-image-label { font-size:12px; font-weight:700; color:#2f4f70; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.02em; }
-            .compact-image-card img { width:100%; max-height:360px; object-fit:contain; background:#fff; border:1px solid #e5ecf7; border-radius:8px; display:block; cursor:zoom-in; }
-            .compact-image-path { margin-top:6px; font-size:11px; color:#5f738a; word-break:break-all; }
-            @keyframes softLoadingWave {
-                0% { background-position: 100% 0; }
-                100% { background-position: -100% 0; }
-            }
-            .search-box button,
-            #collapseToggleBtn,
-            .list-toggle-btn,
-            .mode-btn,
-            .modal-close,
-            .modal-back,
-            .summary-image-close,
-            .image-preview-btn,
-            .order-detail-modal-actions .list-toggle-btn {
-                transition: transform 0.18s ease, box-shadow 0.2s ease, filter 0.18s ease;
-            }
-            .search-box button:hover,
-            #collapseToggleBtn:hover,
-            .list-toggle-btn:hover,
-            .mode-btn:hover,
-            .modal-close:hover,
-            .modal-back:hover,
-            .summary-image-close:hover,
-            .image-preview-btn:hover,
-            .order-detail-modal-actions .list-toggle-btn:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 8px 18px rgba(15,53,96,0.18);
-            }
-            .search-box button:active,
-            #collapseToggleBtn:active,
-            .list-toggle-btn:active,
-            .mode-btn:active,
-            .modal-close:active,
-            .modal-back:active,
-            .summary-image-close:active,
-            .image-preview-btn:active,
-            .order-detail-modal-actions .list-toggle-btn:active {
-                transform: translateY(0);
-            }
-            @media (max-width: 1360px) {
-                .modal-content-wrap { grid-template-columns: minmax(0, 1fr); }
-                .summary-image-panel { border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; position: relative; top: auto; max-height: 58vh; }
-                .oversigt-modal-layout { grid-template-columns:1fr; }
-                .oversigt-details table { min-width:0; }
-            }
             @media (max-width: 900px) {
-                .modal-box { width: 99vw; max-height: 93vh; padding: 12px; }
+                .modal-box { width: 98vw; max-height: 92vh; padding: 12px; }
                 .modal-box th, .modal-box td { padding: 8px 6px; font-size: 13px; }
-                .modal-content-wrap { grid-template-columns: 1fr; }
-                .summary-image-panel { width: 100%; min-width: 0; max-height: 52vh; border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; }
+                .modal-content-wrap { flex-direction: column; }
+                .summary-image-panel { width: 100%; min-width: 0; max-height: none; border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; }
                 .laser-summary-layout { flex-direction: column; }
                 .laser-image-panel { width: 100%; min-width: 0; max-height: none; position: static; }
                 .image-lightbox { padding: 12px; }
                 .image-lightbox-dialog { width: 100%; max-height: 96vh; padding: 12px; }
                 .image-lightbox-body img { max-height: calc(96vh - 110px); }
-                .compact-image-grid { grid-template-columns:1fr; }
-                .oversigt-launcher-grid { grid-template-columns:1fr; }
-                .oversigt-modal-layout { grid-template-columns:1fr; }
-                .oversigt-modal-header { flex-direction:column; align-items:flex-start; }
-                .oversigt-modal-actions { width:100%; justify-content:flex-end; }
-                .oversigt-details table { min-width:0; }
-            }
-            @media (max-width: 640px) {
-                .order-detail-modal-overlay { padding: 6px; }
-                .order-detail-modal-shell { border-radius: 10px; }
-                .order-detail-modal-header { padding: 10px 12px; }
-                .order-detail-modal-actions { gap: 6px; }
-                .order-detail-modal-actions .list-toggle-btn { padding: 6px 10px !important; font-size: 12px; }
-                .order-detail-modal-body { padding: 10px; }
-                .order-detail-modal-body .order-report-meta strong { font-size: 20px; }
-                .order-detail-modal-body .report-hero-title h1 { font-size: 24px; }
-                .oversigt-modal-overlay { padding: 6px; }
-                .oversigt-modal-shell { border-radius: 10px; max-height: 96vh; }
-                .oversigt-modal-header { padding: 10px 12px; }
-                .oversigt-modal-body { padding: 8px; }
-                .oversigt-details table { min-width:0; }
-                .order-list-section { padding: 12px; overflow-x: auto; }
-                .order-list-table { min-width: 820px; }
             }
             .order-list-section { background: #fff; padding: 16px 20px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
             .order-list-section h3 { color: #333; margin-bottom: 12px; border-bottom: 2px solid #2196F3; padding-bottom: 8px; }
@@ -904,7 +253,7 @@ app.get('/', (req, res) => {
             .order-note-banner.credit { background:#e3f2fd; border:1px solid #90caf9; color:#0d47a1; }
             .order-note-banner .note-icon { font-size:18px; flex-shrink:0; }
             .order-note-banner .note-body { flex:1; }
-            .order-list-summary { margin-top:12px; margin-bottom:14px; background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; font-size:13px; color:#0f3560; }
+            .order-list-summary { margin-top:12px; background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; font-size:13px; color:#0f3560; }
             .order-list-summary strong { color:#0d47a1; }
             .access-gate-overlay { position: fixed; inset: 0; background: rgba(20, 26, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 12000; }
             .access-gate-box { width: min(430px, 92vw); background: #ffffff; border-radius: 10px; padding: 22px; box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
@@ -928,17 +277,14 @@ app.get('/', (req, res) => {
                 <p>Indtast kode for at se ordreliste og detaljer.</p>
                 <div class="access-gate-row">
                     <input id="accessGateInput" type="password" placeholder="Kode" autocomplete="off" />
-                    <button id="accessGateBtn" type="button">Åbn</button>
+                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn</button>
                 </div>
                 <div id="accessGateError" class="access-gate-error"></div>
             </div>
         </div>
         <div class="header-banner-wrapper">
             <button id="homeBtn" onclick="goBackToList()" title="Tilbage til ordreliste" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
-            <div class="header-brand">
-                <img class="header-brand-logo" src="/assets/brand/logo-gantech.png" alt="Gantech logo" />
-                <span class="header-brand-text">${APP_VERSION}</span>
-            </div>
+            <span style="flex:1;">🔷 Gantech Efterkalkulation - v1.0.93</span>
             <div id="warmupBarWrap" title="Forberegner ordredata i baggrunden">
                 <div id="warmupBarBg"><div id="warmupBarFill"></div></div>
                 <span id="warmupBarText">Forberegner...</span>
@@ -948,8 +294,8 @@ app.get('/', (req, res) => {
         <div class="container">
             <div class="search-box" id="searchBox">
                 <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Åbn søgefelt og filtre">▼ Søg</button>
-                <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." style="display:none;" />
-                <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret" style="display:none;">Søg</button>
+                <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." />
+                <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret">Søg</button>
                 <select id="updateActionSelect" class="filter-select" onchange="handleUpdateActionSelection()" title="Vaelg hvad du vil opdatere">
                     <option value="">Opdater...</option>
                     <option value="order-cache">Ordre cache</option>
@@ -999,19 +345,6 @@ app.get('/', (req, res) => {
             </div>
         </div>
 
-        <div id="compactImageModal" class="compact-image-modal" onclick="closeCompactImageModal(event)">
-            <div class="compact-image-dialog" onclick="event.stopPropagation()">
-                <div class="compact-image-header">
-                    <div>
-                        <div id="compactImageTitle" class="compact-image-title">Billeder</div>
-                        <div id="compactImageSubtitle" class="compact-image-subtitle"></div>
-                    </div>
-                    <button class="compact-image-close" onclick="closeCompactImageModal()">Luk</button>
-                </div>
-                <div id="compactImageBody" class="compact-image-body"></div>
-            </div>
-        </div>
-
         <div id="printPreviewOverlay" class="print-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="printPreviewTitle" onclick="closePrintPreview(event)">
             <div class="print-preview-dialog" tabindex="-1" onclick="event.stopPropagation()">
                 <div class="print-preview-header">
@@ -1033,28 +366,11 @@ app.get('/', (req, res) => {
                         <span id="orderDetailModalSubtitle">Manager-oversigt med produktion, cost og sporbarhed</span>
                     </div>
                     <div class="order-detail-modal-actions">
-                            <button id="orderDetailModalBackBtn" class="list-toggle-btn" onclick="goBackFromReportToOrder()" style="display:none;">Tilbage til ordre</button>
                         <button class="list-toggle-btn" onclick="printOrderDetailReport()">Udskriv / PDF</button>
                         <button class="list-toggle-btn" onclick="closeOrderDetailModal()">Luk</button>
                     </div>
                 </div>
                 <div id="orderDetailModalBody" class="order-detail-modal-body"></div>
-            </div>
-        </div>
-
-        <div id="oversigtModal" class="oversigt-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="oversigtModalTitle" onclick="closeOversigtModal(event)">
-            <div class="oversigt-modal-shell" onclick="event.stopPropagation()">
-                <div class="oversigt-modal-header">
-                    <div class="oversigt-modal-title-wrap">
-                        <strong id="oversigtModalTitle">Oversigt</strong>
-                        <span id="oversigtModalSubtitle">Detaljeret produktionsanalyse</span>
-                    </div>
-                    <div class="oversigt-modal-actions">
-                        <button class="list-toggle-btn" onclick="refreshActiveOversigtModal()">Opdater</button>
-                        <button class="list-toggle-btn" onclick="closeOversigtModal()">Luk</button>
-                    </div>
-                </div>
-                <div id="oversigtModalBody" class="oversigt-modal-body"></div>
             </div>
         </div>
         
@@ -1348,67 +664,13 @@ app.get('/', (req, res) => {
                 btn.textContent = isClosed ? 'Skjul operationer' : 'Vis operationer';
             }
 
-            function buildOversigtModalView(type) {
-                const isLaser = type === 'laser';
-                const totalsId = isLaser ? 'laserOrderSummaryTotals' : 'operationOrderSummaryTotals';
-                const bodyId = isLaser ? 'laserOrderSummaryBody' : 'operationOrderSummaryBody';
-                const titleEl = document.getElementById('oversigtModalTitle');
-                const subtitleEl = document.getElementById('oversigtModalSubtitle');
-                const modalBody = document.getElementById('oversigtModalBody');
-                const totals = document.getElementById(totalsId);
-                const body = document.getElementById(bodyId);
-                if (!titleEl || !subtitleEl || !modalBody || !totals || !body) return;
-
-                titleEl.textContent = isLaser ? 'Laseroversigt (L-linjer)' : 'Operation Oversigt';
-                subtitleEl.textContent = isLaser
-                    ? 'Nesting, vægt og kost i samlet driftsvisning'
-                    : 'Operationstid, kapacitet og kost i samlet driftsvisning';
-
-                modalBody.innerHTML = ''
-                    + '<div class="oversigt-modal-layout">'
-                    +   '<section class="oversigt-panel oversigt-kpi"><h5>Samlede KPI</h5>' + totals.innerHTML + '</section>'
-                    +   '<section class="oversigt-panel oversigt-details"><h5>Detaljer</h5>' + body.innerHTML + '</section>'
-                    + '</div>';
-                applyMicroTablePolish(modalBody);
-            }
-
-            function openOversigtModal(type) {
-                currentOversigtModalType = (type === 'operation') ? 'operation' : 'laser';
-                const modal = document.getElementById('oversigtModal');
-                if (!modal) return;
-                buildOversigtModalView(currentOversigtModalType);
-                modal.style.display = 'flex';
-            }
-
-            function closeOversigtModal(event) {
-                if (event && event.target && event.target.id !== 'oversigtModal') return;
-                const modal = document.getElementById('oversigtModal');
-                const body = document.getElementById('oversigtModalBody');
-                if (modal) modal.style.display = 'none';
-                if (body) body.innerHTML = '';
-                currentOversigtModalType = null;
-            }
-
-            function refreshActiveOversigtModal() {
-                if (!currentSearchOrderData) return;
-                if (currentOversigtModalType === 'laser') {
-                    loadSalesOrderLaserSummary(currentSearchOrderData);
-                } else if (currentOversigtModalType === 'operation') {
-                    loadSalesOrderOperationSummary(currentSearchOrderData);
-                }
-            }
-
             let currentMarginMode = 'classic';
             let orderListData = [];
             let orderListVisible = true;
             const ORDER_LIST_DAYS_BACK_CLIENT = 30;
-            const AFTERCALC_CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
-            let activeSearchRequestId = 0;
-            let prefetchOrderDebounceTimer = null;
             let currentSearchOrderData = null;
             let lastOrderReportHtml = '';
             let lastOrderReportTitle = 'Rapport';
-            let reportOriginState = null;
             let orderListFilter = '';
             let orderListBrugerFilter = '';
             let marginStateByOrdNo = {};
@@ -1420,107 +682,6 @@ app.get('/', (req, res) => {
             let orderListSortField = 'date';
             let orderListSortDir = 'desc';
             let marginSortRefreshTimer = null;
-            let currentOversigtModalType = null;
-            const aftercalcClientCache = new Map();
-
-            function normalizeOrdNoValue(ordNo) {
-                return String(ordNo || '').trim();
-            }
-
-            function pruneAftercalcClientCache() {
-                if (aftercalcClientCache.size <= 80) return;
-                const keys = Array.from(aftercalcClientCache.keys());
-                for (let i = 0; i < keys.length - 80; i++) {
-                    aftercalcClientCache.delete(keys[i]);
-                }
-            }
-
-            async function requestAftercalcData(ordNo, options = {}) {
-                const normalizedOrdNo = normalizeOrdNoValue(ordNo);
-                if (!normalizedOrdNo) throw new Error('Ordrenummer mangler');
-
-                const forceReload = Boolean(options.forceReload);
-                const now = Date.now();
-                const cacheKey = normalizedOrdNo;
-                const existing = aftercalcClientCache.get(cacheKey);
-
-                if (!forceReload && existing) {
-                    if (existing.data && (now - Number(existing.ts || 0)) < AFTERCALC_CLIENT_CACHE_TTL_MS) {
-                        return existing.data;
-                    }
-                    if (existing.promise) {
-                        return existing.promise;
-                    }
-                }
-
-                const fetchPromise = (async () => {
-                    const response = await fetch('/aftercalc/' + encodeURIComponent(normalizedOrdNo));
-                    const data = await response.json();
-                    if (!response.ok) {
-                        throw new Error((data && data.error) ? data.error : ('HTTP ' + response.status));
-                    }
-                    aftercalcClientCache.set(cacheKey, { data, ts: Date.now(), promise: null });
-                    pruneAftercalcClientCache();
-                    return data;
-                })();
-
-                aftercalcClientCache.set(cacheKey, { data: null, ts: now, promise: fetchPromise });
-
-                try {
-                    return await fetchPromise;
-                } catch (err) {
-                    aftercalcClientCache.delete(cacheKey);
-                    throw err;
-                }
-            }
-
-            function prefetchAftercalcData(ordNo) {
-                const normalizedOrdNo = normalizeOrdNoValue(ordNo);
-                if (!normalizedOrdNo) return;
-                requestAftercalcData(normalizedOrdNo).catch(() => {});
-            }
-
-            function applyMicroTablePolish(rootEl) {
-                const root = rootEl || document;
-                const tables = Array.from(root.querySelectorAll('table'));
-                if (!tables.length) return;
-
-                const rightPattern = /færdigmeldt|minutter|min\.|kost|pris|margin|afvigelse|kg|%|beløb|antal|samlet|dkk|forbrugt|stykliste|icon vægt|nestkost|nestmulti/i;
-                const centerPattern = /linje|rute|prodtp4|prod\.ordre|prodordre|nestingordre|ordre$/i;
-                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\/ref|hvem|status|message|beskrivelse/i;
-
-                for (const table of tables) {
-                    table.classList.add('micro-grid-table');
-                    const headerCells = Array.from(table.querySelectorAll('tr:first-child th'));
-                    if (!headerCells.length) continue;
-
-                    const alignByIndex = [];
-                    for (let i = 0; i < headerCells.length; i++) {
-                        const text = String(headerCells[i].textContent || '').trim().toLowerCase();
-                        let align = 'left';
-                        if (rightPattern.test(text)) {
-                            align = 'right';
-                        } else if (centerPattern.test(text)) {
-                            align = 'center';
-                        } else if (leftPattern.test(text)) {
-                            align = 'left';
-                        }
-                        alignByIndex[i] = align;
-                    }
-
-                    const rows = Array.from(table.querySelectorAll('tr'));
-                    for (const row of rows) {
-                        const cells = Array.from(row.children);
-                        for (let i = 0; i < cells.length; i++) {
-                            const align = alignByIndex[i] || 'left';
-                            cells[i].style.textAlign = align;
-                            if (align === 'right') {
-                                cells[i].style.fontVariantNumeric = 'tabular-nums';
-                            }
-                        }
-                    }
-                }
-            }
 
             // ── ORDER NOTES ────────────────────────────────────────────────
             let orderNotesCache = {};  // ordNo(string) -> { status, text, updatedAt }
@@ -1595,7 +756,7 @@ app.get('/', (req, res) => {
                     (note.updatedAt ? '<div style="font-size:11px;color:#888;margin-bottom:10px;">Sidst opdateret: ' + note.updatedAt.slice(0,16).replace('T',' ') + '</div>' : '') +
                     '<div class="note-popup-actions">' +
                     '<button class="btn-note-delete" onclick="deleteOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Slet</button>' +
-                    '<button class="btn-note-cancel" onclick="document.getElementById(\\'notePopupOverlay\\').remove()">Annuller</button>' +
+                    '<button class="btn-note-cancel" onclick="document.getElementById(\'notePopupOverlay\').remove()">Annuller</button>' +
                     '<button class="btn-note-save" onclick="saveOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Gem</button>' +
                     '</div></div>';
 
@@ -1787,67 +948,6 @@ app.get('/', (req, res) => {
                 return '/image-file?path=' + encodeURIComponent(item.value || '');
             }
 
-            function selectCompactImageItems(items) {
-                const source = Array.isArray(items) ? items : [];
-                const clean = source.filter(item => item && String(item.value || '').trim());
-                if (clean.length <= 2) return clean;
-
-                const pickByLabel = (pattern) => clean.find(item => pattern.test(String(item.label || '')));
-                const picked = [];
-                const pushUnique = (item) => {
-                    if (!item) return;
-                    const value = String(item.value || '').trim().toLowerCase();
-                    if (!value) return;
-                    if (picked.some(x => String(x.value || '').trim().toLowerCase() === value)) return;
-                    picked.push(item);
-                };
-
-                pushUnique(pickByLabel(/webpg|nesting/i));
-                pushUnique(pickByLabel(/pictfnm|icon/i));
-                for (const item of clean) {
-                    pushUnique(item);
-                    if (picked.length >= 2) break;
-                }
-                return picked.slice(0, 2);
-            }
-
-            function openCompactImageModal(imageKey) {
-                const entry = summaryImageRegistry[imageKey];
-                const modal = document.getElementById('compactImageModal');
-                const titleEl = document.getElementById('compactImageTitle');
-                const subtitleEl = document.getElementById('compactImageSubtitle');
-                const bodyEl = document.getElementById('compactImageBody');
-                if (!entry || !modal || !titleEl || !bodyEl) return;
-
-                const items = selectCompactImageItems(entry.items);
-                if (!items.length) return;
-
-                titleEl.textContent = entry.title || 'Billeder';
-                subtitleEl.textContent = 'Viser nesting + hovedbilleder';
-
-                let html = '<div class="compact-image-grid">';
-                for (const item of items) {
-                    const src = getSummaryImageSrc(item);
-                    html += '<div class="compact-image-card">';
-                    html += '<div class="compact-image-label">' + escapeHtml(item.label || 'Billede') + '</div>';
-                    html += '<img class="image-preview-zoomable" src="' + escapeHtml(src) + '" alt="' + escapeHtml(item.label || entry.title || 'Billede') + '" loading="lazy" data-fullsrc="' + escapeHtml(src) + '" data-title="' + escapeHtml(item.label || entry.title || 'Billede') + '" data-path="' + escapeHtml(item.value || '') + '" />';
-                    html += '<div class="compact-image-path">' + escapeHtml(item.value || '') + '</div>';
-                    html += '</div>';
-                }
-                html += '</div>';
-                bodyEl.innerHTML = html;
-                modal.classList.add('show');
-            }
-
-            function closeCompactImageModal(event) {
-                if (event && event.target && event.target.id !== 'compactImageModal') return;
-                const modal = document.getElementById('compactImageModal');
-                const bodyEl = document.getElementById('compactImageBody');
-                if (!modal) return;
-                modal.classList.remove('show');
-                if (bodyEl) bodyEl.innerHTML = '';
-            }
-
             function closeSummaryImagePanel() {
                 const panels = [
                     document.getElementById('summaryImagePanel'),
@@ -1858,16 +958,6 @@ app.get('/', (req, res) => {
                     panel.innerHTML = '';
                     panel.classList.add('hidden');
                 }
-                updateSummaryImagePanelLayout();
-            }
-
-            function updateSummaryImagePanelLayout() {
-                const wrap = document.querySelector('#summaryModal .modal-content-wrap');
-                const summaryPanel = document.getElementById('summaryImagePanel');
-                if (!wrap || !summaryPanel) return;
-                const hasImages = !summaryPanel.classList.contains('hidden') && summaryPanel.innerHTML.trim() !== '';
-                const shouldFocus = hasImages && window.matchMedia('(max-width: 1440px)').matches;
-                wrap.classList.toggle('image-focus', shouldFocus);
             }
 
             function openSummaryImagePanel(imageKey, preferredPanelId) {
@@ -1877,14 +967,9 @@ app.get('/', (req, res) => {
                 const laserPanel = document.getElementById('laserImagePanel');
                 const summaryPanel = document.getElementById('summaryImagePanel');
                 const isLaserVisible = laserPanelWrap && laserPanelWrap.style.display !== 'none';
-                const isVisible = (el) => {
-                    if (!el) return false;
-                    const s = getComputedStyle(el);
-                    return s.display !== 'none' && s.visibility !== 'hidden' && el.getClientRects().length > 0;
-                };
                 let panel = null;
                 if (preferredPanelId === 'laserImagePanel') {
-                    panel = isVisible(laserPanel) ? laserPanel : summaryPanel;
+                    panel = laserPanel;
                 } else if (preferredPanelId === 'summaryImagePanel') {
                     panel = summaryPanel;
                 } else {
@@ -1921,7 +1006,6 @@ app.get('/', (req, res) => {
                 html += '</div>';
                 panel.innerHTML = html;
                 panel.classList.remove('hidden');
-                updateSummaryImagePanelLayout();
             }
 
             function openImageLightbox(src, title, pathText) {
@@ -1985,7 +1069,6 @@ app.get('/', (req, res) => {
                     imagePanel.innerHTML = prev.imageHtml || '';
                     imagePanel.classList.toggle('hidden', prev.imageHidden !== false);
                 }
-                updateSummaryImagePanelLayout();
                 updateSummaryModalBackBtn();
             }
 
@@ -2123,21 +1206,13 @@ app.get('/', (req, res) => {
             function getOrderMarginHtml(ordNo) {
                 const marginState = getMarginState(ordNo);
                 let marginHtml = '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>';
-                let toneClass = 'na';
                 if (marginState && marginState.status === 'loading') {
                     marginHtml = '<span style="background:#546e7a; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">...</span>';
-                    toneClass = 'na';
                 } else if (marginState && marginState.status === 'success') {
-                    const marginValue = calculateOrderMarginPercent(marginState.totalRevenue || 0, marginState.totalCost || 0);
-                    const margin = marginValue.toFixed(2);
+                    const margin = calculateOrderMarginPercent(marginState.totalRevenue || 0, marginState.totalCost || 0).toFixed(2);
                     marginHtml = getMarginBadge(margin);
-                    if (currentMarginMode === 'new') {
-                        toneClass = marginValue >= 125 ? 'ok' : (marginValue >= 105 ? 'warn' : 'bad');
-                    } else {
-                        toneClass = marginValue > 20 ? 'ok' : (marginValue >= 5 ? 'warn' : 'bad');
-                    }
                 }
-                return '<span class="order-margin-wrap"><span class="order-kpi-tone ' + toneClass + '" title="KPI tone fra Rapport 2.0">↗</span>' + marginHtml + '</span>';
+                return marginHtml;
             }
 
             function updateOrderMarginCell(ordNo) {
@@ -2546,51 +1621,18 @@ app.get('/', (req, res) => {
                         if (a.ref !== b.ref) return a.ref.localeCompare(b.ref, 'da');
                         return a.message.localeCompare(b.message, 'da');
                     });
-
-                const exceptionCompactMap = new Map();
-                for (const ex of exceptionRows) {
-                    const prodOrdNo = String(ex.prodOrdNo || '-');
-                    const message = String(ex.message || '').trim() || '-';
-                    const compactKey = prodOrdNo + '|' + message;
-                    if (!exceptionCompactMap.has(compactKey)) {
-                        exceptionCompactMap.set(compactKey, {
-                            prodOrdNo,
-                            message,
-                            typeSet: new Set(),
-                            refSet: new Set(),
-                            count: 0
-                        });
-                    }
-                    const row = exceptionCompactMap.get(compactKey);
-                    row.typeSet.add(String(ex.type || '-'));
-                    row.refSet.add(String(ex.ref || '-'));
-                    row.count += Number(ex.count || 0);
-                }
-
-                const exceptionCompactRows = Array.from(exceptionCompactMap.values())
-                    .map(row => ({
-                        prodOrdNo: row.prodOrdNo,
-                        types: Array.from(row.typeSet.values()).sort((a, b) => a.localeCompare(b, 'da')),
-                        refs: Array.from(row.refSet.values()).sort((a, b) => a.localeCompare(b, 'da')),
-                        message: row.message,
-                        count: row.count
-                    }))
-                    .sort((a, b) => {
-                        const aProd = Number(a.prodOrdNo) || 0;
-                        const bProd = Number(b.prodOrdNo) || 0;
-                        if (aProd !== bProd) return aProd - bProd;
-                        if (b.count !== a.count) return b.count - a.count;
-                        return a.message.localeCompare(b.message, 'da');
-                    });
-
                 const exceptionOccurrenceCount = exceptionRows.reduce((sum, item) => sum + Number(item.count || 0), 0);
-                const exceptionGroupCount = exceptionCompactRows.length;
+                const exceptionGroupCount = exceptionRows.length;
 
                 const marginAmount = Number((orderData && orderData.summary && orderData.summary.margin) || 0);
                 const marginPct = orderMarginPercent || '0.00';
                 const revenue = Number((orderData && orderData.summary && orderData.summary.totalRevenue) || 0);
                 const cost = Number((orderData && orderData.summary && orderData.summary.totalCost) || 0);
                 const generatedAt = new Date().toLocaleString('da-DK');
+                const reportFilters = [];
+                if (orderListFilter) reportFilters.push('kunde/søgning: "' + escapeHtml(orderListFilter) + '"');
+                if (orderListBrugerFilter) reportFilters.push('bruger: "' + escapeHtml(orderListBrugerFilter) + '"');
+                const reportFilterText = reportFilters.length > 0 ? reportFilters.join(', ') : 'ingen aktive filtre';
                 const orderTypeLabel = Number(orderHeader.Gr4 || 0) === 3 ? 'Multiordre' : 'Ordre';
                 const statusLabel = Number(orderHeader.InvoAm || 0) === 0
                     ? 'I produktion'
@@ -2598,14 +1640,14 @@ app.get('/', (req, res) => {
 
                 let html = '<div id="orderDetailReport" class="order-detail-report">';
                 html += '<div class="order-report-toolbar">';
-                html += '<div class="order-report-meta"><strong>' + escapeHtml(orderTypeLabel) + ' ' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</strong><div class="report-subline">' + escapeHtml(String(orderHeader.CustomerName || '-')) + '</div><div class="report-badges"><span class="report-badge">Status: <strong>' + escapeHtml(statusLabel) + '</strong></span><span class="report-badge">Margin: <strong>' + escapeHtml(marginPct) + '%</strong></span></div></div>';
+                html += '<div class="order-report-meta"><strong>' + escapeHtml(orderTypeLabel) + ' ' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</strong><div class="report-subline">' + escapeHtml(String(orderHeader.CustomerName || '-')) + '</div><div class="report-badges"><span class="report-badge">Status: <strong>' + escapeHtml(statusLabel) + '</strong></span><span class="report-badge">Margin: <strong>' + escapeHtml(marginPct) + '%</strong></span><span class="report-badge">Filtre: <strong>' + escapeHtml(reportFilterText) + '</strong></span></div></div>';
                 html += '</div>';
                 html += '<div class="report-hero">';
                 html += '<div class="report-hero-top">';
                 html += '<div class="report-hero-title">';
                 html += '<div class="eyebrow">Ledelsesoverblik</div>';
                 html += '<h1>Rapport for ordre ' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</h1>';
-                html += '<div class="context">' + escapeHtml(String(orderHeader.CustomerName || '-')) + ' • Genereret ' + escapeHtml(generatedAt) + '</div>';
+                html += '<div class="context">' + escapeHtml(String(orderHeader.CustomerName || '-')) + ' • Genereret ' + escapeHtml(generatedAt) + ' • ' + escapeHtml(reportFilterText) + '</div>';
                 html += '<div class="report-arrow">Forbedringsretning i grøn KPI-tone</div>';
                 html += '</div>';
                 html += '<div class="report-hero-meta">';
@@ -2662,21 +1704,14 @@ app.get('/', (req, res) => {
                 html += '<div class="order-report-card" style="margin-top:12px;">';
                 html += '<div class="label">Exceptioner og spor</div>';
                 html += '<div class="value" style="font-size:14px; font-weight:600; margin-bottom:8px;">Advarsler: ' + formatCount(exceptionGroupCount) + ' grupper • ' + formatCount(exceptionOccurrenceCount) + ' forekomster</div>';
-                if (exceptionCompactRows.length > 0) {
+                if (exceptionRows.length > 0) {
                     html += '<table class="order-report-table" style="margin-top:0;">';
-                    html += '<tr><th>Prod.ordre</th><th>Type</th><th>Linjer/Ref</th><th>Beskrivelse</th><th>Antal</th></tr>';
-                    for (const ex of exceptionCompactRows) {
-                        const refsPreview = ex.refs.length <= 4
-                            ? ex.refs.join(', ')
-                            : (ex.refs.slice(0, 4).join(', ') + ' +' + (ex.refs.length - 4));
-                        const refsTitle = ex.refs.join(', ');
-                        html += '<tr>';
-                        html += '<td>' + escapeHtml(ex.prodOrdNo || '-') + '</td>';
-                        html += '<td>' + escapeHtml(ex.types.join(' + ') || '-') + '</td>';
-                        html += '<td title="' + escapeHtml(refsTitle) + '">' + escapeHtml(refsPreview || '-') + '</td>';
-                        html += '<td>' + escapeHtml(ex.message || '-') + '</td>';
-                        html += '<td>' + formatCount(ex.count || 0) + '</td>';
-                        html += '</tr>';
+                    html += '<tr><th>Type</th><th>Prod.ordre</th><th>Lnr/Ref</th><th>Beskrivelse</th><th>Antal</th></tr>';
+                    for (const ex of exceptionRows.slice(0, 12)) {
+                        html += '<tr><td>' + escapeHtml(ex.type || '-') + '</td><td>' + escapeHtml(ex.prodOrdNo || '-') + '</td><td>' + escapeHtml(ex.ref || '-') + '</td><td>' + escapeHtml(ex.message || '-') + '</td><td>' + formatCount(ex.count || 0) + '</td></tr>';
+                    }
+                    if (exceptionRows.length > 12) {
+                        html += '<tr><td colspan="5">Viser de første 12 af ' + formatCount(exceptionRows.length) + ' grupper.</td></tr>';
                     }
                     html += '</table>';
                 } else {
@@ -2697,30 +1732,6 @@ app.get('/', (req, res) => {
             let currentPrintPreviewMode = null;
             let reportPrintRestoreState = null;
 
-            function isOrderDetailReportViewActive() {
-                const bodyEl = document.getElementById('orderDetailModalBody');
-                return Boolean(bodyEl && bodyEl.querySelector('#orderDetailReport'));
-            }
-
-            function updateOrderDetailModalBackButton() {
-                const btn = document.getElementById('orderDetailModalBackBtn');
-                if (!btn) return;
-                const show = Boolean(reportOriginState && isOrderDetailReportViewActive());
-                btn.style.display = show ? '' : 'none';
-            }
-
-            function restoreOrderDetailFromReport() {
-                if (!reportOriginState) return false;
-                const snapshot = reportOriginState;
-                reportOriginState = null;
-                openOrderDetailModal(snapshot.html, snapshot.title, snapshot.subtitle);
-                return true;
-            }
-
-            function goBackFromReportToOrder() {
-                restoreOrderDetailFromReport();
-            }
-
             function openOrderDetailModal(html, titleText, subtitleText) {
                 const overlay = document.getElementById('orderDetailModal');
                 const titleEl = document.getElementById('orderDetailModalTitle');
@@ -2730,26 +1741,17 @@ app.get('/', (req, res) => {
                 titleEl.textContent = titleText || 'Ordre-rapport';
                 subtitleEl.textContent = subtitleText || 'Manager-oversigt med produktion, cost og sporbarhed';
                 bodyEl.innerHTML = html || '';
-                applyMicroTablePolish(bodyEl);
                 overlay.style.display = 'flex';
                 document.body.classList.add('report-modal-open');
-                updateOrderDetailModalBackButton();
             }
 
             function closeOrderDetailModal(event) {
                 if (event && event.target && event.target.id !== 'orderDetailModal') return;
-                if (isOrderDetailReportViewActive() && reportOriginState) {
-                    restoreOrderDetailFromReport();
-                    return;
-                }
                 const overlay = document.getElementById('orderDetailModal');
                 const bodyEl = document.getElementById('orderDetailModalBody');
                 if (overlay) overlay.style.display = 'none';
                 if (bodyEl) bodyEl.innerHTML = '';
                 document.body.classList.remove('report-modal-open');
-                reportOriginState = null;
-                updateOrderDetailModalBackButton();
-                goBackToList();
             }
 
             function buildStandaloneReportPrintCss() {
@@ -2768,22 +1770,19 @@ app.get('/', (req, res) => {
                     '.order-report-table th, .order-report-table td { border-bottom:1px solid #dfe8f3; padding:8px 10px; }',
                     '.order-report-table th { background:#eef5ff; }',
                     '.summary-box { break-inside: avoid; page-break-inside: avoid; }'
-                ].join('\\n');
+                ].join('\n');
             }
 
             function buildStandaloneListPrintCss() {
                 return [
-                    '@page { size: A4 portrait; margin: 7mm; }',
-                    'body { margin:0; font-family: Arial, sans-serif; color:#1f2937; font-size:10px; line-height:1.2; }',
+                    '@page { size: A4 portrait; margin: 10mm; }',
+                    'body { margin:0; font-family: Arial, sans-serif; color:#1f2937; }',
                     '.order-list-summary-actions, .order-report-actions, .search-box, .header-banner-wrapper { display:none !important; }',
                     '.order-list-section { margin:0 !important; box-shadow:none !important; border:none !important; padding:0 !important; }',
-                    '.order-list-summary { margin:0 0 8px 0 !important; padding:7px 9px !important; font-size:10px !important; }',
-                    '.order-list-section h3 { margin:0 0 7px 0 !important; padding:0 0 5px 0 !important; font-size:12px !important; }',
-                    '.order-list-table { width:100%; font-size:9.3px; border-collapse:collapse; table-layout:auto; }',
-                    '.order-list-table th, .order-list-table td { padding:3px 4px; line-height:1.15; }',
-                    '.order-list-table th:nth-child(8), .order-list-table td:nth-child(8), .order-list-table th:nth-child(9), .order-list-table td:nth-child(9) { display:none; }',
+                    '.order-list-table { font-size:11px; }',
+                    '.order-list-table th, .order-list-table td { padding:6px 7px; }',
                     '.order-list-table tr { break-inside: avoid; page-break-inside: avoid; }'
-                ].join('\\n');
+                ].join('\n');
             }
 
             function printStandaloneHtml(title, html, cssText) {
@@ -2800,7 +1799,7 @@ app.get('/', (req, res) => {
 
                 const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
                     .map(el => el.outerHTML)
-                    .join('\\n');
+                    .join('\n');
                 const safeTitle = escapeHtml(title || 'Udskrift');
                 const doc = iframe.contentWindow.document;
                 doc.open();
@@ -2893,39 +1892,7 @@ app.get('/', (req, res) => {
                     alert('Rapporten er ikke klar endnu. Søg efter en ordre først.');
                     return;
                 }
-
-                const overlay = document.getElementById('orderDetailModal');
-                const bodyEl = document.getElementById('orderDetailModalBody');
-                const titleEl = document.getElementById('orderDetailModalTitle');
-                const subtitleEl = document.getElementById('orderDetailModalSubtitle');
-                const modalOpen = overlay && getComputedStyle(overlay).display === 'flex';
-                if (modalOpen && bodyEl && !isOrderDetailReportViewActive() && !reportOriginState) {
-                    reportOriginState = {
-                        html: bodyEl.innerHTML,
-                        title: titleEl ? titleEl.textContent : 'Ordre-rapport',
-                        subtitle: subtitleEl ? subtitleEl.textContent : 'Manager-oversigt med produktion, cost og sporbarhed'
-                    };
-                }
-
-                openOrderDetailModal(
-                    lastOrderReportHtml,
-                    lastOrderReportTitle || 'Rapport 2.0',
-                    'Manager-oversigt med produktion, cost og sporbarhed'
-                );
-            }
-
-            function updateReportOpenButtonState(isReady, ordNo) {
-                const btn = document.getElementById('openReportBtn');
-                if (!btn) return;
-                const ready = Boolean(isReady && lastOrderReportHtml);
-                btn.disabled = !ready;
-                if (ready) {
-                    btn.title = 'Åbn seneste rapport i separat visning';
-                    btn.textContent = ordNo ? ('Rapport ' + ordNo) : 'Rapport 2.0';
-                } else {
-                    btn.title = 'Søg efter en ordre for at aktivere rapport';
-                    btn.textContent = 'Rapport 2.0';
-                }
+                renderPrintPreview(lastOrderReportTitle || 'Rapport 2.0', lastOrderReportHtml, 'report');
             }
 
             window.addEventListener('afterprint', function() {
@@ -2958,27 +1925,15 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                const requestId = ++activeSearchRequestId;
-
                 // Keep customer list visible during direct order search.
                 const result = document.getElementById('result');
                 result.innerHTML = '<div class="loading">Indlæser...</div>';
-                openOrderDetailModal(
-                    '<div class="section"><h3>Ordre ' + escapeHtml(String(ordNo)) + '</h3><div class="loading">Henter ordredata...</div></div>',
-                    'Ordre ' + escapeHtml(String(ordNo)) + ' - indlæser...',
-                    'Forbereder produktion, cost og sporbarhed...'
-                );
                 
                 try {
-                    const data = await requestAftercalcData(ordNo);
-                    if (requestId !== activeSearchRequestId) return;
+                    const response = await fetch('/aftercalc/' + ordNo);
+                    const data = await response.json();
                     
                     if (data.error) {
-                        openOrderDetailModal(
-                            '<div class="section"><div class="error">Fejl: ' + escapeHtml(String(data.error)) + '</div></div>',
-                            'Ordre ' + escapeHtml(String(ordNo)) + ' - fejl',
-                            'Kunne ikke hente data for ordren'
-                        );
                         result.innerHTML = '<div class="error">Fejl: ' + data.error + '</div>';
                         return;
                     }
@@ -3072,40 +2027,33 @@ app.get('/', (req, res) => {
                     html += '<div class="order-header-item"><div class="order-header-label">Fakturastatus</div><div class="order-header-value">' + invoiceStatusBadge + invoiceStatusSub + '</div></div>';
                     html += '</div></div>';
 
-                    html += '<div class="section oversigt-launcher-section">';
-                    html += '<h3>Produktionsoversigter</h3>';
-                    html += '<div class="oversigt-launcher-grid">';
-                    html += '<article class="oversigt-launcher-card">';
-                    html += '<h4>Laseroversigt (L-linjer)</h4>';
-                    html += '<div class="desc">Nesting, vægtafvigelser og kost på tværs af ruter.</div>';
-                    html += '<div id="laserOversigtSummaryTeaser" class="oversigt-launcher-kpi"><span class="loading">Indlæser laser-KPI...</span></div>';
-                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\\\'laser\\\')" title="Åbn detaljeret laseroversigt">Åbn laseroversigt</button>';
-                    html += '</article>';
-                    html += '<article class="oversigt-launcher-card">';
-                    html += '<h4>Operation Oversigt</h4>';
-                    html += '<div class="desc">Operationstid, afvigelser og omkostninger i én driftsvisning.</div>';
-                    html += '<div id="operationOversigtSummaryTeaser" class="oversigt-launcher-kpi"><span class="loading">Indlæser operations-KPI...</span></div>';
-                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\\\'operation\\\')" title="Åbn detaljeret operationsoversigt">Åbn operationer</button>';
-                    html += '</article>';
-                    html += '</div>';
-                    html += '</div>';
-
-                    html += '<div id="laserOrderSummaryPanel" style="display:none;" aria-hidden="true">';
+                    html += '<div class="section">';
+                    html += '<h3 style="display:flex; align-items:center; justify-content:space-between; gap:10px;">';
+                    html += '<span>Laseroversigt (L-linjer)</span>';
+                    html += '<button id="laserOrderSummaryToggleBtn" class="list-toggle-btn" style="padding:6px 10px;" onclick="toggleLaserOrderSummary()" title="Vis eller skjul detaljeret laseroversigt">Vis laseroversigt</button>';
+                    html += '</h3>';
                     html += '<div id="laserOrderSummaryTotals" class="summary-box"><div class="loading">Indlæser totaler...</div></div>';
+                    html += '<div id="laserOrderSummaryPanel" style="display:none;">';
                     html += '<div class="laser-summary-layout">';
                     html += '<div id="laserOrderSummaryBody" class="loading">Indlæser laserdata...</div>';
                     html += '<aside id="laserImagePanel" class="laser-image-panel hidden"></aside>';
                     html += '</div>';
                     html += '</div>';
+                    html += '</div>';
 
-                    html += '<div id="operationOrderSummaryPanel" style="display:none;" aria-hidden="true">';
+                    html += '<div class="section">';
+                    html += '<h3 style="display:flex; align-items:center; justify-content:space-between; gap:10px;">';
+                    html += '<span>Operation Oversigt</span>';
+                    html += '<button id="operationOrderSummaryToggleBtn" class="list-toggle-btn" style="padding:6px 10px;" onclick="toggleOperationOrderSummary()" title="Vis eller skjul detaljeret operationsoversigt">Vis operationer</button>';
+                    html += '</h3>';
                     html += '<div id="operationOrderSummaryTotals" class="summary-box"><div class="loading">Indlæser totaler...</div></div>';
+                    html += '<div id="operationOrderSummaryPanel" style="display:none;">';
                     html += '<div id="operationOrderSummaryBody" class="loading">Indlæser operationsdata...</div>';
+                    html += '</div>';
                     html += '</div>';
 
                     lastOrderReportHtml = buildOrderDetailReportHtml(data, orderMarginPercent, costToDateFromProduction);
                     lastOrderReportTitle = 'Rapport 2.0 - ordre ' + String(data.orderHeader.OrdNo || '-');
-                    updateReportOpenButtonState(true, String(data.orderHeader.OrdNo || ''));
 
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
@@ -3133,7 +2081,7 @@ app.get('/', (req, res) => {
                                 : getMarginBadge(lineMarginPercent);
                             html += '<tr>';
                             html += '<td>' + (hasProductionOrder
-                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\\'' + breakdownRowId + '\\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
+                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\'' + breakdownRowId + '\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
                                 : '') + (line.LnNo || 0) + '</td>';
 
                             const salesWarningFlag = getWarningFlagHtml(line, 'Tilknyttet produktionsordre har en advarsel.');
@@ -3470,7 +2418,6 @@ app.get('/', (req, res) => {
                         html += '</div>';
                     }
                     
-                    reportOriginState = null;
                     openOrderDetailModal(
                         html,
                         'Ordre ' + data.orderHeader.OrdNo + ' - ' + (data.orderHeader.CustomerName || '-'),
@@ -3480,12 +2427,6 @@ app.get('/', (req, res) => {
                     loadSalesOrderLaserSummary(data);
                     loadSalesOrderOperationSummary(data);
                 } catch (err) {
-                    if (requestId !== activeSearchRequestId) return;
-                    openOrderDetailModal(
-                        '<div class="section"><div class="error">Fejl: ' + escapeHtml(String(err.message || err)) + '</div></div>',
-                        'Ordre ' + escapeHtml(String(ordNo)) + ' - fejl',
-                        'Der opstod en fejl under indlæsning'
-                    );
                     result.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
                 }
             }
@@ -3493,7 +2434,6 @@ app.get('/', (req, res) => {
             function loadSalesOrderOperationSummary(orderData) {
                 const body = document.getElementById('operationOrderSummaryBody');
                 const totals = document.getElementById('operationOrderSummaryTotals');
-                const teaser = document.getElementById('operationOversigtSummaryTeaser');
                 if (!body || !totals) return;
 
                 try {
@@ -3548,13 +2488,11 @@ app.get('/', (req, res) => {
                     if (rows.length === 0) {
                         body.innerHTML = '<div>Ingen operationer fundet for denne salgsordre.</div>';
                         totals.innerHTML = '<div><strong>Samlet Operation kost:</strong> 0,00 DKK</div><div><strong>Ordre stykliste minutter:</strong> 0,00</div><div><strong>Ordre færdigmeldt minutter:</strong> 0,00</div><div><strong>Afvigelse minutter:</strong> 0,00</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
-                        if (teaser) teaser.innerHTML = '<strong>Ingen operationer fundet</strong>';
-                        if (currentOversigtModalType === 'operation') buildOversigtModalView('operation');
                         return;
                     }
 
-                    let html = '<table class="oversigt-table-operation">';
-                    html += '<tr><th>Operation</th><th>Beskrivelse</th><th>Linjer</th><th>Stykliste</th><th>Færdig</th><th>Kost/enh.</th><th>Samlet</th></tr>';
+                    let html = '<table>';
+                    html += '<tr><th>Operation</th><th>Beskrivelse</th><th>Antal linjer</th><th>Stykliste antal</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                     for (const row of rows) {
                         const unitCost = row.qty > 0 ? (row.totalCost / row.qty) : 0;
                         html += '<tr>';
@@ -3579,23 +2517,15 @@ app.get('/', (req, res) => {
                         + '<div><strong>Ordre færdigmeldt minutter:</strong> ' + formatNumber(totalFinishedMinutes) + '</div>'
                         + '<div><strong>Afvigelse minutter:</strong> ' + formatNumber(deltaMinutes) + '</div>'
                         + '<div><strong>Samlet afvigelse %:</strong> ' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + '</div>';
-                    if (teaser) {
-                        teaser.innerHTML = ''
-                            + '<div><strong>' + formatNumber(totalOperationCost) + ' DKK</strong> samlet operation kost</div>'
-                            + '<div>Afvigelse: <strong>' + formatNumber(deltaMinutes) + ' min</strong> (' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + ')</div>';
-                    }
-                    if (currentOversigtModalType === 'operation') buildOversigtModalView('operation');
                 } catch (err) {
                     body.innerHTML = '<div class="error">Fejl operationsoversigt: ' + err.message + '</div>';
                     totals.innerHTML = '<div class="error">Fejl i samlet operationsoversigt: ' + err.message + '</div>';
-                    if (teaser) teaser.innerHTML = '<strong>Fejl i operation KPI:</strong> ' + err.message;
                 }
             }
 
             async function loadSalesOrderLaserSummary(orderData) {
                 const body = document.getElementById('laserOrderSummaryBody');
                 const totals = document.getElementById('laserOrderSummaryTotals');
-                const teaser = document.getElementById('laserOversigtSummaryTeaser');
                 if (!body || !totals) return;
                 // NOTE: Preserve existing Gr4 branching exactly; Gr4=3 indicates Multiordre type.
                 const orderGr4 = Number((orderData && orderData.orderHeader && orderData.orderHeader.Gr4) || currentSalesOrderGr4 || 0);
@@ -3712,8 +2642,6 @@ app.get('/', (req, res) => {
                     if (requests.length === 0) {
                         body.innerHTML = '<div>Ingen L-linjer fundet for denne salgsordre.</div>';
                         totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
-                        if (teaser) teaser.innerHTML = '<strong>Ingen laserlinjer fundet</strong>';
-                        if (currentOversigtModalType === 'laser') buildOversigtModalView('laser');
                         return;
                     }
 
@@ -3757,14 +2685,12 @@ app.get('/', (req, res) => {
                     if (rows.length === 0) {
                         body.innerHTML = '<div>Ingen laserberegninger tilgaengelige for denne salgsordre.</div>';
                         totals.innerHTML = '<div><strong>Samlet L-kost (NestKost):</strong> 0,00 DKK</div><div><strong>Ordre stykliste kg:</strong> 0,00 kg</div><div><strong>Ordre forbrugt kg:</strong> 0,00 kg</div><div><strong>Afvigelse kg:</strong> 0,00 kg</div><div><strong>Samlet afvigelse %:</strong> NULL</div>';
-                        if (teaser) teaser.innerHTML = '<strong>Ingen laserdata klar</strong>';
-                        if (currentOversigtModalType === 'laser') buildOversigtModalView('laser');
                         return;
                     }
 
                     const multiNestHeader = orderGr4 === 3 ? 'NestMultiPris' : 'NestKost pr. stk';
-                    let html = '<table class="oversigt-table-laser">';
-                    html += '<tr><th>Prod.ordre</th><th>Nesting</th><th>Produkt</th><th>Rute</th><th>Færdig</th><th>Icon kg</th><th>Stykl. kg</th><th>Forbrug kg</th><th>' + (orderGr4 === 3 ? 'Multi/stk' : 'Nest/stk') + '</th><th>Samlet</th><th>Afvig. %</th><th>Vis</th></tr>';
+                    let html = '<table>';
+                    html += '<tr><th>Prod.ordre</th><th>Nestingordre</th><th>Produkt</th><th>Rute</th><th>Færdigmeldt</th><th>Icon vægt (kg/stk)</th><th>Stykliste vaegt (kg/stk)</th><th>Forbrugt (kg/stk)</th><th>' + multiNestHeader + '</th><th>Samlet kost</th><th>Afvigelse (%)</th><th>Billeder</th></tr>';
                     let totalKgUtilizzati = 0;
                     let totalKgPrevisti = 0;
                     let totalKgIcon = 0;
@@ -3799,7 +2725,7 @@ app.get('/', (req, res) => {
                         html += '<td>' + (r.extraPct === null || r.extraPct === undefined ? 'NULL' : (formatNumber(r.extraPct) + '%')) + '</td>';
                         if (Array.isArray(r.imageItems) && r.imageItems.length > 0) {
                             const imageKey = registerSummaryImageData('Billeder for ' + (r.prodNo || 'produkt') + ' / rute ' + (r.route || '-'), r.imageItems);
-                            html += '<td><button class="image-preview-btn" data-image-mode="compact" data-image-key="' + imageKey + '">Vis</button></td>';
+                            html += '<td><button class="image-preview-btn" data-image-key="' + imageKey + '" onclick="openSummaryImagePanel('' + imageKey + '', 'laserImagePanel')">Vis</button></td>';
                         } else {
                             html += '<td>-</td>';
                         }
@@ -3811,7 +2737,6 @@ app.get('/', (req, res) => {
                         : null;
                     html += '</table>';
                     body.innerHTML = html;
-                    applyMicroTablePolish(body);
                     totals.innerHTML = ''
                         + '<div><strong>Samlet L-kost (' + (orderGr4 === 3 ? 'NestMultiPris' : 'NestKost') + '):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
                         + '<div><strong>Ordre icon kg:</strong> ' + formatNumber(totalKgIcon) + ' kg</div>'
@@ -3819,16 +2744,9 @@ app.get('/', (req, res) => {
                         + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
                         + '<div><strong>Afvigelse kg:</strong> ' + formatNumber(deltaKg) + ' kg</div>'
                         + '<div><strong>Samlet afvigelse %:</strong> ' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + '</div>';
-                    if (teaser) {
-                        teaser.innerHTML = ''
-                            + '<div><strong>' + formatNumber(totalLaserCost) + ' DKK</strong> samlet L-kost</div>'
-                            + '<div>Afvigelse: <strong>' + formatNumber(deltaKg) + ' kg</strong> (' + (deltaPct === null ? 'NULL' : (formatNumber(deltaPct) + '%')) + ')</div>';
-                    }
-                    if (currentOversigtModalType === 'laser') buildOversigtModalView('laser');
                 } catch (err) {
                     body.innerHTML = '<div class="error">Fejl laseroversigt: ' + err.message + '</div>';
                     totals.innerHTML = '<div class="error">Fejl i samlet laseroversigt: ' + err.message + '</div>';
-                    if (teaser) teaser.innerHTML = '<strong>Fejl i laser KPI:</strong> ' + err.message;
                 }
             }
 
@@ -3869,14 +2787,14 @@ app.get('/', (req, res) => {
                             const rawFinDt = String(r.FinDt || '').trim();
                             const compactFinDt = rawFinDt.split('T')[0].replace(/-/g, '');
                             let finDt = '-';
-                            if (/^\\d{8}$/.test(compactFinDt)) {
+                            if (/^\d{8}$/.test(compactFinDt)) {
                                 finDt = compactFinDt.slice(6, 8) + '-' + compactFinDt.slice(4, 6) + '-' + compactFinDt.slice(0, 4);
                             } else if (rawFinDt) {
                                 finDt = rawFinDt;
                             }
                             const rawFinTm = r.FinTm != null ? String(r.FinTm).trim() : '';
                             const finTm = rawFinTm
-                                ? rawFinTm.padStart(4, '0').replace(/^(\\d{2})(\\d{2})$/, '$1:$2')
+                                ? rawFinTm.padStart(4, '0').replace(/^(\d{2})(\d{2})$/, '$1:$2')
                                 : '-';
                             html += '<tr>';
                             html += '<td>' + finDt + '</td>';
@@ -3887,7 +2805,6 @@ app.get('/', (req, res) => {
                         }
                         html += '</table>';
                         body.innerHTML = html;
-                        applyMicroTablePolish(body);
                     } catch (err) {
                         body.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
                     }
@@ -4012,7 +2929,7 @@ app.get('/', (req, res) => {
                             html += '<td>' + (extraPct === null ? 'NULL' : (formatNumber(extraPct) + '%')) + '</td>';
                             if (Array.isArray(rowProduct.ImageItems) && rowProduct.ImageItems.length > 0) {
                                 const imageKey = registerSummaryImageData('Billeder for ' + (rowProduct.ProdNo || 'produkt') + ' / rute ' + (rowProduct.Route || '-'), rowProduct.ImageItems);
-                                html += '<td><button class="image-preview-btn" data-image-mode="compact" data-image-key="' + imageKey + '">Vis</button></td>';
+                                html += '<td><button class="image-preview-btn" data-image-key="' + imageKey + '" onclick="openSummaryImagePanel('' + imageKey + '', 'laserImagePanel')">Vis</button></td>';
                             } else {
                                 html += '<td>-</td>';
                             }
@@ -4026,7 +2943,6 @@ app.get('/', (req, res) => {
                             + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
                             + '</div>';
                         body.innerHTML = html;
-                        applyMicroTablePolish(body);
                     } catch (err) {
                         body.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
                     }
@@ -4053,10 +2969,6 @@ app.get('/', (req, res) => {
                 if (!btn) return;
                 const imageKey = btn.dataset.imageKey;
                 if (imageKey) {
-                    if (btn.dataset.imageMode === 'compact') {
-                        openCompactImageModal(imageKey);
-                        return;
-                    }
                     const inLaserPanel = !!e.target.closest('#laserOrderSummaryPanel');
                     const preferredPanelId = inLaserPanel ? 'laserImagePanel' : 'summaryImagePanel';
                     openSummaryImagePanel(imageKey, preferredPanelId);
@@ -4089,11 +3001,7 @@ app.get('/', (req, res) => {
             document.addEventListener('click', handleDrawingOpenClick);
             document.addEventListener('click', handlePreviewImageZoom);
             document.addEventListener('keydown', function(event) {
-                if (event.key === 'Escape') {
-                    closeImageLightbox();
-                    closeCompactImageModal();
-                    closeOversigtModal();
-                }
+                if (event.key === 'Escape') closeImageLightbox();
             });
             // Inside modal content (document listener is blocked by modal stopPropagation).
             const summaryModalBodyEl = document.getElementById('summaryModalBody');
@@ -4105,22 +3013,6 @@ app.get('/', (req, res) => {
             const summaryImagePanelEl = document.getElementById('summaryImagePanel');
             if (summaryImagePanelEl) {
                 summaryImagePanelEl.addEventListener('click', handlePreviewImageZoom);
-            }
-            window.addEventListener('resize', updateSummaryImagePanelLayout);
-            const oversigtModalBodyEl = document.getElementById('oversigtModalBody');
-            if (oversigtModalBodyEl) {
-                oversigtModalBodyEl.addEventListener('click', handleProdNoClick);
-                oversigtModalBodyEl.addEventListener('click', handleImagePreviewClick);
-                oversigtModalBodyEl.addEventListener('click', handleDrawingOpenClick);
-                oversigtModalBodyEl.addEventListener('click', handlePreviewImageZoom);
-            }
-            const orderDetailModalBodyEl = document.getElementById('orderDetailModalBody');
-            if (orderDetailModalBodyEl) {
-                // Clicks inside the order detail modal do not bubble to document because the shell stops propagation.
-                orderDetailModalBodyEl.addEventListener('click', handleProdNoClick);
-                orderDetailModalBodyEl.addEventListener('click', handleImagePreviewClick);
-                orderDetailModalBodyEl.addEventListener('click', handleDrawingOpenClick);
-                orderDetailModalBodyEl.addEventListener('click', handlePreviewImageZoom);
             }
             const laserImagePanelEl = document.getElementById('laserImagePanel');
             if (laserImagePanelEl) {
@@ -4273,7 +3165,6 @@ app.get('/', (req, res) => {
                         : '<tr class="summary-row"><td colspan="8">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>';
                     html += '</table>';
                     body.innerHTML = html;
-                    applyMicroTablePolish(body);
                 } catch (err) {
                     body.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
                 }
@@ -4306,16 +3197,7 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                const modal = document.getElementById('orderDetailModal');
-                const modalBody = document.getElementById('orderDetailModalBody');
-                const modalIsOpen = modal && getComputedStyle(modal).display === 'flex';
-                if (modalIsOpen && modalBody && modalBody.contains(el)) {
-                    // When browsing inside the report modal, scroll the modal body instead of the page.
-                    const top = Math.max(el.offsetTop - 16, 0);
-                    modalBody.scrollTo({ top, behavior: 'auto' });
-                } else {
-                    scrollToElementWithStickyOffset(el);
-                }
+                scrollToElementWithStickyOffset(el);
                 el.classList.add('po-highlight');
                 setTimeout(() => el.classList.remove('po-highlight'), 1800);
             }
@@ -4501,7 +3383,6 @@ app.get('/', (req, res) => {
                 const normalizedOrdNo = String(ordNo || '').trim();
                 if (!normalizedOrdNo) return;
                 const ordNoNum = Number(normalizedOrdNo);
-                aftercalcClientCache.delete(normalizedOrdNo);
 
                 const btn = document.getElementById('refreshSingleOrderBtn');
                 if (btn) {
@@ -4629,7 +3510,6 @@ app.get('/', (req, res) => {
 
             function selectOrder(ordNo) {
                 document.getElementById('orderInput').value = ordNo;
-                prefetchAftercalcData(ordNo);
                 orderListVisible = false;
                 renderOrderList();
                 searchOrder();
@@ -4655,17 +3535,15 @@ app.get('/', (req, res) => {
                 if (searchBox.classList.contains('collapsed')) {
                     collapseToggleBtn.style.display = 'inline-block';
                     collapseExpandBtn.style.display = 'none';
-                    collapseToggleBtn.textContent = '↗ Søg';
+                    collapseToggleBtn.textContent = '▼ Søg';
                 } else {
                     collapseToggleBtn.style.display = 'none';
                     collapseExpandBtn.style.display = 'inline-block';
                 }
             }
 
-            let uiBootstrapped = false;
-            function bootstrapUiAfterLoad() {
-                if (uiBootstrapped) return;
-                uiBootstrapped = true;
+            // Soeg ved indlaesning hvis ordrenummer er i query string
+            window.onload = function() {
                 showAccessGate();
                 const orderInput = document.getElementById('orderInput');
                 const accessGateBtn = document.getElementById('accessGateBtn');
@@ -4679,14 +3557,6 @@ app.get('/', (req, res) => {
                             }
                             searchOrder();
                         }
-                    });
-                    orderInput.addEventListener('input', function() {
-                        clearTimeout(prefetchOrderDebounceTimer);
-                        const ordNo = String(orderInput.value || '').trim();
-                        if (!ordNo || ordNo.length < 4) return;
-                        prefetchOrderDebounceTimer = setTimeout(() => {
-                            prefetchAftercalcData(ordNo);
-                        }, 260);
                     });
                 }
                 if (accessGateBtn) {
@@ -4704,7 +3574,6 @@ app.get('/', (req, res) => {
                         }
                     });
                 }
-                updateReportOpenButtonState(Boolean(lastOrderReportHtml));
                 const orderListEl = document.getElementById('orderList');
                 if (orderListEl) {
                     orderListEl.addEventListener('pointerdown', function(e) {
@@ -4736,101 +3605,9 @@ app.get('/', (req, res) => {
                         const tr = e.target.closest('tr[data-ordno]');
                         if (tr) selectOrder(Number(tr.dataset.ordno));
                     });
-
-                    orderListEl.addEventListener('mouseover', function(e) {
-                        const tr = e.target.closest('tr[data-ordno]');
-                        if (!tr) return;
-                        const ordNo = String(tr.dataset.ordno || '').trim();
-                        if (!ordNo) return;
-                        prefetchAftercalcData(ordNo);
-                    });
                 }
-            }
-
-            // Soeg ved indlaesning hvis ordrenummer er i query string
-            window.onload = bootstrapUiAfterLoad;
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                setTimeout(bootstrapUiAfterLoad, 0);
-            }
+            };
         </script>
     </body>
     </html>
-    `);
-});
-
-const PORT = Number(process.env.PORT || 3000);
-let startedServerPromise = null;
-let scheduledRefreshTimer = null;
-
-function startScheduledRefresh() {
-    if (scheduledRefreshTimer) return;
-    scheduledRefreshTimer = setInterval(() => {
-        refreshOrderListCache(true)
-            .then(() => {
-                logEvent('Scheduled refresh completed (10 min)');
-            })
-            .catch(err => {
-                logEvent('ERROR scheduled refresh: ' + err.message);
-            });
-    }, BACKGROUND_WARM_INTERVAL_MS);
-}
-
-function ensureServerStarted() {
-    if (startedServerPromise) return startedServerPromise;
-
-    startedServerPromise = new Promise((resolve, reject) => {
-        const server = app.listen(PORT, async () => {
-            try {
-                console.log('Server in ascolto su http://localhost:' + PORT);
-                logEvent('Server started - smart preload phase beginning');
-
-                // Try to load from persistent cache first for faster startup
-                const cachedList = tryLoadOrderListFromCache();
-                if (cachedList && cachedList.length > 0) {
-                    orderListCache.data = cachedList;
-                    orderListCache.loadedAt = Date.now();
-                    logEvent('Cache primed from disk: ' + cachedList.length + ' orders ready');
-                    
-                    // Preload margins AND aftercalc details from disk (instant load)
-                    const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
-                    preloadMarginsAndDetailsFromCache(preloadOrdNos);
-
-                    // Warm up margins in background (will check disk first, then refresh if needed)
-                    warmMarginsInBackground(preloadOrdNos);
-                    
-                    // Refresh from DB in background (don't block startup)
-                    refreshOrderListCache(true).catch(err => {
-                        logEvent('WARNING: background DB refresh failed: ' + err.message);
-                    });
-                } else {
-                    // No cache: load from DB (fresh startup)
-                    await refreshOrderListCache(true);
-                    logEvent('Cache primed from database (first startup)');
-                }
-
-                logEvent('Cache primed: order list loaded and ready');
-                startScheduledRefresh();
-                resolve(server);
-            } catch (err) {
-                logEvent('WARNING cache warmup error (non-fatal): ' + err.message);
-                resolve(server); // server is running — warmup error is not fatal
-            }
-        });
-
-        server.on('error', reject);
-    });
-
-    return startedServerPromise;
-}
-
-if (require.main === module) {
-    ensureServerStarted().catch(err => {
-        logEvent('FATAL server startup error: ' + err.message);
-        process.exit(1);
-    });
-}
-
-module.exports = {
-    app,
-    ensureServerStarted
-};
+    

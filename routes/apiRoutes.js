@@ -642,30 +642,54 @@ function createApiRouter({
     });
 
     router.post('/open-drawing', (req, res) => {
-        try {
-            const rawPath = String((req.body && req.body.path) || '').trim();
-            if (!rawPath) {
-                return res.status(400).json({ ok: false, message: 'Path mangler.' });
+        (async () => {
+            try {
+                const rawPath = String((req.body && req.body.path) || '').trim();
+                const prodNo = String((req.body && req.body.prodNo) || '').trim();
+                let candidatePath = rawPath;
+
+                if (!candidatePath && prodNo) {
+                    const pool = await getConnection();
+                    const drawingRow = await pool.request()
+                        .input('prodNo', sql.VarChar(100), prodNo)
+                        .query(`
+                            SELECT TOP 1 LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) AS WebPg
+                            FROM FreeInf2
+                            WHERE LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo))) = @prodNo
+                              AND WebPg IS NOT NULL
+                              AND LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) <> ''
+                            ORDER BY LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) DESC
+                        `);
+
+                    const webPg = String((drawingRow.recordset && drawingRow.recordset[0] && drawingRow.recordset[0].WebPg) || '').trim();
+                    if (webPg) {
+                        candidatePath = webPg;
+                    }
+                }
+
+                if (!candidatePath) {
+                    return res.status(400).json({ ok: false, message: 'Path mangler.' });
+                }
+
+                const lower = candidatePath.toLowerCase();
+                if (lower.indexOf('.pdf') === -1) {
+                    return res.status(400).json({ ok: false, message: 'Kun PDF er tilladt.' });
+                }
+
+                const child = spawn('cmd', ['/c', 'start', '', candidatePath], {
+                    windowsHide: true,
+                    detached: true,
+                    stdio: 'ignore'
+                });
+                child.unref();
+
+                logEvent('OPEN-DRAWING: ' + candidatePath + (prodNo ? (' [prodNo=' + prodNo + ']') : ''));
+                return res.json({ ok: true });
+            } catch (err) {
+                logEvent('OPEN-DRAWING ERROR: ' + err.message);
+                return res.status(500).json({ ok: false, message: err.message });
             }
-
-            const lower = rawPath.toLowerCase();
-            if (lower.indexOf('.pdf') === -1) {
-                return res.status(400).json({ ok: false, message: 'Kun PDF er tilladt.' });
-            }
-
-            const child = spawn('cmd', ['/c', 'start', '', rawPath], {
-                windowsHide: true,
-                detached: true,
-                stdio: 'ignore'
-            });
-            child.unref();
-
-            logEvent('OPEN-DRAWING: ' + rawPath);
-            return res.json({ ok: true });
-        } catch (err) {
-            logEvent('OPEN-DRAWING ERROR: ' + err.message);
-            return res.status(500).json({ ok: false, message: err.message });
-        }
+        })();
     });
 
     router.get('/prodtr/:ordno/:lnno', async (req, res) => {
