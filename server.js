@@ -512,6 +512,36 @@ app.get('/', (req, res) => {
             .summary-box { background: #e8f5e9; padding: 15px; border-radius: 4px; margin-top: 15px; }
             .summary-box div { margin: 8px 0; font-size: 14px; }
             .summary-box .total { font-size: 18px; color: #2196F3; font-weight: bold; }
+            .order-list-summary-actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; flex-wrap:wrap; }
+            .order-detail-report { margin-top:16px; background:#fff; border:1px solid #d6e9ff; border-radius:8px; padding:14px 14px 16px 14px; }
+            .order-report-toolbar { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+            .order-report-toolbar .order-report-meta { font-size:13px; color:#4b5563; }
+            .order-report-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px; }
+            .order-report-card { background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; }
+            .order-report-card .label { font-size:12px; color:#57718f; margin-bottom:4px; }
+            .order-report-card .value { font-size:18px; font-weight:700; color:#0f3560; }
+            .order-report-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
+            .order-report-table th, .order-report-table td { border-bottom:1px solid #e5e7eb; padding:8px 10px; text-align:left; }
+            .order-report-table th { background:#f3f8ff; color:#0f3560; }
+            .order-report-table tr:last-child td { border-bottom:none; }
+            .order-report-table .summary-row td { background:#f7fbff; font-weight:700; }
+            @media print {
+                body.print-report-mode .header-banner-wrapper,
+                body.print-report-mode .search-box,
+                body.print-report-mode #orderList,
+                body.print-report-mode #result > :not(#orderDetailReport) { display:none !important; }
+                body.print-report-mode #result { display:block !important; }
+                body.print-report-mode #orderDetailReport { display:block !important; margin:0 !important; border:none !important; box-shadow:none !important; }
+                body.print-report-mode .order-report-toolbar button,
+                body.print-report-mode .order-report-actions button { display:none !important; }
+                body.print-report-mode .order-report-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+                body.print-list-mode .header-banner-wrapper,
+                body.print-list-mode .search-box,
+                body.print-list-mode #result { display:none !important; }
+                body.print-list-mode #orderList { display:block !important; }
+                body.print-list-mode .order-list-summary-actions button { display:none !important; }
+            }
             .margin-positive { color: green; }
             .margin-negative { color: red; }
             .error { color: red; padding: 20px; background: #ffebee; border-radius: 4px; }
@@ -662,6 +692,7 @@ app.get('/', (req, res) => {
                     <option value="program">Program</option>
                 </select>
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
+                <button class="mode-btn" onclick="printCurrentOrderListView()" title="Udskriv den filtrerede ordreliste som PDF eller papir">Liste / PDF</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
                 <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
                 <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
@@ -977,6 +1008,7 @@ app.get('/', (req, res) => {
             let currentMarginMode = 'classic';
             let orderListData = [];
             let orderListVisible = true;
+            let currentSearchOrderData = null;
             let orderListFilter = '';
             let orderListBrugerFilter = '';
             let marginStateByOrdNo = {};
@@ -1792,14 +1824,164 @@ app.get('/', (req, res) => {
 
             function buildOrderListSummaryHtml(orders) {
                 const listSummary = getFilteredOrderSummary(orders);
-                let html = '<div><strong>Resoconto lista filtrata</strong> (viste: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + listSummary.excludedCredit + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
+                let html = '<div><strong>Filtreret ordrelisteoversigt</strong> (vist: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + listSummary.excludedCredit + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
                 html += '<div style="margin-top:6px;display:flex;gap:18px;flex-wrap:wrap;">';
-                html += '<span>Totale ricavo: <strong>' + formatNumber(listSummary.totalRevenue) + ' DKK</strong></span>';
-                html += '<span>Totale costo: <strong>' + formatNumber(listSummary.totalCost) + ' DKK</strong></span>';
-                html += '<span>Margine: <strong>' + formatNumber(listSummary.marginAmount) + ' DKK (' + listSummary.marginPct + '%)</strong></span>';
+                html += '<span>Samlet omsætning: <strong>' + formatNumber(listSummary.totalRevenue) + ' DKK</strong></span>';
+                html += '<span>Samlet kost: <strong>' + formatNumber(listSummary.totalCost) + ' DKK</strong></span>';
+                html += '<span>Margin: <strong>' + formatNumber(listSummary.marginAmount) + ' DKK (' + listSummary.marginPct + '%)</strong></span>';
+                html += '</div>';
+                html += '<div class="order-list-summary-actions">';
+                html += '<button class="list-toggle-btn" onclick="printCurrentOrderListView()" title="Udskriv den filtrerede ordreliste som PDF eller papir">Udskriv liste / PDF</button>';
                 html += '</div>';
                 return html;
             }
+
+            function buildOrderDetailReportHtml(orderData, orderMarginPercent, costToDateFromProduction) {
+                const orderHeader = (orderData && orderData.orderHeader) || {};
+                const productionOrders = Array.isArray(orderData && orderData.productionOrders) ? orderData.productionOrders : [];
+                const salesOrderLines = Array.isArray(orderData && orderData.salesOrderLines) ? orderData.salesOrderLines : [];
+                const salesLines = Array.isArray(orderData && orderData.salesLines) ? orderData.salesLines : [];
+
+                let totalPlannedMinutes = 0;
+                let totalUsedMinutes = 0;
+                let totalOperationCost = 0;
+                let totalLaserCost = 0;
+                const rows = [];
+
+                for (const prodOrder of productionOrders) {
+                    const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
+                    let plannedMinutes = 0;
+                    let usedMinutes = 0;
+                    let operationCost = 0;
+                    let laserCost = 0;
+                    let productLabel = '-';
+
+                    for (const line of lines) {
+                        const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                        const lnNo = Number((line && line.LnNo) || 0);
+                        if (lnNo === 1 && line && line.ProdNo) {
+                            productLabel = String(line.ProdNo || '-') + ' - ' + String(line.Descr || '');
+                        }
+                        if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+
+                        const totalCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                        if (key === '1') {
+                            plannedMinutes += Number((line && line.NoOrg) || 0);
+                            usedMinutes += Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
+                            operationCost += totalCost;
+                        } else if (key === '2' && isLaserLProdNo(line && line.ProdNo)) {
+                            laserCost += totalCost;
+                        }
+                    }
+
+                    totalPlannedMinutes += plannedMinutes;
+                    totalUsedMinutes += usedMinutes;
+                    totalOperationCost += operationCost;
+                    totalLaserCost += laserCost;
+                    rows.push({
+                        ordNo: Number(prodOrder && prodOrder.ordNo) || 0,
+                        productLabel,
+                        plannedMinutes,
+                        usedMinutes,
+                        deltaMinutes: usedMinutes - plannedMinutes,
+                        operationCost,
+                        laserCost,
+                        totalCost: Number(prodOrder && prodOrder.totalCost) || 0
+                    });
+                }
+
+                const marginAmount = Number((orderData && orderData.summary && orderData.summary.margin) || 0);
+                const marginPct = orderMarginPercent || '0.00';
+                const revenue = Number((orderData && orderData.summary && orderData.summary.totalRevenue) || 0);
+                const cost = Number((orderData && orderData.summary && orderData.summary.totalCost) || 0);
+
+                let html = '<div id="orderDetailReport" class="order-detail-report" style="display:none;">';
+                html += '<div class="order-report-toolbar">';
+                html += '<div class="order-report-meta"><strong>Rapport for ordre ' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</strong> - ' + escapeHtml(String(orderHeader.CustomerName || '-')) + '</div>';
+                html += '<div class="order-report-actions">';
+                html += '<button class="list-toggle-btn" onclick="toggleOrderDetailReport()" title="Skjul eller vis rapporten">Skjul rapport</button>';
+                html += '<button class="list-toggle-btn" onclick="printOrderDetailReport()" title="Udskriv rapporten som PDF eller papir">Udskriv / PDF</button>';
+                html += '</div>';
+                html += '</div>';
+
+                html += '<div class="order-report-grid">';
+                html += '<div class="order-report-card"><div class="label">Samlet omsætning</div><div class="value">' + formatNumber(revenue) + ' DKK</div></div>';
+                html += '<div class="order-report-card"><div class="label">Samlet kost</div><div class="value">' + formatNumber(cost) + ' DKK</div></div>';
+                html += '<div class="order-report-card"><div class="label">Margin</div><div class="value">' + formatNumber(marginAmount) + ' DKK (' + marginPct + '%)</div></div>';
+                html += '<div class="order-report-card"><div class="label">Produktionsordrer</div><div class="value">' + formatNumber(productionOrders.length) + '</div></div>';
+                html += '<div class="order-report-card"><div class="label">Planlagte minutter</div><div class="value">' + formatNumber(totalPlannedMinutes) + '</div></div>';
+                html += '<div class="order-report-card"><div class="label">Brugte minutter</div><div class="value">' + formatNumber(totalUsedMinutes) + '</div></div>';
+                html += '<div class="order-report-card"><div class="label">Operation kost</div><div class="value">' + formatNumber(totalOperationCost) + ' DKK</div></div>';
+                html += '<div class="order-report-card"><div class="label">Laser kost</div><div class="value">' + formatNumber(totalLaserCost) + ' DKK</div></div>';
+                html += '</div>';
+
+                html += '<table class="order-report-table">';
+                html += '<tr><th>Produktionsordre</th><th>Produkt</th><th>Planlagt min.</th><th>Brugt min.</th><th>Afvigelse</th><th>Operation kost</th><th>Laser kost</th><th>Samlet kost</th></tr>';
+                for (const row of rows) {
+                    html += '<tr>';
+                    html += '<td>' + row.ordNo + '</td>';
+                    html += '<td>' + escapeHtml(row.productLabel || '-') + '</td>';
+                    html += '<td>' + formatNumber(row.plannedMinutes || 0) + '</td>';
+                    html += '<td>' + formatNumber(row.usedMinutes || 0) + '</td>';
+                    html += '<td>' + formatNumber(row.deltaMinutes || 0) + '</td>';
+                    html += '<td>' + formatNumber(row.operationCost || 0) + ' DKK</td>';
+                    html += '<td>' + formatNumber(row.laserCost || 0) + ' DKK</td>';
+                    html += '<td><strong>' + formatNumber(row.totalCost || 0) + ' DKK</strong></td>';
+                    html += '</tr>';
+                }
+                if (rows.length === 0) {
+                    html += '<tr><td colspan="8">Ingen produktionsordrer fundet.</td></tr>';
+                }
+                html += '<tr class="summary-row"><td colspan="2">Samlet</td><td>' + formatNumber(totalPlannedMinutes || 0) + '</td><td>' + formatNumber(totalUsedMinutes || 0) + '</td><td>' + formatNumber(totalUsedMinutes - totalPlannedMinutes) + '</td><td>' + formatNumber(totalOperationCost || 0) + ' DKK</td><td>' + formatNumber(totalLaserCost || 0) + ' DKK</td><td><strong>' + formatNumber(cost || 0) + ' DKK</strong></td></tr>';
+                html += '</table>';
+
+                html += '<div class="order-report-grid" style="margin-top:12px;">';
+                html += '<div class="order-report-card"><div class="label">Salgsordrer</div><div class="value">' + formatNumber(salesOrderLines.length) + '</div></div>';
+                html += '<div class="order-report-card"><div class="label">Ekstra salgslinjer</div><div class="value">' + formatNumber(salesLines.length) + '</div></div>';
+                html += '<div class="order-report-card"><div class="label">Kost til dato</div><div class="value">' + formatNumber(costToDateFromProduction || 0) + ' DKK</div></div>';
+                html += '<div class="order-report-card"><div class="label">Marginprocent</div><div class="value">' + marginPct + '%</div></div>';
+                html += '</div>';
+                html += '</div>';
+                return html;
+            }
+
+            function toggleOrderDetailReport() {
+                const report = document.getElementById('orderDetailReport');
+                if (!report) return;
+                const isClosed = report.style.display === 'none';
+                report.style.display = isClosed ? '' : 'none';
+            }
+
+            let reportPrintRestoreState = null;
+
+            function printCurrentOrderListView() {
+                if (!orderListVisible) {
+                    toggleOrderList();
+                }
+                document.body.classList.remove('print-report-mode');
+                document.body.classList.add('print-list-mode');
+                setTimeout(() => window.print(), 100);
+            }
+
+            function printOrderDetailReport() {
+                const report = document.getElementById('orderDetailReport');
+                if (!report) return;
+                reportPrintRestoreState = report.style.display;
+                report.style.display = '';
+                document.body.classList.remove('print-list-mode');
+                document.body.classList.add('print-report-mode');
+                setTimeout(() => window.print(), 50);
+            }
+
+            window.addEventListener('afterprint', function() {
+                document.body.classList.remove('print-report-mode');
+                document.body.classList.remove('print-list-mode');
+                const report = document.getElementById('orderDetailReport');
+                if (report && reportPrintRestoreState !== null) {
+                    report.style.display = reportPrintRestoreState;
+                    reportPrintRestoreState = null;
+                }
+            });
 
             function updateOrderListSummaryPanel() {
                 const summaryEl = document.getElementById('orderListSummary');
@@ -1830,6 +2012,7 @@ app.get('/', (req, res) => {
 
                     // NOTE: Gr4 is order type (e.g., Multiordre). Do not change Gr4 logic here.
                     currentSalesOrderGr4 = Number((data.orderHeader && data.orderHeader.Gr4) || 0);
+                    currentSearchOrderData = data;
                     const orderMarginPercent = calculateOrderMarginPercent(data.summary.totalRevenue, data.summary.totalCost).toFixed(2);
                     const _invoAm = Number(data.orderHeader.InvoAm || 0);
                     const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
@@ -1887,6 +2070,10 @@ app.get('/', (req, res) => {
                     }
                     html += '</div>';
                     html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text || _existingNote.isCreditNote) ? 'Rediger note' : 'Tilføj note') + '</button>';
+                    html += '<div class="order-report-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 12px 0;">';
+                    html += '<button class="list-toggle-btn" onclick="toggleOrderDetailReport()" title="Vis eller skjul den detaljerede rapport">Vis rapport</button>';
+                    html += '<button class="list-toggle-btn" onclick="printOrderDetailReport()" title="Udskriv rapporten som PDF eller papir">Udskriv / PDF</button>';
+                    html += '</div>';
                     loadOrderNote(_noteOrdNo).catch(() => {});
                     html += '<div class="order-header-row">';
                     if (_invoAm === 0) {
@@ -1933,6 +2120,8 @@ app.get('/', (req, res) => {
                     html += '<div id="operationOrderSummaryBody" class="loading">Indlæser operationsdata...</div>';
                     html += '</div>';
                     html += '</div>';
+
+                    html += buildOrderDetailReportHtml(data, orderMarginPercent, costToDateFromProduction);
 
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
@@ -3101,7 +3290,10 @@ app.get('/', (req, res) => {
                 }
 
                 let html = '<div class="order-list-section">';
-                html += '<h3>Seneste fakturerede ordrer (${ORDER_LIST_DAYS_BACK} dage) &mdash; ' + orders.length + ' af ' + orderListData.length + ' ordrer</h3>';
+                html += '<div id="orderListSummary" class="order-list-summary">';
+                html += buildOrderListSummaryHtml(orders);
+                html += '</div>';
+                html += '<h3>Seneste fakturerede ordrer (' + ORDER_LIST_DAYS_BACK + ' dage) &mdash; ' + orders.length + ' af ' + orderListData.length + ' ordrer</h3>';
                 const sortMark = (field) => {
                     if (orderListSortField !== field) return ' <span style="opacity:0.4;">^v</span>';
                     return orderListSortDir === 'asc'
@@ -3142,10 +3334,6 @@ app.get('/', (req, res) => {
                     html += '</tr>';
                 }
                 html += '</table>';
-
-                html += '<div id="orderListSummary" class="order-list-summary">';
-                html += buildOrderListSummaryHtml(orders);
-                html += '</div>';
 
                 html += '</div>';
                 el.innerHTML = html;
