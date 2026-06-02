@@ -14,7 +14,7 @@
   "author": "Gantech",
   "license": "ISC",
   "type": "commonjs",
-  "description": "Desktop app for Gantech efterkalkulation and order margin analysis",
+  "description": "Desktop app for Gantech Operations Hub and order margin analysis",
   "dependencies": {
     "electron-updater": "^6.1.8",
     "express": "^5.2.1",
@@ -27,8 +27,8 @@
   },
   "build": {
     "appId": "com.gantech.efterkalk",
-    "productName": "Gantech Efterkalk",
-    "artifactName": "Gantech-Efterkalk-Setup-${version}.${ext}",
+    "productName": "Gantech Operations Hub",
+    "artifactName": "Gantech-Operations-Hub-Setup-${version}.${ext}",
     "publish": {
       "provider": "github",
       "owner": "tbgoblin",
@@ -78,8 +78,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
-      "shortcutName": "Gantech Efterkalk",
-      "uninstallDisplayName": "Gantech Efterkalk",
+      "shortcutName": "Gantech Operations Hub",
+      "uninstallDisplayName": "Gantech Operations Hub",
       "installerLanguages": [
         "da_DK",
         "en_US"

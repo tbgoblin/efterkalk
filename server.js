@@ -45,7 +45,7 @@ try {
 } catch (e) {
     console.warn('Could not read package.json version');
 }
-const APP_VERSION = 'Gantech Efterkalkulation - v' + pkgVersion;
+const APP_VERSION = 'Gantech Operations Hub - v' + pkgVersion;
 
 const { logEvent } = createLogger(APP_VERSION);
 const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -497,7 +497,7 @@ app.get('/', (req, res) => {
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>Efterkalkulation</title>
+        <title>Gantech Operations Hub</title>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');
             :root {

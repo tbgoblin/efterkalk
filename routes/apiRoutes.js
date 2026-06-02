@@ -170,7 +170,7 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ugyldige parametre: ordine er paakraevet' });
             }
 
-            const laserCacheKey = 'laser_v3_' + ordine + '_' + (route || 'all') + '_' + (prodNoFilter || 'all') + '_' + (showAllRoutes ? '1' : '0') + '_gr4_' + (useSpecialLaserCost ? '3' : '0');
+            const laserCacheKey = 'laser_v4_' + ordine + '_' + (route || 'all') + '_' + (prodNoFilter || 'all') + '_' + (showAllRoutes ? '1' : '0') + '_gr4_' + (useSpecialLaserCost ? '3' : '0');
             const cachedLaser = diskCache.get(laserCacheKey);
             if (cachedLaser) return res.json(cachedLaser);
 
@@ -301,9 +301,6 @@ function createApiRouter({
 
             const kgConsumati = sheetRows.reduce((s, r) => s + toNumber(r.NoFin), 0);
             const costoLastre = sheetRows.reduce((s, r) => s + toNumber(r.IncCst), 0);
-            const kgFiniti = finishedRows.reduce((s, r) => s + (normalizeExpectedWeight(r.Free3) * toNumber(r.NoFin)), 0);
-            const sfridoKg = kgConsumati - kgFiniti;
-            const sfridoPct = kgConsumati > 0 ? (sfridoKg / kgConsumati) : null;
 
             const filteredFinishedRows = (prodNoFilter
                 ? finishedRows.filter(r => String(r.ProdNo || '').trim().toUpperCase() === normalizedProdNoFilter)
@@ -314,33 +311,6 @@ function createApiRouter({
                 ? finishedRows.filter(r => String(r.ProdNo || '').trim().toUpperCase() === normalizedProdNoFilter)
                 : finishedRows)
                 .sort((a, b) => toNumber(a.LnNo) - toNumber(b.LnNo));
-
-            const routeStats = new Map();
-            for (const row of inScopeRows) {
-                const routeKey = String(row.TrInf4 || '').trim();
-                if (!routeStats.has(routeKey)) {
-                    routeStats.set(routeKey, {
-                        kgConsumati: 0,
-                        costoLastre: 0,
-                        kgFiniti: 0,
-                        cstPrSum: 0,
-                        cstPrCount: 0
-                    });
-                }
-
-                const stats = routeStats.get(routeKey);
-                if (Number(row.TrTp) === 5) {
-                    stats.kgConsumati += toNumber(row.NoFin);
-                    stats.costoLastre += toNumber(row.IncCst);
-                    const rowCstPr = toNumber(row.CstPr);
-                    if (rowCstPr > 0) {
-                        stats.cstPrSum += rowCstPr;
-                        stats.cstPrCount += 1;
-                    }
-                } else if (Number(row.TrTp) === 7) {
-                    stats.kgFiniti += normalizeExpectedWeight(row.Free3) * toNumber(row.NoFin);
-                }
-            }
 
             const structMap = new Map();
             try {
@@ -375,11 +345,50 @@ function createApiRouter({
                 logEvent(`Errore lettura Struct: ${err.message}`);
             }
 
+            const getExpectedUnitWeight = (row) => {
+                const free3Weight = normalizeExpectedWeight(row.Free3);
+                if (free3Weight > 0) return free3Weight;
+                const prodKey = String(row.ProdNo || '').trim().toUpperCase();
+                return normalizeExpectedWeight(structMap.get(prodKey));
+            };
+
+            const kgFiniti = finishedRows.reduce((s, r) => s + (getExpectedUnitWeight(r) * toNumber(r.NoFin)), 0);
+            const sfridoKg = kgConsumati - kgFiniti;
+            const sfridoPct = kgConsumati > 0 ? (sfridoKg / kgConsumati) : null;
+
+            const routeStats = new Map();
+            const routeStatsKey = (row) => String(row.OrdNo || '').trim() + '|' + String(row.TrInf4 || '').trim();
+            for (const row of inScopeRows) {
+                const statsKey = routeStatsKey(row);
+                if (!routeStats.has(statsKey)) {
+                    routeStats.set(statsKey, {
+                        kgConsumati: 0,
+                        costoLastre: 0,
+                        kgFiniti: 0,
+                        cstPrSum: 0,
+                        cstPrCount: 0
+                    });
+                }
+
+                const stats = routeStats.get(statsKey);
+                if (Number(row.TrTp) === 5) {
+                    stats.kgConsumati += toNumber(row.NoFin);
+                    stats.costoLastre += toNumber(row.IncCst);
+                    const rowCstPr = toNumber(row.CstPr);
+                    if (rowCstPr > 0) {
+                        stats.cstPrSum += rowCstPr;
+                        stats.cstPrCount += 1;
+                    }
+                } else if (Number(row.TrTp) === 7) {
+                    stats.kgFiniti += getExpectedUnitWeight(row) * toNumber(row.NoFin);
+                }
+            }
+
             const products = filteredNestingRows.map(r => {
                 const routeKey = String(r.TrInf4 || '').trim();
                 const refFinished = Number(r.TrTp) === 7
                     ? r
-                    : filteredFinishedRows.find(fr => String(fr.TrInf4 || '').trim() === routeKey);
+                    : filteredFinishedRows.find(fr => String(fr.TrInf4 || '').trim() === routeKey && String(fr.OrdNo || '').trim() === String(r.OrdNo || '').trim());
 
                 const prodKey = String(r.ProdNo || '').trim().toUpperCase();
                 const candidateLookupKey = String(r.OrdNo || '').trim() + '_' + routeKey + '_' + prodKey;
@@ -391,14 +400,14 @@ function createApiRouter({
                     ? rowNoFin
                     : (candidateNoFin !== null && candidateNoFin > 0 ? candidateNoFin : null);
                 const structNoPerStr = structMap.get(prodKey) || null;
-                const oldExpectedUnitWeight = refFinished ? normalizeExpectedWeight(refFinished.Free3) : null;
+                const oldExpectedUnitWeight = refFinished ? getExpectedUnitWeight(refFinished) : null;
                 const expectedUnitWeight = (structNoPerStr !== null && structNoPerStr > 0)
                     ? structNoPerStr
                     : oldExpectedUnitWeight;
                 const kgProdotto = (qtaPezzi !== null && expectedUnitWeight !== null)
                     ? (expectedUnitWeight * qtaPezzi)
                     : null;
-                const stats = routeStats.get(routeKey) || { kgConsumati: 0, costoLastre: 0, kgFiniti: 0 };
+                const stats = routeStats.get(String(r.OrdNo || '').trim() + '|' + routeKey) || { kgConsumati: 0, costoLastre: 0, kgFiniti: 0, cstPrSum: 0, cstPrCount: 0 };
                 const nWgtUMedio = (qtaPezzi !== null && qtaPezzi > 0 && kgProdotto !== null) ? (kgProdotto / qtaPezzi) : null;
                 const oldKgProdotto = (qtaPezzi !== null && oldExpectedUnitWeight !== null)
                     ? (oldExpectedUnitWeight * qtaPezzi)

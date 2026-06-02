@@ -256,7 +256,11 @@ function createAftercalcService({
 
                 if (Number(row.TrTp) === 7 && prodKey) {
                     const noFin = Number(row.NoFin || 0);
-                    const oldExpectedUnitWeight = normalizeExpectedWeight(row.Free3);
+                    const free3ExpectedUnitWeight = normalizeExpectedWeight(row.Free3);
+                    const structExpectedUnitWeight = normalizeExpectedWeight(structMap.get(prodKey));
+                    const oldExpectedUnitWeight = free3ExpectedUnitWeight > 0
+                        ? free3ExpectedUnitWeight
+                        : structExpectedUnitWeight;
                     const oldKgProdotto = oldExpectedUnitWeight > 0 && noFin > 0
                         ? (oldExpectedUnitWeight * noFin)
                         : 0;

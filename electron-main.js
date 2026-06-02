@@ -19,6 +19,7 @@ if (!process.env.GANTECH_LOG_DIR) {
     const logCandidates = [
         'C:\\GantechCache',
         'C:\\cache\\Gantech',
+        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Gantech Operations Hub') : null,
         process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Gantech Efterkalk') : null
     ].filter(Boolean);
 
@@ -80,7 +81,7 @@ process.env.PORT = String(USER_PORT);
 const { ensureServerStarted } = require('./server');
 
 const APP_URL = 'http://localhost:' + USER_PORT;
-const APP_NAME = 'Gantech Efterkalk';
+const APP_NAME = 'Gantech Operations Hub';
 // Disabled by default, especially for shared/RDS environments.
 const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '0') === '1';
 let manualUpdateCheckRunning = false;
@@ -174,7 +175,7 @@ function setupAutoUpdater() {
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
                 title: 'Opdatering tilgængelig',
-                message: 'Gantech Efterkalk ' + info.version + ' er klar.',
+                message: 'Gantech Operations Hub ' + info.version + ' er klar.',
                 detail: 'Klik OK for at genstarte og installere opdateringen.',
                 buttons: ['OK', 'Senere']
             }).then((result) => {
@@ -286,7 +287,7 @@ function bootDesktopApp() {
         if (mainWindow) {
             const raw = (err && err.message ? err.message : 'Unknown startup error') + (err && err.code ? ' [' + err.code + ']' : '');
             const details = (err && err.code === 'EADDRINUSE')
-                ? ('Port ' + USER_PORT + ' er allerede i brug. Luk andre Efterkalk-processer og prov igen.')
+                ? ('Port ' + USER_PORT + ' er allerede i brug. Luk andre Operations Hub-processer og prov igen.')
                 : raw;
             const msg = details.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const errorHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;background:#c0392b;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.box{background:rgba(0,0,0,.3);border-radius:12px;padding:40px;max-width:700px;text-align:center}</style></head><body><div class="box"><h2>Server kunne ikke starte</h2><p style="word-break:break-word">' + msg + '</p><p style="margin-top:20px;font-size:12px;opacity:.75">Luk og prov igen.</p></div></body></html>';

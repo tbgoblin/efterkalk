@@ -1,5 +1,5 @@
 /**
- * diskCache.js - File-based persistent cache for Gantech Efterkalkulation.
+ * diskCache.js - File-based persistent cache for Gantech Operations Hub.
  *
  * Cache files are stored as JSON in the /cache/ folder.
  * Each file is human-readable and contains metadata + the cached data.
@@ -23,9 +23,12 @@ function resolveWritableCacheDir() {
         // Shared location on C:\ — works across all RDS users on the same machine
         'C:\\GantechCache',
         'C:\\cache\\Gantech',
+        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Gantech Operations Hub', 'cache') : null,
+        process.env.APPDATA ? path.join(process.env.APPDATA, 'Gantech Operations Hub', 'cache') : null,
         process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Gantech Efterkalk', 'cache') : null,
         process.env.APPDATA ? path.join(process.env.APPDATA, 'Gantech Efterkalk', 'cache') : null,
         path.join(process.cwd(), 'cache'),
+        path.join(os.tmpdir(), 'gantech-operations-hub-cache'),
         path.join(os.tmpdir(), 'gantech-efterkalk-cache')
     ].filter(Boolean);
 
@@ -38,7 +41,7 @@ function resolveWritableCacheDir() {
         }
     }
 
-    return path.join(os.tmpdir(), 'gantech-efterkalk-cache');
+    return path.join(os.tmpdir(), 'gantech-operations-hub-cache');
 }
 
 const CACHE_DIR = resolveWritableCacheDir();
