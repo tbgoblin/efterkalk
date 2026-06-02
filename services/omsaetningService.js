@@ -1,4 +1,12 @@
 function createOmsaetningService({ getConnection, sql }) {
+    function isValidPeriod(value) {
+        const raw = String(value || '').trim();
+        const match = raw.match(/^(\d{4})(\d{2})$/);
+        if (!match) return false;
+        const month = Number(match[2]);
+        return month >= 0 && month <= 12;
+    }
+
     async function getAccounts() {
         const pool = await getConnection();
         const result = await pool.request().query(`
@@ -15,8 +23,8 @@ function createOmsaetningService({ getConnection, sql }) {
     }
 
     async function getSummary({ fra, til, accountCsv }) {
-        if (!/^\d{6}$/.test(fra) || !/^\d{6}$/.test(til)) {
-            const error = new Error('Ugyldig periode. Brug format YYYY00.');
+        if (!isValidPeriod(fra) || !isValidPeriod(til)) {
+            const error = new Error('Ugyldig periode. Brug format YYYYMM.');
             error.statusCode = 400;
             throw error;
         }
