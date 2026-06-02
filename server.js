@@ -53,9 +53,9 @@ const ORDER_LIST_MAX_ROWS = 150;
 const ORDER_LIST_DAYS_BACK = 30;
 const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
 const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = ORDER_LIST_MAX_ROWS;  // Warm all visible orders to reduce slow first-open on non-warm orders
-const BACKGROUND_WARM_DELAY_MS = 100;  // Controlled warmup pace: faster coverage with single-query concurrency
-const MAX_DB_CALC_CONCURRENCY = 1;
+const BACKGROUND_AFTERCALC_WARM_COUNT = 60;  // Startup gate: warm top orders quickly, remaining orders prefetch on demand/background
+const BACKGROUND_WARM_DELAY_MS = 10;  // Small stagger between queue submissions to keep DB stable
+const MAX_DB_CALC_CONCURRENCY = 2;  // Controlled parallel DB calculations for faster startup warmup
 const AFTERCALC_QUERY_TIMEOUT_MS = 45 * 1000;
 
 const orderListCache = {
@@ -320,6 +320,8 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
     warmupProgress.startedAt = Date.now();
     warmupProgress.completedAt = null;
 
+    const queuedComputations = [];
+
     try {
         for (const ordNo of ordNos) {
             const numericOrdNo = Number(ordNo);
@@ -334,19 +336,25 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
             }
 
             warmupProgress.current = numericOrdNo;
-            try {
-                await getOrComputeAftercalc(numericOrdNo, { priority: 'normal' });
-                warmed += 1;
-                warmupProgress.loaded += 1;
-            } catch (err) {
-                failed += 1;
-                warmupProgress.failed += 1;
-                logEvent('WARM-AFTERCALC ERROR ordNo=' + numericOrdNo + ': ' + err.message);
-            }
+            const computePromise = getOrComputeAftercalc(numericOrdNo, { priority: 'normal' })
+                .then(() => {
+                    warmed += 1;
+                    warmupProgress.loaded += 1;
+                })
+                .catch((err) => {
+                    failed += 1;
+                    warmupProgress.failed += 1;
+                    logEvent('WARM-AFTERCALC ERROR ordNo=' + numericOrdNo + ': ' + err.message);
+                });
+            queuedComputations.push(computePromise);
 
             if (maxDelayMs > 0) {
                 await new Promise(resolve => setTimeout(resolve, maxDelayMs));
             }
+        }
+
+        if (queuedComputations.length > 0) {
+            await Promise.allSettled(queuedComputations);
         }
     } finally {
         backgroundAftercalcWarmRunning = false;
@@ -433,7 +441,7 @@ async function refreshOrderListCache(force = false) {
             // Trigger warmup if not already running (avoid double-start during initial DB refresh)
             if (!backgroundAftercalcWarmRunning) {
                 const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-                warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', 50);
+                warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', BACKGROUND_WARM_DELAY_MS);
             }
         } catch (err) {
             orderListCache.lastError = err.message;
