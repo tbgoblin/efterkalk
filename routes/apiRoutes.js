@@ -1,5 +1,6 @@
 const express = require('express');
 const orderNotesService = require('../services/orderNotesService');
+const { createOmsaetningService } = require('../services/omsaetningService');
 
 function createApiRouter({
     getConnection,
@@ -33,6 +34,7 @@ function createApiRouter({
     pkgVersion
 }) {
     const router = express.Router();
+    const omsaetningService = createOmsaetningService({ getConnection, sql });
 
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
@@ -478,6 +480,40 @@ function createApiRouter({
             return res.json(laserResult);
         } catch (err) {
             return res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/omsaetning/accounts', async (req, res) => {
+        try {
+            const accounts = await omsaetningService.getAccounts();
+
+            return res.json({
+                ok: true,
+                accounts
+            });
+        } catch (err) {
+            logEvent('ERROR omsaetning/accounts: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/omsaetning/summary', async (req, res) => {
+        try {
+            const fra = String(req.query.fra || '').trim();
+            const til = String(req.query.til || '').trim();
+            const accountCsv = String(req.query.accounts || '').trim();
+            const summary = await omsaetningService.getSummary({ fra, til, accountCsv });
+
+            return res.json({
+                ok: true,
+                ...summary
+            });
+        } catch (err) {
+            if (err && err.statusCode) {
+                return res.status(err.statusCode).json({ ok: false, error: err.message || 'Ugyldig forespørgsel' });
+            }
+            logEvent('ERROR omsaetning/summary: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
         }
     });
 

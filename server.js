@@ -850,6 +850,9 @@ app.get('/', (req, res) => {
                 .modal-box { width: 99vw; max-height: 93vh; padding: 12px; }
                 .modal-box th, .modal-box td { padding: 8px 6px; font-size: 13px; }
                 .dashboard-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+                .omsaetning-filters { grid-template-columns:1fr 1fr; }
+                .omsaetning-actions { grid-column:span 2; }
+                .omsaetning-kpis { grid-template-columns:1fr; }
                 .modal-content-wrap { grid-template-columns: 1fr; }
                 .summary-image-panel { width: 100%; min-width: 0; max-height: 52vh; border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; }
                 .laser-summary-layout { flex-direction: column; }
@@ -925,16 +928,38 @@ app.get('/', (req, res) => {
             .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
             .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
             .main-dashboard { display:none; margin-bottom:16px; }
-            .dashboard-shell { background:linear-gradient(160deg, #ffffff 0%, #f3f8ff 62%, #edf4ff 100%); border:1px solid #d7e6fb; border-radius:16px; box-shadow:0 14px 30px rgba(15,53,96,0.10); padding:16px; }
+            .dashboard-shell { position:relative; overflow:hidden; background:radial-gradient(1100px 360px at 8% -12%, rgba(22,101,192,0.19) 0%, rgba(22,101,192,0.03) 40%, transparent 70%), linear-gradient(160deg, #ffffff 0%, #f3f8ff 62%, #edf4ff 100%); border:1px solid #d7e6fb; border-radius:16px; box-shadow:0 14px 30px rgba(15,53,96,0.10); padding:16px; }
+            .dashboard-shell::before { content:''; position:absolute; width:240px; height:240px; right:-95px; top:-105px; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(86,164,255,0.24), rgba(86,164,255,0)); pointer-events:none; }
+            .dashboard-shell::after { content:''; position:absolute; width:360px; height:110px; left:-90px; bottom:-60px; transform:rotate(-8deg); background:linear-gradient(90deg, rgba(15,53,96,0.00), rgba(15,53,96,0.08), rgba(15,53,96,0.00)); pointer-events:none; }
             .dashboard-head h2 { margin:0; color:#0f3560; font-size:26px; letter-spacing:0.01em; }
             .dashboard-head p { margin:6px 0 0 0; color:#4d6680; font-size:13px; }
             .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-            .dash-card { border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; }
+            .dash-card { position:relative; isolation:isolate; border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08), inset 0 1px 0 rgba(255,255,255,0.90); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; transform:translateZ(0); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+            .dash-card::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.70), rgba(255,255,255,0.08)); z-index:-1; pointer-events:none; }
+            .dash-card:hover { transform:translateY(-2px) scale(1.01); border-color:#c5dbf8; box-shadow:0 16px 26px rgba(15,53,96,0.16), inset 0 1px 0 rgba(255,255,255,0.95); }
             .dash-card h4 { margin:0; color:#0f3560; font-size:15px; }
             .dash-card p { margin:0; color:#5d7590; font-size:12px; line-height:1.35; }
             .dash-card .dash-chip { align-self:flex-start; font-size:11px; font-weight:700; color:#0f3560; background:#eaf3ff; border:1px solid #d0e2f9; border-radius:999px; padding:3px 8px; }
             .dash-card button { margin-top:auto; border:none; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; }
             .dash-card button[disabled] { opacity:0.6; cursor:not-allowed; background:linear-gradient(180deg,#8aa6c5 0%,#5f7f9e 100%); }
+            .main-omsaetning { display:none; margin-bottom:16px; }
+            .omsaetning-shell { background:#fff; border:1px solid #d7e6fb; border-radius:14px; box-shadow:0 8px 20px rgba(15,53,96,0.10); padding:14px; }
+            .omsaetning-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:12px; }
+            .omsaetning-head h3 { margin:0; color:#0f3560; font-size:22px; }
+            .omsaetning-head p { margin:4px 0 0 0; color:#4d6680; font-size:12px; }
+            .omsaetning-filters { display:grid; grid-template-columns:180px 180px 1fr auto; gap:10px; align-items:end; }
+            .omsaetning-field label { display:block; font-size:12px; color:#3f5875; font-weight:700; margin-bottom:4px; }
+            .omsaetning-field input, .omsaetning-field select { width:100%; border:1px solid #cfe0f7; border-radius:8px; padding:8px 10px; font-size:13px; }
+            .omsaetning-actions button { border:none; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
+            .omsaetning-kpis { margin-top:12px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+            .omsaetning-kpi { border:1px solid #d6e7fb; border-radius:10px; background:#f8fbff; padding:10px; }
+            .omsaetning-kpi .lbl { font-size:11px; font-weight:700; color:#4f6d8c; text-transform:uppercase; letter-spacing:0.03em; }
+            .omsaetning-kpi .val { margin-top:4px; font-size:20px; font-weight:800; color:#0f3560; }
+            .omsaetning-table-wrap { margin-top:12px; overflow:auto; border:1px solid #dbe8f9; border-radius:10px; }
+            .omsaetning-table { width:100%; border-collapse:collapse; min-width:760px; font-size:12px; }
+            .omsaetning-table th { background:#1565c0; color:#fff; text-align:left; padding:8px 10px; position:sticky; top:0; z-index:1; }
+            .omsaetning-table td { padding:7px 10px; border-bottom:1px solid #e6eef9; }
+            .omsaetning-empty { margin-top:10px; padding:10px; border:1px dashed #c7daef; border-radius:8px; color:#4f6d8c; background:#f8fbff; }
             #mainWorkspace { display:none; }
             .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
             .allocation-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#b26a00; font-size:16px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; }
@@ -950,7 +975,7 @@ app.get('/', (req, res) => {
                 <p>Indtast kode for at se ordreliste og detaljer.</p>
                 <div class="access-gate-row">
                     <input id="accessGateInput" type="password" placeholder="Kode" autocomplete="off" />
-                    <button id="accessGateBtn" type="button">Åbn</button>
+                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn</button>
                 </div>
                 <div id="accessGateError" class="access-gate-error"></div>
             </div>
@@ -990,7 +1015,7 @@ app.get('/', (req, res) => {
                         <span class="dash-chip">Planlagt</span>
                         <h4>Omsætning</h4>
                         <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
-                        <button onclick="openModule('omsaetning')" disabled>Kommer snart</button>
+                        <button onclick="openModule('omsaetning')">Åbn Omsætning</button>
                     </article>
                     <article class="dash-card">
                         <span class="dash-chip">Planlagt</span>
@@ -999,6 +1024,41 @@ app.get('/', (req, res) => {
                         <button onclick="openModule('faktura')" disabled>Kommer snart</button>
                     </article>
                 </div>
+            </section>
+        </div>
+
+        <div class="container main-omsaetning" id="mainOmsaetning">
+            <section class="omsaetning-shell">
+                <div class="omsaetning-head">
+                    <div>
+                        <h3>Omsætning</h3>
+                        <p>SSRS-baseret oversigt fra AcTr, AcPr og Ac (kontogruppe 10_Omsætning).</p>
+                    </div>
+                </div>
+                <div class="omsaetning-filters">
+                    <div class="omsaetning-field">
+                        <label for="omsaetningFraInput">Fra (YYYY00)</label>
+                        <input id="omsaetningFraInput" type="text" maxlength="6" placeholder="202500" />
+                    </div>
+                    <div class="omsaetning-field">
+                        <label for="omsaetningTilInput">Til (YYYY00)</label>
+                        <input id="omsaetningTilInput" type="text" maxlength="6" placeholder="202700" />
+                    </div>
+                    <div class="omsaetning-field">
+                        <label for="omsaetningAccountsSelect">Konto (multi)</label>
+                        <select id="omsaetningAccountsSelect" multiple size="4"></select>
+                    </div>
+                    <div class="omsaetning-actions">
+                        <button id="omsaetningLoadBtn" onclick="loadOmsaetningSummary()">Opdater</button>
+                    </div>
+                </div>
+                <div class="omsaetning-kpis">
+                    <div class="omsaetning-kpi"><div class="lbl">Omsætning (Mio)</div><div class="val" id="omsaetningTotalMio">-</div></div>
+                    <div class="omsaetning-kpi"><div class="lbl">Rækker</div><div class="val" id="omsaetningRowsCount">-</div></div>
+                    <div class="omsaetning-kpi"><div class="lbl">Perioder</div><div class="val" id="omsaetningPeriodsCount">-</div></div>
+                </div>
+                <div id="omsaetningTableWrap" class="omsaetning-table-wrap" style="display:none;"></div>
+                <div id="omsaetningEmpty" class="omsaetning-empty">Vælg perioder og konti, og tryk Opdater.</div>
             </section>
         </div>
 
@@ -1544,7 +1604,7 @@ app.get('/', (req, res) => {
 
                 const rightPattern = /færdigmeldt|minutter|min\.|kost|pris|margin|afvigelse|kg|%|beløb|antal|samlet|dkk|forbrugt|stykliste|icon vægt|nestkost|nestmulti/i;
                 const centerPattern = /linje|rute|prodtp4|prod\.ordre|prodordre|nestingordre|ordre$/i;
-                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\/ref|hvem|status|message|beskrivelse/i;
+                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\\/ref|hvem|status|message|beskrivelse/i;
 
                 for (const table of tables) {
                     table.classList.add('micro-grid-table');
@@ -1733,6 +1793,20 @@ app.get('/', (req, res) => {
             let lastOrderListCheckTime = 0;
             let lastOrderListRemoteTime = 0;
             let updateActionRunning = false;
+            let omsaetningInitialized = false;
+            let omsaetningAccounts = [];
+
+            function formatMio(value) {
+                const numeric = Number(value || 0);
+                return numeric.toLocaleString('da-DK', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+            }
+
+            function formatMonthDa(dateValue) {
+                if (!dateValue) return '-';
+                const dt = new Date(dateValue);
+                if (Number.isNaN(dt.getTime())) return String(dateValue);
+                return dt.toLocaleDateString('da-DK', { month: 'short', year: 'numeric' });
+            }
 
             function showAccessGate() {
                 const overlay = document.getElementById('accessGateOverlay');
@@ -1810,27 +1884,178 @@ app.get('/', (req, res) => {
             }
 
             function openModule(moduleKey) {
+                const dashboard = document.getElementById('mainDashboard');
+                const workspace = document.getElementById('mainWorkspace');
+                const omsaetning = document.getElementById('mainOmsaetning');
+
+                if (moduleKey === 'efterkalk') {
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (omsaetning) omsaetning.style.display = 'none';
+                    if (workspace) workspace.style.display = 'block';
+                    goBackToList();
+                    return;
+                }
+
+                if (moduleKey === 'omsaetning') {
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (workspace) workspace.style.display = 'none';
+                    if (omsaetning) omsaetning.style.display = 'block';
+                    initializeOmsaetningIfNeeded();
+                    return;
+                }
+
                 if (moduleKey !== 'efterkalk') {
                     alert('Dette modul er klar til næste fase. Når du sender logikken, bygger vi det visuelt og funktionelt.');
                     return;
                 }
-                const dashboard = document.getElementById('mainDashboard');
-                const workspace = document.getElementById('mainWorkspace');
-                if (dashboard) dashboard.style.display = 'none';
-                if (workspace) workspace.style.display = 'block';
-                goBackToList();
             }
 
             function goToDashboard() {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
+                const omsaetning = document.getElementById('mainOmsaetning');
                 if (workspace) workspace.style.display = 'none';
+                if (omsaetning) omsaetning.style.display = 'none';
                 if (dashboard) dashboard.style.display = 'block';
                 const detailModal = document.getElementById('orderDetailModal');
                 const detailBody = document.getElementById('orderDetailModalBody');
                 if (detailModal) detailModal.style.display = 'none';
                 if (detailBody) detailBody.innerHTML = '';
                 document.body.classList.remove('report-modal-open');
+            }
+
+            async function initializeOmsaetningIfNeeded() {
+                if (omsaetningInitialized) return;
+                omsaetningInitialized = true;
+
+                const fraInput = document.getElementById('omsaetningFraInput');
+                const tilInput = document.getElementById('omsaetningTilInput');
+                const nowYear = new Date().getFullYear();
+                if (fraInput && !fraInput.value) fraInput.value = String(nowYear - 1) + '00';
+                if (tilInput && !tilInput.value) tilInput.value = String(nowYear + 1) + '00';
+
+                await loadOmsaetningAccounts();
+                await loadOmsaetningSummary();
+            }
+
+            async function loadOmsaetningAccounts() {
+                const select = document.getElementById('omsaetningAccountsSelect');
+                if (!select) return;
+
+                select.innerHTML = '<option value="">Indlæser konti...</option>';
+                try {
+                    const response = await fetch('/omsaetning/accounts');
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const payload = await response.json();
+                    const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+                    omsaetningAccounts = accounts;
+
+                    if (accounts.length === 0) {
+                        select.innerHTML = '<option value="">Ingen konti fundet</option>';
+                        return;
+                    }
+
+                    select.innerHTML = accounts
+                        .map(acc => '<option value="' + escapeHtmlFE(String(acc.acNo)) + '" selected>' +
+                            escapeHtmlFE(String(acc.acNo)) + ' - ' + escapeHtmlFE(acc.name || '') + '</option>')
+                        .join('');
+                } catch (err) {
+                    select.innerHTML = '<option value="">Fejl ved konti</option>';
+                    console.error('loadOmsaetningAccounts failed:', err);
+                }
+            }
+
+            async function loadOmsaetningSummary() {
+                const fraInput = document.getElementById('omsaetningFraInput');
+                const tilInput = document.getElementById('omsaetningTilInput');
+                const select = document.getElementById('omsaetningAccountsSelect');
+                const loadBtn = document.getElementById('omsaetningLoadBtn');
+                const empty = document.getElementById('omsaetningEmpty');
+                const tableWrap = document.getElementById('omsaetningTableWrap');
+                const totalEl = document.getElementById('omsaetningTotalMio');
+                const rowsEl = document.getElementById('omsaetningRowsCount');
+                const periodsEl = document.getElementById('omsaetningPeriodsCount');
+
+                const fra = String((fraInput && fraInput.value) || '').trim();
+                const til = String((tilInput && tilInput.value) || '').trim();
+                if (!/^\\d{6}$/.test(fra) || !/^\\d{6}$/.test(til)) {
+                    alert('Periode skal være i format YYYY00, fx 202500.');
+                    return;
+                }
+
+                const selected = select
+                    ? Array.from(select.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)
+                    : [];
+
+                if (loadBtn) {
+                    loadBtn.disabled = true;
+                    loadBtn.textContent = 'Indlæser...';
+                }
+
+                try {
+                    const query = new URLSearchParams({
+                        fra,
+                        til,
+                        accounts: selected.join(',')
+                    });
+
+                    const response = await fetch('/omsaetning/summary?' + query.toString());
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const payload = await response.json();
+                    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+                    const uniquePeriods = new Set(rows.map(r => String(r.date || '')));
+
+                    if (totalEl) totalEl.textContent = formatMio(payload.totalRevenueMio || 0);
+                    if (rowsEl) rowsEl.textContent = formatCount(rows.length);
+                    if (periodsEl) periodsEl.textContent = formatCount(uniquePeriods.size);
+
+                    if (rows.length === 0) {
+                        if (tableWrap) {
+                            tableWrap.style.display = 'none';
+                            tableWrap.innerHTML = '';
+                        }
+                        if (empty) {
+                            empty.style.display = 'block';
+                            empty.textContent = 'Ingen data fundet for valgte filtre.';
+                        }
+                        return;
+                    }
+
+                    let html = '<table class="omsaetning-table"><thead><tr>' +
+                        '<th>Måned</th><th>Konto</th><th>Navn</th><th style="text-align:right;">Omsætning (Mio)</th>' +
+                        '</tr></thead><tbody>';
+
+                    for (const row of rows) {
+                        html += '<tr>' +
+                            '<td>' + escapeHtmlFE(formatMonthDa(row.date)) + '</td>' +
+                            '<td>' + escapeHtmlFE(String(row.acNo || '')) + '</td>' +
+                            '<td>' + escapeHtmlFE(String(row.name || '')) + '</td>' +
+                            '<td style="text-align:right;">' + escapeHtmlFE(formatMio(row.revenueMio || 0)) + '</td>' +
+                            '</tr>';
+                    }
+
+                    html += '</tbody></table>';
+                    if (tableWrap) {
+                        tableWrap.innerHTML = html;
+                        tableWrap.style.display = 'block';
+                    }
+                    if (empty) empty.style.display = 'none';
+                } catch (err) {
+                    if (tableWrap) {
+                        tableWrap.style.display = 'none';
+                        tableWrap.innerHTML = '';
+                    }
+                    if (empty) {
+                        empty.style.display = 'block';
+                        empty.textContent = 'Fejl ved indlæsning: ' + (err && err.message ? err.message : 'ukendt fejl');
+                    }
+                    console.error('loadOmsaetningSummary failed:', err);
+                } finally {
+                    if (loadBtn) {
+                        loadBtn.disabled = false;
+                        loadBtn.textContent = 'Opdater';
+                    }
+                }
             }
 
             async function checkOrderListFreshness() {
@@ -4832,7 +5057,8 @@ app.get('/', (req, res) => {
             }
 
             // Soeg ved indlaesning hvis ordrenummer er i query string
-            window.onload = bootstrapUiAfterLoad;
+            window.addEventListener('load', bootstrapUiAfterLoad, { once: true });
+            document.addEventListener('DOMContentLoaded', bootstrapUiAfterLoad, { once: true });
             if (document.readyState === 'complete' || document.readyState === 'interactive') {
                 setTimeout(bootstrapUiAfterLoad, 0);
             }
