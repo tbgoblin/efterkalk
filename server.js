@@ -951,6 +951,7 @@ app.get('/', (req, res) => {
             .omsaetning-head h3 { margin:0; color:#0f3560; font-size:22px; }
             .omsaetning-head p { margin:4px 0 0 0; color:#4d6680; font-size:12px; }
             .omsaetning-years { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+            .omsaetning-year-note { margin:-2px 0 10px 0; color:#4f6d8c; font-size:12px; }
             .omsaetning-year-btn { border:1px solid #c9ddf8; background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); color:#0f3560; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
             .omsaetning-year-btn.active { background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; border-color:#0f3560; }
             .omsaetning-filters { display:grid; grid-template-columns:160px 160px 1fr 220px auto; gap:10px; align-items:end; }
@@ -970,7 +971,7 @@ app.get('/', (req, res) => {
             .omsaetning-kpi { border:1px solid #d6e7fb; border-radius:10px; background:#f8fbff; padding:10px; }
             .omsaetning-kpi .lbl { font-size:11px; font-weight:700; color:#4f6d8c; text-transform:uppercase; letter-spacing:0.03em; }
             .omsaetning-kpi .val { margin-top:4px; font-size:20px; font-weight:800; color:#0f3560; }
-            .omsaetning-charts { margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+            .omsaetning-charts { margin-top:12px; display:grid; grid-template-columns:1fr; gap:10px; }
             .omsaetning-chart-card { border:1px solid #dbe8f9; border-radius:10px; background:linear-gradient(180deg,#ffffff 0%,#f6faff 100%); overflow:hidden; }
             .omsaetning-chart-head { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #dbe8f9; background:#f4f9ff; }
             .omsaetning-chart-title { font-size:12px; font-weight:800; color:#2f5475; }
@@ -1068,6 +1069,7 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 <div id="omsaetningYears" class="omsaetning-years"></div>
+                <p class="omsaetning-year-note">Regnskabsår: 1. juli - 30. juni. Vælg flere FY-knapper for at se flere år samlet.</p>
                 <div class="omsaetning-filters">
                     <div class="omsaetning-field">
                         <label for="omsaetningFraMonth">Fra måned</label>
@@ -1868,7 +1870,7 @@ app.get('/', (req, res) => {
             let omsaetningInitialized = false;
             let omsaetningAccounts = [];
             let omsaetningSelectedAccounts = new Set();
-            let omsaetningActiveYear = null;
+            let omsaetningSelectedFiscalYears = new Set();
 
             function formatMio(value) {
                 const numeric = Number(value || 0);
@@ -1896,6 +1898,41 @@ app.get('/', (req, res) => {
                 };
             }
 
+            function getCurrentFiscalYearStart(referenceDate) {
+                const now = referenceDate instanceof Date ? referenceDate : new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth() + 1;
+                return month >= 7 ? year : (year - 1);
+            }
+
+            function getFiscalYearRange(startYear) {
+                const start = Number(startYear);
+                if (!Number.isFinite(start)) return null;
+                return {
+                    fromMonth: String(start) + '-07',
+                    toMonth: String(start + 1) + '-06',
+                    fra: String(start * 100 + 7),
+                    til: String((start + 1) * 100 + 7)
+                };
+            }
+
+            function applySelectedFiscalYearsToInputs() {
+                const fromEl = document.getElementById('omsaetningFraMonth');
+                const toEl = document.getElementById('omsaetningTilMonth');
+                const selectedYears = Array.from(omsaetningSelectedFiscalYears.values())
+                    .map(y => Number(y))
+                    .filter(y => Number.isFinite(y))
+                    .sort((a, b) => a - b);
+                if (selectedYears.length === 0) return;
+
+                const firstRange = getFiscalYearRange(selectedYears[0]);
+                const lastRange = getFiscalYearRange(selectedYears[selectedYears.length - 1]);
+                if (!firstRange || !lastRange) return;
+
+                if (fromEl) fromEl.value = firstRange.fromMonth;
+                if (toEl) toEl.value = lastRange.toMonth;
+            }
+
             function buildOmsaetningPeriodRange() {
                 const fromEl = document.getElementById('omsaetningFraMonth');
                 const toEl = document.getElementById('omsaetningTilMonth');
@@ -1914,31 +1951,31 @@ app.get('/', (req, res) => {
                 };
             }
 
-            function renderOmsaetningYearChips(centerYear) {
+            function renderOmsaetningYearChips(centerFiscalYear) {
                 const wrap = document.getElementById('omsaetningYears');
-                const fromEl = document.getElementById('omsaetningFraMonth');
-                const toEl = document.getElementById('omsaetningTilMonth');
-                if (!wrap || !fromEl || !toEl) return;
+                if (!wrap) return;
 
-                const currentYear = Number(centerYear || new Date().getFullYear());
-                const years = [currentYear - 3, currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-                wrap.innerHTML = years.map(year => {
-                    const activeCls = (omsaetningActiveYear === year) ? ' active' : '';
-                    return '<button type="button" class="omsaetning-year-btn' + activeCls + '" onclick="setOmsaetningYear(' + year + ')">' +
-                        (year === currentYear ? 'Nu ' : '') + escapeHtmlFE(String(year)) +
+                const currentFiscalYear = Number(centerFiscalYear || getCurrentFiscalYearStart());
+                const years = [currentFiscalYear - 3, currentFiscalYear - 2, currentFiscalYear - 1, currentFiscalYear, currentFiscalYear + 1];
+                wrap.innerHTML = years.map(fiscalYearStart => {
+                    const activeCls = omsaetningSelectedFiscalYears.has(fiscalYearStart) ? ' active' : '';
+                    const label = 'FY ' + String(fiscalYearStart) + '/' + String((fiscalYearStart + 1)).slice(-2);
+                    return '<button type="button" class="omsaetning-year-btn' + activeCls + '" onclick="toggleOmsaetningFiscalYear(' + fiscalYearStart + ')">' +
+                        (fiscalYearStart === currentFiscalYear ? 'Nu ' : '') + escapeHtmlFE(label) +
                         '</button>';
                 }).join('');
             }
 
-            function setOmsaetningYear(year) {
-                const y = Number(year);
-                if (!Number.isFinite(y)) return;
-                const fromEl = document.getElementById('omsaetningFraMonth');
-                const toEl = document.getElementById('omsaetningTilMonth');
-                if (fromEl) fromEl.value = String(y) + '-01';
-                if (toEl) toEl.value = String(y) + '-12';
-                omsaetningActiveYear = y;
-                renderOmsaetningYearChips(new Date().getFullYear());
+            function toggleOmsaetningFiscalYear(year) {
+                const fiscalYearStart = Number(year);
+                if (!Number.isFinite(fiscalYearStart)) return;
+                if (omsaetningSelectedFiscalYears.has(fiscalYearStart) && omsaetningSelectedFiscalYears.size > 1) {
+                    omsaetningSelectedFiscalYears.delete(fiscalYearStart);
+                } else {
+                    omsaetningSelectedFiscalYears.add(fiscalYearStart);
+                }
+                applySelectedFiscalYearsToInputs();
+                renderOmsaetningYearChips(getCurrentFiscalYearStart());
                 loadOmsaetningSummary();
             }
 
@@ -2248,11 +2285,13 @@ app.get('/', (req, res) => {
 
                 const fraInput = document.getElementById('omsaetningFraMonth');
                 const tilInput = document.getElementById('omsaetningTilMonth');
-                const nowYear = new Date().getFullYear();
-                if (fraInput && !fraInput.value) fraInput.value = String(nowYear - 1) + '-01';
-                if (tilInput && !tilInput.value) tilInput.value = String(nowYear) + '-12';
-                omsaetningActiveYear = nowYear;
-                renderOmsaetningYearChips(nowYear);
+                const currentFiscalYear = getCurrentFiscalYearStart();
+                const currentFiscalRange = getFiscalYearRange(currentFiscalYear);
+                if (fraInput && !fraInput.value && currentFiscalRange) fraInput.value = currentFiscalRange.fromMonth;
+                if (tilInput && !tilInput.value && currentFiscalRange) tilInput.value = currentFiscalRange.toMonth;
+                omsaetningSelectedFiscalYears = new Set([currentFiscalYear]);
+                applySelectedFiscalYearsToInputs();
+                renderOmsaetningYearChips(currentFiscalYear);
 
                 await loadOmsaetningAccounts();
                 await loadOmsaetningSummary();

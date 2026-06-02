@@ -59,7 +59,7 @@ $package = Get-Content $packagePath -Raw | ConvertFrom-Json
 $version = [string]$package.version
 if ([string]::IsNullOrWhiteSpace($version)) { throw 'Versione non valida in package.json' }
 
-$exeName = "Gantech-Efterkalk-Setup-$version.exe"
+$exeName = "Gantech-Operations-Hub-Setup-$version.exe"
 $blockmapName = "$exeName.blockmap"
 $exePath = Join-Path $distPath $exeName
 $blockmapPath = Join-Path $distPath $blockmapName
@@ -76,7 +76,7 @@ if ($latestYml -notmatch [regex]::Escape($exeName)) {
 }
 
 $tag = "v$version"
-$title = "Gantech Efterkalk $tag"
+$title = "Gantech Operations Hub $tag"
 
 $releaseExists = $true
 try {

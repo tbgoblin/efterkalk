@@ -17,12 +17,13 @@ function Stop-WorkspaceLockingProcesses {
             'server\.js',
             'npm(?:\.cmd)?[\\/].*npm-cli\.js"?\s+start',
             'electron(?:\.exe)?"?\s+\.',
+            'Gantech Operations Hub',
             'Gantech Efterkalk'
         )
 
         $candidates = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
             if ($_.ProcessId -eq $PID) { return $false }
-            if ($_.Name -notin @('node.exe', 'electron.exe', 'Gantech Efterkalk.exe')) { return $false }
+            if ($_.Name -notin @('node.exe', 'electron.exe', 'Gantech Operations Hub.exe', 'Gantech Efterkalk.exe')) { return $false }
 
             $commandLine = [string]($_.CommandLine)
             $exePath = [string]($_.ExecutablePath)
@@ -51,7 +52,7 @@ function Stop-WorkspaceLockingProcesses {
     }
 }
 
-Write-Host "🚀 Gantech Efterkalk - Automated Release Publisher" -ForegroundColor Cyan
+Write-Host "🚀 Gantech Operations Hub - Automated Release Publisher" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -127,11 +128,14 @@ Stop-WorkspaceLockingProcesses -RootPath $PSScriptRoot
 
 # Remove stale artifacts for this target version to avoid NSIS "Can't open output file"
 $distDir = Join-Path $PSScriptRoot 'dist'
-$installerPath = Join-Path $distDir ("Gantech-Efterkalk-Setup-{0}.exe" -f $newVersion)
+$installerPath = Join-Path $distDir ("Gantech-Operations-Hub-Setup-{0}.exe" -f $newVersion)
 $blockmapPath = "$installerPath.blockmap"
 $uninstallerPath = Join-Path $distDir '__uninstaller-nsis-efterkalk.exe'
 
-foreach ($p in @($installerPath, $blockmapPath, $uninstallerPath)) {
+$legacyInstallerPath = Join-Path $distDir ("Gantech-Efterkalk-Setup-{0}.exe" -f $newVersion)
+$legacyBlockmapPath = "$legacyInstallerPath.blockmap"
+
+foreach ($p in @($installerPath, $blockmapPath, $legacyInstallerPath, $legacyBlockmapPath, $uninstallerPath)) {
     if (Test-Path $p) {
         try {
             Remove-Item $p -Force -ErrorAction Stop

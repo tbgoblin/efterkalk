@@ -4,7 +4,7 @@ function createOmsaetningService({ getConnection, sql }) {
         const match = raw.match(/^(\d{4})(\d{2})$/);
         if (!match) return false;
         const month = Number(match[2]);
-        return month >= 0 && month <= 12;
+        return month >= 1 && month <= 12;
     }
 
     async function getAccounts() {
