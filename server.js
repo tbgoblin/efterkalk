@@ -525,7 +525,9 @@ app.get('/', (req, res) => {
             .order-report-table th { background:#f3f8ff; color:#0f3560; }
             .order-report-table tr:last-child td { border-bottom:none; }
             .order-report-table .summary-row td { background:#f7fbff; font-weight:700; }
+            .order-report-table tr { page-break-inside: avoid; }
             @media print {
+                @page { size: A4 portrait; margin: 12mm; }
                 body.print-report-mode .header-banner-wrapper,
                 body.print-report-mode .search-box,
                 body.print-report-mode #orderList,
@@ -535,6 +537,8 @@ app.get('/', (req, res) => {
                 body.print-report-mode .order-report-toolbar button,
                 body.print-report-mode .order-report-actions button { display:none !important; }
                 body.print-report-mode .order-report-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+                body.print-report-mode .order-report-card,
+                body.print-report-mode .order-report-table { break-inside: avoid; page-break-inside: avoid; }
 
                 body.print-list-mode .header-banner-wrapper,
                 body.print-list-mode .search-box,
@@ -1825,7 +1829,12 @@ app.get('/', (req, res) => {
 
             function buildOrderListSummaryHtml(orders) {
                 const listSummary = getFilteredOrderSummary(orders);
+                const activeFilters = [];
+                if (orderListFilter) activeFilters.push('kunde/søgning: "' + escapeHtml(orderListFilter) + '"');
+                if (orderListBrugerFilter) activeFilters.push('bruger: "' + escapeHtml(orderListBrugerFilter) + '"');
+                const filterText = activeFilters.length > 0 ? activeFilters.join(', ') : 'ingen aktive filtre';
                 let html = '<div><strong>Filtreret ordrelisteoversigt</strong> (vist: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + listSummary.excludedCredit + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
+                html += '<div style="margin-top:4px; font-size:12px; color:#57718f;">Genereret: ' + escapeHtml(new Date().toLocaleString('da-DK')) + ' • Filtre: ' + filterText + '</div>';
                 html += '<div style="margin-top:6px;display:flex;gap:18px;flex-wrap:wrap;">';
                 html += '<span>Samlet omsætning: <strong>' + formatNumber(listSummary.totalRevenue) + ' DKK</strong></span>';
                 html += '<span>Samlet kost: <strong>' + formatNumber(listSummary.totalCost) + ' DKK</strong></span>';
@@ -1930,6 +1939,11 @@ app.get('/', (req, res) => {
                 const marginPct = orderMarginPercent || '0.00';
                 const revenue = Number((orderData && orderData.summary && orderData.summary.totalRevenue) || 0);
                 const cost = Number((orderData && orderData.summary && orderData.summary.totalCost) || 0);
+                const generatedAt = new Date().toLocaleString('da-DK');
+                const reportFilters = [];
+                if (orderListFilter) reportFilters.push('kunde/søgning: "' + escapeHtml(orderListFilter) + '"');
+                if (orderListBrugerFilter) reportFilters.push('bruger: "' + escapeHtml(orderListBrugerFilter) + '"');
+                const reportFilterText = reportFilters.length > 0 ? reportFilters.join(', ') : 'ingen aktive filtre';
 
                 let html = '<div id="orderDetailReport" class="order-detail-report" style="display:none;">';
                 html += '<div class="order-report-toolbar">';
@@ -1939,6 +1953,7 @@ app.get('/', (req, res) => {
                 html += '<button class="list-toggle-btn" onclick="printOrderDetailReport()" title="Udskriv rapporten som PDF eller papir">Udskriv / PDF</button>';
                 html += '</div>';
                 html += '</div>';
+                html += '<div style="font-size:12px; color:#57718f; margin-top:-2px; margin-bottom:10px;">Genereret: ' + escapeHtml(generatedAt) + ' • Filtre: ' + reportFilterText + '</div>';
 
                 html += '<div class="order-report-grid">';
                 html += '<div class="order-report-card"><div class="label">Samlet omsætning</div><div class="value">' + formatNumber(revenue) + ' DKK</div></div>';
