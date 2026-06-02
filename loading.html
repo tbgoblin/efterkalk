@@ -105,11 +105,12 @@
             width: clamp(52px, 5vw, 68px);
             height: clamp(52px, 5vw, 68px);
             border-radius: 14px;
-            background: #ffffff;
-            border: 1px solid rgba(255,255,255,0.30);
-            box-shadow: 0 10px 24px rgba(0,0,0,0.30);
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.24);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.12);
             padding: 8px;
             object-fit: contain;
+            filter: brightness(0) invert(1) contrast(1.08);
             flex-shrink: 0;
         }
         .brand-text {
@@ -206,7 +207,7 @@
     <div class="card">
         <div class="eyebrow"><span class="eyebrow-dot"></span>System startup</div>
         <div class="brand-lockup">
-            <img class="brand-logo" src="assets/brand/logo-gantech.png" alt="Gantech logo" />
+            <img class="brand-logo" src="./assets/brand/logo-gantech.png" alt="Gantech logo" />
             <div class="brand-text">
                 <div class="logo">Gantech Efterkalk</div>
             </div>

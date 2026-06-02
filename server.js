@@ -511,7 +511,7 @@ app.get('/', (req, res) => {
             .container { max-width: 1320px; margin: 0 auto; }
             .header-banner-wrapper { background: linear-gradient(135deg, #0f3560 0%, #14577e 62%, #123f6f 100%); color: #fff; font-weight: 800; font-size: 25px; padding: 10px 12px; border-radius: 10px; margin-bottom: 16px; letter-spacing: 0.2px; width: 100%; position: sticky; top: 0; z-index: 1200; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 12px 28px rgba(15,53,96,0.24); }
             .header-brand { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
-            .header-brand-logo { width:38px; height:38px; border-radius:8px; background:#ffffff; padding:5px; object-fit:contain; border:1px solid rgba(255,255,255,0.35); box-shadow:0 6px 16px rgba(4,16,30,0.25); flex-shrink:0; }
+            .header-brand-logo { width:38px; height:38px; border-radius:8px; background:transparent; padding:5px; object-fit:contain; border:1px solid rgba(255,255,255,0.22); box-shadow:0 6px 16px rgba(4,16,30,0.25); filter:brightness(0) invert(1) contrast(1.08); flex-shrink:0; }
             .header-brand-text { min-width:0; font-size:20px; font-weight:800; letter-spacing:0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
             .header-status-badge { display: inline-block; font-size: 12px; font-weight: 700; color: #8a6d3b; background: #fff3cd; border: 1px solid #fff3cd; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
             #warmupBarWrap { display:none; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }

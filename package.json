@@ -41,6 +41,7 @@
       "utils/**/*.js",
       "services/**/*.js",
       "routes/**/*.js",
+      "assets/**/*",
       "users.json",
       "electron-main.js",
       "loading.html",
