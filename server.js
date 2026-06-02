@@ -526,6 +526,17 @@ app.get('/', (req, res) => {
             .order-report-table tr:last-child td { border-bottom:none; }
             .order-report-table .summary-row td { background:#f7fbff; font-weight:700; }
             .order-report-table tr { page-break-inside: avoid; }
+            .print-preview-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:15000; display:none; align-items:center; justify-content:center; padding:18px; }
+            .print-preview-dialog { width:min(1320px, 96vw); max-height:92vh; background:#fff; border-radius:10px; box-shadow:0 18px 46px rgba(0,0,0,0.34); display:flex; flex-direction:column; overflow:hidden; }
+            .print-preview-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#f8fbff; }
+            .print-preview-title { font-size:16px; font-weight:800; color:#0f3560; }
+            .print-preview-actions { display:flex; gap:8px; flex-wrap:wrap; }
+            .print-preview-body { padding:16px; overflow:auto; background:#fff; }
+            .print-preview-body .order-list-summary-actions,
+            .print-preview-body .order-report-actions { display:none !important; }
+            .print-preview-body .order-detail-report { display:block !important; margin-top:0; border:none; box-shadow:none; padding:0; }
+            .print-preview-body .order-list-section { margin-bottom:0; box-shadow:none; }
+            .print-preview-body .order-report-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
             @media print {
                 @page { size: A4 portrait; margin: 12mm; }
                 body.print-report-mode .header-banner-wrapper,
@@ -545,6 +556,17 @@ app.get('/', (req, res) => {
                 body.print-list-mode #result { display:none !important; }
                 body.print-list-mode #orderList { display:block !important; }
                 body.print-list-mode .order-list-summary-actions button { display:none !important; }
+
+                body.print-preview-mode .header-banner-wrapper,
+                body.print-preview-mode .search-box,
+                body.print-preview-mode #orderList,
+                body.print-preview-mode #result { display:none !important; }
+                body.print-preview-mode .print-preview-overlay { display:flex !important; }
+                body.print-preview-mode .print-preview-dialog { box-shadow:none; width:100%; max-height:none; }
+                body.print-preview-mode .print-preview-header { display:none !important; }
+                body.print-preview-mode .print-preview-body { padding:0; overflow:visible; }
+                body.print-preview-mode .print-preview-body .order-list-summary-actions,
+                body.print-preview-mode .print-preview-body .order-report-actions { display:none !important; }
             }
             .margin-positive { color: green; }
             .margin-negative { color: red; }
@@ -696,7 +718,7 @@ app.get('/', (req, res) => {
                     <option value="program">Program</option>
                 </select>
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
-                <button class="mode-btn" onclick="printCurrentOrderListView()" title="Udskriv den filtrerede ordreliste som PDF eller papir">Liste / PDF</button>
+                <button class="mode-btn" onclick="openOrderListPrintPreview()" title="Vis forhåndsvisning af den filtrerede ordreliste">Liste / PDF</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
                 <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
                 <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
@@ -735,6 +757,19 @@ app.get('/', (req, res) => {
                     <img id="imageLightboxImg" src="" alt="" />
                 </div>
                 <div id="imageLightboxPath" class="image-lightbox-path"></div>
+            </div>
+        </div>
+
+        <div id="printPreviewOverlay" class="print-preview-overlay" onclick="closePrintPreview(event)">
+            <div class="print-preview-dialog" onclick="event.stopPropagation()">
+                <div class="print-preview-header">
+                    <div id="printPreviewTitle" class="print-preview-title">Forhåndsvisning</div>
+                    <div class="print-preview-actions">
+                        <button class="list-toggle-btn" onclick="closePrintPreview()">Luk</button>
+                        <button class="list-toggle-btn" onclick="confirmPrintFromPreview()">Udskriv / PDF</button>
+                    </div>
+                </div>
+                <div id="printPreviewBody" class="print-preview-body"></div>
             </div>
         </div>
         
@@ -1841,7 +1876,7 @@ app.get('/', (req, res) => {
                 html += '<span>Margin: <strong>' + formatNumber(listSummary.marginAmount) + ' DKK (' + listSummary.marginPct + '%)</strong></span>';
                 html += '</div>';
                 html += '<div class="order-list-summary-actions">';
-                html += '<button class="list-toggle-btn" onclick="printCurrentOrderListView()" title="Udskriv den filtrerede ordreliste som PDF eller papir">Udskriv liste / PDF</button>';
+                html += '<button class="list-toggle-btn" onclick="openOrderListPrintPreview()" title="Vis forhåndsvisning af den filtrerede ordreliste">Forhåndsvisning / PDF</button>';
                 html += '</div>';
                 return html;
             }
@@ -1950,7 +1985,7 @@ app.get('/', (req, res) => {
                 html += '<div class="order-report-meta"><strong>Rapport for ordre ' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</strong> - ' + escapeHtml(String(orderHeader.CustomerName || '-')) + '</div>';
                 html += '<div class="order-report-actions">';
                 html += '<button class="list-toggle-btn" onclick="toggleOrderDetailReport()" title="Skjul eller vis rapporten">Skjul rapport</button>';
-                html += '<button class="list-toggle-btn" onclick="printOrderDetailReport()" title="Udskriv rapporten som PDF eller papir">Udskriv / PDF</button>';
+                html += '<button class="list-toggle-btn" onclick="openOrderDetailPrintPreview()" title="Vis forhåndsvisning af rapporten">Forhåndsvisning / PDF</button>';
                 html += '</div>';
                 html += '</div>';
                 html += '<div style="font-size:12px; color:#57718f; margin-top:-2px; margin-bottom:10px;">Genereret: ' + escapeHtml(generatedAt) + ' • Filtre: ' + reportFilterText + '</div>';
@@ -2021,35 +2056,68 @@ app.get('/', (req, res) => {
                 report.style.display = isClosed ? '' : 'none';
             }
 
+            let currentPrintPreviewMode = null;
             let reportPrintRestoreState = null;
 
-            function printCurrentOrderListView() {
+            function renderPrintPreview(title, html, mode) {
+                const overlay = document.getElementById('printPreviewOverlay');
+                const titleEl = document.getElementById('printPreviewTitle');
+                const bodyEl = document.getElementById('printPreviewBody');
+                if (!overlay || !titleEl || !bodyEl) return;
+                currentPrintPreviewMode = mode;
+                titleEl.textContent = title;
+                bodyEl.innerHTML = html;
+                overlay.style.display = 'flex';
+                document.body.classList.add('print-preview-mode');
+            }
+
+            function closePrintPreview(event) {
+                if (event && event.target && event.target.id !== 'printPreviewOverlay') return;
+                const overlay = document.getElementById('printPreviewOverlay');
+                if (overlay) overlay.style.display = 'none';
+                const bodyEl = document.getElementById('printPreviewBody');
+                if (bodyEl) bodyEl.innerHTML = '';
+                document.body.classList.remove('print-preview-mode');
+                currentPrintPreviewMode = null;
+            }
+
+            function confirmPrintFromPreview() {
+                document.body.classList.remove('print-list-mode');
+                document.body.classList.remove('print-report-mode');
+                setTimeout(() => window.print(), 50);
+            }
+
+            function openOrderListPrintPreview() {
                 if (!orderListVisible) {
                     toggleOrderList();
                 }
-                document.body.classList.remove('print-report-mode');
-                document.body.classList.add('print-list-mode');
-                setTimeout(() => window.print(), 100);
+                const listEl = document.getElementById('orderList');
+                if (!listEl) return;
+                renderPrintPreview('Forhåndsvisning - ordreliste', listEl.innerHTML, 'list');
             }
 
-            function printOrderDetailReport() {
+            function openOrderDetailPrintPreview() {
                 const report = document.getElementById('orderDetailReport');
                 if (!report) return;
                 reportPrintRestoreState = report.style.display;
                 report.style.display = '';
-                document.body.classList.remove('print-list-mode');
-                document.body.classList.add('print-report-mode');
-                setTimeout(() => window.print(), 50);
+                renderPrintPreview('Forhåndsvisning - rapport', report.innerHTML, 'report');
             }
 
             window.addEventListener('afterprint', function() {
                 document.body.classList.remove('print-report-mode');
                 document.body.classList.remove('print-list-mode');
+                document.body.classList.remove('print-preview-mode');
                 const report = document.getElementById('orderDetailReport');
                 if (report && reportPrintRestoreState !== null) {
                     report.style.display = reportPrintRestoreState;
                     reportPrintRestoreState = null;
                 }
+                const overlay = document.getElementById('printPreviewOverlay');
+                if (overlay) overlay.style.display = 'none';
+                const bodyEl = document.getElementById('printPreviewBody');
+                if (bodyEl) bodyEl.innerHTML = '';
+                currentPrintPreviewMode = null;
             });
 
             function updateOrderListSummaryPanel() {
@@ -2141,7 +2209,7 @@ app.get('/', (req, res) => {
                     html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text || _existingNote.isCreditNote) ? 'Rediger note' : 'Tilføj note') + '</button>';
                     html += '<div class="order-report-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 12px 0;">';
                     html += '<button class="list-toggle-btn" onclick="toggleOrderDetailReport()" title="Vis eller skjul den detaljerede rapport">Vis rapport</button>';
-                    html += '<button class="list-toggle-btn" onclick="printOrderDetailReport()" title="Udskriv rapporten som PDF eller papir">Udskriv / PDF</button>';
+                    html += '<button class="list-toggle-btn" onclick="openOrderDetailPrintPreview()" title="Vis forhåndsvisning af rapporten">Forhåndsvisning / PDF</button>';
                     html += '</div>';
                     loadOrderNote(_noteOrdNo).catch(() => {});
                     html += '<div class="order-header-row">';
