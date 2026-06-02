@@ -526,17 +526,38 @@ app.get('/', (req, res) => {
             .order-report-table tr:last-child td { border-bottom:none; }
             .order-report-table .summary-row td { background:#f7fbff; font-weight:700; }
             .order-report-table tr { page-break-inside: avoid; }
-            .print-preview-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:15000; display:none; align-items:center; justify-content:center; padding:18px; }
-            .print-preview-dialog { width:min(1320px, 96vw); max-height:92vh; background:#fff; border-radius:10px; box-shadow:0 18px 46px rgba(0,0,0,0.34); display:flex; flex-direction:column; overflow:hidden; }
+            .print-preview-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:15000; display:none; align-items:center; justify-content:center; padding:18px; }
+            .print-preview-dialog { width:min(1320px, 96vw); max-height:92vh; background:#fff; border-radius:10px; box-shadow:0 18px 46px rgba(0,0,0,0.34); display:flex; flex-direction:column; overflow:hidden; outline:none; }
             .print-preview-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#f8fbff; }
             .print-preview-title { font-size:16px; font-weight:800; color:#0f3560; }
             .print-preview-actions { display:flex; gap:8px; flex-wrap:wrap; }
-            .print-preview-body { padding:16px; overflow:auto; background:#fff; }
+            .print-preview-body { padding:16px; overflow:auto; background:#fff; max-height:calc(92vh - 62px); }
             .print-preview-body .order-list-summary-actions,
             .print-preview-body .order-report-actions { display:none !important; }
             .print-preview-body .order-detail-report { display:block !important; margin-top:0; border:none; box-shadow:none; padding:0; }
             .print-preview-body .order-list-section { margin-bottom:0; box-shadow:none; }
             .print-preview-body .order-report-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+            body.print-preview-lock { overflow:hidden; }
+            .order-detail-modal-overlay { position:fixed; inset:0; z-index:15100; display:none; align-items:stretch; justify-content:center; background:rgba(7,18,35,0.68); backdrop-filter:blur(6px); padding:16px; }
+            .order-detail-modal-shell { width:min(1540px, 100%); height:100%; background:linear-gradient(180deg, #0f213a 0%, #132d4f 100%); border-radius:18px; box-shadow:0 24px 72px rgba(0,0,0,0.42); display:flex; flex-direction:column; overflow:hidden; }
+            .order-detail-modal-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid rgba(255,255,255,0.12); color:#fff; }
+            .order-detail-modal-title { display:flex; flex-direction:column; gap:4px; }
+            .order-detail-modal-title strong { font-size:18px; letter-spacing:0.2px; }
+            .order-detail-modal-title span { font-size:12px; color:rgba(255,255,255,0.76); }
+            .order-detail-modal-actions { display:flex; gap:10px; flex-wrap:wrap; }
+            .order-detail-modal-actions .list-toggle-btn { background:rgba(255,255,255,0.14) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.16) !important; }
+            .order-detail-modal-actions .list-toggle-btn:hover { background:rgba(255,255,255,0.22) !important; }
+            .order-detail-modal-body { flex:1; overflow:auto; background:linear-gradient(180deg, #f5f8fd 0%, #edf2f8 100%); padding:18px; }
+            .order-detail-modal-body .order-detail-report { display:block !important; margin:0 auto; max-width:1480px; }
+            .order-detail-modal-body .order-report-actions { display:none !important; }
+            .order-detail-modal-body .order-report-toolbar { position:sticky; top:0; z-index:2; backdrop-filter:blur(8px); background:rgba(255,255,255,0.88); border:1px solid rgba(214,233,255,0.9); border-radius:14px; padding:14px 16px; margin-bottom:14px; box-shadow:0 8px 22px rgba(15,53,96,0.08); }
+            .order-detail-modal-body .section { background:#fff; border:1px solid #dde9f6; border-radius:16px; box-shadow:0 12px 30px rgba(15,53,96,0.08); padding:16px 18px; }
+            .order-detail-modal-body .summary-box { background:linear-gradient(180deg, #f7fbff 0%, #eff6ff 100%); border:1px solid #d8e8fb; border-radius:14px; padding:14px 16px; }
+            .order-detail-modal-body .order-report-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+            .order-detail-modal-body .order-report-card { background:linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border:1px solid #d7e6f8; border-radius:14px; box-shadow:0 8px 24px rgba(15,53,96,0.06); }
+            .order-detail-modal-body .order-report-card .value { font-size:20px; }
+            .order-detail-modal-body .order-report-table th { background:#eaf2ff; }
+            body.report-modal-open { overflow:hidden; }
             @media print {
                 @page { size: A4 portrait; margin: 12mm; }
                 body.print-report-mode .header-banner-wrapper,
@@ -760,8 +781,8 @@ app.get('/', (req, res) => {
             </div>
         </div>
 
-        <div id="printPreviewOverlay" class="print-preview-overlay" onclick="closePrintPreview(event)">
-            <div class="print-preview-dialog" onclick="event.stopPropagation()">
+        <div id="printPreviewOverlay" class="print-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="printPreviewTitle" onclick="closePrintPreview(event)">
+            <div class="print-preview-dialog" tabindex="-1" onclick="event.stopPropagation()">
                 <div class="print-preview-header">
                     <div id="printPreviewTitle" class="print-preview-title">Forhåndsvisning</div>
                     <div class="print-preview-actions">
@@ -770,6 +791,22 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 <div id="printPreviewBody" class="print-preview-body"></div>
+            </div>
+        </div>
+
+        <div id="orderDetailModal" class="order-detail-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="orderDetailModalTitle" onclick="closeOrderDetailModal(event)">
+            <div class="order-detail-modal-shell" onclick="event.stopPropagation()">
+                <div class="order-detail-modal-header">
+                    <div class="order-detail-modal-title">
+                        <strong id="orderDetailModalTitle">Ordre-rapport</strong>
+                        <span id="orderDetailModalSubtitle">Manager-oversigt med produktion, cost og sporbarhed</span>
+                    </div>
+                    <div class="order-detail-modal-actions">
+                        <button class="list-toggle-btn" onclick="printOrderDetailReport()">Udskriv / PDF</button>
+                        <button class="list-toggle-btn" onclick="closeOrderDetailModal()">Luk</button>
+                    </div>
+                </div>
+                <div id="orderDetailModalBody" class="order-detail-modal-body"></div>
             </div>
         </div>
         
@@ -832,6 +869,17 @@ app.get('/', (req, res) => {
                     .replace(/>/g, '&gt;')
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;');
+            }
+
+            function getResourceDisplayLabel(prodNo, descr) {
+                const code = String(prodNo || '').trim();
+                const name = String(descr || '').trim();
+                if (!code) return name || '-';
+                if (!name) return code;
+                if (code.toUpperCase().startsWith('R')) {
+                    return code + ' - ' + name;
+                }
+                return code;
             }
 
             function collectWarningMessages(item, fallbackText) {
@@ -1906,6 +1954,7 @@ app.get('/', (req, res) => {
                     let usedMinutes = 0;
                     let operationCost = 0;
                     let laserCost = 0;
+                    let materialCost = 0;
                     let productLabel = '-';
 
                     for (const line of lines) {
@@ -1921,8 +1970,11 @@ app.get('/', (req, res) => {
                             plannedMinutes += Number((line && line.NoOrg) || 0);
                             usedMinutes += Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
                             operationCost += totalCost;
-                        } else if (key === '2' && isLaserLProdNo(line && line.ProdNo)) {
+                        } else if (key === '2') {
                             laserCost += totalCost;
+                            if (!isLaserLProdNo(line && line.ProdNo)) {
+                                materialCost += totalCost;
+                            }
                         }
 
                         if (line && line.HasWarning && line.WarningText) {
@@ -1948,6 +2000,7 @@ app.get('/', (req, res) => {
                         deltaMinutes: usedMinutes - plannedMinutes,
                         operationCost,
                         laserCost,
+                        materialCost,
                         totalCost: Number(prodOrder && prodOrder.totalCost) || 0
                     });
                 }
@@ -1980,7 +2033,7 @@ app.get('/', (req, res) => {
                 if (orderListBrugerFilter) reportFilters.push('bruger: "' + escapeHtml(orderListBrugerFilter) + '"');
                 const reportFilterText = reportFilters.length > 0 ? reportFilters.join(', ') : 'ingen aktive filtre';
 
-                let html = '<div id="orderDetailReport" class="order-detail-report" style="display:none;">';
+                let html = '<div id="orderDetailReport" class="order-detail-report">';
                 html += '<div class="order-report-toolbar">';
                 html += '<div class="order-report-meta"><strong>Rapport for ordre ' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</strong> - ' + escapeHtml(String(orderHeader.CustomerName || '-')) + '</div>';
                 html += '<div class="order-report-actions">';
@@ -1998,11 +2051,11 @@ app.get('/', (req, res) => {
                 html += '<div class="order-report-card"><div class="label">Planlagte minutter</div><div class="value">' + formatNumber(totalPlannedMinutes) + '</div></div>';
                 html += '<div class="order-report-card"><div class="label">Brugte minutter</div><div class="value">' + formatNumber(totalUsedMinutes) + '</div></div>';
                 html += '<div class="order-report-card"><div class="label">Operation kost</div><div class="value">' + formatNumber(totalOperationCost) + ' DKK</div></div>';
-                html += '<div class="order-report-card"><div class="label">Laser kost</div><div class="value">' + formatNumber(totalLaserCost) + ' DKK</div></div>';
+                html += '<div class="order-report-card"><div class="label">Laser / materiale kost</div><div class="value">' + formatNumber(totalLaserCost) + ' DKK</div></div>';
                 html += '</div>';
 
                 html += '<table class="order-report-table">';
-                html += '<tr><th>Produktionsordre</th><th>Produkt</th><th>Planlagt min.</th><th>Brugt min.</th><th>Afvigelse</th><th>Operation kost</th><th>Laser kost</th><th>Samlet kost</th></tr>';
+                html += '<tr><th>Produktionsordre</th><th>Produkt</th><th>Planlagt min.</th><th>Brugt min.</th><th>Afvigelse</th><th>Operation kost</th><th>Laser / materiale kost</th><th>Samlet kost</th></tr>';
                 for (const row of rows) {
                     html += '<tr>';
                     html += '<td>' + row.ordNo + '</td>';
@@ -2059,6 +2112,82 @@ app.get('/', (req, res) => {
             let currentPrintPreviewMode = null;
             let reportPrintRestoreState = null;
 
+            function openOrderDetailModal(html, titleText, subtitleText) {
+                const overlay = document.getElementById('orderDetailModal');
+                const titleEl = document.getElementById('orderDetailModalTitle');
+                const subtitleEl = document.getElementById('orderDetailModalSubtitle');
+                const bodyEl = document.getElementById('orderDetailModalBody');
+                if (!overlay || !titleEl || !subtitleEl || !bodyEl) return;
+                titleEl.textContent = titleText || 'Ordre-rapport';
+                subtitleEl.textContent = subtitleText || 'Manager-oversigt med produktion, cost og sporbarhed';
+                bodyEl.innerHTML = html || '';
+                overlay.style.display = 'flex';
+                document.body.classList.add('report-modal-open');
+            }
+
+            function closeOrderDetailModal(event) {
+                if (event && event.target && event.target.id !== 'orderDetailModal') return;
+                const overlay = document.getElementById('orderDetailModal');
+                const bodyEl = document.getElementById('orderDetailModalBody');
+                if (overlay) overlay.style.display = 'none';
+                if (bodyEl) bodyEl.innerHTML = '';
+                document.body.classList.remove('report-modal-open');
+            }
+
+            function buildStandaloneReportPrintCss() {
+                return [
+                    '@page { size: A4 portrait; margin: 12mm; }',
+                    'body { margin: 0; background: #fff; color: #10253f; font-family: Arial, sans-serif; }',
+                    '.order-detail-report { display:block !important; }',
+                    '.order-report-toolbar,',
+                    '.order-report-actions,',
+                    '.list-toggle-btn,',
+                    'button { display:none !important; }',
+                    '.section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }',
+                    '.order-report-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }',
+                    '.order-report-card { break-inside: avoid; page-break-inside: avoid; }',
+                    '.order-report-table { width:100%; border-collapse:collapse; }',
+                    '.order-report-table th, .order-report-table td { border-bottom:1px solid #dfe8f3; padding:8px 10px; }',
+                    '.order-report-table th { background:#eef5ff; }',
+                    '.summary-box { break-inside: avoid; page-break-inside: avoid; }'
+                ].join('\n');
+            }
+
+            function printOrderDetailReport() {
+                const bodyEl = document.getElementById('orderDetailModalBody');
+                if (!bodyEl) return;
+                const titleEl = document.getElementById('orderDetailModalTitle');
+                const iframe = document.createElement('iframe');
+                iframe.setAttribute('aria-hidden', 'true');
+                iframe.style.position = 'fixed';
+                iframe.style.right = '0';
+                iframe.style.bottom = '0';
+                iframe.style.width = '0';
+                iframe.style.height = '0';
+                iframe.style.border = '0';
+                iframe.style.opacity = '0';
+                document.body.appendChild(iframe);
+
+                const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                    .map(el => el.outerHTML)
+                    .join('\n');
+                const reportTitle = escapeHtml(titleEl ? titleEl.textContent : 'Ordre-rapport');
+                const reportHtml = bodyEl.innerHTML;
+                const doc = iframe.contentWindow.document;
+                doc.open();
+                doc.write('<!doctype html><html><head><meta charset="utf-8"><title>' + reportTitle + '</title>' + styles + '<style>' + buildStandaloneReportPrintCss() + '</style></head><body>' + reportHtml + '</body></html>');
+                doc.close();
+
+                setTimeout(() => {
+                    try {
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                    } finally {
+                        setTimeout(() => iframe.remove(), 1500);
+                    }
+                }, 250);
+            }
+
             function renderPrintPreview(title, html, mode) {
                 const overlay = document.getElementById('printPreviewOverlay');
                 const titleEl = document.getElementById('printPreviewTitle');
@@ -2068,7 +2197,10 @@ app.get('/', (req, res) => {
                 titleEl.textContent = title;
                 bodyEl.innerHTML = html;
                 overlay.style.display = 'flex';
+                document.body.classList.add('print-preview-lock');
                 document.body.classList.add('print-preview-mode');
+                const dialog = overlay.querySelector('.print-preview-dialog');
+                if (dialog && dialog.focus) dialog.focus();
             }
 
             function closePrintPreview(event) {
@@ -2077,6 +2209,7 @@ app.get('/', (req, res) => {
                 if (overlay) overlay.style.display = 'none';
                 const bodyEl = document.getElementById('printPreviewBody');
                 if (bodyEl) bodyEl.innerHTML = '';
+                document.body.classList.remove('print-preview-lock');
                 document.body.classList.remove('print-preview-mode');
                 currentPrintPreviewMode = null;
             }
@@ -2086,6 +2219,12 @@ app.get('/', (req, res) => {
                 document.body.classList.remove('print-report-mode');
                 setTimeout(() => window.print(), 50);
             }
+
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && document.body.classList.contains('print-preview-mode')) {
+                    closePrintPreview();
+                }
+            });
 
             function openOrderListPrintPreview() {
                 if (!orderListVisible) {
@@ -2099,9 +2238,7 @@ app.get('/', (req, res) => {
             function openOrderDetailPrintPreview() {
                 const report = document.getElementById('orderDetailReport');
                 if (!report) return;
-                reportPrintRestoreState = report.style.display;
-                report.style.display = '';
-                renderPrintPreview('Forhåndsvisning - rapport', report.innerHTML, 'report');
+                renderPrintPreview('Forhåndsvisning - rapport', report.outerHTML, 'report');
             }
 
             window.addEventListener('afterprint', function() {
@@ -2170,6 +2307,7 @@ app.get('/', (req, res) => {
                         const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
                         let operationTotal = 0;
                         let laserTotal = 0;
+                        let materialTotal = 0;
 
                         for (const line of lines) {
                             const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
@@ -2178,8 +2316,11 @@ app.get('/', (req, res) => {
                             const effectiveCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
                             if (key === '1') {
                                 operationTotal += effectiveCost;
-                            } else if (key === '2' && isLaserLProdNo(line && line.ProdNo)) {
+                            } else if (key === '2') {
                                 laserTotal += effectiveCost;
+                                if (!isLaserLProdNo(line && line.ProdNo)) {
+                                    materialTotal += effectiveCost;
+                                }
                             }
                         }
 
@@ -2325,7 +2466,10 @@ app.get('/', (req, res) => {
                                 html += '<td colspan="' + salesOrderColspan + '" style="padding:10px 16px; border-top:none;">';
                                 html += '<div style="display:grid; gap:6px; color:#1f2937;">';
                                 html += '<div><strong>Operation:</strong> ' + formatNumber(breakdownInfo.operationTotal || 0) + ' DKK</div>';
-                                html += '<div><strong>L:</strong> ' + formatNumber(breakdownInfo.laserTotal || 0) + ' DKK</div>';
+                                html += '<div><strong>Laser / materiale:</strong> ' + formatNumber(breakdownInfo.laserAndMaterialTotal || 0) + ' DKK</div>';
+                                if ((breakdownInfo.materialTotal || 0) > 0) {
+                                    html += '<div><strong>Materiale (ikke L):</strong> ' + formatNumber(breakdownInfo.materialTotal || 0) + ' DKK</div>';
+                                }
                                 html += '</div>';
                                 html += '</td>';
                                 html += '</tr>';
@@ -2528,16 +2672,18 @@ app.get('/', (req, res) => {
                                     const hasChildProductionOrder = Number(line.PurcNo || 0) > 0;
                                     if (String(key) === '1' && line.ProdNo) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+                                        const safeProdLabel = escapeHtml(getResourceDisplayLabel(line.ProdNo, line.Descr));
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdLabel + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (String(key) === '2' && line.ProdNo && isLaserLProdNo(line.ProdNo)) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+                                        const safeProdLabel = escapeHtml(getResourceDisplayLabel(line.ProdNo, line.Descr));
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1" data-nofin="' + Number(line.NoFin || 0) + '" data-nestingcost="' + Number(line.NestingCost || 0) + '">' + safeProdNo + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1" data-nofin="' + Number(line.NoFin || 0) + '" data-nestingcost="' + Number(line.NestingCost || 0) + '">' + safeProdLabel + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (hasChildProductionOrder) {
                                         const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const childSummaryArgs = shouldFilterChildSummary(key, line.ProdNo, line.PurcNo)
@@ -2618,16 +2764,12 @@ app.get('/', (req, res) => {
                         html += '</div>';
                     }
                     
-                    // Riepilogo
-                    html += '<div class="section"><h3>Ordresammendrag</h3>';
-                    html += '<div class="summary-box">';
-                    html += '<div><strong>Samlet faktureret beløb:</strong> ' + formatNumber(data.summary.totalRevenue) + ' DKK</div>';
-                    html += '<div><strong>Samlet kost:</strong> ' + formatNumber(data.summary.totalCost) + ' DKK</div>';
-                    let marginClass = data.summary.margin >= 0 ? 'margin-positive' : 'margin-negative';
-                    html += '<div class="total"><span class="' + marginClass + '">Margin: ' + formatNumber(data.summary.margin) + ' DKK (' + orderMarginPercent + '%)</span></div>';
-                    html += '</div></div>';
-                    
-                    result.innerHTML = html;
+                    openOrderDetailModal(
+                        html,
+                        'Ordre ' + data.orderHeader.OrdNo + ' - ' + (data.orderHeader.CustomerName || '-'),
+                        'Produktion, cost og sporbarhed i en separat rapportvisning'
+                    );
+                    result.innerHTML = '';
                     loadSalesOrderLaserSummary(data);
                     loadSalesOrderOperationSummary(data);
                 } catch (err) {
@@ -2695,6 +2837,7 @@ app.get('/', (req, res) => {
                         return;
                     }
 
+                            materialTotal,
                     let html = '<table>';
                     html += '<tr><th>Operation</th><th>Beskrivelse</th><th>Antal linjer</th><th>Stykliste antal</th><th>Færdigmeldt</th><th>Kostpris/enhed</th><th>Samlet kost</th></tr>';
                     for (const row of rows) {
