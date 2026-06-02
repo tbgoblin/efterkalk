@@ -81,18 +81,26 @@ function createOmsaetningService({ getConnection, sql }) {
                 a.Nm,
                 CASE WHEN t.Cust > 0 THEN t.Cust ELSE NULL END AS CustNo,
                 CASE WHEN t.Cust > 0 THEN c.Nm ELSE NULL END AS CustNm,
-                p.Yr,
-                p.Pr,
-                CONVERT(date, CONVERT(varchar(8), p.FrDt)) AS FrDtConverted,
+                (t.AcYrPr / 100) AS Yr,
+                (t.AcYrPr % 100) AS Pr,
+                DATEFROMPARTS(
+                    CASE
+                        WHEN (t.AcYrPr % 100) BETWEEN 1 AND 6 THEN (t.AcYrPr / 100)
+                        ELSE (t.AcYrPr / 100) + 1
+                    END,
+                    CASE
+                        WHEN (t.AcYrPr % 100) BETWEEN 1 AND 6 THEN (t.AcYrPr % 100) + 6
+                        ELSE (t.AcYrPr % 100) - 6
+                    END,
+                    1
+                ) AS FrDtConverted,
                 CAST(SUM(CAST(t.AcAm AS decimal(38, 6))) / 1000000.0 * -1.0 AS decimal(38, 6)) AS RevenueMio
             FROM AcTr t
-            INNER JOIN AcPr p
-                ON t.AcYr = p.Yr
-               AND t.AcPr = p.Pr
             INNER JOIN Ac a
                 ON t.AcNo = a.AcNo
             LEFT JOIN Actor c
-                ON t.Cust = c.CustNo
+                ON t.Cust > 0
+               AND t.Cust = c.CustNo
             WHERE
                 (t.SrcTp = 9 OR t.SrcTp = 1)
                 AND t.AcYrPr >= @fra
@@ -114,7 +122,7 @@ function createOmsaetningService({ getConnection, sql }) {
                         WHERE TRY_CAST(LTRIM(RTRIM(s.value)) AS int) = t.Cust
                     )
                 )
-            GROUP BY t.AcNo, a.Nm, CASE WHEN t.Cust > 0 THEN t.Cust ELSE NULL END, CASE WHEN t.Cust > 0 THEN c.Nm ELSE NULL END, p.Yr, p.Pr, p.FrDt
+            GROUP BY t.AcNo, a.Nm, CASE WHEN t.Cust > 0 THEN t.Cust ELSE NULL END, CASE WHEN t.Cust > 0 THEN c.Nm ELSE NULL END, t.AcYrPr
             ORDER BY FrDtConverted ASC, t.AcNo ASC
         `);
 

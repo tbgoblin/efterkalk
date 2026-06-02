@@ -1,6 +1,8 @@
 const express = require('express');
 const orderNotesService = require('../services/orderNotesService');
+const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
 const { createOmsaetningService } = require('../services/omsaetningService');
+const { createOrdreindgangService } = require('../services/ordreindgangService');
 
 function createApiRouter({
     getConnection,
@@ -35,6 +37,7 @@ function createApiRouter({
 }) {
     const router = express.Router();
     const omsaetningService = createOmsaetningService({ getConnection, sql });
+    const ordreindgangService = createOrdreindgangService({ getConnection, sql });
 
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
@@ -541,6 +544,79 @@ function createApiRouter({
             logEvent('ERROR omsaetning/summary: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message });
         }
+    });
+
+    router.get('/ordreindgang/summary', async (req, res) => {
+        try {
+            const fraWeek = String(req.query.fraWeek || '').trim();
+            const tilWeek = String(req.query.tilWeek || '').trim();
+            const summary = await ordreindgangService.getSummary({ fraWeek, tilWeek });
+
+            return res.json({
+                ok: true,
+                ...summary
+            });
+        } catch (err) {
+            if (err && err.statusCode) {
+                return res.status(err.statusCode).json({ ok: false, error: err.message || 'Ugyldig forespørgsel' });
+            }
+            logEvent('ERROR ordreindgang/summary: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/omsaetning/customer-threshold/:custno', (req, res) => {
+        const custNo = String(req.params.custno || '').trim();
+        if (!/^\d{1,20}$/.test(custNo)) {
+            return res.status(400).json({ ok: false, error: 'Ugyldigt kundenummer' });
+        }
+
+        const threshold = omsaetningThresholdsService.getThreshold(custNo);
+        const meta = omsaetningThresholdsService.getStorageMeta();
+        if (!threshold) {
+            return res.json({
+                ok: true,
+                custNo,
+                warnThreshold: meta.defaultWarnThreshold,
+                goodThreshold: meta.defaultGoodThreshold,
+                updatedAt: null,
+                exists: false,
+                storageFile: meta.filePath
+            });
+        }
+
+        return res.json({
+            ok: true,
+            custNo,
+            warnThreshold: threshold.warnThreshold,
+            goodThreshold: threshold.goodThreshold,
+            updatedAt: threshold.updatedAt,
+            exists: true,
+            storageFile: meta.filePath
+        });
+    });
+
+    router.post('/omsaetning/customer-threshold/:custno', express.json(), (req, res) => {
+        const custNo = String(req.params.custno || '').trim();
+        if (!/^\d{1,20}$/.test(custNo)) {
+            return res.status(400).json({ ok: false, error: 'Ugyldigt kundenummer' });
+        }
+
+        const { warnThreshold, goodThreshold } = req.body || {};
+        const saved = omsaetningThresholdsService.setThreshold(custNo, { warnThreshold, goodThreshold });
+        const meta = omsaetningThresholdsService.getStorageMeta();
+        if (!saved) {
+            return res.status(400).json({ ok: false, error: 'Ugyldige tærskelværdier' });
+        }
+
+        return res.json({
+            ok: true,
+            custNo,
+            warnThreshold: saved.warnThreshold,
+            goodThreshold: saved.goodThreshold,
+            updatedAt: saved.updatedAt,
+            storageFile: meta.filePath
+        });
     });
 
     router.get('/cache-status', (req, res) => {

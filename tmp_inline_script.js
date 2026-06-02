@@ -1,1424 +1,4 @@
-const express = require('express');
-const sql = require('mssql/msnodesqlv8');
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
-const getConnection = require('./db');
-const diskCache = require('./diskCache');
-const { createLogger } = require('./utils/logger');
-const {
-    isLaserLProduct,
-    isGloballyExcludedProdNo,
-    isExcludedOperationProdNo,
-    isEstimatedOperationMinutesFallback,
-    getEffectiveOperationMinutes,
-    adjustOperationLinePricing
-} = require('./utils/productRules');
-const {
-    isHttpUrl,
-    isAbsoluteWindowsPath,
-    normalizeWindowsPath,
-    buildImageItems,
-    isSupportedImagePath,
-    getLatestDrawingByProdNo
-} = require('./services/drawingService');
-const { createAftercalcService } = require('./services/aftercalcService');
-const { createApiRouter } = require('./routes/apiRoutes');
 
-const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
-const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
-const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
-const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v21_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v21_';
-const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
-
-const app = express();
-app.use(express.json({ limit: '256kb' }));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-
-// Read version from package.json
-let pkgVersion = '1.0.0';
-try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-    pkgVersion = pkg.version || '1.0.0';
-} catch (e) {
-    console.warn('Could not read package.json version');
-}
-const APP_VERSION = 'Gantech Operations Hub - v' + pkgVersion;
-
-const { logEvent } = createLogger(APP_VERSION);
-const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
-const ORDER_LIST_MAX_ROWS = 150;
-const ORDER_LIST_DAYS_BACK = 30;
-const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
-const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = 60;  // Startup gate: warm top orders quickly, remaining orders prefetch on demand/background
-const BACKGROUND_WARM_DELAY_MS = 10;  // Small stagger between queue submissions to keep DB stable
-const MAX_DB_CALC_CONCURRENCY = 2;  // Controlled parallel DB calculations for faster startup warmup
-const AFTERCALC_QUERY_TIMEOUT_MS = 45 * 1000;
-
-const orderListCache = {
-    data: [],
-    loadedAt: 0,
-    loading: false,
-    refreshPromise: null,
-    lastError: null,
-    lastModifiedTime: 0
-};
-
-const orderMarginCache = new Map();
-const orderMarginInFlight = new Map();
-const afterCalcInFlight = new Map();
-const orderRefreshInFlight = new Map();
-const orderRefreshStatus = new Map();
-const dbCalcQueue = [];
-let activeDbCalcs = 0;
-let backgroundAftercalcWarmRunning = false;
-
-const warmupProgress = {
-    running: false,
-    total: 0,
-    cached: 0,
-    loaded: 0,
-    failed: 0,
-    current: null,
-    startedAt: null,
-    completedAt: null
-};
-
-const {
-    getAfterCalc,
-    fetchOrderListBase,
-    getProductionSummary
-} = createAftercalcService({
-    getConnection,
-    sql,
-    diskCache,
-    logEvent,
-    getLatestDrawingByProdNo,
-    isGloballyExcludedProdNo,
-    isExcludedOperationProdNo,
-    isEstimatedOperationMinutesFallback,
-    getEffectiveOperationMinutes,
-    adjustOperationLinePricing,
-    isLaserLProduct,
-    orderListMaxRows: ORDER_LIST_MAX_ROWS,
-    orderListDaysBack: ORDER_LIST_DAYS_BACK,
-    cacheTtlProductionSummaryMs: CACHE_TTL_PRODUCTION_SUMMARY_MS
-});
-
-// Evita cache lato browser durante lo sviluppo: forza sempre il fetch dell'ultima UI/API.
-app.use((req, res, next) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    next();
-});
-
-
-function isOrderListCacheFresh() {
-    return orderListCache.loadedAt > 0 && (Date.now() - orderListCache.loadedAt) < ORDER_LIST_CACHE_TTL_MS;
-}
-
-function runWithDbCalcLimit(task, priority = 'normal') {
-    return new Promise((resolve, reject) => {
-        const job = { task, resolve, reject };
-        if (priority === 'high') {
-            dbCalcQueue.unshift(job);
-        } else {
-            dbCalcQueue.push(job);
-        }
-        pumpDbCalcQueue();
-    });
-}
-
-function pumpDbCalcQueue() {
-    while (activeDbCalcs < MAX_DB_CALC_CONCURRENCY && dbCalcQueue.length > 0) {
-        const job = dbCalcQueue.shift();
-        activeDbCalcs += 1;
-        Promise.resolve()
-            .then(job.task)
-            .then(job.resolve)
-            .catch(job.reject)
-            .finally(() => {
-                activeDbCalcs -= 1;
-                pumpDbCalcQueue();
-            });
-    }
-}
-
-function withTimeout(promise, timeoutMs, timeoutMessage) {
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-    });
-
-    return Promise.race([promise, timeoutPromise]).finally(() => {
-        clearTimeout(timeoutId);
-    });
-}
-
-function getAftercalcCacheWithFallback(ordNo, promoteToCurrent = false) {
-    const numericOrdNo = Number(ordNo);
-    if (!Number.isFinite(numericOrdNo)) return null;
-
-    const currentKey = AFTERCALC_CACHE_KEY_PREFIX + numericOrdNo;
-    const currentCached = diskCache.get(currentKey);
-    if (currentCached) return currentCached;
-
-    for (const prefix of LEGACY_AFTERCALC_CACHE_KEY_PREFIXES) {
-        const legacyKey = prefix + numericOrdNo;
-        const legacyCached = diskCache.get(legacyKey);
-        if (legacyCached) {
-            if (promoteToCurrent) {
-                diskCache.set(currentKey, legacyCached, CACHE_TTL_AFTERCALC_MS);
-            }
-            return legacyCached;
-        }
-    }
-
-    return null;
-}
-
-async function getOrComputeAftercalc(ordNo, options = {}) {
-    const priority = options.priority || 'normal';
-    const key = Number(ordNo);
-    if (!Number.isFinite(key)) {
-        throw new Error('Ordrenummer ugyldigt');
-    }
-
-    const cacheKey = AFTERCALC_CACHE_KEY_PREFIX + key;
-    const cached = getAftercalcCacheWithFallback(key, true);
-    if (cached) {
-        logEvent('AFTERCALC CACHE HIT: ordNo=' + key);
-        return cached;
-    }
-
-    let computePromise = afterCalcInFlight.get(key);
-    if (computePromise) {
-        logEvent('AFTERCALC IN-FLIGHT REUSE: ordNo=' + key);
-    }
-    if (!computePromise) {
-        logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
-        computePromise = runWithDbCalcLimit(async () => {
-            const data = await withTimeout(
-                getAfterCalc(key),
-                AFTERCALC_QUERY_TIMEOUT_MS,
-                'Aftercalc timeout for ordNo=' + key
-            );
-            if (!data.error) {
-                diskCache.set(cacheKey, data, CACHE_TTL_AFTERCALC_MS);
-            }
-            return data;
-        }, priority).finally(() => {
-            afterCalcInFlight.delete(key);
-        });
-        afterCalcInFlight.set(key, computePromise);
-    }
-
-    return computePromise;
-}
-
-
-async function getOrComputeOrderMargin(ordNo, options = {}) {
-    const forceRefresh = Boolean(options.forceRefresh);
-    const key = Number(ordNo);
-    if (!Number.isFinite(key)) {
-        throw new Error('Ordrenummer ugyldigt');
-    }
-
-    if (!forceRefresh && orderMarginCache.has(key)) {
-        return orderMarginCache.get(key);
-    }
-
-    if (!forceRefresh) {
-        const diskMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
-            || diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
-            || diskCache.getStale('order_margin_v6_' + key);
-        if (diskMargin && diskMargin.totalCost !== null && diskMargin.totalCost !== undefined) {
-            const marginInfo = {
-                ordNo: key,
-                totalRevenue: Number(diskMargin.totalRevenue || 0),
-                totalCost: Number(diskMargin.totalCost || 0),
-                hasInvoiceWarning: diskMargin.hasInvoiceWarning === true,
-                computedAt: Date.now()
-            };
-            orderMarginCache.set(key, marginInfo);
-            return marginInfo;
-        }
-    }
-
-    if (!forceRefresh && orderMarginInFlight.has(key)) {
-        return orderMarginInFlight.get(key);
-    }
-
-    const computePromise = runWithDbCalcLimit(async () => {
-        const data = await withTimeout(
-            getAfterCalc(key),
-            AFTERCALC_QUERY_TIMEOUT_MS,
-            'Aftercalc timeout for ordNo=' + key
-        );
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        const marginInfo = {
-            ordNo: key,
-            totalRevenue: Number(data.summary.totalRevenue || 0),
-            totalCost: Number(data.summary.totalCost || 0),
-            hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning),
-            computedAt: Date.now()
-        };
-
-        orderMarginCache.set(key, marginInfo);
-        // Also save to persistent disk cache (24 hours) for faster startup next time
-        diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + key, marginInfo, 24 * 60 * 60 * 1000);
-        return marginInfo;
-    }).finally(() => {
-        orderMarginInFlight.delete(key);
-    });
-
-    orderMarginInFlight.set(key, computePromise);
-    return computePromise;
-}
-
-function warmMarginsInBackground(ordNos) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) return;
-    logEvent('WARM-MARGIN: queueing ' + ordNos.length + ' orders');
-    for (const ordNo of ordNos) {
-        const numericOrdNo = Number(ordNo);
-        if (!Number.isFinite(numericOrdNo)) continue;
-        getOrComputeOrderMargin(numericOrdNo).catch(() => {});
-    }
-}
-
-async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKGROUND_WARM_DELAY_MS) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) {
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (empty array)');
-        return;
-    }
-    if (backgroundAftercalcWarmRunning) {
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (previous run is still active)');
-        return;
-    }
-
-    backgroundAftercalcWarmRunning = true;
-    const startMs = Date.now();
-    let total = 0;
-    let alreadyCached = 0;
-    let warmed = 0;
-    let failed = 0;
-
-    // Reset global progress tracker
-    warmupProgress.running = true;
-    warmupProgress.total = ordNos.filter(o => Number.isFinite(Number(o))).length;
-    warmupProgress.cached = 0;
-    warmupProgress.loaded = 0;
-    warmupProgress.failed = 0;
-    warmupProgress.current = null;
-    warmupProgress.startedAt = Date.now();
-    warmupProgress.completedAt = null;
-
-    const queuedComputations = [];
-
-    try {
-        for (const ordNo of ordNos) {
-            const numericOrdNo = Number(ordNo);
-            if (!Number.isFinite(numericOrdNo)) continue;
-            total += 1;
-
-            if (getAftercalcCacheWithFallback(numericOrdNo, false)) {
-                alreadyCached += 1;
-                warmupProgress.cached += 1;
-                warmupProgress.current = numericOrdNo;
-                continue;
-            }
-
-            warmupProgress.current = numericOrdNo;
-            const computePromise = getOrComputeAftercalc(numericOrdNo, { priority: 'normal' })
-                .then(() => {
-                    warmed += 1;
-                    warmupProgress.loaded += 1;
-                })
-                .catch((err) => {
-                    failed += 1;
-                    warmupProgress.failed += 1;
-                    logEvent('WARM-AFTERCALC ERROR ordNo=' + numericOrdNo + ': ' + err.message);
-                });
-            queuedComputations.push(computePromise);
-
-            if (maxDelayMs > 0) {
-                await new Promise(resolve => setTimeout(resolve, maxDelayMs));
-            }
-        }
-
-        if (queuedComputations.length > 0) {
-            await Promise.allSettled(queuedComputations);
-        }
-    } finally {
-        backgroundAftercalcWarmRunning = false;
-        warmupProgress.running = false;
-        warmupProgress.current = null;
-        warmupProgress.completedAt = Date.now();
-        const sec = ((Date.now() - startMs) / 1000).toFixed(1);
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): total=' + total + ', cached=' + alreadyCached + ', warmed=' + warmed + ', failed=' + failed + ', time=' + sec + 's');
-    }
-}
-
-function tryLoadOrderListFromCache() {
-    try {
-        const cached = diskCache.get('order_list');
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-            logEvent('ORDER-LIST: loaded ' + cached.length + ' rows from diskCache');
-            return cached;
-        }
-    } catch (e) {
-        logEvent('ORDER-LIST-CACHE READ ERROR: ' + e.message);
-    }
-    return null;
-}
-
-function preloadMarginsAndDetailsFromCache(ordNos) {
-    let marginsLoaded = 0;
-    let detailsLoaded = 0;
-    
-    for (const ordNo of ordNos) {
-        try {
-            const key = Number(ordNo);
-            if (!Number.isFinite(key)) continue;
-            
-            // Preload margins
-            const marginCached = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key);
-            if (marginCached) {
-                orderMarginCache.set(key, marginCached);
-                marginsLoaded += 1;
-            }
-            
-            // Preload aftercalc details
-            const detailsCached = getAftercalcCacheWithFallback(key, false);
-            if (detailsCached) {
-                detailsLoaded += 1;
-            }
-        } catch (e) {
-            // Silently skip errors during preload
-        }
-    }
-    
-    if (marginsLoaded > 0 || detailsLoaded > 0) {
-        logEvent('PRELOAD: loaded ' + marginsLoaded + ' margins + ' + detailsLoaded + ' details from diskCache');
-    }
-}
-
-async function refreshOrderListCache(force = false) {
-    if (!force && isOrderListCacheFresh()) {
-        return;
-    }
-
-    if (orderListCache.loading) {
-        if (orderListCache.refreshPromise) {
-            await orderListCache.refreshPromise;
-        }
-        return;
-    }
-
-    orderListCache.loading = true;
-    logEvent('ORDER-LIST-REFRESH: start force=' + (force ? '1' : '0'));
-    orderListCache.refreshPromise = (async () => {
-        try {
-            const rows = await fetchOrderListBase();
-            logEvent('ORDER-LIST-REFRESH: fetched ' + rows.length + ' rows from DB');
-            orderListCache.data = rows;
-            orderListCache.loadedAt = Date.now();
-            orderListCache.lastError = null;
-
-            // Save to persistent disk cache (TTL: 24 hours) for startup speedup
-            diskCache.set('order_list', rows, 24 * 60 * 60 * 1000);
-            logEvent('ORDER-LIST-REFRESH: saved ' + rows.length + ' rows to diskCache');
-
-            const warmOrdNos = rows.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
-            warmMarginsInBackground(warmOrdNos);
-            // Trigger warmup if not already running (avoid double-start during initial DB refresh)
-            if (!backgroundAftercalcWarmRunning) {
-                const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-                warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', BACKGROUND_WARM_DELAY_MS);
-            }
-        } catch (err) {
-            orderListCache.lastError = err.message;
-            logEvent('ORDER-LIST-REFRESH ERROR: ' + err.message);
-            throw err;
-        } finally {
-            orderListCache.loading = false;
-            orderListCache.refreshPromise = null;
-            logEvent('ORDER-LIST-REFRESH: done force=' + (force ? '1' : '0'));
-        }
-    })();
-
-    await orderListCache.refreshPromise;
-}
-
-app.use(createApiRouter({
-    getConnection,
-    sql,
-    fs,
-    spawn,
-    diskCache,
-    logEvent,
-    getOrComputeAftercalc,
-    getOrComputeOrderMargin,
-    getProductionSummary,
-    AFTERCALC_CACHE_KEY_PREFIX,
-    ORDER_MARGIN_CACHE_KEY_PREFIX,
-    CACHE_TTL_ORDER_MARGIN_MS,
-    CACHE_TTL_LASER_METRICS_MS,
-    isHttpUrl,
-    normalizeWindowsPath,
-    isAbsoluteWindowsPath,
-    isSupportedImagePath,
-    buildImageItems,
-    orderListCache,
-    orderMarginCache,
-    orderRefreshInFlight,
-    orderRefreshStatus,
-    orderMarginInFlight,
-    afterCalcInFlight,
-    warmupProgress,
-    refreshOrderListCache,
-    isOrderListCacheFresh,
-    ORDER_LIST_DAYS_BACK,
-    pkgVersion
-}));
-
-// Endpoint per HTML
-app.get('/', (req, res) => {
-    logEvent('HTTP GET /');
-    res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Gantech Operations Hub</title>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');
-            :root {
-                --ink-900: #0f3560;
-                --ink-800: #123f6f;
-                --ink-700: #1f4f7f;
-                --sky-050: #f7fbff;
-                --sky-100: #eef5ff;
-                --sky-200: #d8e7fb;
-                --line-soft: #dce8f7;
-                --text-900: #13253e;
-                --text-700: #456383;
-                --radius-m: 12px;
-                --radius-l: 16px;
-                --elev-soft: 0 10px 24px rgba(15,53,96,0.10);
-            }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Sora', 'Segoe UI Variable', 'Segoe UI', sans-serif; background: radial-gradient(circle at 8% 0%, #f4f8ff 0%, #edf3fb 32%, #e8eef8 100%); padding: 20px; }
-            .container { max-width: 1320px; margin: 0 auto; }
-            .header-banner-wrapper { background: linear-gradient(135deg, #0f3560 0%, #14577e 62%, #123f6f 100%); color: #fff; font-weight: 800; font-size: 25px; padding: 10px 12px; border-radius: 10px; margin-bottom: 16px; letter-spacing: 0.2px; width: 100%; position: sticky; top: 0; z-index: 1200; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 12px 28px rgba(15,53,96,0.24); }
-            .header-brand { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
-            .header-brand-logo { width:38px; height:38px; border-radius:8px; background:transparent; padding:5px; object-fit:contain; border:1px solid rgba(255,255,255,0.22); box-shadow:0 6px 16px rgba(4,16,30,0.25); filter:brightness(0) invert(1) contrast(1.08); flex-shrink:0; }
-            .header-brand-text { min-width:0; font-size:20px; font-weight:800; letter-spacing:0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-            .header-status-badge { display: inline-block; font-size: 12px; font-weight: 700; color: #8a6d3b; background: #fff3cd; border: 1px solid #fff3cd; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
-            #warmupBarWrap { display:none; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }
-            #warmupBarWrap.active { display:flex; }
-            #warmupBarBg { background:rgba(255,255,255,0.25); border-radius:999px; height:6px; width:110px; overflow:hidden; flex-shrink:0; }
-            #warmupBarFill { background:#fff; height:100%; border-radius:999px; width:0%; transition:width 0.35s ease; }
-            .search-box { background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%); padding: 14px; margin-bottom: 18px; border-radius: 12px; box-shadow: 0 10px 24px rgba(15,53,96,0.10); border: 1px solid #d9e8f9; position: sticky; top: 58px; z-index: 1100; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-            .search-box.collapsed { padding: 8px 12px; height: 36px; }
-            .search-box.collapsed > * { display: none; }
-            .search-box.collapsed > #collapseToggleBtn { display: inline-block; }
-            #collapseToggleBtn { background: linear-gradient(180deg, #5ca646 0%, #3f8d31 100%); color: #fff; border: 1px solid rgba(255,255,255,0.28); padding: 8px 12px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 12px; box-shadow: 0 6px 14px rgba(63,141,49,0.28); }
-            .build-badge { display: inline-block; font-size: 12px; color: #444; background: #f1f1f1; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; }
-            .build-banner { display: none; }
-            .search-box input { padding: 8px 12px; font-size: 14px; width: 200px; border: 1px solid #c7d7ea; border-radius: 8px; }
-            .search-box button { padding: 8px 14px; background: linear-gradient(180deg, #1565c0 0%, #0f3560 100%); color: white; border: 1px solid rgba(255,255,255,0.10); border-radius: 999px; cursor: pointer; margin-left: 0; font-weight: 700; letter-spacing: 0.01em; }
-            .mode-btn { background: linear-gradient(180deg, #0f3560 0%, #0d2f53 100%) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.08); }
-            .list-toggle-btn { background: linear-gradient(180deg, #123f6f 0%, #0f3560 100%) !important; color: #fff !important; border:1px solid rgba(255,255,255,0.08); }
-            .search-box button:hover { filter: brightness(1.04); }
-            .search-box button:disabled { opacity: 0.55; cursor: not-allowed; }
-            .report-open-btn { position: relative; padding-left: 36px !important; }
-            .report-open-btn::before { content: '↗'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #5ca646; color: #fff; font-size: 11px; box-shadow: 0 4px 10px rgba(92,166,70,0.40); }
-            .report-open-btn:disabled::before { background: #9ca3af; box-shadow: none; }
-            .filter-input { width: 260px !important; margin-left: 10px; }
-            .filter-select { width: 180px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 3px; background: #fff; }
-            .section { background: white; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; }
-            .order-header { background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%); color: white; padding: 25px; border-radius: 6px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-            .order-header h2 { margin: 0 0 20px 0; font-size: 28px; font-weight: 700; }
-            .order-header-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-            .order-header-item { display: flex; flex-direction: column; }
-            .order-header-label { font-size: 12px; font-weight: 600; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-            .order-header-value { font-size: 22px; font-weight: 700; color: #fff; }
-            .invoice-status-badge { display: inline-block; font-size: 14px; font-weight: 700; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
-            .status-in-production { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.4); }
-            .status-partial-invoiced { background: #e65100; color: #fff; }
-            .status-fully-invoiced { background: #2e7d32; color: #fff; }
-            h3 { color: var(--ink-900); margin-bottom: 14px; border-bottom: 2px solid #7eb1e6; padding-bottom: 10px; font-size: clamp(15px, 1.5vw, 19px); letter-spacing: 0.01em; }
-            table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; background: #fff; border: 1px solid var(--line-soft); border-radius: var(--radius-m); overflow: hidden; box-shadow: 0 6px 16px rgba(15,53,96,0.05); }
-            th, td { padding: 10px 11px; text-align: left; border-bottom: 1px solid #e8eff8; font-size: 13px; color: var(--text-900); }
-            th { position: sticky; top: 0; z-index: 1; background: linear-gradient(180deg, #f4f9ff 0%, #eaf2ff 100%); font-weight: 700; color: var(--ink-900); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
-            tr:last-child td { border-bottom: none; }
-            tr:nth-child(even) td { background: #fcfdff; }
-            tr:hover td { background: #f3f8ff; }
-            .micro-grid-table th,
-            .micro-grid-table td { padding: 7px 10px; }
-            .micro-grid-table td { line-height: 1.26; }
-            .summary-row { font-weight: bold; background: #f2f7ff; }
-            .summary-box { background: linear-gradient(160deg, #f9fbff 0%, #eef4ff 54%, #e8f0ff 100%); border: 1px solid #d4e3fb; box-shadow: 0 10px 24px rgba(15,53,96,0.10); padding: 16px 18px; border-radius: 14px; margin-top: 15px; }
-            .summary-box div { margin: 8px 0; font-size: 14px; color: #0e2f4c; }
-            .summary-box .total { font-size: 18px; color: #0f3560; font-weight: 800; }
-            .order-list-summary-actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; flex-wrap:wrap; }
-            .order-detail-report { margin-top:16px; background:#fff; border:1px solid #d6e9ff; border-radius:8px; padding:14px 14px 16px 14px; }
-            .order-report-toolbar { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-            .order-report-toolbar .order-report-meta { font-size:13px; color:#4b5563; }
-            .order-report-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px; }
-            .order-report-card { background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; }
-            .order-report-card .label { font-size:12px; color:#57718f; margin-bottom:4px; }
-            .order-report-card .value { font-size:18px; font-weight:700; color:#0f3560; }
-            .order-report-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
-            .order-report-table th, .order-report-table td { border-bottom:1px solid #e5e7eb; padding:8px 10px; text-align:left; }
-            .order-report-table th { background:#f3f8ff; color:#0f3560; }
-            .order-report-table tr:last-child td { border-bottom:none; }
-            .order-report-table .summary-row td { background:#f7fbff; font-weight:700; }
-            .order-report-table tr { page-break-inside: avoid; }
-            .print-preview-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:15000; display:none; align-items:center; justify-content:center; padding:18px; }
-            .print-preview-dialog { width:min(1320px, 96vw); max-height:92vh; background:#fff; border-radius:10px; box-shadow:0 18px 46px rgba(0,0,0,0.34); display:flex; flex-direction:column; overflow:hidden; outline:none; }
-            .print-preview-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#f8fbff; }
-            .print-preview-title { font-size:16px; font-weight:800; color:#0f3560; }
-            .print-preview-actions { display:flex; gap:8px; flex-wrap:wrap; }
-            .print-preview-body { padding:16px; overflow:auto; background:#fff; max-height:calc(92vh - 62px); }
-            .print-preview-body .order-list-summary-actions,
-            .print-preview-body .order-report-actions { display:none !important; }
-            .print-preview-body .order-detail-report { display:block !important; margin-top:0; border:none; box-shadow:none; padding:0; }
-            .print-preview-body .order-list-section { margin-bottom:0; box-shadow:none; }
-            .print-preview-body .order-report-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
-            body.print-preview-lock { overflow:hidden; }
-            .order-detail-modal-overlay { position:fixed; inset:0; z-index:15100; display:none; align-items:stretch; justify-content:center; background:rgba(7,18,35,0.68); backdrop-filter:blur(6px); padding:16px; }
-            .order-detail-modal-shell { width:min(1540px, 100%); height:100%; background:linear-gradient(180deg, #0f3560 0%, #123f6f 56%, #0e2f4c 100%); border-radius:18px; box-shadow:0 24px 72px rgba(0,0,0,0.42); display:flex; flex-direction:column; overflow:hidden; }
-            .order-detail-modal-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid rgba(255,255,255,0.10); color:#fff; }
-            .order-detail-modal-title { display:flex; flex-direction:column; gap:4px; }
-            .order-detail-modal-title strong { font-size:clamp(16px, 1.45vw, 21px); letter-spacing:0.2px; }
-            .order-detail-modal-title span { font-size:12px; color:rgba(255,255,255,0.76); }
-            .order-detail-modal-actions { display:flex; gap:10px; flex-wrap:wrap; }
-            .order-detail-modal-actions .list-toggle-btn { background:linear-gradient(180deg, #5ca646 0%, #4e9440 100%) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.16) !important; box-shadow:0 10px 20px rgba(92,166,70,0.18); }
-            .order-detail-modal-actions .list-toggle-btn:hover { filter:brightness(1.04); }
-            .order-detail-modal-body { flex:1; overflow:auto; background:linear-gradient(180deg, #f5f8fd 0%, #edf2f8 100%); padding:18px; }
-            .order-detail-modal-body .order-detail-report { display:block !important; margin:0 auto; max-width:1480px; }
-            .order-detail-modal-body .order-report-actions { display:flex !important; justify-content:flex-end; margin:8px 0 14px 0; }
-            .order-detail-modal-body .order-report-toolbar { position:sticky; top:0; z-index:2; backdrop-filter:blur(10px); background:linear-gradient(135deg, rgba(7,18,35,0.92), rgba(19,45,79,0.92)); border:1px solid rgba(255,255,255,0.08); border-radius:18px; padding:18px 20px; margin-bottom:16px; box-shadow:0 18px 40px rgba(15,53,96,0.16); }
-            .order-detail-modal-body .order-report-meta { display:flex; flex-direction:column; gap:8px; color:#fff; }
-            .order-detail-modal-body .order-report-meta strong { font-size:24px; line-height:1.15; letter-spacing:0.2px; }
-            .order-detail-modal-body .order-report-meta .report-subline { font-size:13px; color:rgba(255,255,255,0.78); }
-            .order-detail-modal-body .report-badges { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
-            .order-detail-modal-body .report-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.08); color:#fff; }
-            .order-detail-modal-body .report-badge strong { font-weight:800; }
-            .order-detail-modal-body .report-hero { background:linear-gradient(135deg, #0f3560 0%, #123f6f 56%, #0e2f4c 100%); border:1px solid rgba(255,255,255,0.10); border-radius:22px; padding:18px 20px; box-shadow:0 16px 36px rgba(15,53,96,0.18); margin-bottom:16px; position:relative; overflow:hidden; }
-            .order-detail-modal-body .report-hero::after { content:''; position:absolute; inset:auto -70px -70px auto; width:220px; height:220px; border-radius:50%; background:radial-gradient(circle, rgba(92,166,70,0.28) 0%, rgba(92,166,70,0.06) 62%, rgba(92,166,70,0) 72%); pointer-events:none; }
-            .order-detail-modal-body .report-hero-top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
-            .order-detail-modal-body .report-hero-title { display:flex; flex-direction:column; gap:6px; }
-            .order-detail-modal-body .report-hero-title .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:#bfe2b5; font-weight:800; }
-            .order-detail-modal-body .report-hero-title h1 { margin:0; font-size:clamp(22px, 2.35vw, 32px); line-height:1.12; color:#ffffff; }
-            .order-detail-modal-body .report-hero-title .context { font-size:13px; color:rgba(255,255,255,0.82); max-width:960px; }
-            .order-detail-modal-body .report-hero-meta { display:flex; flex-direction:column; align-items:flex-end; gap:8px; min-width:220px; }
-            .order-detail-modal-body .report-hero-meta .stamp { font-size:12px; color:#ffffff; text-align:right; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.16); border-radius:999px; padding:6px 10px; }
-            .order-detail-modal-body .report-pill-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-            .order-detail-modal-body .report-pill { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:999px; background:rgba(255,255,255,0.10); color:#ffffff; border:1px solid rgba(255,255,255,0.16); font-size:12px; font-weight:700; }
-            .order-detail-modal-body .report-pill.warn { background:rgba(92,166,70,0.16); border-color:rgba(92,166,70,0.32); color:#edf9e8; }
-            .order-detail-modal-body .report-pill.ok { background:rgba(255,255,255,0.14); border-color:rgba(255,255,255,0.20); color:#ffffff; }
-            .order-detail-modal-body .report-pill strong { font-size:13px; color:#ffffff; }
-            .order-detail-modal-body .report-arrow { margin-top:6px; font-size:12px; font-weight:700; color:#dff4d8; display:inline-flex; align-items:center; gap:6px; }
-            .order-detail-modal-body .report-arrow::before { content:'↗'; width:18px; height:18px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:#5ca646; color:#fff; font-size:11px; }
-            .order-detail-modal-body .section { background:#fff; border:1px solid #dde9f6; border-radius:18px; box-shadow:0 12px 30px rgba(15,53,96,0.08); padding:16px 18px; margin-bottom:16px; }
-            .order-detail-modal-body .section h3 { margin-top:0; color:#0f3560; font-size:16px; letter-spacing:0.1px; }
-            .order-detail-modal-body .summary-box { background:linear-gradient(180deg, #f7fbff 0%, #eff6ff 100%); border:1px solid #d8e8fb; border-radius:16px; padding:14px 16px; }
-            .order-detail-modal-body .order-report-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
-            .order-detail-modal-body .order-report-card { background:linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border:1px solid #d7e6f8; border-radius:16px; box-shadow:0 10px 24px rgba(15,53,96,0.06); position:relative; overflow:hidden; }
-            .order-detail-modal-body .order-report-card::before { content:''; position:absolute; inset:0 auto auto 0; width:4px; height:100%; background:linear-gradient(180deg, #1565c0, #4f8bdc); }
-            .order-detail-modal-body .order-report-card .label { font-size:12px; color:#5c7590; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.04em; }
-            .order-detail-modal-body .order-report-card .value { font-size:21px; font-weight:800; color:#0f3560; }
-            .order-detail-modal-body .order-report-table { margin-top:14px; border-radius:14px; overflow:hidden; border:1px solid #dfeaf7; }
-            .order-detail-modal-body .order-report-table th { background:linear-gradient(180deg, #eef5ff 0%, #e2edff 100%); color:#0f3560; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; }
-            .order-detail-modal-body .order-report-table td { background:#fff; }
-            .order-detail-modal-body .order-report-table tr:nth-child(even) td { background:#fafcff; }
-            .order-detail-modal-body .order-report-table .summary-row td { background:#eff6ff; }
-            .oversigt-launcher-section { background:linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border:1px solid #d8e8fb; }
-            .oversigt-launcher-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-            .oversigt-launcher-card { background:#ffffff; border:1px solid #d8e8fb; border-radius:16px; padding:14px; box-shadow:0 10px 24px rgba(15,53,96,0.06); display:flex; flex-direction:column; gap:10px; min-height:160px; }
-            .oversigt-launcher-card h4 { margin:0; color:#0f3560; font-size:15px; }
-            .oversigt-launcher-card .desc { color:#5c7590; font-size:12px; }
-            .oversigt-launcher-kpi { background:linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%); border:1px solid #d9e8fa; border-radius:12px; padding:10px 12px; font-size:13px; color:#0f3560; min-height:52px; display:flex; align-items:center; }
-            .oversigt-launcher-card .list-toggle-btn { align-self:flex-start; margin-top:auto; }
-            .oversigt-modal-overlay { position:fixed; inset:0; z-index:15160; display:none; align-items:center; justify-content:center; background:rgba(7,18,35,0.70); backdrop-filter:blur(4px); padding:14px; }
-            .oversigt-modal-shell { width:min(1520px, 99vw); max-height:94vh; background:linear-gradient(180deg, #f5f9ff 0%, #edf3fb 100%); border-radius:18px; box-shadow:0 24px 72px rgba(0,0,0,0.42); overflow:hidden; display:flex; flex-direction:column; border:1px solid rgba(255,255,255,0.24); }
-            .oversigt-modal-header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px; background:linear-gradient(135deg, #0f3560 0%, #123f6f 56%, #0e2f4c 100%); color:#fff; }
-            .oversigt-modal-title-wrap { display:flex; flex-direction:column; gap:4px; }
-            .oversigt-modal-title-wrap strong { font-size:17px; letter-spacing:0.2px; }
-            .oversigt-modal-title-wrap span { font-size:12px; color:rgba(255,255,255,0.82); }
-            .oversigt-modal-actions { display:flex; gap:8px; flex-wrap:wrap; }
-            .oversigt-modal-body { overflow:auto; padding:clamp(10px, 1.6vw, 18px); }
-            .oversigt-modal-layout { display:grid; grid-template-columns:minmax(210px, 280px) minmax(0, 1fr); gap:10px; align-items:start; }
-            .oversigt-panel { background:#fff; border:1px solid #dce9f7; border-radius:14px; box-shadow:0 8px 20px rgba(15,53,96,0.07); padding:12px; }
-            .oversigt-panel h5 { margin:0 0 8px 0; font-size:13px; color:#0f3560; text-transform:uppercase; letter-spacing:0.05em; }
-            .oversigt-panel.oversigt-kpi { padding:10px; }
-            .oversigt-panel.oversigt-kpi .summary-box { padding:10px 12px; border-radius:10px; }
-            .oversigt-panel.oversigt-kpi .summary-box div { margin:3px 0; font-size:12px; line-height:1.25; }
-            .oversigt-panel .summary-box { margin:0; }
-            .oversigt-panel table { margin-top:0; }
-            .oversigt-details { overflow-x:hidden; overflow-y:auto; min-width:0; }
-            .oversigt-details table { min-width:0; width:100%; table-layout:fixed; }
-            .oversigt-details th,
-            .oversigt-details td { padding:6px 8px; font-size:12px; white-space:normal; word-break:break-word; }
-            .oversigt-details td:nth-child(3) { font-weight:700; color:#153b63; }
-            .oversigt-details td:nth-child(n+5):nth-child(-n+11) { font-variant-numeric: tabular-nums; }
-            .oversigt-table-laser th:nth-child(1) { width:10%; }
-            .oversigt-table-laser th:nth-child(2) { width:10%; }
-            .oversigt-table-laser th:nth-child(3) { width:16%; }
-            .oversigt-table-laser th:nth-child(4) { width:6%; }
-            .oversigt-table-laser th:nth-child(5) { width:7%; }
-            .oversigt-table-laser th:nth-child(6),
-            .oversigt-table-laser th:nth-child(7),
-            .oversigt-table-laser th:nth-child(8),
-            .oversigt-table-laser th:nth-child(9),
-            .oversigt-table-laser th:nth-child(10),
-            .oversigt-table-laser th:nth-child(11) { width:7%; }
-            .oversigt-table-laser th:nth-child(12) { width:5%; }
-            .oversigt-table-operation th:nth-child(1) { width:15%; }
-            .oversigt-table-operation th:nth-child(2) { width:27%; }
-            .oversigt-table-operation th:nth-child(3),
-            .oversigt-table-operation th:nth-child(4),
-            .oversigt-table-operation th:nth-child(5),
-            .oversigt-table-operation th:nth-child(6),
-            .oversigt-table-operation th:nth-child(7) { width:11%; }
-            .order-margin-wrap { display:inline-flex; align-items:center; gap:6px; }
-            .order-kpi-tone { width:18px; height:18px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:800; box-shadow:0 4px 10px rgba(15,53,96,0.20); }
-            .order-kpi-tone.ok { background:#5ca646; }
-            .order-kpi-tone.warn { background:#f59e0b; }
-            .order-kpi-tone.bad { background:#d32f2f; }
-            .order-kpi-tone.na { background:#607d8b; }
-            body.report-modal-open { overflow:hidden; }
-            @media print {
-                @page { size: A4 portrait; margin: 12mm; }
-                body.print-report-mode .header-banner-wrapper,
-                body.print-report-mode .search-box,
-                body.print-report-mode #orderList,
-                body.print-report-mode #result > :not(#orderDetailReport) { display:none !important; }
-                body.print-report-mode #result { display:block !important; }
-                body.print-report-mode #orderDetailReport { display:block !important; margin:0 !important; border:none !important; box-shadow:none !important; }
-                body.print-report-mode .order-report-toolbar button,
-                body.print-report-mode .order-report-actions button { display:none !important; }
-                body.print-report-mode .order-report-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-                body.print-report-mode .order-report-card,
-                body.print-report-mode .order-report-table { break-inside: avoid; page-break-inside: avoid; }
-
-                body.print-list-mode .header-banner-wrapper,
-                body.print-list-mode .search-box,
-                body.print-list-mode #result { display:none !important; }
-                body.print-list-mode #orderList { display:block !important; }
-                body.print-list-mode .order-list-summary-actions button { display:none !important; }
-
-                body.print-preview-mode .header-banner-wrapper,
-                body.print-preview-mode .search-box,
-                body.print-preview-mode #orderList,
-                body.print-preview-mode #result { display:none !important; }
-                body.print-preview-mode .print-preview-overlay { display:flex !important; }
-                body.print-preview-mode .print-preview-dialog { box-shadow:none; width:100%; max-height:none; }
-                body.print-preview-mode .print-preview-header { display:none !important; }
-                body.print-preview-mode .print-preview-body { padding:0; overflow:visible; }
-                body.print-preview-mode .print-preview-body .order-list-summary-actions,
-                body.print-preview-mode .print-preview-body .order-report-actions { display:none !important; }
-            }
-            .margin-positive { color: green; }
-            .margin-negative { color: red; }
-            .error { color: #9f1239; padding: 14px 16px; background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%); border: 1px solid #fecdd3; border-radius: 12px; font-weight: 600; }
-            .loading { color: #0f3560; padding: 14px 16px; border-radius: 12px; border: 1px solid #d7e6fb; background: linear-gradient(110deg, #f8fbff 8%, #edf4ff 34%, #f8fbff 60%); background-size: 220% 100%; animation: softLoadingWave 1.25s ease-in-out infinite; font-weight: 600; }
-            .prod-link { color: #1976D2; text-decoration: underline; cursor: pointer; }
-            .prod-link:hover { color: #0D47A1; }
-            .po-highlight { box-shadow: 0 0 0 3px #90CAF9; }
-            .prodtp4-group { border: 1px solid #e5e5e5; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
-            .prodtp4-header { background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); padding: 10px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
-            .prodtp4-header:hover { background: linear-gradient(180deg, #eff6ff 0%, #e5efff 100%); }
-            .prodtp4-label { color: #2b2b2b; }
-            .prodtp4-subtotal { color: #1976D2; font-weight: 700; }
-            .prodtp4-body { padding: 8px 12px 12px; }
-            .po-total-row { margin-top: 10px; padding: 10px 12px; border-top: 1px solid #d8e5f7; font-weight: 800; text-align: right; background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%); color: var(--ink-900); }
-            .prodtp4-hint { color: #555; margin: 6px 0 10px; font-size: 13px; }
-            .main-product-box { background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%); border: 1px solid #bdd8f6; border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; box-shadow: 0 8px 20px rgba(15,53,96,0.08); }
-            .main-product-box .value { font-size: 20px; font-weight: 800; color: #0d47a1; margin-top: 3px; }
-            .inline-link { color: #1565c0; text-decoration: underline; cursor: pointer; }
-            .inline-link:hover { color: #0d47a1; }
-            .prod-no-link { color: #1565c0; text-decoration: underline; cursor: pointer; }
-            .prod-no-link:hover { color: #0d47a1; }
-            .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 15220; }
-            .modal-box { width: min(1400px, 97vw); max-height: 90vh; overflow: auto; background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%); border: 1px solid #d9e8fb; border-radius: 14px; box-shadow: 0 18px 42px rgba(6,26,48,0.24); padding: 16px; }
-            .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-            .modal-header-left { display: flex; align-items: center; gap: 8px; }
-            .modal-content-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 32vw); gap: 16px; align-items: start; }
-            #summaryModalBody { flex: 1; min-width: 0; }
-            .modal-back { border: 1px solid #c9dcf9; background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-weight: 700; color: #0f3560; letter-spacing: 0.01em; }
-            .modal-back.hidden { display: none; }
-            .modal-close { border: 1px solid #c9dcf9; background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%); border-radius: 999px; padding: 6px 12px; cursor: pointer; color: #0f3560; letter-spacing: 0.01em; }
-            .modal-loading { color: #0f3560; padding: 10px 12px; border-radius: 10px; border: 1px solid #d8e7fb; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); font-weight: 600; }
-            .summary-image-panel { width: 100%; min-width: 0; max-height: calc(90vh - 140px); overflow: auto; border-left: 1px solid #e0e0e0; padding-left: 16px; position: sticky; top: 0; background: #fff; }
-            .summary-image-panel.hidden { display: none; }
-            .modal-content-wrap.image-focus { grid-template-columns: 1fr; }
-            .modal-content-wrap.image-focus #summaryModalBody { display: none; }
-            .modal-content-wrap.image-focus .summary-image-panel { border-left: none; padding-left: 0; max-height: calc(90vh - 160px); position: relative; top: auto; }
-            .laser-summary-layout { display: flex; gap: 12px; align-items: flex-start; }
-            .laser-image-panel { width: min(360px, 32vw); min-width: 240px; max-height: 70vh; overflow: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; position: sticky; top: 12px; background: #fff; }
-            .laser-image-panel.hidden { display: none; }
-            .summary-image-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
-            .summary-image-panel-title { font-size: 16px; font-weight: 700; color: #1f2937; }
-            .summary-image-close { border: none; background: #efefef; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
-            .image-preview-btn { padding: 6px 11px; border: 1px solid rgba(255,255,255,0.15); border-radius: 999px; background: linear-gradient(180deg, #1565c0 0%, #0f3560 100%); color: #fff; cursor: pointer; font-size: 12px; font-weight: 700; }
-            .image-preview-btn:hover { filter: brightness(1.05); }
-            .image-preview-gallery { display: grid; gap: 12px; }
-            .image-preview-card { border: 1px solid #dae8fb; border-radius: 10px; padding: 10px; background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); }
-            .image-preview-card img { display: block; width: 100%; max-height: 240px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid #e5e7eb; cursor: zoom-in; }
-            .image-preview-label { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 8px; }
-            .image-preview-path { font-size: 11px; color: #6b7280; word-break: break-all; margin-top: 8px; }
-            .image-preview-empty { font-size: 13px; color: #6b7280; padding: 8px 0; }
-            .image-lightbox { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.88); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 15300; }
-            .image-lightbox.hidden { display: none; }
-            .image-lightbox-dialog { width: min(1200px, 96vw); max-height: 92vh; background: #111827; color: #f9fafb; border-radius: 10px; box-shadow: 0 18px 40px rgba(0,0,0,0.35); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-            .image-lightbox-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-            .image-lightbox-title { font-size: 15px; font-weight: 700; color: #f9fafb; }
-            .image-lightbox-close { border: none; background: rgba(255,255,255,0.12); color: #fff; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
-            .image-lightbox-close:hover { background: rgba(255,255,255,0.2); }
-            .image-lightbox-body { display: flex; align-items: center; justify-content: center; min-height: 0; overflow: auto; }
-            .image-lightbox-body img { display: block; max-width: 100%; max-height: calc(92vh - 110px); object-fit: contain; border-radius: 6px; background: #fff; }
-            .image-lightbox-path { font-size: 12px; color: #d1d5db; word-break: break-all; }
-            .compact-image-modal { position: fixed; inset: 0; background: rgba(7,18,35,0.72); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 15320; }
-            .compact-image-modal.show { display: flex; }
-            .compact-image-dialog { width: min(1080px, 95vw); max-height: 92vh; background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%); border: 1px solid #d6e5fa; border-radius: 14px; box-shadow: 0 24px 52px rgba(5,23,42,0.36); display: flex; flex-direction: column; overflow: hidden; }
-            .compact-image-header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid #d9e6f8; background:linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); }
-            .compact-image-title { font-size:17px; font-weight:800; color:#0f3560; }
-            .compact-image-subtitle { font-size:12px; color:#4f6b86; margin-top:2px; }
-            .compact-image-close { border:1px solid #c9dcf9; background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); color:#0f3560; border-radius:999px; padding:6px 12px; cursor:pointer; font-weight:700; }
-            .compact-image-body { padding:12px; overflow:auto; }
-            .compact-image-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-            .compact-image-card { border:1px solid #dce8f8; border-radius:10px; padding:10px; background:#fff; }
-            .compact-image-label { font-size:12px; font-weight:700; color:#2f4f70; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.02em; }
-            .compact-image-card img { width:100%; max-height:360px; object-fit:contain; background:#fff; border:1px solid #e5ecf7; border-radius:8px; display:block; cursor:zoom-in; }
-            .compact-image-path { margin-top:6px; font-size:11px; color:#5f738a; word-break:break-all; }
-            @keyframes softLoadingWave {
-                0% { background-position: 100% 0; }
-                100% { background-position: -100% 0; }
-            }
-            .search-box button,
-            #collapseToggleBtn,
-            .list-toggle-btn,
-            .mode-btn,
-            .modal-close,
-            .modal-back,
-            .summary-image-close,
-            .image-preview-btn,
-            .order-detail-modal-actions .list-toggle-btn {
-                transition: transform 0.18s ease, box-shadow 0.2s ease, filter 0.18s ease;
-            }
-            .search-box button:hover,
-            #collapseToggleBtn:hover,
-            .list-toggle-btn:hover,
-            .mode-btn:hover,
-            .modal-close:hover,
-            .modal-back:hover,
-            .summary-image-close:hover,
-            .image-preview-btn:hover,
-            .order-detail-modal-actions .list-toggle-btn:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 8px 18px rgba(15,53,96,0.18);
-            }
-            .search-box button:active,
-            #collapseToggleBtn:active,
-            .list-toggle-btn:active,
-            .mode-btn:active,
-            .modal-close:active,
-            .modal-back:active,
-            .summary-image-close:active,
-            .image-preview-btn:active,
-            .order-detail-modal-actions .list-toggle-btn:active {
-                transform: translateY(0);
-            }
-            @media (max-width: 1360px) {
-                .modal-content-wrap { grid-template-columns: minmax(0, 1fr); }
-                .summary-image-panel { border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; position: relative; top: auto; max-height: 58vh; }
-                .oversigt-modal-layout { grid-template-columns:1fr; }
-                .oversigt-details table { min-width:0; }
-            }
-            @media (max-width: 900px) {
-                .modal-box { width: 99vw; max-height: 93vh; padding: 12px; }
-                .modal-box th, .modal-box td { padding: 8px 6px; font-size: 13px; }
-                .dashboard-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-                .omsaetning-filters { grid-template-columns:1fr 1fr; }
-                .omsaetning-field.omsaetning-accounts-field,
-                .omsaetning-field.omsaetning-customer-field,
-                .omsaetning-field.omsaetning-threshold-field,
-                .omsaetning-actions { grid-column:span 2; }
-                .omsaetning-kpis { grid-template-columns:1fr; }
-                .omsaetning-charts { grid-template-columns:1fr; }
-                .modal-content-wrap { grid-template-columns: 1fr; }
-                .summary-image-panel { width: 100%; min-width: 0; max-height: 52vh; border-left: none; border-top: 1px solid #e0e0e0; padding-left: 0; padding-top: 12px; }
-                .laser-summary-layout { flex-direction: column; }
-                .laser-image-panel { width: 100%; min-width: 0; max-height: none; position: static; }
-                .image-lightbox { padding: 12px; }
-                .image-lightbox-dialog { width: 100%; max-height: 96vh; padding: 12px; }
-                .image-lightbox-body img { max-height: calc(96vh - 110px); }
-                .compact-image-grid { grid-template-columns:1fr; }
-                .oversigt-launcher-grid { grid-template-columns:1fr; }
-                .oversigt-modal-layout { grid-template-columns:1fr; }
-                .oversigt-modal-header { flex-direction:column; align-items:flex-start; }
-                .oversigt-modal-actions { width:100%; justify-content:flex-end; }
-                .oversigt-details table { min-width:0; }
-            }
-            @media (max-width: 640px) {
-                .dashboard-grid { grid-template-columns:1fr; }
-                .order-detail-modal-overlay { padding: 6px; }
-                .order-detail-modal-shell { border-radius: 10px; }
-                .order-detail-modal-header { padding: 10px 12px; }
-                .order-detail-modal-actions { gap: 6px; }
-                .order-detail-modal-actions .list-toggle-btn { padding: 6px 10px !important; font-size: 12px; }
-                .order-detail-modal-body { padding: 10px; }
-                .order-detail-modal-body .order-report-meta strong { font-size: 20px; }
-                .order-detail-modal-body .report-hero-title h1 { font-size: 24px; }
-                .oversigt-modal-overlay { padding: 6px; }
-                .oversigt-modal-shell { border-radius: 10px; max-height: 96vh; }
-                .oversigt-modal-header { padding: 10px 12px; }
-                .oversigt-modal-body { padding: 8px; }
-                .oversigt-details table { min-width:0; }
-                .order-list-section { padding: 12px; overflow-x: auto; }
-                .order-list-table { min-width: 820px; }
-            }
-            .order-list-section { background: #fff; padding: 16px 20px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-            .order-list-section h3 { color: #333; margin-bottom: 12px; border-bottom: 2px solid #2196F3; padding-bottom: 8px; }
-            .order-list-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            .order-list-table th { background: #1565C0; color: #fff; padding: 8px 10px; text-align: left; }
-            .order-list-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; cursor: pointer; }
-            .order-list-table tr:hover td { background: #e3f2fd; }
-            .note-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; border:1px solid; cursor:pointer; white-space:nowrap; }
-            .note-badge.ok  { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
-            .note-badge.error { background:#ffebee; color:#b71c1c; border-color:#ef9a9a; }
-            .note-badge.check { background:#fff8e1; color:#f57f17; border-color:#ffe082; }
-            .note-badge.text { background:#f3e5f5; color:#4a148c; border-color:#ce93d8; }
-            .note-badge.credit { background:#e3f2fd; color:#0d47a1; border-color:#90caf9; }
-            .note-popup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:15450; display:flex; align-items:center; justify-content:center; }
-            .note-popup { background:#fff; border-radius:10px; padding:22px; width:min(480px,92vw); box-shadow:0 18px 42px rgba(0,0,0,0.28); }
-            .note-popup h3 { margin:0 0 14px 0; font-size:16px; color:#1f2937; }
-            .note-popup label { font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:4px; }
-            .note-popup select, .note-popup textarea { width:100%; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; font-family:inherit; }
-            .note-popup textarea { resize:vertical; min-height:80px; margin-bottom:12px; }
-            .note-popup select { margin-bottom:12px; }
-            .note-popup-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
-            .note-popup-actions button { border:none; border-radius:6px; padding:8px 16px; font-weight:700; font-size:13px; cursor:pointer; }
-            .btn-note-save { background:#1565c0; color:#fff; }
-            .btn-note-delete { background:#b71c1c; color:#fff; }
-            .btn-note-cancel { background:#e0e0e0; color:#333; }
-            .order-note-banner { margin:0 0 14px 0; padding:10px 14px; border-radius:8px; font-size:13px; display:flex; align-items:flex-start; gap:10px; cursor:pointer; }
-            .order-note-banner.ok    { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; }
-            .order-note-banner.error { background:#ffebee; border:1px solid #ef9a9a; color:#b71c1c; }
-            .order-note-banner.check { background:#fff8e1; border:1px solid #ffe082; color:#e65100; }
-            .order-note-banner.text  { background:#f3e5f5; border:1px solid #ce93d8; color:#4a148c; }
-            .order-note-banner.credit { background:#e3f2fd; border:1px solid #90caf9; color:#0d47a1; }
-            .order-note-banner .note-icon { font-size:18px; flex-shrink:0; }
-            .order-note-banner .note-body { flex:1; }
-            .order-list-summary { margin-top:12px; margin-bottom:14px; background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; font-size:13px; color:#0f3560; }
-            .order-list-summary strong { color:#0d47a1; }
-            .access-gate-overlay { position: fixed; inset: 0; background: rgba(20, 26, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 12000; }
-            .access-gate-box { width: min(430px, 92vw); background: #ffffff; border-radius: 10px; padding: 22px; box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
-            .access-gate-box h3 { margin: 0 0 10px 0; border: none; padding: 0; color: #1f2937; }
-            .access-gate-box p { margin: 0 0 14px 0; color: #4b5563; }
-            .access-gate-row { display: flex; gap: 8px; }
-            .access-gate-row input { flex: 1; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 16px; }
-            .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
-            .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
-            .main-dashboard { display:none; margin-bottom:16px; }
-            .dashboard-shell { position:relative; overflow:hidden; background:radial-gradient(1100px 360px at 8% -12%, rgba(22,101,192,0.19) 0%, rgba(22,101,192,0.03) 40%, transparent 70%), linear-gradient(160deg, #ffffff 0%, #f3f8ff 62%, #edf4ff 100%); border:1px solid #d7e6fb; border-radius:16px; box-shadow:0 14px 30px rgba(15,53,96,0.10); padding:16px; }
-            .dashboard-shell::before { content:''; position:absolute; width:240px; height:240px; right:-95px; top:-105px; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(86,164,255,0.24), rgba(86,164,255,0)); pointer-events:none; }
-            .dashboard-shell::after { content:''; position:absolute; width:360px; height:110px; left:-90px; bottom:-60px; transform:rotate(-8deg); background:linear-gradient(90deg, rgba(15,53,96,0.00), rgba(15,53,96,0.08), rgba(15,53,96,0.00)); pointer-events:none; }
-            .dashboard-head h2 { margin:0; color:#0f3560; font-size:26px; letter-spacing:0.01em; }
-            .dashboard-head p { margin:6px 0 0 0; color:#4d6680; font-size:13px; }
-            .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-            .dash-card { position:relative; isolation:isolate; border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08), inset 0 1px 0 rgba(255,255,255,0.90); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; transform:translateZ(0); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
-            .dash-card::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.70), rgba(255,255,255,0.08)); z-index:-1; pointer-events:none; }
-            .dash-card:hover { transform:translateY(-2px) scale(1.01); border-color:#c5dbf8; box-shadow:0 16px 26px rgba(15,53,96,0.16), inset 0 1px 0 rgba(255,255,255,0.95); }
-            .dash-card h4 { margin:0; color:#0f3560; font-size:15px; }
-            .dash-card p { margin:0; color:#5d7590; font-size:12px; line-height:1.35; }
-            .dash-card .dash-chip { align-self:flex-start; font-size:11px; font-weight:700; color:#0f3560; background:#eaf3ff; border:1px solid #d0e2f9; border-radius:999px; padding:3px 8px; }
-            .dash-card button { margin-top:auto; border:none; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; }
-            .dash-card button[disabled] { opacity:0.6; cursor:not-allowed; background:linear-gradient(180deg,#8aa6c5 0%,#5f7f9e 100%); }
-            .main-omsaetning { display:none; margin-bottom:16px; }
-            .omsaetning-shell { background:#fff; border:1px solid #d7e6fb; border-radius:14px; box-shadow:0 8px 20px rgba(15,53,96,0.10); padding:14px; }
-            .omsaetning-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:12px; }
-            .omsaetning-head h3 { margin:0; color:#0f3560; font-size:22px; }
-            .omsaetning-head p { margin:4px 0 0 0; color:#4d6680; font-size:12px; }
-            .omsaetning-head-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-            .omsaetning-head-actions button { border:none; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
-            .omsaetning-head-actions select { border:1px solid #c9ddf8; border-radius:999px; padding:7px 10px; background:#fff; color:#0f3560; font-size:12px; font-weight:700; }
-            .omsaetning-years { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
-            .omsaetning-year-note { margin:-2px 0 10px 0; color:#4f6d8c; font-size:12px; }
-            .omsaetning-year-btn { border:1px solid #c9ddf8; background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); color:#0f3560; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
-            .omsaetning-year-btn.active { background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; border-color:#0f3560; }
-            .omsaetning-filters { display:grid; grid-template-columns:160px 160px minmax(260px,1fr) minmax(260px,1fr) 220px; gap:10px; align-items:end; }
-            .omsaetning-field label { display:block; font-size:12px; color:#3f5875; font-weight:700; margin-bottom:4px; }
-            .omsaetning-field input, .omsaetning-field select { width:100%; border:1px solid #cfe0f7; border-radius:8px; padding:8px 10px; font-size:13px; }
-            .omsaetning-threshold-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-            .omsaetning-accounts-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
-            .omsaetning-accounts-toggle { border:1px solid #c6dcf8; border-radius:999px; background:#fff; color:#0f3560; padding:5px 10px; cursor:pointer; font-size:11px; font-weight:700; }
-            .omsaetning-accounts-summary { font-size:11px; color:#4f6d8c; font-weight:700; }
-            .omsaetning-accounts-active { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
-            .omsaetning-accounts-active .chip { display:inline-flex; align-items:center; border:1px solid #c9ddf8; border-radius:999px; background:#eef5ff; color:#0f3560; padding:3px 8px; font-size:10px; font-weight:700; }
-            .omsaetning-accounts-active .chip.more { background:#f3f8ff; color:#496989; border-color:#d8e7f8; }
-            .omsaetning-accounts-panel { border:1px solid #d3e4f8; border-radius:10px; background:#f9fcff; padding:8px; max-height:220px; overflow:auto; }
-            .omsaetning-accounts-toolbar { display:flex; gap:6px; margin-bottom:8px; }
-            .omsaetning-accounts-toolbar button { border:1px solid #c6dcf8; border-radius:999px; background:#fff; color:#0f3560; padding:4px 9px; cursor:pointer; font-size:11px; font-weight:700; }
-            .omsaetning-accounts-list { display:flex; flex-direction:column; gap:4px; }
-            .omsaetning-account-item { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; }
-            .omsaetning-account-item:hover { background:#ecf4ff; }
-            .omsaetning-account-item input { width:15px; height:15px; }
-            .omsaetning-account-item span { font-size:12px; color:#244766; }
-            .omsaetning-customer-results { border:1px solid #d3e4f8; border-radius:10px; background:#f9fcff; max-height:176px; overflow:auto; margin-top:6px; }
-            .omsaetning-customer-empty { padding:7px 9px; font-size:12px; color:#6b7f95; }
-            .omsaetning-customer-item { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 9px; border-bottom:1px solid #e3eefb; cursor:pointer; }
-            .omsaetning-customer-item:last-child { border-bottom:none; }
-            .omsaetning-customer-item:hover { background:#ecf4ff; }
-            .omsaetning-customer-item .meta { display:flex; flex-direction:column; gap:2px; min-width:0; }
-            .omsaetning-customer-item .meta strong { font-size:12px; color:#214867; }
-            .omsaetning-customer-item .meta span { font-size:11px; color:#5f7892; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }
-            .omsaetning-customer-item .pick { border:none; border-radius:999px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
-            .omsaetning-customer-item .pick.remove { background:linear-gradient(180deg,#8aa6c5 0%,#5f7f9e 100%); }
-            .omsaetning-selected-customers { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-            .omsaetning-selected-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid #c9ddf8; border-radius:999px; background:#eef5ff; color:#0f3560; padding:4px 10px; font-size:11px; font-weight:700; }
-            .omsaetning-selected-chip button { border:none; background:transparent; color:#0f3560; font-size:12px; cursor:pointer; font-weight:800; }
-            .omsaetning-customer-mode { margin-top:6px; font-size:11px; color:#4f6d8c; }
-            .omsaetning-customer-thresholds { margin-top:6px; font-size:11px; color:#335170; display:flex; flex-direction:column; gap:3px; }
-            .omsaetning-customer-threshold-row { display:flex; gap:6px; align-items:center; }
-            .omsaetning-customer-threshold-row .cust { font-weight:700; color:#214867; }
-            .omsaetning-customer-threshold-row .thr { color:#496989; }
-            .omsaetning-persist-overlay { position:fixed; inset:0; z-index:2200; background:rgba(10,22,40,0.45); display:flex; align-items:center; justify-content:center; padding:16px; }
-            .omsaetning-persist-dialog { width:min(560px, 100%); border-radius:12px; border:1px solid #c7daef; background:#ffffff; box-shadow:0 16px 42px rgba(10,35,65,0.28); overflow:hidden; }
-            .omsaetning-persist-head { padding:12px 14px; background:#f1f7ff; border-bottom:1px solid #dbe8f9; }
-            .omsaetning-persist-head h4 { margin:0; font-size:14px; color:#1e4768; }
-            .omsaetning-persist-body { padding:12px 14px; font-size:12px; color:#355675; display:flex; flex-direction:column; gap:10px; }
-            .omsaetning-persist-customer-list { max-height:130px; overflow:auto; border:1px solid #dbe8f9; border-radius:8px; background:#f8fbff; padding:8px 10px; font-size:11px; line-height:1.5; }
-            .omsaetning-persist-customer-option { width:100%; border:1px solid #d5e6fa; border-radius:8px; background:#ffffff; color:#214867; padding:7px 9px; margin:0 0 6px 0; text-align:left; font-size:12px; font-weight:600; cursor:pointer; }
-            .omsaetning-persist-customer-option:last-child { margin-bottom:0; }
-            .omsaetning-persist-customer-option:hover { background:#eef6ff; border-color:#b9d3f1; }
-            .omsaetning-persist-customer-option.active { background:#dfeeff; border-color:#1565c0; color:#0f3560; box-shadow:inset 0 0 0 1px rgba(21,101,192,0.20); }
-            .omsaetning-persist-thr { font-weight:700; color:#214867; }
-            .omsaetning-persist-pick { font-size:12px; color:#355675; }
-            .omsaetning-persist-picked { font-weight:800; color:#0f3560; }
-            .omsaetning-persist-actions { display:flex; gap:8px; flex-wrap:wrap; }
-            .omsaetning-persist-actions button { border:none; border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer; }
-            .omsaetning-persist-actions .primary { color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
-            .omsaetning-persist-actions .ghost { color:#244a6d; background:#eaf3ff; border:1px solid #c7daef; }
-            .omsaetning-persist-actions .danger { color:#7a1a1a; background:#ffecec; border:1px solid #f2bbbb; }
-            .omsaetning-actions button { border:none; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
-            .omsaetning-kpis { margin-top:12px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-            .omsaetning-kpi { border:1px solid #d6e7fb; border-radius:10px; background:#f8fbff; padding:10px; }
-            .omsaetning-kpi .lbl { font-size:11px; font-weight:700; color:#4f6d8c; text-transform:uppercase; letter-spacing:0.03em; }
-            .omsaetning-kpi .val { margin-top:4px; font-size:20px; font-weight:800; color:#0f3560; }
-            .omsaetning-charts { margin-top:12px; display:grid; grid-template-columns:1fr; gap:10px; }
-            .omsaetning-chart-card { border:1px solid #dbe8f9; border-radius:10px; background:linear-gradient(180deg,#ffffff 0%,#f6faff 100%); overflow:hidden; }
-            .omsaetning-chart-head { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #dbe8f9; background:#f4f9ff; }
-            .omsaetning-chart-title { font-size:12px; font-weight:800; color:#2f5475; }
-            .omsaetning-chart-sub { font-size:11px; color:#5f7892; }
-            .omsaetning-chart-body { padding:8px; overflow:auto; }
-            .omsaetning-chart-svg { width:100%; min-width:680px; height:260px; display:block; }
-            .ordreindgang-chart-svg { height:430px; min-height:400px; }
-            .ordreindgang-legend-row { margin:0 0 8px 0; }
-            .ordreindgang-legend-row .omsaetning-legend-item { font-size:12px; font-weight:700; }
-            .omsaetning-legend { display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:8px; }
-            .omsaetning-legend-item { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#355675; }
-            .omsaetning-legend-swatch { width:10px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,0.16); }
-            .omsaetning-table-card { margin-top:12px; border:1px solid #dbe8f9; border-radius:10px; background:#fff; overflow:hidden; }
-            .omsaetning-table-title { padding:8px 10px; font-size:12px; font-weight:700; color:#2f5475; background:#f4f9ff; border-bottom:1px solid #dbe8f9; }
-            .omsaetning-table-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-            .omsaetning-collapse-btn { border:1px solid #bcd2eb; border-radius:999px; background:#ffffff; color:#1e4768; font-size:11px; font-weight:700; padding:5px 10px; cursor:pointer; }
-            .omsaetning-collapse-btn:hover { background:#ebf4ff; }
-            .omsaetning-table-wrap { margin-top:12px; overflow:auto; border:1px solid #dbe8f9; border-radius:10px; }
-            .omsaetning-table { width:100%; border-collapse:collapse; min-width:760px; font-size:12px; }
-            .omsaetning-table th { background:#1565c0; color:#fff; text-align:left; padding:8px 10px; position:sticky; top:0; z-index:1; }
-            .omsaetning-table td { padding:7px 10px; border-bottom:1px solid #e6eef9; }
-            .ordreindgang-weekly-table { min-width:980px; table-layout:fixed; }
-            .ordreindgang-weekly-table th:nth-child(n+2), .ordreindgang-weekly-table td:nth-child(n+2) { text-align:right; font-variant-numeric:tabular-nums; }
-            .ordreindgang-weekly-table tbody tr:nth-child(even) { background:#f8fbff; }
-            .ordreindgang-toggle { display:flex; align-items:center; gap:8px; min-height:34px; padding:6px 0; color:#244a6d; font-weight:600; }
-            .ordreindgang-toggle input[type="checkbox"] { width:16px; height:16px; accent-color:#1565c0; }
-            .omsaetning-cell-right { text-align:right; }
-            .omsaetning-status { display:inline-flex; align-items:center; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
-            .omsaetning-status.good { color:#1b5e20; background:#e8f5e9; border:1px solid #a5d6a7; }
-            .omsaetning-status.mid { color:#8d6e00; background:#fff8e1; border:1px solid #ffe082; }
-            .omsaetning-status.low { color:#b71c1c; background:#ffebee; border:1px solid #ef9a9a; }
-            .omsaetning-gauge-wrap { min-width:280px; }
-            .omsaetning-gauge-meta { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:#4f6d8c; margin-bottom:4px; }
-            .omsaetning-gauge-track { position:relative; height:10px; border-radius:999px; background:linear-gradient(90deg,#ffe5e5 0%, #fff2cc 33%, #e8f5e9 66%, #d9eefb 100%); border:1px solid #d6e7fb; overflow:hidden; }
-            .omsaetning-gauge-fill { position:absolute; top:1px; height:6px; border-radius:999px; }
-            .omsaetning-gauge-fill.pos { background:#2e7d32; }
-            .omsaetning-gauge-fill.neg { background:#c62828; }
-            .omsaetning-gauge-marker { position:absolute; top:-2px; width:2px; height:14px; background:#355675; opacity:0.65; }
-            .omsaetning-gauge-point { position:absolute; top:-3px; width:8px; height:8px; margin-left:-4px; border-radius:50%; background:#0f3560; box-shadow:0 0 0 2px rgba(255,255,255,0.95); }
-            .omsaetning-gauge-legend { display:flex; justify-content:space-between; font-size:10px; color:#6a829b; margin-top:3px; }
-            .omsaetning-gauge-delta { margin-top:4px; font-size:11px; color:#355675; }
-            .omsaetning-gauge-delta strong { color:#0f3560; }
-            .omsaetning-empty { margin-top:10px; padding:10px; border:1px dashed #c7daef; border-radius:8px; color:#4f6d8c; background:#f8fbff; }
-            #mainWorkspace { display:none; }
-            .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
-            .allocation-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#b26a00; font-size:16px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; }
-            .invoice-status-banner { margin: 0 0 10px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; }
-            .invoice-status-banner.ok { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
-            .invoice-status-banner.warn { background: #fff8e1; color: #8d6e00; border: 1px solid #ffe082; }
-        </style>
-    </head>
-    <body>
-        <div id="accessGateOverlay" class="access-gate-overlay" style="display:flex;">
-            <div class="access-gate-box">
-                <h3>Adgangskode</h3>
-                <p>Indtast kode for at se ordreliste og detaljer.</p>
-                <div class="access-gate-row">
-                    <input id="accessGateInput" type="password" placeholder="Kode" autocomplete="off" />
-                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn</button>
-                </div>
-                <div id="accessGateError" class="access-gate-error"></div>
-            </div>
-        </div>
-        <div class="header-banner-wrapper">
-            <button id="homeBtn" onclick="goToDashboard()" title="Tilbage til dashboard" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
-            <div class="header-brand">
-                <img class="header-brand-logo" src="/assets/brand/logo-gantech.png" alt="Gantech logo" />
-                <span class="header-brand-text">${APP_VERSION}</span>
-            </div>
-            <div id="warmupBarWrap" title="Forberegner ordredata i baggrunden">
-                <div id="warmupBarBg"><div id="warmupBarFill"></div></div>
-                <span id="warmupBarText">Forberegner...</span>
-            </div>
-            <span class="header-status-badge" id="systemStatusBadge">System indlæser...</span>
-        </div>
-        <div class="container main-dashboard" id="mainDashboard">
-            <section class="dashboard-shell">
-                <div class="dashboard-head">
-                    <h2>Gantech Operations Hub</h2>
-                    <p>Vælg modul for at gå videre. Efterkalk, Omsætning og Ordreindgang er aktive.</p>
-                </div>
-                <div class="dashboard-grid">
-                    <article class="dash-card">
-                        <span class="dash-chip">Aktiv</span>
-                        <h4>Efterkalkulation</h4>
-                        <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
-                        <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
-                    </article>
-                    <article class="dash-card">
-                        <span class="dash-chip">Planlagt</span>
-                        <h4>Belastning</h4>
-                        <p>Kapacitetsbelastning, ressourcer, ordreflyt og planlægningsudsving.</p>
-                        <button onclick="openModule('belastning')" disabled>Kommer snart</button>
-                    </article>
-                    <article class="dash-card">
-                        <span class="dash-chip">Aktiv</span>
-                        <h4>Omsætning</h4>
-                        <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
-                        <button onclick="openModule('omsaetning')">Åbn Omsætning</button>
-                    </article>
-                    <article class="dash-card">
-                        <span class="dash-chip">Aktiv</span>
-                        <h4>Ordreindgang</h4>
-                        <p>Ordreindgang fra SSRS: budget, ordre, tilbud og udvikling pr. uge/periode.</p>
-                        <button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button>
-                    </article>
-                </div>
-            </section>
-        </div>
-
-        <div class="container main-omsaetning" id="mainOmsaetning">
-            <section class="omsaetning-shell">
-                <div class="omsaetning-head">
-                    <div>
-                        <h3>Omsætning</h3>
-                        <p>SSRS-baseret oversigt fra AcTr, AcPr og Ac (kontogruppe 10_Omsætning).</p>
-                    </div>
-                    <div class="omsaetning-head-actions">
-                        <button id="omsaetningLoadBtn" onclick="loadOmsaetningSummary({ persistThresholdsOnUpdate: true, forceRefresh: true })">Opdater</button>
-                        <select id="omsaetningPrintOrientation" title="Print-layout">
-                            <option value="auto" selected>Layout: Auto</option>
-                            <option value="portrait">Layout: Stående</option>
-                            <option value="landscape">Layout: Liggende</option>
-                        </select>
-                        <button id="omsaetningPrintBtn" onclick="printOmsaetningReport()">Print rapport</button>
-                    </div>
-                </div>
-                <div id="omsaetningYears" class="omsaetning-years"></div>
-                <p id="omsaetningYearNote" class="omsaetning-year-note">Regnskabsår (jul-jun). Vælg flere år for samlet periode.</p>
-                <div class="omsaetning-filters">
-                    <div class="omsaetning-field">
-                        <label for="omsaetningFraMonth">Fra måned</label>
-                        <input id="omsaetningFraMonth" type="month" onchange="scheduleOmsaetningAutoReload()" />
-                    </div>
-                    <div class="omsaetning-field">
-                        <label for="omsaetningTilMonth">Til måned</label>
-                        <input id="omsaetningTilMonth" type="month" onchange="scheduleOmsaetningAutoReload()" />
-                    </div>
-                    <div class="omsaetning-field omsaetning-accounts-field">
-                        <label for="omsaetningAccountSearch">Kontoer (multi)</label>
-                        <div class="omsaetning-accounts-head">
-                            <button id="omsaetningAccountsToggleBtn" class="omsaetning-accounts-toggle" type="button" onclick="toggleOmsaetningAccountsPanel()">Vis konti</button>
-                            <span id="omsaetningAccountsSummary" class="omsaetning-accounts-summary">0/0 valgt</span>
-                        </div>
-                        <div id="omsaetningAccountsActive" class="omsaetning-accounts-active"></div>
-                        <input id="omsaetningAccountSearch" type="text" placeholder="Søg konto/navn..." oninput="filterOmsaetningAccounts()" style="display:none;" />
-                        <div id="omsaetningAccountsPanel" class="omsaetning-accounts-panel" style="display:none;">
-                            <div class="omsaetning-accounts-toolbar">
-                                <button type="button" onclick="setAllOmsaetningAccounts(true)">Alle</button>
-                                <button type="button" onclick="setAllOmsaetningAccounts(false)">Ingen</button>
-                            </div>
-                            <div id="omsaetningAccountsList" class="omsaetning-accounts-list"></div>
-                        </div>
-                    </div>
-                    <div class="omsaetning-field omsaetning-customer-field">
-                        <label for="omsaetningCustomerSearch">Kunde (prefix)</label>
-                        <input id="omsaetningCustomerSearch" type="text" placeholder="Søg kunde fx logitr..." oninput="scheduleOmsaetningCustomerSearch()" />
-                        <div id="omsaetningCustomerResults" class="omsaetning-customer-results">
-                            <div class="omsaetning-customer-empty">Ingen kunde valgt: viser normal visning for valgte år og konti.</div>
-                        </div>
-                        <div id="omsaetningSelectedCustomers" class="omsaetning-selected-customers"></div>
-                        <div id="omsaetningCustomerMode" class="omsaetning-customer-mode">Ingen kunde valgt: viser normal visning for valgte år og konti.</div>
-                        <div id="omsaetningCustomerThresholds" class="omsaetning-customer-thresholds"></div>
-                    </div>
-                    <div class="omsaetning-field omsaetning-threshold-field">
-                        <label>Tærskler (Mio)</label>
-                        <div class="omsaetning-threshold-grid">
-                            <input id="omsaetningWarnThreshold" type="number" step="0.1" min="0" value="3.0" title="Under denne værdi markeres lav" />
-                            <input id="omsaetningGoodThreshold" type="number" step="0.1" min="0" value="5.0" title="Over denne værdi markeres god" />
-                        </div>
-                    </div>
-                </div>
-                <div class="omsaetning-kpis">
-                    <div class="omsaetning-kpi"><div class="lbl">Omsætning (Mio)</div><div class="val" id="omsaetningTotalMio">-</div></div>
-                    <div class="omsaetning-kpi"><div class="lbl">Rækker</div><div class="val" id="omsaetningRowsCount">-</div></div>
-                    <div class="omsaetning-kpi"><div class="lbl">Perioder</div><div class="val" id="omsaetningPeriodsCount">-</div></div>
-                </div>
-                <div id="omsaetningChartsWrap" class="omsaetning-charts" style="display:none;">
-                    <section class="omsaetning-chart-card">
-                        <header class="omsaetning-chart-head">
-                            <span id="omsaetningStackedTitle" class="omsaetning-chart-title">Omsætning pr. måned (stacked pr. konto)</span>
-                            <span class="omsaetning-chart-sub">Mio DKK</span>
-                        </header>
-                        <div class="omsaetning-chart-body">
-                            <svg id="omsaetningStackedChart" class="omsaetning-chart-svg" aria-label="Omsætning stacked chart"></svg>
-                            <div id="omsaetningLegend" class="omsaetning-legend"></div>
-                        </div>
-                    </section>
-                    <section class="omsaetning-chart-card">
-                        <header class="omsaetning-chart-head">
-                            <span class="omsaetning-chart-title">Trend total omsætning</span>
-                            <span class="omsaetning-chart-sub">Månedlig udvikling</span>
-                        </header>
-                        <div class="omsaetning-chart-body">
-                            <svg id="omsaetningTrendChart" class="omsaetning-chart-svg" aria-label="Omsætning trend chart"></svg>
-                        </div>
-                    </section>
-                </div>
-                <div id="omsaetningThresholdWrap" class="omsaetning-table-card" style="display:none;">
-                    <div class="omsaetning-table-title">Månedstabel med tærskler</div>
-                    <div id="omsaetningThresholdTable" class="omsaetning-table-wrap" style="margin-top:0;border:none;border-radius:0;"></div>
-                </div>
-                <div id="omsaetningDetailsWrap" class="omsaetning-table-card" style="display:none;">
-                    <div class="omsaetning-table-title omsaetning-table-title-row">
-                        <span>Måned/Kunde detaljer (tekst)</span>
-                        <button id="omsaetningDetailsToggleBtn" class="omsaetning-collapse-btn" type="button" onclick="toggleOmsaetningDetails()">Vis detaljer</button>
-                    </div>
-                    <div id="omsaetningTableWrap" class="omsaetning-table-wrap" style="margin-top:0;border:none;border-radius:0;display:none;"></div>
-                </div>
-                <div id="omsaetningEmpty" class="omsaetning-empty">Vælg perioder og konti, og tryk Opdater.</div>
-            </section>
-        </div>
-
-        <div class="container main-omsaetning" id="mainOrdreindgang">
-            <section class="omsaetning-shell">
-                <div class="omsaetning-head">
-                    <div>
-                        <h3>Ordreindgang</h3>
-                        <p>SSRS-baseret oversigt over ordre og tilbud pr. uge.</p>
-                    </div>
-                    <div class="omsaetning-head-actions">
-                        <button id="ordreindgangLoadBtn" onclick="loadOrdreindgangSummary({ forceRefresh: true })">Opdater</button>
-                        <select id="ordreindgangPrintOrientation" title="Print-layout">
-                            <option value="auto" selected>Layout: Auto</option>
-                            <option value="portrait">Layout: Stående</option>
-                            <option value="landscape">Layout: Liggende</option>
-                        </select>
-                        <button id="ordreindgangPrintBtn" onclick="printOrdreindgangReport()">Print rapport</button>
-                    </div>
-                </div>
-                <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px minmax(180px,1fr);">
-                    <div class="omsaetning-field">
-                        <label for="ordreindgangFraWeek">Fra uge (YYYYWW)</label>
-                        <input id="ordreindgangFraWeek" type="text" maxlength="6" placeholder="202601" onchange="scheduleOrdreindgangAutoReload()" />
-                    </div>
-                    <div class="omsaetning-field">
-                        <label for="ordreindgangTilWeek">Til uge (YYYYWW)</label>
-                        <input id="ordreindgangTilWeek" type="text" maxlength="6" placeholder="202612" onchange="scheduleOrdreindgangAutoReload()" />
-                    </div>
-                    <div class="omsaetning-field">
-                        <label for="ordreindgangShowTilbud">Tilbud</label>
-                        <label class="ordreindgang-toggle" for="ordreindgangShowTilbud">
-                            <input id="ordreindgangShowTilbud" type="checkbox" onchange="renderOrdreindgangFromLastPayload()" />
-                            <span>Vis tilbud i graf og tabel</span>
-                        </label>
-                    </div>
-                    <div class="omsaetning-field">
-                        <label>Status</label>
-                        <div id="ordreindgangStatus" class="omsaetning-customer-mode">Vælg ugeperiode og tryk Opdater.</div>
-                    </div>
-                </div>
-                <div class="omsaetning-kpis">
-                    <div class="omsaetning-kpi"><div class="lbl">Total Ordre</div><div class="val" id="ordreindgangTotalOrd">-</div></div>
-                    <div class="omsaetning-kpi"><div class="lbl">Total Tilbud</div><div class="val" id="ordreindgangTotalTilbud">-</div></div>
-                    <div class="omsaetning-kpi"><div class="lbl">Gns. Ordre</div><div class="val" id="ordreindgangAvgOrd">-</div></div>
-                    <div class="omsaetning-kpi"><div class="lbl">Tilbud → Ordre</div><div class="val" id="ordreindgangConv">-</div></div>
-                </div>
-                <div id="ordreindgangChartsWrap" class="omsaetning-charts" style="display:none;">
-                    <section class="omsaetning-chart-card" style="grid-column:1 / -1;">
-                        <header class="omsaetning-chart-head">
-                            <span class="omsaetning-chart-title">Ugeudvikling (Ordre / Tilbud / Budget)</span>
-                            <span class="omsaetning-chart-sub">DKK</span>
-                        </header>
-                        <div class="omsaetning-chart-body">
-                            <div id="ordreindgangLegend" class="omsaetning-legend ordreindgang-legend-row"></div>
-                            <svg id="ordreindgangTrendChart" class="omsaetning-chart-svg ordreindgang-chart-svg" aria-label="Ordreindgang trend chart"></svg>
-                        </div>
-                    </section>
-                </div>
-                <div id="ordreindgangWeeklyWrap" class="omsaetning-table-card" style="display:none;">
-                    <div class="omsaetning-table-title omsaetning-table-title-row">
-                        <span>Ugetabel</span>
-                        <button id="ordreindgangWeeklyToggleBtn" class="omsaetning-collapse-btn" type="button" onclick="toggleOrdreindgangWeeklyTable()">Vis tabel</button>
-                    </div>
-                    <div id="ordreindgangWeeklyTable" class="omsaetning-table-wrap" style="margin-top:0;border:none;border-radius:0;display:none;"></div>
-                </div>
-                <div id="ordreindgangCustomersWrap" class="omsaetning-table-card" style="display:none;">
-                    <div class="omsaetning-table-title omsaetning-table-title-row">
-                        <span>Top kunder</span>
-                        <button id="ordreindgangCustomersToggleBtn" class="omsaetning-collapse-btn" type="button" onclick="toggleOrdreindgangCustomersTable()">Vis tabel</button>
-                    </div>
-                    <div id="ordreindgangCustomersTable" class="omsaetning-table-wrap" style="margin-top:0;border:none;border-radius:0;display:none;"></div>
-                </div>
-                <div id="ordreindgangEmpty" class="omsaetning-empty">Vælg ugeperiode og tryk Opdater.</div>
-            </section>
-        </div>
-
-        <div class="container" id="mainWorkspace">
-            <div class="search-box" id="searchBox">
-                <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Åbn søgefelt og filtre">▼ Søg</button>
-                <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." style="display:none;" />
-                <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret" style="display:none;">Søg</button>
-                <select id="updateActionSelect" class="filter-select" onchange="handleUpdateActionSelection()" title="Vaelg hvad du vil opdatere">
-                    <option value="">Opdater...</option>
-                    <option value="order-cache">Ordre cache</option>
-                    <option value="list">Liste</option>
-                    <option value="program">Program</option>
-                </select>
-                <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
-                <button class="mode-btn" onclick="openOrderListPrintPreview()" title="Vis forhåndsvisning af den filtrerede ordreliste">Liste / PDF</button>
-                <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
-                <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
-                <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
-                    <option value="">Alle brugere</option>
-                </select>
-                <input type="text" id="customerFilterInput" class="filter-input" placeholder="Søg kunde i listen..." oninput="setOrderListFilter()" />
-                <button id="collapseExpandBtn" class="list-toggle-btn" onclick="toggleSearchBox()" style="margin-left:auto;" title="Skjul sogefelt og filtre">▲ Luk</button>
-            </div>
-            <div id="orderList"></div>
-            <div id="result"></div>
-        </div>
-
-        <div id="summaryModal" class="modal-overlay" onclick="closeSummaryModal(event)">
-            <div class="modal-box" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <div class="modal-header-left">
-                        <button id="summaryModalBackBtn" class="modal-back hidden" onclick="goSummaryModalBack()">←</button>
-                        <h3 id="summaryModalTitle">Produktoversigt</h3>
-                    </div>
-                    <button class="modal-close" onclick="closeSummaryModal()">Luk</button>
-                </div>
-                <div class="modal-content-wrap">
-                    <div id="summaryModalBody"></div>
-                    <aside id="summaryImagePanel" class="summary-image-panel hidden"></aside>
-                </div>
-            </div>
-        </div>
-
-        <div id="imageLightbox" class="image-lightbox hidden" onclick="closeImageLightbox(event)">
-            <div class="image-lightbox-dialog" onclick="event.stopPropagation()">
-                <div class="image-lightbox-header">
-                    <div id="imageLightboxTitle" class="image-lightbox-title">Billede</div>
-                    <button class="image-lightbox-close" onclick="closeImageLightbox()">Luk</button>
-                </div>
-                <div class="image-lightbox-body">
-                    <img id="imageLightboxImg" src="" alt="" />
-                </div>
-                <div id="imageLightboxPath" class="image-lightbox-path"></div>
-            </div>
-        </div>
-
-        <div id="compactImageModal" class="compact-image-modal" onclick="closeCompactImageModal(event)">
-            <div class="compact-image-dialog" onclick="event.stopPropagation()">
-                <div class="compact-image-header">
-                    <div>
-                        <div id="compactImageTitle" class="compact-image-title">Billeder</div>
-                        <div id="compactImageSubtitle" class="compact-image-subtitle"></div>
-                    </div>
-                    <button class="compact-image-close" onclick="closeCompactImageModal()">Luk</button>
-                </div>
-                <div id="compactImageBody" class="compact-image-body"></div>
-            </div>
-        </div>
-
-        <div id="printPreviewOverlay" class="print-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="printPreviewTitle" onclick="closePrintPreview(event)">
-            <div class="print-preview-dialog" tabindex="-1" onclick="event.stopPropagation()">
-                <div class="print-preview-header">
-                    <div id="printPreviewTitle" class="print-preview-title">Forhåndsvisning</div>
-                    <div class="print-preview-actions">
-                        <button class="list-toggle-btn" onclick="closePrintPreview()">Luk</button>
-                        <button class="list-toggle-btn" onclick="confirmPrintFromPreview()">Udskriv / PDF</button>
-                    </div>
-                </div>
-                <div id="printPreviewBody" class="print-preview-body"></div>
-            </div>
-        </div>
-
-        <div id="orderDetailModal" class="order-detail-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="orderDetailModalTitle" onclick="closeOrderDetailModal(event)">
-            <div class="order-detail-modal-shell" onclick="event.stopPropagation()">
-                <div class="order-detail-modal-header">
-                    <div class="order-detail-modal-title">
-                        <strong id="orderDetailModalTitle">Ordre-rapport</strong>
-                        <span id="orderDetailModalSubtitle">Manager-oversigt med produktion, cost og sporbarhed</span>
-                    </div>
-                    <div class="order-detail-modal-actions">
-                            <button id="orderDetailModalBackBtn" class="list-toggle-btn" onclick="goBackFromReportToOrder()" style="display:none;">Tilbage til ordre</button>
-                        <button class="list-toggle-btn" onclick="printOrderDetailReport()">Udskriv / PDF</button>
-                        <button class="list-toggle-btn" onclick="closeOrderDetailModal()">Luk</button>
-                    </div>
-                </div>
-                <div id="orderDetailModalBody" class="order-detail-modal-body"></div>
-            </div>
-        </div>
-
-        <div id="oversigtModal" class="oversigt-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="oversigtModalTitle" onclick="closeOversigtModal(event)">
-            <div class="oversigt-modal-shell" onclick="event.stopPropagation()">
-                <div class="oversigt-modal-header">
-                    <div class="oversigt-modal-title-wrap">
-                        <strong id="oversigtModalTitle">Oversigt</strong>
-                        <span id="oversigtModalSubtitle">Detaljeret produktionsanalyse</span>
-                    </div>
-                    <div class="oversigt-modal-actions">
-                        <button class="list-toggle-btn" onclick="refreshActiveOversigtModal()">Opdater</button>
-                        <button class="list-toggle-btn" onclick="closeOversigtModal()">Luk</button>
-                    </div>
-                </div>
-                <div id="oversigtModalBody" class="oversigt-modal-body"></div>
-            </div>
-        </div>
-        
-        <script>
             function formatNumber(num) {
                 const fixed = parseFloat(num).toFixed(2);
                 const parts = fixed.split('.');
@@ -1845,9 +425,9 @@ app.get('/', (req, res) => {
                 const tables = Array.from(root.querySelectorAll('table'));
                 if (!tables.length) return;
 
-                const rightPattern = /færdigmeldt|minutter|min\.|kost|pris|margin|afvigelse|kg|%|beløb|antal|samlet|dkk|forbrugt|stykliste|icon vægt|nestkost|nestmulti/i;
-                const centerPattern = /linje|rute|prodtp4|prod\.ordre|prodordre|nestingordre|ordre$/i;
-                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\\/ref|hvem|status|message|beskrivelse/i;
+                const rightPattern = /færdigmeldt|minutter|min.|kost|pris|margin|afvigelse|kg|%|beløb|antal|samlet|dkk|forbrugt|stykliste|icon vægt|nestkost|nestmulti/i;
+                const centerPattern = /linje|rute|prodtp4|prod.ordre|prodordre|nestingordre|ordre$/i;
+                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\/ref|hvem|status|message|beskrivelse/i;
 
                 for (const table of tables) {
                     table.classList.add('micro-grid-table');
@@ -1955,7 +535,7 @@ app.get('/', (req, res) => {
                     (note.updatedAt ? '<div style="font-size:11px;color:#888;margin-bottom:10px;">Sidst opdateret: ' + note.updatedAt.slice(0,16).replace('T',' ') + '</div>' : '') +
                     '<div class="note-popup-actions">' +
                     '<button class="btn-note-delete" onclick="deleteOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Slet</button>' +
-                    '<button class="btn-note-cancel" onclick="document.getElementById(\\'notePopupOverlay\\').remove()">Annuller</button>' +
+                    '<button class="btn-note-cancel" onclick="document.getElementById(\'notePopupOverlay\').remove()">Annuller</button>' +
                     '<button class="btn-note-save" onclick="saveOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Gem</button>' +
                     '</div></div>';
 
@@ -2047,164 +627,11 @@ app.get('/', (req, res) => {
             let omsaetningAutoReloadTimer = null;
             let omsaetningThresholdsByCustomer = new Map();
             let omsaetningDetailsCollapsed = true;
-            let omsaetningAccountsPanelOpen = false;
             const OMSAETNING_SSRS_DEFAULT_ACCOUNTS = new Set(['11012', '11015', '11040']);
             const OMSAETNING_AUTO_RELOAD_DELAY_MS = 280;
-            const OMSAETNING_SUMMARY_CACHE_TTL_MS = 15 * 60 * 1000;
-            const OMSAETNING_CUSTOMER_SEARCH_CACHE_TTL_MS = 120000;
-            const OMSAETNING_CACHE_MAX_ITEMS = 30;
-            const OMSAETNING_SHOW_THRESHOLD_SECTION = false;
             let omsaetningThresholdLoadToken = 0;
             const OMSAETNING_DEFAULT_WARN_THRESHOLD = 3;
             const OMSAETNING_DEFAULT_GOOD_THRESHOLD = 5;
-            let omsaetningSummaryCache = new Map();
-            let omsaetningSummaryInFlight = new Map();
-            let omsaetningCustomerSearchCache = new Map();
-            let omsaetningCustomerSearchInFlight = new Map();
-            let ordreindgangInitialized = false;
-            let ordreindgangAutoReloadTimer = null;
-            let ordreindgangSummaryCache = new Map();
-            let ordreindgangSummaryInFlight = new Map();
-            let ordreindgangLastPayload = null;
-            let ordreindgangWeeklyCollapsed = true;
-            let ordreindgangCustomersCollapsed = true;
-            let ordreindgangResizeTimer = null;
-            const ORDREINDGANG_AUTO_RELOAD_DELAY_MS = 280;
-            const ORDREINDGANG_SUMMARY_CACHE_TTL_MS = 15 * 60 * 1000;
-
-            function setOmsaetningCacheEntry(cacheMap, key, value) {
-                cacheMap.set(key, {
-                    ts: Date.now(),
-                    value
-                });
-                if (cacheMap.size > OMSAETNING_CACHE_MAX_ITEMS) {
-                    const oldestKey = cacheMap.keys().next().value;
-                    if (oldestKey !== undefined) cacheMap.delete(oldestKey);
-                }
-            }
-
-            function getOmsaetningCacheEntry(cacheMap, key, ttlMs) {
-                const hit = cacheMap.get(key);
-                if (!hit) return null;
-                if ((Date.now() - Number(hit.ts || 0)) > ttlMs) {
-                    cacheMap.delete(key);
-                    return null;
-                }
-                return hit.value;
-            }
-
-            function buildOmsaetningSummaryCacheKey(fra, til, selectedAccounts, selectedCustomers) {
-                const accounts = Array.from(new Set((Array.isArray(selectedAccounts) ? selectedAccounts : [])
-                    .map(v => String(v || '').trim())
-                    .filter(Boolean))).sort();
-                const customers = Array.from(new Set((Array.isArray(selectedCustomers) ? selectedCustomers : [])
-                    .map(v => String(v || '').trim())
-                    .filter(Boolean))).sort();
-                return JSON.stringify({ fra, til, accounts, customers });
-            }
-
-            async function fetchOmsaetningSummaryCached(fra, til, selectedAccounts, selectedCustomers, options) {
-                const safeOptions = options && typeof options === 'object' ? options : {};
-                const forceRefresh = safeOptions.forceRefresh === true;
-                const cacheKey = buildOmsaetningSummaryCacheKey(fra, til, selectedAccounts, selectedCustomers);
-                if (!forceRefresh) {
-                    const cached = getOmsaetningCacheEntry(omsaetningSummaryCache, cacheKey, OMSAETNING_SUMMARY_CACHE_TTL_MS);
-                    if (cached) {
-                        return cached;
-                    }
-                }
-
-                const customerFilters = Array.isArray(selectedCustomers)
-                    ? Array.from(new Set(selectedCustomers.map(v => String(v || '').trim()).filter(Boolean))).sort()
-                    : [];
-                if (!forceRefresh && customerFilters.length > 0) {
-                    const allCustomersKey = buildOmsaetningSummaryCacheKey(fra, til, selectedAccounts, []);
-                    const allCustomersCached = getOmsaetningCacheEntry(omsaetningSummaryCache, allCustomersKey, OMSAETNING_SUMMARY_CACHE_TTL_MS);
-                    if (allCustomersCached && Array.isArray(allCustomersCached.rows)) {
-                        const selectedSet = new Set(customerFilters);
-                        const filteredRows = allCustomersCached.rows.filter(row => {
-                            const custNo = row && row.custNo !== null && row.custNo !== undefined
-                                ? String(row.custNo).trim()
-                                : '';
-                            return custNo && selectedSet.has(custNo);
-                        });
-                        const derivedPayload = {
-                            ok: true,
-                            filters: {
-                                fra,
-                                til,
-                                accounts: Array.isArray(allCustomersCached.filters && allCustomersCached.filters.accounts)
-                                    ? allCustomersCached.filters.accounts
-                                    : [],
-                                customers: customerFilters
-                            },
-                            totalRevenueMio: filteredRows.reduce((sum, row) => sum + Number((row && row.revenueMio) || 0), 0),
-                            rows: filteredRows
-                        };
-                        setOmsaetningCacheEntry(omsaetningSummaryCache, cacheKey, derivedPayload);
-                        return derivedPayload;
-                    }
-                }
-
-                if (!forceRefresh) {
-                    const inFlight = omsaetningSummaryInFlight.get(cacheKey);
-                    if (inFlight) {
-                        return await inFlight;
-                    }
-                }
-
-                const query = new URLSearchParams({
-                    fra,
-                    til,
-                    accounts: selectedAccounts.join(','),
-                    customers: selectedCustomers.join(',')
-                });
-
-                const reqPromise = (async () => {
-                    const response = await fetch('/omsaetning/summary?' + query.toString());
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    const payload = await response.json();
-                    setOmsaetningCacheEntry(omsaetningSummaryCache, cacheKey, payload);
-                    return payload;
-                })();
-
-                omsaetningSummaryInFlight.set(cacheKey, reqPromise);
-                try {
-                    return await reqPromise;
-                } finally {
-                    omsaetningSummaryInFlight.delete(cacheKey);
-                }
-            }
-
-            async function searchOmsaetningCustomersCached(q) {
-                const key = String(q || '').trim().toLowerCase();
-                if (!key) return { customers: [] };
-
-                const cached = getOmsaetningCacheEntry(omsaetningCustomerSearchCache, key, OMSAETNING_CUSTOMER_SEARCH_CACHE_TTL_MS);
-                if (cached) {
-                    return cached;
-                }
-
-                const inFlight = omsaetningCustomerSearchInFlight.get(key);
-                if (inFlight) {
-                    return await inFlight;
-                }
-
-                const reqPromise = (async () => {
-                    const response = await fetch('/omsaetning/customers?q=' + encodeURIComponent(key) + '&limit=25');
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    const payload = await response.json();
-                    setOmsaetningCacheEntry(omsaetningCustomerSearchCache, key, payload);
-                    return payload;
-                })();
-
-                omsaetningCustomerSearchInFlight.set(key, reqPromise);
-                try {
-                    return await reqPromise;
-                } finally {
-                    omsaetningCustomerSearchInFlight.delete(key);
-                }
-            }
 
             function applyOmsaetningDetailsCollapsedState() {
                 const tableWrap = document.getElementById('omsaetningTableWrap');
@@ -2212,87 +639,6 @@ app.get('/', (req, res) => {
                 if (!tableWrap || !toggleBtn) return;
                 tableWrap.style.display = omsaetningDetailsCollapsed ? 'none' : 'block';
                 toggleBtn.textContent = omsaetningDetailsCollapsed ? 'Vis detaljer' : 'Skjul detaljer';
-            }
-
-            function renderOmsaetningAccountsSummary() {
-                const summaryEl = document.getElementById('omsaetningAccountsSummary');
-                const activeEl = document.getElementById('omsaetningAccountsActive');
-                if (!summaryEl) return;
-                const selectedCount = Array.from(omsaetningSelectedAccounts.values()).filter(Boolean).length;
-                const totalCount = Array.isArray(omsaetningAccounts) ? omsaetningAccounts.length : 0;
-                summaryEl.textContent = String(selectedCount) + '/' + String(totalCount) + ' valgt';
-
-                if (activeEl) {
-                    const selectedValues = Array.from(omsaetningSelectedAccounts.values())
-                        .map(v => String(v || '').trim())
-                        .filter(Boolean)
-                        .sort((a, b) => a.localeCompare(b));
-
-                    if (selectedValues.length === 0) {
-                        activeEl.innerHTML = '<span class="chip more">Ingen konti valgt</span>';
-                    } else {
-                        const visible = selectedValues.slice(0, 5).map(acNo => {
-                            const account = Array.isArray(omsaetningAccounts)
-                                ? omsaetningAccounts.find(a => String(a && a.acNo || '').trim() === acNo)
-                                : null;
-                            const label = account ? (acNo + ' ' + String(account.name || '').trim()) : acNo;
-                            return '<span class="chip" title="' + escapeHtmlFE(label) + '">' + escapeHtmlFE(acNo) + '</span>';
-                        });
-                        if (selectedValues.length > 5) {
-                            visible.push('<span class="chip more">+' + escapeHtmlFE(String(selectedValues.length - 5)) + '</span>');
-                        }
-                        activeEl.innerHTML = visible.join('');
-                    }
-                }
-            }
-
-            function formatSigned(value, digits) {
-                const n = Number(value || 0);
-                const fixed = n.toFixed(Number.isFinite(digits) ? digits : 1);
-                return (n > 0 ? '+' : '') + fixed;
-            }
-
-            function buildOmsaetningGaugeData(amountMio, warnThreshold, goodThreshold) {
-                const amount = Number(amountMio || 0);
-                const warn = Number(warnThreshold || 0);
-                const good = Math.max(warn + 0.0001, Number(goodThreshold || 0));
-                const span = Math.max(0.0001, good - warn);
-
-                const marginPct = ((amount - warn) / span) * 30;
-                const scaleMin = -30;
-                const scaleMax = 60;
-                const toLeft = value => ((value - scaleMin) / (scaleMax - scaleMin)) * 100;
-
-                const zeroLeft = toLeft(0);
-                const targetLeft = toLeft(30);
-                const clamped = Math.max(scaleMin, Math.min(scaleMax, marginPct));
-                const pointLeft = toLeft(clamped);
-
-                return {
-                    marginPct,
-                    pointLeft,
-                    zeroLeft,
-                    targetLeft,
-                    fillLeft: Math.min(pointLeft, zeroLeft),
-                    fillWidth: Math.abs(pointLeft - zeroLeft),
-                    fillClass: pointLeft >= zeroLeft ? 'pos' : 'neg',
-                    deltaWarn: amount - warn,
-                    deltaGood: amount - good
-                };
-            }
-
-            function applyOmsaetningAccountsPanelState() {
-                const panel = document.getElementById('omsaetningAccountsPanel');
-                const search = document.getElementById('omsaetningAccountSearch');
-                const btn = document.getElementById('omsaetningAccountsToggleBtn');
-                if (panel) panel.style.display = omsaetningAccountsPanelOpen ? 'block' : 'none';
-                if (search) search.style.display = omsaetningAccountsPanelOpen ? 'block' : 'none';
-                if (btn) btn.textContent = omsaetningAccountsPanelOpen ? 'Skjul konti' : 'Vis konti';
-            }
-
-            function toggleOmsaetningAccountsPanel() {
-                omsaetningAccountsPanelOpen = !omsaetningAccountsPanelOpen;
-                applyOmsaetningAccountsPanelState();
             }
 
             function toggleOmsaetningDetails() {
@@ -2327,7 +673,7 @@ app.get('/', (req, res) => {
 
             function parseMonthInputToPeriod(monthValue) {
                 const raw = String(monthValue || '').trim();
-                const match = raw.match(/^(\\d{4})-(\\d{2})$/);
+                const match = raw.match(/^(\d{4})-(\d{2})$/);
                 if (!match) return null;
                 const year = Number(match[1]);
                 const month = Number(match[2]);
@@ -2476,7 +822,6 @@ app.get('/', (req, res) => {
                     if (checked) omsaetningSelectedAccounts.add(value);
                     else omsaetningSelectedAccounts.delete(value);
                 }
-                renderOmsaetningAccountsSummary();
                 scheduleOmsaetningAutoReload();
             }
 
@@ -2497,8 +842,6 @@ app.get('/', (req, res) => {
                         '<span>' + escapeHtmlFE(value + ' - ' + String(acc.name || '')) + '</span>' +
                         '</label>';
                 }).join('');
-                renderOmsaetningAccountsSummary();
-                applyOmsaetningAccountsPanelState();
             }
 
             function toggleOmsaetningAccount(inputEl) {
@@ -2507,7 +850,6 @@ app.get('/', (req, res) => {
                 if (!value) return;
                 if (inputEl.checked) omsaetningSelectedAccounts.add(value);
                 else omsaetningSelectedAccounts.delete(value);
-                renderOmsaetningAccountsSummary();
                 scheduleOmsaetningAutoReload();
             }
 
@@ -2641,7 +983,9 @@ app.get('/', (req, res) => {
                 }
 
                 try {
-                    const payload = await searchOmsaetningCustomersCached(q);
+                    const response = await fetch('/omsaetning/customers?q=' + encodeURIComponent(q) + '&limit=25');
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const payload = await response.json();
                     if (token !== omsaetningCustomerSearchToken) return;
                     const rows = Array.isArray(payload.customers) ? payload.customers : [];
                     omsaetningCustomerResults = rows;
@@ -2697,7 +1041,7 @@ app.get('/', (req, res) => {
 
             async function loadOmsaetningThresholdForCustomer(custNo) {
                 const key = String(custNo || '').trim();
-                if (!/^\\d{1,20}$/.test(key)) return;
+                if (!/^\d{1,20}$/.test(key)) return;
                 const token = ++omsaetningThresholdLoadToken;
 
                 try {
@@ -2733,11 +1077,11 @@ app.get('/', (req, res) => {
                     if (!threshold) {
                         return '<div class="omsaetning-customer-threshold-row"><span class="cust">' +
                             escapeHtmlFE(String(custName || key)) + ' (' + escapeHtmlFE(key) + ')' +
-                            '</span><span class="thr">tærskler: indlæser...</span></div>';
+                            '</span><span class="thr">soglie: indlæser...</span></div>';
                     }
                     return '<div class="omsaetning-customer-threshold-row"><span class="cust">' +
                         escapeHtmlFE(String(custName || key)) + ' (' + escapeHtmlFE(key) + ')' +
-                        '</span><span class="thr">tærskler: ' + escapeHtmlFE(Number(threshold.warnThreshold).toFixed(1)) +
+                        '</span><span class="thr">soglie: ' + escapeHtmlFE(Number(threshold.warnThreshold).toFixed(1)) +
                         ' / ' + escapeHtmlFE(Number(threshold.goodThreshold).toFixed(1)) + '</span></div>';
                 });
 
@@ -2748,7 +1092,7 @@ app.get('/', (req, res) => {
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const selectedCustomers = Array.from(omsaetningSelectedCustomers.keys())
                     .map(v => String(v || '').trim())
-                    .filter(v => /^\\d{1,20}$/.test(v));
+                    .filter(v => /^\d{1,20}$/.test(v));
 
                 if (selectedCustomers.length === 0) {
                     omsaetningThresholdLoadToken += 1;
@@ -2800,7 +1144,7 @@ app.get('/', (req, res) => {
             async function persistOmsaetningThresholdsForCustomers(customerNos, warnThreshold, goodThreshold) {
                 const customerKeys = Array.from(new Set((Array.isArray(customerNos) ? customerNos : [])
                     .map(v => String(v || '').trim())
-                    .filter(v => /^\\d{1,20}$/.test(v))));
+                    .filter(v => /^\d{1,20}$/.test(v))));
                 if (customerKeys.length === 0) return;
 
                 await Promise.all(customerKeys.map(async custNo => {
@@ -2826,12 +1170,12 @@ app.get('/', (req, res) => {
                     const overlay = document.createElement('div');
                     overlay.className = 'omsaetning-persist-overlay';
                     overlay.innerHTML =
-                        '<div class="omsaetning-persist-dialog" role="dialog" aria-modal="true" aria-label="Gem tærskler">' +
-                            '<div class="omsaetning-persist-head"><h4>Gem tærskler for valgte kunder</h4></div>' +
+                        '<div class="omsaetning-persist-dialog" role="dialog" aria-modal="true" aria-label="Gem soglier">' +
+                            '<div class="omsaetning-persist-head"><h4>Gem soglier for valgte kunder</h4></div>' +
                             '<div class="omsaetning-persist-body">' +
-                                '<div>Flere kunder er valgt. Vælg hvor de nye tærskler skal gemmes.</div>' +
+                                '<div>Flere kunder er valgt. Vælg hvor de nye soglier skal gemmes.</div>' +
                                 '<div class="omsaetning-persist-customer-list">' + listHtml + '</div>' +
-                                '<div class="omsaetning-persist-thr">Nye tærskler: ' + escapeHtmlFE(Number(warnThreshold).toFixed(1)) + ' / ' + escapeHtmlFE(Number(goodThreshold).toFixed(1)) + '</div>' +
+                                '<div class="omsaetning-persist-thr">Nye soglier: ' + escapeHtmlFE(Number(warnThreshold).toFixed(1)) + ' / ' + escapeHtmlFE(Number(goodThreshold).toFixed(1)) + '</div>' +
                                 '<div class="omsaetning-persist-pick">Valgt kunde: <span id="omsaetningPersistPicked" class="omsaetning-persist-picked">' + escapeHtmlFE(defaultCustomer) + '</span></div>' +
                                 '</div>' +
                                 '<div class="omsaetning-persist-actions">' +
@@ -2864,7 +1208,7 @@ app.get('/', (req, res) => {
                         for (const btn of customerButtons) {
                             const btnCust = String(btn.getAttribute('data-cust') || '');
                             btn.classList.toggle('active', btnCust === selectedCustomer);
-                        }
+                        });
                         if (pickedEl) pickedEl.textContent = selectedCustomer || '-';
                     };
 
@@ -2898,7 +1242,7 @@ app.get('/', (req, res) => {
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const customerKeys = Array.from(new Set((Array.isArray(selectedCustomers) ? selectedCustomers : [])
                     .map(v => String(v || '').trim())
-                    .filter(v => /^\\d{1,20}$/.test(v))));
+                    .filter(v => /^\d{1,20}$/.test(v))));
 
                 if (customerKeys.length === 0) return [];
                 if (safeOptions.silentValidation === true) return [];
@@ -2921,7 +1265,7 @@ app.get('/', (req, res) => {
                 const exact = customerKeys.find(c => c.toUpperCase() === answer);
                 if (exact) return [exact];
 
-                alert('Ugyldigt valg for tærskel-gemning. Ingen tærskler blev gemt.');
+                alert('Ugyldigt valg for soglie-gemning. Ingen soglie blev gemt.');
                 return [];
             }
 
@@ -3250,757 +1594,6 @@ app.get('/', (req, res) => {
                 chartsWrap.style.display = 'grid';
             }
 
-            function normalizeWeekKeyInput(value) {
-                return String(value || '').replace(/[^0-9]/g, '').slice(0, 6);
-            }
-
-            function parseWeekKeyMeta(value) {
-                const raw = normalizeWeekKeyInput(value);
-                if (!/^[0-9]{6}$/.test(raw)) return null;
-                const year = Number(raw.slice(0, 4));
-                const week = Number(raw.slice(4, 6));
-                if (!Number.isFinite(year) || !Number.isFinite(week) || week < 1 || week > 53) return null;
-                return { raw, year, week };
-            }
-
-            function getIsoWeekMeta(dateValue) {
-                const d = new Date(Date.UTC(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate()));
-                d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-                const isoYear = d.getUTCFullYear();
-                const yearStart = new Date(Date.UTC(isoYear, 0, 1));
-                const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-                return {
-                    isoYear,
-                    week,
-                    weekKey: String(isoYear) + String(week).padStart(2, '0')
-                };
-            }
-
-            function getIsoWeekStartDate(isoYear, week) {
-                const jan4 = new Date(Date.UTC(isoYear, 0, 4));
-                const jan4Day = jan4.getUTCDay() || 7;
-                const mondayWeek1 = new Date(jan4);
-                mondayWeek1.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
-                const weekStart = new Date(mondayWeek1);
-                weekStart.setUTCDate(mondayWeek1.getUTCDate() + ((week - 1) * 7));
-                return weekStart;
-            }
-
-            function formatWeekLabel(weekKey) {
-                const meta = parseWeekKeyMeta(weekKey);
-                if (!meta) return String(weekKey || '-');
-                return String(meta.year) + '-W' + String(meta.week).padStart(2, '0');
-            }
-
-            function formatDkkDa(value) {
-                return Number(value || 0).toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
-
-            function formatPctDa(value) {
-                if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
-                return Number(value).toLocaleString('da-DK', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
-            }
-
-            function shouldShowOrdreindgangTilbudLine() {
-                const el = document.getElementById('ordreindgangShowTilbud');
-                return !!el && el.checked === true;
-            }
-
-            function setOrdreindgangStatus(message) {
-                const el = document.getElementById('ordreindgangStatus');
-                if (el) el.textContent = String(message || '');
-            }
-
-            function buildModulePrintStyles(options) {
-                const safeOptions = options && typeof options === 'object' ? options : {};
-                const orientation = safeOptions.orientation === 'landscape' ? 'landscape' : 'portrait';
-                const reportMaxWidth = orientation === 'landscape' ? '277mm' : '190mm';
-                return '<style>' +
-                    '@page { size: A4 ' + orientation + '; margin: 12mm; }' +
-                    'body { font-family: Segoe UI, Arial, sans-serif; margin:0; color:#172b3c; background:#fff; }' +
-                    '.report { max-width: ' + reportMaxWidth + '; margin:0 auto; }' +
-                    '.report-head { border-bottom:2px solid #d9e6f5; padding:0 0 8px 0; margin:0 0 10px 0; }' +
-                    '.report-title { font-size:22px; font-weight:800; color:#0f3560; margin:0; }' +
-                    '.report-sub { margin:3px 0 0 0; font-size:12px; color:#4b6783; }' +
-                    '.report-meta { display:flex; gap:8px 16px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:#355675; }' +
-                    '.report-meta strong { color:#0f3560; }' +
-                    '.kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0 12px 0; }' +
-                    '.kpi { border:1px solid #dbe8f9; border-radius:8px; padding:8px; background:#f8fbff; }' +
-                    '.kpi .lbl { font-size:11px; color:#4f6d8c; text-transform:uppercase; font-weight:700; }' +
-                    '.kpi .val { margin-top:3px; font-size:16px; font-weight:800; color:#0f3560; }' +
-                    '.section { margin-top:10px; page-break-inside:avoid; }' +
-                    '.section h3 { margin:0 0 6px 0; font-size:14px; color:#214867; border-bottom:1px solid #e2ebf7; padding-bottom:4px; }' +
-                    '.chart-box { border:1px solid #dbe8f9; border-radius:8px; padding:8px; background:#fff; }' +
-                    '.chart-box svg { width:100%; height:auto; display:block; }' +
-                    '.legend-line { margin:0 0 6px 0; font-size:12px; color:#355675; font-weight:700; }' +
-                    '.omsaetning-legend-item,.ordreindgang-legend-item { display:inline-flex; align-items:center; gap:6px; margin-right:10px; font-size:12px; font-weight:700; color:#355675; }' +
-                    '.omsaetning-legend-swatch,.ordreindgang-legend-swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }' +
-                    '.context-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }' +
-                    '.context-card { border:1px solid #dbe8f9; border-radius:8px; padding:8px; background:#f8fbff; }' +
-                    '.context-card h4 { margin:0 0 6px 0; font-size:12px; color:#214867; text-transform:uppercase; }' +
-                    '.context-card p { margin:0; font-size:12px; color:#355675; }' +
-                    '.context-line { margin-top:4px; font-size:12px; color:#355675; }' +
-                    '.pill-list { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }' +
-                    '.pill { display:inline-block; padding:2px 7px; border-radius:999px; background:#e8f1fc; color:#1f476a; font-size:11px; font-weight:700; }' +
-                    '.report-landscape .kpis { grid-template-columns:repeat(4,minmax(0,1fr)); }' +
-                    '.report-landscape table { font-size:11px; }' +
-                    '.table-wrap { border:1px solid #dbe8f9; border-radius:8px; overflow:hidden; }' +
-                    'table { width:100%; border-collapse:collapse; font-size:12px; }' +
-                    'th { background:#1565c0; color:#fff; text-align:left; padding:7px 8px; }' +
-                    'td { border-bottom:1px solid #e7eef8; padding:6px 8px; }' +
-                    'td[style*="text-align:right"], th[style*="text-align:right"] { text-align:right !important; }' +
-                    '.muted { color:#6a829b; font-size:11px; }' +
-                    '</style>';
-            }
-
-            function openModulePrintWindow(title, subtitle, metaHtml, kpiHtml, sectionsHtml, options) {
-                const safeOptions = options && typeof options === 'object' ? options : {};
-                const orientation = safeOptions.orientation === 'landscape' ? 'landscape' : 'portrait';
-                const html = '<!doctype html><html><head><meta charset="utf-8" />' +
-                    '<title>' + escapeHtmlFE(title) + '</title>' +
-                    buildModulePrintStyles({ orientation }) +
-                    '</head><body>' +
-                    '<div class="report report-' + orientation + '">' +
-                    '<header class="report-head">' +
-                    '<h1 class="report-title">' + escapeHtmlFE(title) + '</h1>' +
-                    '<p class="report-sub">' + escapeHtmlFE(subtitle) + '</p>' +
-                    '<div class="report-meta">' + metaHtml + '</div>' +
-                    '</header>' +
-                    '<section class="kpis">' + kpiHtml + '</section>' +
-                    sectionsHtml +
-                    '</div>' +
-                    '</body></html>';
-
-                const existing = document.getElementById('modulePrintFrame');
-                if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-
-                const frame = document.createElement('iframe');
-                frame.id = 'modulePrintFrame';
-                frame.setAttribute('aria-hidden', 'true');
-                frame.style.position = 'fixed';
-                frame.style.right = '0';
-                frame.style.bottom = '0';
-                frame.style.width = '1px';
-                frame.style.height = '1px';
-                frame.style.border = '0';
-                frame.style.opacity = '0';
-                document.body.appendChild(frame);
-
-                const cleanup = () => {
-                    const current = document.getElementById('modulePrintFrame');
-                    if (current && current.parentNode) current.parentNode.removeChild(current);
-                };
-
-                const runPrint = () => {
-                    const w = frame.contentWindow;
-                    if (!w) {
-                        alert('Kunne ikke oprette print-visning. Prøv igen.');
-                        cleanup();
-                        return;
-                    }
-
-                    w.onafterprint = cleanup;
-                    w.focus();
-                    w.print();
-                    setTimeout(cleanup, 2000);
-                };
-
-                frame.onload = () => {
-                    setTimeout(runPrint, 120);
-                };
-
-                // srcdoc avoids popup blockers and is more reliable in Electron than window.open.
-                frame.srcdoc = html;
-            }
-
-            function getOrientationLabelDa(orientation) {
-                return orientation === 'landscape' ? 'Liggende' : 'Stående';
-            }
-
-            function getPrintOrientationPreference(moduleKey) {
-                const id = moduleKey === 'ordreindgang' ? 'ordreindgangPrintOrientation' : 'omsaetningPrintOrientation';
-                const raw = String((document.getElementById(id) || {}).value || 'auto').toLowerCase();
-                if (raw === 'portrait' || raw === 'landscape') return raw;
-                return 'auto';
-            }
-
-            function resolvePrintOrientation(preference, autoOrientation) {
-                if (preference === 'portrait' || preference === 'landscape') return preference;
-                return autoOrientation === 'landscape' ? 'landscape' : 'portrait';
-            }
-
-            function getOrientationSourceLabelDa(preference) {
-                return preference === 'auto' ? 'Auto' : 'Manuel';
-            }
-
-            function chooseOmsaetningPrintOrientation(context) {
-                const c = context && typeof context === 'object' ? context : {};
-                if (c.detailsOpen || c.thresholdOpen) return 'landscape';
-                if (Number(c.selectedCustomers || 0) > 1) return 'landscape';
-                if (Number(c.selectedAccounts || 0) > 6) return 'landscape';
-                if (Number(c.periods || 0) > 12) return 'landscape';
-                return 'portrait';
-            }
-
-            function chooseOrdreindgangPrintOrientation(context) {
-                const c = context && typeof context === 'object' ? context : {};
-                if (c.weeklyOpen || c.customersOpen) return 'landscape';
-                if (Number(c.weeks || 0) > 20) return 'landscape';
-                return 'portrait';
-            }
-
-            function printOmsaetningReport() {
-                const chartsWrap = document.getElementById('omsaetningChartsWrap');
-                if (!chartsWrap || chartsWrap.style.display === 'none') {
-                    alert('Ingen Omsætning-data at printe. Tryk Opdater først.');
-                    return;
-                }
-
-                const detailsWrapEl = document.getElementById('omsaetningTableWrap');
-                const thresholdWrapEl = document.getElementById('omsaetningThresholdWrap');
-                const detailsOpen = !!detailsWrapEl && detailsWrapEl.style.display !== 'none';
-                const thresholdOpen = !!thresholdWrapEl && thresholdWrapEl.style.display !== 'none';
-
-                const fra = String((document.getElementById('omsaetningFraMonth') || {}).value || '-');
-                const til = String((document.getElementById('omsaetningTilMonth') || {}).value || '-');
-                const total = String((document.getElementById('omsaetningTotalMio') || {}).textContent || '-').trim();
-                const rows = String((document.getElementById('omsaetningRowsCount') || {}).textContent || '-').trim();
-                const periods = String((document.getElementById('omsaetningPeriodsCount') || {}).textContent || '-').trim();
-                const stackedSvg = (document.getElementById('omsaetningStackedChart') || {}).outerHTML || '';
-                const trendSvg = (document.getElementById('omsaetningTrendChart') || {}).outerHTML || '';
-                const legend = (document.getElementById('omsaetningLegend') || {}).innerHTML || '';
-                const thresholdTable = (document.getElementById('omsaetningThresholdTable') || {}).innerHTML || '';
-                const detailsTable = (document.getElementById('omsaetningTableWrap') || {}).innerHTML || '<div class="muted">Ingen detaljetabel tilgængelig.</div>';
-                const customerModeText = String((document.getElementById('omsaetningCustomerMode') || {}).textContent || '').trim();
-                const customerThresholdsHtml = (document.getElementById('omsaetningCustomerThresholds') || {}).innerHTML || '';
-                const selectedAccounts = Array.from(omsaetningSelectedAccounts.values()).filter(Boolean).map(v => String(v));
-                const selectedCustomerEntries = Array.from(omsaetningSelectedCustomers.entries());
-                const numericPeriods = Number(periods.replace(/\./g, '').replace(',', '.')) || 0;
-                const orientationPreference = getPrintOrientationPreference('omsaetning');
-                const autoOrientation = chooseOmsaetningPrintOrientation({
-                    detailsOpen,
-                    thresholdOpen,
-                    selectedCustomers: selectedCustomerEntries.length,
-                    selectedAccounts: selectedAccounts.length,
-                    periods: numericPeriods
-                });
-                const orientation = resolvePrintOrientation(orientationPreference, autoOrientation);
-
-                const accountPills = selectedAccounts.slice(0, 18).map(v => '<span class="pill">' + escapeHtmlFE(v) + '</span>').join('');
-                const accountRest = selectedAccounts.length > 18
-                    ? '<span class="pill">+' + escapeHtmlFE(String(selectedAccounts.length - 18)) + '</span>'
-                    : '';
-                const customerPills = selectedCustomerEntries.slice(0, 12).map(([custNo, custName]) => {
-                    const label = String(custName || '').trim() || String(custNo || '').trim();
-                    return '<span class="pill">' + escapeHtmlFE(label + ' (' + String(custNo || '') + ')') + '</span>';
-                }).join('');
-                const customerRest = selectedCustomerEntries.length > 12
-                    ? '<span class="pill">+' + escapeHtmlFE(String(selectedCustomerEntries.length - 12)) + '</span>'
-                    : '';
-
-                const metaHtml =
-                    '<div><strong>Periode:</strong> ' + escapeHtmlFE(fra + ' → ' + til) + '</div>' +
-                    '<div><strong>Layoutvalg:</strong> ' + escapeHtmlFE(getOrientationSourceLabelDa(orientationPreference)) + '</div>' +
-                    '<div><strong>Layout:</strong> ' + escapeHtmlFE(getOrientationLabelDa(orientation)) + '</div>' +
-                    '<div><strong>Udskrevet:</strong> ' + escapeHtmlFE(new Date().toLocaleString('da-DK')) + '</div>';
-
-                const kpiHtml =
-                    '<div class="kpi"><div class="lbl">Omsætning (Mio)</div><div class="val">' + escapeHtmlFE(total) + '</div></div>' +
-                    '<div class="kpi"><div class="lbl">Rækker</div><div class="val">' + escapeHtmlFE(rows) + '</div></div>' +
-                    '<div class="kpi"><div class="lbl">Perioder</div><div class="val">' + escapeHtmlFE(periods) + '</div></div>' +
-                    '<div class="kpi"><div class="lbl">Modul</div><div class="val">Omsætning</div></div>';
-
-                const contextSection =
-                    '<section class="section"><h3>Aktive filtre og visning</h3>' +
-                        '<div class="context-grid">' +
-                            '<div class="context-card">' +
-                                '<h4>Konti</h4>' +
-                                '<p>' + escapeHtmlFE(String(selectedAccounts.length)) + ' aktiv</p>' +
-                                '<div class="pill-list">' + accountPills + accountRest + '</div>' +
-                            '</div>' +
-                            '<div class="context-card">' +
-                                '<h4>Kunder</h4>' +
-                                '<p>' + escapeHtmlFE(String(selectedCustomerEntries.length)) + ' valgt</p>' +
-                                '<div class="pill-list">' + (selectedCustomerEntries.length > 0 ? (customerPills + customerRest) : '<span class="pill">Ingen kunde</span>') + '</div>' +
-                                '<div class="context-line"><strong>Visning:</strong> ' + escapeHtmlFE(customerModeText || 'Standardvisning') + '</div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</section>';
-
-                const customerCompareSection = selectedCustomerEntries.length > 1
-                    ? '<section class="section"><h3>Kunde-sammenligning (aktiv)</h3>' +
-                        '<div class="context-card"><p>Flere kunder er valgt. Graf og tabeller er baseret på sammenligning pr. måned.</p></div>' +
-                        '<div class="context-line"></div>' +
-                        '<div class="table-wrap">' + (customerThresholdsHtml || '<div class="muted" style="padding:8px;">Ingen kundetærskler tilgængelig.</div>') + '</div>' +
-                    '</section>'
-                    : '';
-
-                const thresholdSection = thresholdTable
-                    ? '<section class="section"><h3>Tærskel-tabel</h3><div class="table-wrap">' + thresholdTable + '</div></section>'
-                    : '';
-
-                const sectionsHtml =
-                    contextSection +
-                    customerCompareSection +
-                    '<section class="section"><h3>Stacked graf</h3><div class="chart-box"><div class="legend-line">' + legend + '</div>' + stackedSvg + '</div></section>' +
-                    '<section class="section"><h3>Trend graf</h3><div class="chart-box">' + trendSvg + '</div></section>' +
-                    (thresholdOpen ? thresholdSection : '') +
-                    (detailsOpen ? '<section class="section"><h3>Detaljer</h3><div class="table-wrap">' + detailsTable + '</div></section>' : '');
-
-                openModulePrintWindow(
-                    'Gantech Operations Hub - Omsætning',
-                    'Rapportudskrift (' + getOrientationLabelDa(orientation).toLowerCase() + ')',
-                    metaHtml,
-                    kpiHtml,
-                    sectionsHtml,
-                    { orientation }
-                );
-            }
-
-            function printOrdreindgangReport() {
-                const chartsWrap = document.getElementById('ordreindgangChartsWrap');
-                if (!chartsWrap || chartsWrap.style.display === 'none') {
-                    alert('Ingen Ordreindgang-data at printe. Tryk Opdater først.');
-                    return;
-                }
-
-                const weeklyWrapEl = document.getElementById('ordreindgangWeeklyTable');
-                const customersWrapEl = document.getElementById('ordreindgangCustomersTable');
-                const weeklyOpen = !!weeklyWrapEl && weeklyWrapEl.style.display !== 'none';
-                const customersOpen = !!customersWrapEl && customersWrapEl.style.display !== 'none';
-
-                const fraWeek = String((document.getElementById('ordreindgangFraWeek') || {}).value || '-');
-                const tilWeek = String((document.getElementById('ordreindgangTilWeek') || {}).value || '-');
-                const totalOrd = String((document.getElementById('ordreindgangTotalOrd') || {}).textContent || '-').trim();
-                const totalTilbud = String((document.getElementById('ordreindgangTotalTilbud') || {}).textContent || '-').trim();
-                const avgOrd = String((document.getElementById('ordreindgangAvgOrd') || {}).textContent || '-').trim();
-                const conv = String((document.getElementById('ordreindgangConv') || {}).textContent || '-').trim();
-                const trendSvg = (document.getElementById('ordreindgangTrendChart') || {}).outerHTML || '';
-                const legend = (document.getElementById('ordreindgangLegend') || {}).innerHTML || '';
-                const weeklyTable = (document.getElementById('ordreindgangWeeklyTable') || {}).innerHTML || '<div class="muted">Ingen ugetabel tilgængelig.</div>';
-                const customerTable = (document.getElementById('ordreindgangCustomersTable') || {}).innerHTML || '<div class="muted">Ingen kundetabel tilgængelig.</div>';
-                const statusText = String((document.getElementById('ordreindgangStatus') || {}).textContent || '').trim();
-                const tilbudEnabled = !!((document.getElementById('ordreindgangShowTilbud') || {}).checked);
-                const weekCount = Array.isArray(ordreindgangLastPayload && ordreindgangLastPayload.weeklyRows)
-                    ? ordreindgangLastPayload.weeklyRows.length
-                    : 0;
-                const orientationPreference = getPrintOrientationPreference('ordreindgang');
-                const autoOrientation = chooseOrdreindgangPrintOrientation({
-                    weeklyOpen,
-                    customersOpen,
-                    weeks: weekCount
-                });
-                const orientation = resolvePrintOrientation(orientationPreference, autoOrientation);
-
-                const metaHtml =
-                    '<div><strong>Periode:</strong> ' + escapeHtmlFE(fraWeek + ' → ' + tilWeek) + '</div>' +
-                    '<div><strong>Tilbud-linje:</strong> ' + (tilbudEnabled ? 'Aktiv' : 'Skjult') + '</div>' +
-                    '<div><strong>Layoutvalg:</strong> ' + escapeHtmlFE(getOrientationSourceLabelDa(orientationPreference)) + '</div>' +
-                    '<div><strong>Layout:</strong> ' + escapeHtmlFE(getOrientationLabelDa(orientation)) + '</div>' +
-                    '<div><strong>Udskrevet:</strong> ' + escapeHtmlFE(new Date().toLocaleString('da-DK')) + '</div>';
-
-                const kpiHtml =
-                    '<div class="kpi"><div class="lbl">Total Ordre</div><div class="val">' + escapeHtmlFE(totalOrd) + '</div></div>' +
-                    '<div class="kpi"><div class="lbl">Total Tilbud</div><div class="val">' + escapeHtmlFE(totalTilbud) + '</div></div>' +
-                    '<div class="kpi"><div class="lbl">Gns. Ordre</div><div class="val">' + escapeHtmlFE(avgOrd) + '</div></div>' +
-                    '<div class="kpi"><div class="lbl">Tilbud → Ordre</div><div class="val">' + escapeHtmlFE(conv) + '</div></div>';
-
-                const contextSection =
-                    '<section class="section"><h3>Aktive filtre og visning</h3>' +
-                        '<div class="context-grid">' +
-                            '<div class="context-card">' +
-                                '<h4>Periode</h4>' +
-                                '<p>' + escapeHtmlFE(fraWeek + ' → ' + tilWeek) + '</p>' +
-                            '</div>' +
-                            '<div class="context-card">' +
-                                '<h4>Tilbud-linje</h4>' +
-                                '<p>' + (tilbudEnabled ? 'Aktiv (vises i graf)' : 'Skjult (kun ordre)') + '</p>' +
-                                '<div class="context-line"><strong>Status:</strong> ' + escapeHtmlFE(statusText || 'Ingen status') + '</div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</section>';
-
-                const sectionsHtml =
-                    contextSection +
-                    '<section class="section"><h3>Ugeudvikling</h3><div class="chart-box"><div class="legend-line">' + legend + '</div>' + trendSvg + '</div></section>' +
-                    (weeklyOpen ? '<section class="section"><h3>Ugetabel</h3><div class="table-wrap">' + weeklyTable + '</div></section>' : '') +
-                    (customersOpen ? '<section class="section"><h3>Topkunder</h3><div class="table-wrap">' + customerTable + '</div></section>' : '');
-
-                openModulePrintWindow(
-                    'Gantech Operations Hub - Ordreindgang',
-                    'Rapportudskrift (' + getOrientationLabelDa(orientation).toLowerCase() + ')',
-                    metaHtml,
-                    kpiHtml,
-                    sectionsHtml,
-                    { orientation }
-                );
-            }
-
-            function applyOrdreindgangDefaultWeeks() {
-                const fraEl = document.getElementById('ordreindgangFraWeek');
-                const tilEl = document.getElementById('ordreindgangTilWeek');
-                if (!fraEl || !tilEl) return;
-
-                const today = new Date();
-                const toWeek = getIsoWeekMeta(today);
-                const fromYear = toWeek.isoYear - 1;
-                fraEl.value = String(fromYear) + '04';
-                tilEl.value = toWeek.weekKey;
-            }
-
-            function buildOrdreindgangRange() {
-                const fraEl = document.getElementById('ordreindgangFraWeek');
-                const tilEl = document.getElementById('ordreindgangTilWeek');
-                const fraMeta = parseWeekKeyMeta(fraEl ? fraEl.value : '');
-                const tilMeta = parseWeekKeyMeta(tilEl ? tilEl.value : '');
-                if (fraEl) fraEl.value = normalizeWeekKeyInput(fraEl.value);
-                if (tilEl) tilEl.value = normalizeWeekKeyInput(tilEl.value);
-                if (!fraMeta || !tilMeta) return null;
-
-                const fromStart = getIsoWeekStartDate(fraMeta.year, fraMeta.week);
-                const toStart = getIsoWeekStartDate(tilMeta.year, tilMeta.week);
-                if (toStart.getTime() < fromStart.getTime()) return null;
-
-                return {
-                    fraWeek: fraMeta.raw,
-                    tilWeek: tilMeta.raw
-                };
-            }
-
-            function buildOrdreindgangSummaryCacheKey(range) {
-                return JSON.stringify({
-                    fraWeek: String(range.fraWeek || ''),
-                    tilWeek: String(range.tilWeek || '')
-                });
-            }
-
-            async function fetchOrdreindgangSummaryCached(range, options) {
-                const safeOptions = options && typeof options === 'object' ? options : {};
-                const forceRefresh = safeOptions.forceRefresh === true;
-                const cacheKey = buildOrdreindgangSummaryCacheKey(range);
-
-                if (!forceRefresh) {
-                    const cached = getOmsaetningCacheEntry(ordreindgangSummaryCache, cacheKey, ORDREINDGANG_SUMMARY_CACHE_TTL_MS);
-                    if (cached) return cached;
-                }
-
-                if (!forceRefresh) {
-                    const inFlight = ordreindgangSummaryInFlight.get(cacheKey);
-                    if (inFlight) return await inFlight;
-                }
-
-                const reqPromise = (async () => {
-                    const query = new URLSearchParams({
-                        fraWeek: String(range.fraWeek),
-                        tilWeek: String(range.tilWeek)
-                    });
-                    const response = await fetch('/ordreindgang/summary?' + query.toString());
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    const payload = await response.json();
-                    setOmsaetningCacheEntry(ordreindgangSummaryCache, cacheKey, payload);
-                    return payload;
-                })();
-
-                ordreindgangSummaryInFlight.set(cacheKey, reqPromise);
-                try {
-                    return await reqPromise;
-                } finally {
-                    ordreindgangSummaryInFlight.delete(cacheKey);
-                }
-            }
-
-            function renderOrdreindgangTrendChart(rows) {
-                const wrap = document.getElementById('ordreindgangChartsWrap');
-                const svg = document.getElementById('ordreindgangTrendChart');
-                const legendEl = document.getElementById('ordreindgangLegend');
-                const safeRows = Array.isArray(rows) ? rows : [];
-                const showTilbudLine = shouldShowOrdreindgangTilbudLine();
-                if (!wrap || !svg) return;
-
-                if (safeRows.length === 0) {
-                    wrap.style.display = 'none';
-                    svg.innerHTML = '';
-                    if (legendEl) legendEl.innerHTML = '';
-                    return;
-                }
-
-                const labels = safeRows.map(r => {
-                    const key = String(r.weekKey || '');
-                    if (/^\d{6}$/.test(key)) return key.slice(0, 4) + '-' + key.slice(4, 6);
-                    return formatWeekLabel(key);
-                });
-                const ordValues = safeRows.map(r => Number(r.totalOrd || 0));
-                const tilbudValues = safeRows.map(r => Number(r.totalTilbud || 0));
-                const avgValue = Number(safeRows[0] && safeRows[0].avgOrd || 0);
-                const allValues = showTilbudLine
-                    ? ordValues.concat(tilbudValues).concat([avgValue])
-                    : ordValues.concat([avgValue]);
-                const rawMax = Math.max(...allValues, 0);
-                const chartMax = rawMax <= 0 ? 1000 : (Math.ceil(rawMax / 1000) * 1000);
-
-                const leftPad = 72;
-                const topPad = 36;
-                const bottomPad = 108;
-                const viewportWidth = Math.max(760, (wrap.clientWidth || 0) - 24);
-                const visibleWeeksTarget = Math.max(12, Math.min(24, safeRows.length || 12));
-                const slot = Math.max(18, Math.min(36, Math.floor(viewportWidth / visibleWeeksTarget)));
-                const width = Math.max(viewportWidth, safeRows.length * slot);
-                const height = Math.max(320, Math.min(440, Math.round(window.innerHeight * 0.46)));
-                const innerHeight = height - topPad - bottomPad;
-                const viewWidth = leftPad + width + 20;
-                const toY = val => topPad + ((chartMax - Math.max(0, Number(val || 0))) / chartMax) * innerHeight;
-                const toXCenter = idx => leftPad + (idx * slot) + (slot / 2);
-                const yZero = toY(0);
-
-                let html = '<g>';
-                for (let i = 0; i <= 6; i++) {
-                    const ratio = i / 6;
-                    const y = topPad + (innerHeight * ratio);
-                    const tickVal = chartMax * (1 - ratio);
-                    html += '<line x1="' + leftPad + '" y1="' + y + '" x2="' + (leftPad + width) + '" y2="' + y + '" stroke="#d9e6f8" stroke-width="1" />';
-                    html += '<text x="' + (leftPad - 8) + '" y="' + (y + 5) + '" text-anchor="end" font-size="12" fill="#5f7892">' + escapeHtmlFE(Math.round(tickVal).toLocaleString('da-DK')) + '</text>';
-                }
-
-                const ordBarWidth = showTilbudLine ? 8 : 12;
-                const tilbudBarWidth = 7;
-
-                const labelStep = safeRows.length > 70 ? 4 : (safeRows.length > 52 ? 3 : (safeRows.length > 36 ? 2 : 1));
-                safeRows.forEach((row, idx) => {
-                    const centerX = toXCenter(idx);
-                    const ordY = toY(ordValues[idx]);
-                    const ordH = Math.max(1, yZero - ordY);
-
-                    if (showTilbudLine) {
-                        const tilbudY = toY(tilbudValues[idx]);
-                        const tilbudH = Math.max(1, yZero - tilbudY);
-                        const tilbudX = centerX - tilbudBarWidth - 1;
-                        html += '<rect x="' + tilbudX + '" y="' + tilbudY + '" width="' + tilbudBarWidth + '" height="' + tilbudH + '" fill="#8ec3f7" rx="1"><title>' +
-                            escapeHtmlFE(labels[idx] + ' Tilbud: ' + formatDkkDa(tilbudValues[idx])) + '</title></rect>';
-                    }
-
-                    const ordX = showTilbudLine ? (centerX + 1) : (centerX - (ordBarWidth / 2));
-                    html += '<rect x="' + ordX + '" y="' + ordY + '" width="' + ordBarWidth + '" height="' + ordH + '" fill="#2f5ea5" rx="1"><title>' +
-                        escapeHtmlFE(labels[idx] + ' Ordre: ' + formatDkkDa(ordValues[idx])) + '</title></rect>';
-
-                    if ((idx % labelStep) === 0 || idx === safeRows.length - 1) {
-                        html += '<text x="' + centerX + '" y="' + (topPad + innerHeight + 50) + '" text-anchor="middle" transform="rotate(-90 ' + centerX + ' ' + (topPad + innerHeight + 50) + ')" font-size="12" fill="#5f7892">' + escapeHtmlFE(labels[idx]) + '</text>';
-                    }
-                });
-
-                const avgY = toY(avgValue);
-                html += '<line x1="' + leftPad + '" y1="' + avgY + '" x2="' + (leftPad + width) + '" y2="' + avgY + '" stroke="#3d6eb5" stroke-width="3" />';
-                html += '</g>';
-
-                svg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + height);
-                svg.innerHTML = html;
-                if (legendEl) {
-                    let legendHtml = '';
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#2f5ea5"></span>Ordre</span>';
-                    if (showTilbudLine) {
-                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#8ec3f7"></span>Tilbud</span>';
-                    }
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#3d6eb5"></span>Gennem.Ordre</span>';
-                    legendEl.innerHTML = legendHtml;
-                }
-                wrap.style.display = 'grid';
-            }
-
-            function applyOrdreindgangWeeklyCollapsedState() {
-                const tableWrap = document.getElementById('ordreindgangWeeklyTable');
-                const toggleBtn = document.getElementById('ordreindgangWeeklyToggleBtn');
-                if (!tableWrap || !toggleBtn) return;
-                tableWrap.style.display = ordreindgangWeeklyCollapsed ? 'none' : 'block';
-                toggleBtn.textContent = ordreindgangWeeklyCollapsed ? 'Vis tabel' : 'Skjul tabel';
-            }
-
-            function applyOrdreindgangCustomersCollapsedState() {
-                const tableWrap = document.getElementById('ordreindgangCustomersTable');
-                const toggleBtn = document.getElementById('ordreindgangCustomersToggleBtn');
-                if (!tableWrap || !toggleBtn) return;
-                tableWrap.style.display = ordreindgangCustomersCollapsed ? 'none' : 'block';
-                toggleBtn.textContent = ordreindgangCustomersCollapsed ? 'Vis tabel' : 'Skjul tabel';
-            }
-
-            function toggleOrdreindgangWeeklyTable() {
-                ordreindgangWeeklyCollapsed = !ordreindgangWeeklyCollapsed;
-                applyOrdreindgangWeeklyCollapsedState();
-            }
-
-            function toggleOrdreindgangCustomersTable() {
-                ordreindgangCustomersCollapsed = !ordreindgangCustomersCollapsed;
-                applyOrdreindgangCustomersCollapsedState();
-            }
-
-            function renderOrdreindgangWeeklyTable(rows) {
-                const wrapCard = document.getElementById('ordreindgangWeeklyWrap');
-                const wrap = document.getElementById('ordreindgangWeeklyTable');
-                const safeRows = Array.isArray(rows) ? rows : [];
-                const showTilbudColumn = shouldShowOrdreindgangTilbudLine();
-                if (!wrapCard || !wrap) return;
-                if (safeRows.length === 0) {
-                    wrapCard.style.display = 'none';
-                    wrap.innerHTML = '';
-                    return;
-                }
-
-                const body = safeRows.map(row => {
-                    const cells = [
-                        '<td>' + escapeHtmlFE(formatWeekLabel(row.weekKey)) + '</td>',
-                        '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalOrd)) + '</td>'
-                    ];
-                    if (showTilbudColumn) {
-                        cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalTilbud)) + '</td>');
-                    }
-                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalBudget)) + '</td>');
-                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.avgOrd)) + '</td>');
-                    return '<tr>' +
-                        cells.join('') +
-                        '</tr>';
-                }).join('');
-
-                const headers = [
-                    '<th>Uge</th>',
-                    '<th class="omsaetning-cell-right">Ordre</th>'
-                ];
-                if (showTilbudColumn) {
-                    headers.push('<th class="omsaetning-cell-right">Tilbud</th>');
-                }
-                headers.push('<th class="omsaetning-cell-right">Budget</th>');
-                headers.push('<th class="omsaetning-cell-right">Gns. ordre</th>');
-
-                const colgroup = showTilbudColumn
-                    ? '<colgroup><col style="width:16%;" /><col style="width:21%;" /><col style="width:23%;" /><col style="width:20%;" /><col style="width:20%;" /></colgroup>'
-                    : '<colgroup><col style="width:18%;" /><col style="width:28%;" /><col style="width:27%;" /><col style="width:27%;" /></colgroup>';
-
-                wrap.innerHTML = '<table class="omsaetning-table ordreindgang-weekly-table">' +
-                    colgroup +
-                    '<thead><tr>' + headers.join('') + '</tr></thead>' +
-                    '<tbody>' + body + '</tbody></table>';
-                wrapCard.style.display = 'block';
-                applyOrdreindgangWeeklyCollapsedState();
-            }
-
-            function renderOrdreindgangCustomersTable(rows) {
-                const wrapCard = document.getElementById('ordreindgangCustomersWrap');
-                const wrap = document.getElementById('ordreindgangCustomersTable');
-                const safeRows = Array.isArray(rows) ? rows : [];
-                if (!wrapCard || !wrap) return;
-                if (safeRows.length === 0) {
-                    wrapCard.style.display = 'none';
-                    wrap.innerHTML = '';
-                    return;
-                }
-
-                const body = safeRows.map(row => {
-                    const label = String(row.customerName || '').trim() || String(row.custNo || '-');
-                    return '<tr>' +
-                        '<td>' + escapeHtmlFE(label) + '</td>' +
-                        '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.ordSum)) + '</td>' +
-                        '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.tilbudSum)) + '</td>' +
-                        '<td style="text-align:right;">' + escapeHtmlFE(formatPctDa(row.conversionPct)) + '</td>' +
-                        '</tr>';
-                }).join('');
-
-                wrap.innerHTML = '<table class="omsaetning-table">' +
-                    '<thead><tr><th>Kunde</th><th>Ordre</th><th>Tilbud</th><th>Tilbud → Ordre</th></tr></thead>' +
-                    '<tbody>' + body + '</tbody></table>';
-                wrapCard.style.display = 'block';
-                applyOrdreindgangCustomersCollapsedState();
-            }
-
-            function scheduleOrdreindgangAutoReload() {
-                if (ordreindgangAutoReloadTimer) {
-                    clearTimeout(ordreindgangAutoReloadTimer);
-                }
-                ordreindgangAutoReloadTimer = setTimeout(() => {
-                    ordreindgangAutoReloadTimer = null;
-                    loadOrdreindgangSummary({ silentValidation: true });
-                }, ORDREINDGANG_AUTO_RELOAD_DELAY_MS);
-            }
-
-            async function initializeOrdreindgangIfNeeded() {
-                if (ordreindgangInitialized) return;
-                ordreindgangInitialized = true;
-                window.addEventListener('resize', () => {
-                    if (ordreindgangResizeTimer) clearTimeout(ordreindgangResizeTimer);
-                    ordreindgangResizeTimer = setTimeout(() => {
-                        ordreindgangResizeTimer = null;
-                        renderOrdreindgangFromLastPayload();
-                    }, 120);
-                });
-                applyOrdreindgangDefaultWeeks();
-                await loadOrdreindgangSummary({ forceRefresh: true });
-            }
-
-            function renderOrdreindgangFromLastPayload() {
-                if (!ordreindgangLastPayload || !Array.isArray(ordreindgangLastPayload.weeklyRows)) return;
-                renderOrdreindgangTrendChart(ordreindgangLastPayload.weeklyRows);
-                renderOrdreindgangWeeklyTable(ordreindgangLastPayload.weeklyRows);
-            }
-
-            async function loadOrdreindgangSummary(options) {
-                const safeOptions = options && typeof options === 'object' ? options : {};
-                const emptyEl = document.getElementById('ordreindgangEmpty');
-                const loadBtn = document.getElementById('ordreindgangLoadBtn');
-                const range = buildOrdreindgangRange();
-
-                if (!range) {
-                    setOrdreindgangStatus('Ugyldig ugeperiode. Brug format YYYYWW.');
-                    if (safeOptions.silentValidation !== true) {
-                        alert('Ugyldig ugeperiode. Brug format YYYYWW.');
-                    }
-                    return;
-                }
-
-                if (loadBtn) loadBtn.disabled = true;
-                if (emptyEl) {
-                    emptyEl.style.display = 'block';
-                    emptyEl.textContent = 'Henter ordreindgang...';
-                }
-                setOrdreindgangStatus('Henter data...');
-
-                try {
-                    const payload = await fetchOrdreindgangSummaryCached(range, { forceRefresh: safeOptions.forceRefresh === true });
-                    ordreindgangLastPayload = payload;
-                    const kpis = payload && payload.kpis ? payload.kpis : {};
-                    const weeklyRows = Array.isArray(payload && payload.weeklyRows) ? payload.weeklyRows : [];
-                    const customerRows = Array.isArray(payload && payload.customerRows) ? payload.customerRows : [];
-
-                    const ordEl = document.getElementById('ordreindgangTotalOrd');
-                    const tilbudEl = document.getElementById('ordreindgangTotalTilbud');
-                    const avgEl = document.getElementById('ordreindgangAvgOrd');
-                    const convEl = document.getElementById('ordreindgangConv');
-
-                    if (ordEl) ordEl.textContent = formatDkkDa(kpis.totalOrdSum || 0);
-                    if (tilbudEl) tilbudEl.textContent = formatDkkDa(kpis.totalTilbudSum || 0);
-                    if (avgEl) avgEl.textContent = formatDkkDa(kpis.avgSumOrd || 0);
-                    if (convEl) convEl.textContent = formatPctDa(kpis.conversionPct);
-
-                    renderOrdreindgangTrendChart(weeklyRows);
-                    renderOrdreindgangWeeklyTable(weeklyRows);
-                    renderOrdreindgangCustomersTable(customerRows);
-
-                    if (emptyEl) {
-                        if (weeklyRows.length === 0) {
-                            emptyEl.style.display = 'block';
-                            emptyEl.textContent = 'Ingen data i valgt ugeperiode.';
-                        } else {
-                            emptyEl.style.display = 'none';
-                        }
-                    }
-
-                    setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(weeklyRows.length));
-                } catch (err) {
-                    setOrdreindgangStatus('Fejl ved hentning af ordreindgang.');
-                    if (emptyEl) {
-                        emptyEl.style.display = 'block';
-                        emptyEl.textContent = 'Fejl: ' + (err && err.message ? err.message : 'ukendt fejl');
-                    }
-                } finally {
-                    if (loadBtn) loadBtn.disabled = false;
-                }
-            }
-
             function showAccessGate() {
                 const overlay = document.getElementById('accessGateOverlay');
                 const input = document.getElementById('accessGateInput');
@@ -4080,12 +1673,10 @@ app.get('/', (req, res) => {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
                 const omsaetning = document.getElementById('mainOmsaetning');
-                const ordreindgang = document.getElementById('mainOrdreindgang');
 
                 if (moduleKey === 'efterkalk') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
-                    if (ordreindgang) ordreindgang.style.display = 'none';
                     if (workspace) workspace.style.display = 'block';
                     goBackToList();
                     return;
@@ -4094,18 +1685,8 @@ app.get('/', (req, res) => {
                 if (moduleKey === 'omsaetning') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
-                    if (ordreindgang) ordreindgang.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'block';
                     initializeOmsaetningIfNeeded();
-                    return;
-                }
-
-                if (moduleKey === 'ordreindgang') {
-                    if (dashboard) dashboard.style.display = 'none';
-                    if (workspace) workspace.style.display = 'none';
-                    if (omsaetning) omsaetning.style.display = 'none';
-                    if (ordreindgang) ordreindgang.style.display = 'block';
-                    initializeOrdreindgangIfNeeded();
                     return;
                 }
 
@@ -4119,10 +1700,8 @@ app.get('/', (req, res) => {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
                 const omsaetning = document.getElementById('mainOmsaetning');
-                const ordreindgang = document.getElementById('mainOrdreindgang');
                 if (workspace) workspace.style.display = 'none';
                 if (omsaetning) omsaetning.style.display = 'none';
-                if (ordreindgang) ordreindgang.style.display = 'none';
                 if (dashboard) dashboard.style.display = 'block';
                 const detailModal = document.getElementById('orderDetailModal');
                 const detailBody = document.getElementById('orderDetailModalBody');
@@ -4217,7 +1796,16 @@ app.get('/', (req, res) => {
                 }
 
                 try {
-                    const payload = await fetchOmsaetningSummaryCached(fra, til, selected, selectedCustomers, safeOptions);
+                    const query = new URLSearchParams({
+                        fra,
+                        til,
+                        accounts: selected.join(','),
+                        customers: selectedCustomers.join(',')
+                    });
+
+                    const response = await fetch('/omsaetning/summary?' + query.toString());
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const payload = await response.json();
 
                     const persistTargets = await resolveOmsaetningThresholdPersistTargets(
                         selectedCustomers,
@@ -4260,35 +1848,16 @@ app.get('/', (req, res) => {
                         ? monthKeysForPeriod.map(monthKey => [monthKey, Number(monthTotals.get(String(monthKey)) || 0)])
                         : Array.from(monthTotals.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
                     let thresholdHtml = '<table class="omsaetning-table"><thead><tr>' +
-                        '<th>Måned</th><th class="omsaetning-cell-right">Omsætning (Mio)</th><th>Tærskel</th>' +
+                        '<th>Måned</th><th class="omsaetning-cell-right">Omsætning (Mio)</th><th>Soglia</th>' +
                         '</tr></thead><tbody>';
                     for (const [monthKey, amountMio] of sortedMonths) {
                         const statusClass = getOmsaetningStatusClass(amountMio, warnThreshold, goodThreshold);
                         const monthMioLabel = formatMio(amountMio);
                         const monthDkkLabel = formatDkkFromMio(amountMio);
-                        const gauge = buildOmsaetningGaugeData(amountMio, warnThreshold, goodThreshold);
-                        const marginPctLabel = formatSigned(gauge.marginPct, 1) + '%';
-                        const deltaWarnLabel = formatSigned(gauge.deltaWarn, 3) + ' Mio';
-                        const deltaGoodLabel = formatSigned(gauge.deltaGood, 3) + ' Mio';
                         thresholdHtml += '<tr>' +
                             '<td>' + escapeHtmlFE(formatMonthDa(monthKey)) + '</td>' +
                             '<td class="omsaetning-cell-right" title="' + escapeHtmlFE(monthDkkLabel + ' DKK') + '">' + escapeHtmlFE(monthMioLabel) + '</td>' +
-                            '<td>' +
-                                '<div class="omsaetning-gauge-wrap">' +
-                                    '<div class="omsaetning-gauge-meta">' +
-                                        '<span class="omsaetning-status ' + statusClass + '">' + escapeHtmlFE(getOmsaetningStatusLabel(statusClass)) + '</span>' +
-                                        '<strong>' + escapeHtmlFE(marginPctLabel) + '</strong>' +
-                                    '</div>' +
-                                    '<div class="omsaetning-gauge-track">' +
-                                        '<div class="omsaetning-gauge-fill ' + gauge.fillClass + '" style="left:' + gauge.fillLeft.toFixed(2) + '%;width:' + gauge.fillWidth.toFixed(2) + '%;"></div>' +
-                                        '<span class="omsaetning-gauge-marker" style="left:' + gauge.zeroLeft.toFixed(2) + '%;"></span>' +
-                                        '<span class="omsaetning-gauge-marker" style="left:' + gauge.targetLeft.toFixed(2) + '%;"></span>' +
-                                        '<span class="omsaetning-gauge-point" style="left:' + gauge.pointLeft.toFixed(2) + '%;"></span>' +
-                                    '</div>' +
-                                    '<div class="omsaetning-gauge-legend"><span>-30%</span><span>0% (3)</span><span>30% (5)</span><span>60%</span></div>' +
-                                    '<div class="omsaetning-gauge-delta">vs 3: <strong>' + escapeHtmlFE(deltaWarnLabel) + '</strong> · vs 5: <strong>' + escapeHtmlFE(deltaGoodLabel) + '</strong></div>' +
-                                '</div>' +
-                            '</td>' +
+                            '<td><span class="omsaetning-status ' + statusClass + '">' + escapeHtmlFE(getOmsaetningStatusLabel(statusClass)) + '</span></td>' +
                             '</tr>';
                     }
                     thresholdHtml += '</tbody></table>';
@@ -4315,13 +1884,8 @@ app.get('/', (req, res) => {
                     }
 
                     html += '</tbody></table>';
-                    if (OMSAETNING_SHOW_THRESHOLD_SECTION) {
-                        if (thresholdTable) thresholdTable.innerHTML = thresholdHtml;
-                        if (thresholdWrap) thresholdWrap.style.display = 'block';
-                    } else {
-                        if (thresholdTable) thresholdTable.innerHTML = '';
-                        if (thresholdWrap) thresholdWrap.style.display = 'none';
-                    }
+                    if (thresholdTable) thresholdTable.innerHTML = thresholdHtml;
+                    if (thresholdWrap) thresholdWrap.style.display = 'block';
                     if (tableWrap) {
                         tableWrap.innerHTML = html;
                     }
@@ -5372,7 +2936,7 @@ app.get('/', (req, res) => {
                     '.order-report-table th, .order-report-table td { border-bottom:1px solid #dfe8f3; padding:8px 10px; }',
                     '.order-report-table th { background:#eef5ff; }',
                     '.summary-box { break-inside: avoid; page-break-inside: avoid; }'
-                ].join('\\n');
+                ].join('\n');
             }
 
             function buildStandaloneListPrintCss() {
@@ -5387,7 +2951,7 @@ app.get('/', (req, res) => {
                     '.order-list-table th, .order-list-table td { padding:3px 4px; line-height:1.15; }',
                     '.order-list-table th:nth-child(8), .order-list-table td:nth-child(8), .order-list-table th:nth-child(9), .order-list-table td:nth-child(9) { display:none; }',
                     '.order-list-table tr { break-inside: avoid; page-break-inside: avoid; }'
-                ].join('\\n');
+                ].join('\n');
             }
 
             function printStandaloneHtml(title, html, cssText) {
@@ -5404,7 +2968,7 @@ app.get('/', (req, res) => {
 
                 const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
                     .map(el => el.outerHTML)
-                    .join('\\n');
+                    .join('\n');
                 const safeTitle = escapeHtml(title || 'Udskrift');
                 const doc = iframe.contentWindow.document;
                 doc.open();
@@ -5683,13 +3247,13 @@ app.get('/', (req, res) => {
                     html += '<h4>Laseroversigt (L-linjer)</h4>';
                     html += '<div class="desc">Nesting, vægtafvigelser og kost på tværs af ruter.</div>';
                     html += '<div id="laserOversigtSummaryTeaser" class="oversigt-launcher-kpi"><span class="loading">Indlæser laser-KPI...</span></div>';
-                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\\\'laser\\\')" title="Åbn detaljeret laseroversigt">Åbn laseroversigt</button>';
+                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\'laser\')" title="Åbn detaljeret laseroversigt">Åbn laseroversigt</button>';
                     html += '</article>';
                     html += '<article class="oversigt-launcher-card">';
                     html += '<h4>Operation Oversigt</h4>';
                     html += '<div class="desc">Operationstid, afvigelser og omkostninger i én driftsvisning.</div>';
                     html += '<div id="operationOversigtSummaryTeaser" class="oversigt-launcher-kpi"><span class="loading">Indlæser operations-KPI...</span></div>';
-                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\\\'operation\\\')" title="Åbn detaljeret operationsoversigt">Åbn operationer</button>';
+                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\'operation\')" title="Åbn detaljeret operationsoversigt">Åbn operationer</button>';
                     html += '</article>';
                     html += '</div>';
                     html += '</div>';
@@ -5737,7 +3301,7 @@ app.get('/', (req, res) => {
                                 : getMarginBadge(lineMarginPercent);
                             html += '<tr>';
                             html += '<td>' + (hasProductionOrder
-                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\\'' + breakdownRowId + '\\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
+                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\'' + breakdownRowId + '\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
                                 : '') + (line.LnNo || 0) + '</td>';
 
                             const salesWarningFlag = getWarningFlagHtml(line, 'Tilknyttet produktionsordre har en advarsel.');
@@ -6473,14 +4037,14 @@ app.get('/', (req, res) => {
                             const rawFinDt = String(r.FinDt || '').trim();
                             const compactFinDt = rawFinDt.split('T')[0].replace(/-/g, '');
                             let finDt = '-';
-                            if (/^\\d{8}$/.test(compactFinDt)) {
+                            if (/^\d{8}$/.test(compactFinDt)) {
                                 finDt = compactFinDt.slice(6, 8) + '-' + compactFinDt.slice(4, 6) + '-' + compactFinDt.slice(0, 4);
                             } else if (rawFinDt) {
                                 finDt = rawFinDt;
                             }
                             const rawFinTm = r.FinTm != null ? String(r.FinTm).trim() : '';
                             const finTm = rawFinTm
-                                ? rawFinTm.padStart(4, '0').replace(/^(\\d{2})(\\d{2})$/, '$1:$2')
+                                ? rawFinTm.padStart(4, '0').replace(/^(\d{2})(\d{2})$/, '$1:$2')
                                 : '-';
                             html += '<tr>';
                             html += '<td>' + finDt + '</td>';
@@ -7357,85 +4921,4 @@ app.get('/', (req, res) => {
             if (document.readyState === 'complete' || document.readyState === 'interactive') {
                 setTimeout(bootstrapUiAfterLoad, 0);
             }
-        </script>
-    </body>
-    </html>
-    `);
-});
-
-const PORT = Number(process.env.PORT || 3000);
-let startedServerPromise = null;
-let scheduledRefreshTimer = null;
-
-function startScheduledRefresh() {
-    if (scheduledRefreshTimer) return;
-    scheduledRefreshTimer = setInterval(() => {
-        refreshOrderListCache(true)
-            .then(() => {
-                logEvent('Scheduled refresh completed (10 min)');
-            })
-            .catch(err => {
-                logEvent('ERROR scheduled refresh: ' + err.message);
-            });
-    }, BACKGROUND_WARM_INTERVAL_MS);
-}
-
-function ensureServerStarted() {
-    if (startedServerPromise) return startedServerPromise;
-
-    startedServerPromise = new Promise((resolve, reject) => {
-        const server = app.listen(PORT, async () => {
-            try {
-                console.log('Server in ascolto su http://localhost:' + PORT);
-                logEvent('Server started - smart preload phase beginning');
-
-                // Try to load from persistent cache first for faster startup
-                const cachedList = tryLoadOrderListFromCache();
-                if (cachedList && cachedList.length > 0) {
-                    orderListCache.data = cachedList;
-                    orderListCache.loadedAt = Date.now();
-                    logEvent('Cache primed from disk: ' + cachedList.length + ' orders ready');
-                    
-                    // Preload margins AND aftercalc details from disk (instant load)
-                    const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
-                    preloadMarginsAndDetailsFromCache(preloadOrdNos);
-
-                    // Warm up margins in background (will check disk first, then refresh if needed)
-                    warmMarginsInBackground(preloadOrdNos);
-                    
-                    // Refresh from DB in background (don't block startup)
-                    refreshOrderListCache(true).catch(err => {
-                        logEvent('WARNING: background DB refresh failed: ' + err.message);
-                    });
-                } else {
-                    // No cache: load from DB (fresh startup)
-                    await refreshOrderListCache(true);
-                    logEvent('Cache primed from database (first startup)');
-                }
-
-                logEvent('Cache primed: order list loaded and ready');
-                startScheduledRefresh();
-                resolve(server);
-            } catch (err) {
-                logEvent('WARNING cache warmup error (non-fatal): ' + err.message);
-                resolve(server); // server is running — warmup error is not fatal
-            }
-        });
-
-        server.on('error', reject);
-    });
-
-    return startedServerPromise;
-}
-
-if (require.main === module) {
-    ensureServerStarted().catch(err => {
-        logEvent('FATAL server startup error: ' + err.message);
-        process.exit(1);
-    });
-}
-
-module.exports = {
-    app,
-    ensureServerStarted
-};
+        
