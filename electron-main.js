@@ -85,6 +85,17 @@ const APP_NAME = 'Gantech Operations Hub';
 // Disabled by default, especially for shared/RDS environments.
 const SHOULD_AUTO_START = String(process.env.EFTERKALK_AUTO_START || '0') === '1';
 let manualUpdateCheckRunning = false;
+const desktopUpdateState = {
+    ok: true,
+    status: 'idle',
+    message: 'Ingen opdateringsstatus endnu.',
+    currentVersion: null,
+    latestVersion: null,
+    downloaded: false,
+    canInstallNow: false,
+    checkedAt: null,
+    source: 'auto'
+};
 
 // Detect RDS environment
 const IS_RDS = !!process.env.SESSIONNAME && process.env.SESSIONNAME !== 'Console';
@@ -132,25 +143,94 @@ function waitForSingleUpdateResult(timeoutMs = 15000) {
     });
 }
 
+function setDesktopUpdateState(patch) {
+    Object.assign(desktopUpdateState, patch || {}, { checkedAt: new Date().toISOString() });
+}
+
+function getDesktopUpdateStatus() {
+    const currentVersion = (() => {
+        try {
+            return app.getVersion();
+        } catch (_) {
+            return desktopUpdateState.currentVersion || null;
+        }
+    })();
+
+    return {
+        ...desktopUpdateState,
+        currentVersion,
+        packaged: !!app.isPackaged
+    };
+}
+
 async function triggerManualUpdateCheck() {
     if (!app.isPackaged) {
+        setDesktopUpdateState({
+            ok: false,
+            status: 'unsupported',
+            message: 'Manuel opdatering virker kun i installeret app.',
+            source: 'manual'
+        });
         return { ok: false, status: 'unsupported', message: 'Manuel opdatering virker kun i installeret app.' };
     }
 
     if (manualUpdateCheckRunning) {
+        setDesktopUpdateState({
+            ok: true,
+            status: 'busy',
+            message: 'Opdateringskontrol koerer allerede.',
+            source: 'manual'
+        });
         return { ok: true, status: 'busy', message: 'Opdateringskontrol koerer allerede.' };
     }
 
     manualUpdateCheckRunning = true;
     try {
+        setDesktopUpdateState({
+            ok: true,
+            status: 'checking',
+            message: 'Tjekker efter opdatering... ',
+            source: 'manual'
+        });
         const waitResultPromise = waitForSingleUpdateResult();
         autoUpdater.checkForUpdates().catch((err) => {
             console.warn('Manual update check failed:', err.message);
         });
-        return await waitResultPromise;
+        const result = await waitResultPromise;
+        setDesktopUpdateState({
+            ok: !!(result && result.ok),
+            status: String((result && result.status) || 'unknown'),
+            message: String((result && result.message) || 'Ukendt updater-status.'),
+            latestVersion: result && result.version ? String(result.version) : desktopUpdateState.latestVersion,
+            source: 'manual'
+        });
+        return result;
     } finally {
         manualUpdateCheckRunning = false;
     }
+}
+
+function triggerManualUpdateInstall() {
+    if (!app.isPackaged) {
+        return { ok: false, status: 'unsupported', message: 'Installering af opdatering virker kun i installeret app.' };
+    }
+
+    if (!desktopUpdateState.downloaded) {
+        return { ok: false, status: 'not-ready', message: 'Opdateringen er ikke downloadet endnu.' };
+    }
+
+    setDesktopUpdateState({
+        ok: true,
+        status: 'installing',
+        message: 'Genstarter for at installere opdatering...',
+        source: 'manual'
+    });
+
+    setTimeout(() => {
+        autoUpdater.quitAndInstall();
+    }, 300);
+
+    return { ok: true, status: 'installing', message: 'Appen genstarter nu for at installere opdateringen.' };
 }
 
 function setupAutoUpdater() {
@@ -159,18 +239,50 @@ function setupAutoUpdater() {
 
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
         console.warn('Update check failed:', err.message);
+        setDesktopUpdateState({
+            ok: false,
+            status: 'error',
+            message: err.message || 'Opdateringskontrol fejlede.',
+            source: 'auto'
+        });
     });
 
     autoUpdater.on('update-available', (info) => {
         console.info('Update available:', info.version);
+        setDesktopUpdateState({
+            ok: true,
+            status: 'available',
+            latestVersion: info && info.version ? String(info.version) : null,
+            downloaded: false,
+            canInstallNow: false,
+            message: 'Ny version fundet. Download er startet.',
+            source: 'auto'
+        });
     });
 
     autoUpdater.on('update-not-available', () => {
         console.info('Application is up to date');
+        setDesktopUpdateState({
+            ok: true,
+            status: 'up-to-date',
+            downloaded: false,
+            canInstallNow: false,
+            message: 'App er allerede opdateret.',
+            source: 'auto'
+        });
     });
 
     autoUpdater.on('update-downloaded', (info) => {
         console.info('Update downloaded, will apply on restart');
+        setDesktopUpdateState({
+            ok: true,
+            status: 'downloaded',
+            latestVersion: info && info.version ? String(info.version) : desktopUpdateState.latestVersion,
+            downloaded: true,
+            canInstallNow: true,
+            message: 'Ny version er klar til installation.',
+            source: 'auto'
+        });
         if (mainWindow) {
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
@@ -180,6 +292,12 @@ function setupAutoUpdater() {
                 buttons: ['OK', 'Senere']
             }).then((result) => {
                 if (result.response === 0) {
+                    setDesktopUpdateState({
+                        ok: true,
+                        status: 'installing',
+                        message: 'Genstarter for at installere opdatering...',
+                        source: 'auto'
+                    });
                     autoUpdater.quitAndInstall();
                 }
             });
@@ -188,6 +306,12 @@ function setupAutoUpdater() {
 
     autoUpdater.on('error', (err) => {
         console.error('Updater error:', err.message);
+        setDesktopUpdateState({
+            ok: false,
+            status: 'error',
+            message: err.message || 'Updater fejl.',
+            source: 'auto'
+        });
     });
 }
 
@@ -264,6 +388,13 @@ function bootDesktopApp() {
     // Show loading screen immediately — don't wait for server
     createMainWindow();
     setupAutoUpdater();
+    setDesktopUpdateState({
+        ok: true,
+        status: app.isPackaged ? 'checking' : 'unsupported',
+        message: app.isPackaged ? 'Tjekker efter opdateringer...' : 'Auto-update kun i installeret app.',
+        currentVersion: (() => { try { return app.getVersion(); } catch (_) { return null; } })(),
+        source: 'auto'
+    });
 
     const pkgVersion = (() => { try { return require('./package.json').version; } catch(e) { return ''; } })();
     const loadingPath = path.join(__dirname, 'loading.html');
@@ -275,6 +406,8 @@ function bootDesktopApp() {
     ensureServerStarted().then(() => {
         writeDesktopLog('ensureServerStarted resolved appUrl=' + APP_URL);
         global.__desktopManualUpdateCheck = triggerManualUpdateCheck;
+        global.__desktopManualUpdateStatus = getDesktopUpdateStatus;
+        global.__desktopManualUpdateInstall = triggerManualUpdateInstall;
         // loading.html controls navigation timing via /health and /warmup-status polling.
         // Do not force a fallback loadURL here, otherwise the app can open before warmup is done.
     }).catch(err => {
@@ -335,4 +468,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
     delete global.__desktopManualUpdateCheck;
+    delete global.__desktopManualUpdateStatus;
+    delete global.__desktopManualUpdateInstall;
 });

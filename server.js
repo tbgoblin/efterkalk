@@ -937,6 +937,13 @@ app.get('/', (req, res) => {
             .dashboard-shell::after { content:''; position:absolute; width:360px; height:110px; left:-90px; bottom:-60px; transform:rotate(-8deg); background:linear-gradient(90deg, rgba(15,53,96,0.00), rgba(15,53,96,0.08), rgba(15,53,96,0.00)); pointer-events:none; }
             .dashboard-head h2 { margin:0; color:#0f3560; font-size:26px; letter-spacing:0.01em; }
             .dashboard-head p { margin:6px 0 0 0; color:#4d6680; font-size:13px; }
+            .dashboard-update-notice { margin-top:12px; border:1px solid #cfe3fb; background:linear-gradient(180deg,#f8fbff 0%,#eef5ff 100%); border-radius:12px; padding:10px 12px; display:none; align-items:center; justify-content:space-between; gap:12px; }
+            .dashboard-update-notice.active { display:flex; }
+            .dashboard-update-copy { font-size:12px; color:#355675; }
+            .dashboard-update-copy strong { color:#0f3560; }
+            .dashboard-update-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+            .dashboard-update-actions button { border:none; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
+            .dashboard-update-actions button.install { background:linear-gradient(180deg,#2e7d32 0%,#1f5e24 100%); }
             .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
             .dash-card { position:relative; isolation:isolate; border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08), inset 0 1px 0 rgba(255,255,255,0.90); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; transform:translateZ(0); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
             .dash-card::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.70), rgba(255,255,255,0.08)); z-index:-1; pointer-events:none; }
@@ -1098,6 +1105,16 @@ app.get('/', (req, res) => {
                 <div class="dashboard-head">
                     <h2>Gantech Operations Hub</h2>
                     <p>Vælg modul for at gå videre. Efterkalk, Omsætning og Ordreindgang er aktive.</p>
+                    <div id="dashboardUpdateNotice" class="dashboard-update-notice" aria-live="polite">
+                        <div class="dashboard-update-copy">
+                            <strong id="dashboardUpdateTitle">Opdateringsstatus</strong>
+                            <div id="dashboardUpdateText">Tjekker efter opdatering...</div>
+                        </div>
+                        <div class="dashboard-update-actions">
+                            <button id="dashboardUpdateCheckBtn" type="button" onclick="checkDesktopUpdateNow()">Tjek nu</button>
+                            <button id="dashboardUpdateInstallBtn" type="button" class="install" onclick="installDesktopUpdateNow()" style="display:none;">Installer nu</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="dashboard-grid">
                     <article class="dash-card">
@@ -2028,6 +2045,7 @@ app.get('/', (req, res) => {
             let summaryImageRegistryCounter = 0;
             const ACCESS_CODE = '12345';
             let accessGranted = false;
+            let dashboardUpdatePollTimer = null;
             const MARGIN_MAX_CONCURRENT = 2;
             const MARGIN_QUEUE_DELAY_MS = 120;
             const MARGIN_FETCH_TIMEOUT_MS = 20000;
@@ -4065,6 +4083,7 @@ app.get('/', (req, res) => {
                     }
                 }, 2500);
                 startOrderListAutoRefresh();
+                startDashboardUpdatePolling();
 
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('ord')) {
@@ -7176,7 +7195,9 @@ app.get('/', (req, res) => {
 
             async function checkDesktopUpdateNow() {
                 const btn = document.getElementById('checkUpdateBtn');
+                const dashBtn = document.getElementById('dashboardUpdateCheckBtn');
                 if (btn) { btn.disabled = true; btn.textContent = 'Tjekker...'; }
+                if (dashBtn) { dashBtn.disabled = true; dashBtn.textContent = 'Tjekker...'; }
 
                 try {
                     const r = await fetch('/desktop-update-check', { method: 'POST' });
@@ -7198,6 +7219,96 @@ app.get('/', (req, res) => {
                     alert('Fejl ved opdateringskontrol: ' + e.message);
                 } finally {
                     if (btn) { btn.disabled = false; btn.textContent = 'Tjek opdatering nu'; }
+                    if (dashBtn) { dashBtn.disabled = false; dashBtn.textContent = 'Tjek nu'; }
+                    refreshDashboardUpdateNotice().catch(() => {});
+                }
+            }
+
+            function applyDashboardUpdateNotice(state) {
+                const wrap = document.getElementById('dashboardUpdateNotice');
+                const titleEl = document.getElementById('dashboardUpdateTitle');
+                const textEl = document.getElementById('dashboardUpdateText');
+                const installBtn = document.getElementById('dashboardUpdateInstallBtn');
+                if (!wrap || !titleEl || !textEl || !installBtn) return;
+
+                const safe = state && typeof state === 'object' ? state : {};
+                const status = String(safe.status || 'unavailable');
+                const latest = safe.latestVersion ? String(safe.latestVersion) : null;
+                const current = safe.currentVersion ? String(safe.currentVersion) : null;
+                const canInstall = safe.canInstallNow === true || safe.downloaded === true || status === 'downloaded';
+
+                let title = 'Programopdatering';
+                let line = safe.message ? String(safe.message) : 'Ingen status endnu.';
+
+                if (status === 'downloaded') {
+                    title = 'Ny version klar';
+                    line = 'Version ' + (latest || '?') + ' er hentet og klar til installation.';
+                } else if (status === 'available') {
+                    title = 'Ny version fundet';
+                    line = 'Version ' + (latest || '?') + ' er fundet og hentes i baggrunden.';
+                } else if (status === 'up-to-date') {
+                    title = 'Programmet er opdateret';
+                    line = current ? ('Aktuel version: ' + current + '.') : 'Du har den nyeste version.';
+                } else if (status === 'checking' || status === 'busy') {
+                    title = 'Søger efter opdateringer';
+                    line = safe.message ? String(safe.message) : 'Tjekker...';
+                } else if (status === 'unsupported' || status === 'unavailable') {
+                    title = 'Opdatering ikke tilgængelig';
+                } else if (status === 'installing') {
+                    title = 'Installerer opdatering';
+                } else if (status === 'error') {
+                    title = 'Opdateringsfejl';
+                }
+
+                titleEl.textContent = title;
+                textEl.textContent = line;
+                wrap.classList.add('active');
+                installBtn.style.display = canInstall ? 'inline-block' : 'none';
+                installBtn.disabled = !canInstall;
+            }
+
+            async function refreshDashboardUpdateNotice() {
+                const r = await fetch('/desktop-update-status');
+                const d = await r.json();
+                if (!r.ok) {
+                    applyDashboardUpdateNotice({
+                        status: 'error',
+                        message: (d && d.message) ? d.message : ('HTTP ' + r.status)
+                    });
+                    return;
+                }
+                applyDashboardUpdateNotice(d || { status: 'unavailable', message: 'Ingen status.' });
+            }
+
+            function startDashboardUpdatePolling() {
+                if (dashboardUpdatePollTimer) return;
+                refreshDashboardUpdateNotice().catch(() => {});
+                dashboardUpdatePollTimer = setInterval(() => {
+                    if (document.hidden) return;
+                    refreshDashboardUpdateNotice().catch(() => {});
+                }, 20000);
+            }
+
+            async function installDesktopUpdateNow() {
+                const installBtn = document.getElementById('dashboardUpdateInstallBtn');
+                if (installBtn) {
+                    installBtn.disabled = true;
+                    installBtn.textContent = 'Installerer...';
+                }
+
+                try {
+                    const r = await fetch('/desktop-update-install', { method: 'POST' });
+                    const d = await r.json();
+                    if (!r.ok) throw new Error((d && d.message) ? d.message : ('HTTP ' + r.status));
+                    alert((d && d.message) ? d.message : 'Installering starter.');
+                } catch (e) {
+                    alert('Fejl ved installering: ' + e.message);
+                } finally {
+                    if (installBtn) {
+                        installBtn.disabled = false;
+                        installBtn.textContent = 'Installer nu';
+                    }
+                    refreshDashboardUpdateNotice().catch(() => {});
                 }
             }
 

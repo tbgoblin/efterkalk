@@ -779,6 +779,53 @@ function createApiRouter({
         }
     });
 
+    router.get('/desktop-update-status', (req, res) => {
+        try {
+            const statusFn = global.__desktopManualUpdateStatus;
+            if (typeof statusFn !== 'function') {
+                return res.status(503).json({
+                    ok: false,
+                    status: 'unavailable',
+                    message: 'Opdateringsstatus er ikke tilgaengelig i denne mode.'
+                });
+            }
+
+            const result = statusFn();
+            return res.json(result || {
+                ok: false,
+                status: 'error',
+                message: 'Tomt svar fra updater-status.'
+            });
+        } catch (err) {
+            logEvent('DESKTOP-UPDATE-STATUS ERROR: ' + err.message);
+            return res.status(500).json({ ok: false, status: 'error', message: err.message });
+        }
+    });
+
+    router.post('/desktop-update-install', (req, res) => {
+        try {
+            const installFn = global.__desktopManualUpdateInstall;
+            if (typeof installFn !== 'function') {
+                return res.status(503).json({
+                    ok: false,
+                    status: 'unavailable',
+                    message: 'Installering er ikke tilgaengelig i denne mode.'
+                });
+            }
+
+            const result = installFn();
+            logEvent('DESKTOP-UPDATE-INSTALL: status=' + String(result && result.status || 'unknown') + ', ok=' + String(!!(result && result.ok)));
+            return res.json(result || {
+                ok: false,
+                status: 'error',
+                message: 'Tomt svar fra install-funktion.'
+            });
+        } catch (err) {
+            logEvent('DESKTOP-UPDATE-INSTALL ERROR: ' + err.message);
+            return res.status(500).json({ ok: false, status: 'error', message: err.message });
+        }
+    });
+
     router.post('/open-drawing', (req, res) => {
         (async () => {
             try {
