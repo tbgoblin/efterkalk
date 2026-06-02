@@ -1,6 +1,6 @@
 {
   "name": "efterkalk",
-  "version": "1.0.97",
+  "version": "1.0.98",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
