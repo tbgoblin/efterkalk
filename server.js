@@ -540,6 +540,8 @@ app.get('/', (req, res) => {
             .side-menu-module-list { display:flex; flex-direction:column; gap:7px; }
             .side-menu-module-list button { text-align:left; border:1px solid #cfe0f6; border-radius:10px; background:#fff; color:#0f3560; font-weight:700; padding:9px 10px; cursor:pointer; }
             .side-menu-module-list button:hover { background:#f2f7ff; }
+            .side-menu-module-list button[disabled] { background:#eef3f9; color:#7a8ca0; border-color:#d7e1ec; cursor:not-allowed; }
+            .side-menu-module-list button[disabled]:hover { background:#eef3f9; }
             .side-menu-actions { display:flex; flex-direction:column; gap:8px; }
             .side-menu-actions button { border:none; border-radius:10px; padding:9px 10px; font-weight:700; cursor:pointer; }
             .side-menu-actions .logout { background:linear-gradient(180deg,#b71c1c 0%,#8f1717 100%); color:#fff; }
@@ -1165,11 +1167,11 @@ app.get('/', (req, res) => {
                             <button type="button" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
                             <button type="button" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
                             <button type="button" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
-                            <button type="button" onclick="navigateFromSideMenu('faktura')">Faktura</button>
-                            <button type="button" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
-                            <button type="button" onclick="navigateFromSideMenu('bom')">Bom</button>
-                            <button type="button" onclick="navigateFromSideMenu('apv')">APV</button>
-                            <button type="button" onclick="navigateFromSideMenu('belastning')">Belastning (kommer snart)</button>
+                            <button type="button" disabled>Faktura - Kommer snart</button>
+                            <button type="button" disabled>Ordreoversigt - Kommer snart</button>
+                            <button type="button" disabled>Bom - Kommer snart</button>
+                            <button type="button" disabled>APV - Kommer snart</button>
+                            <button type="button" disabled>Belastning - Kommer snart</button>
                             <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
                         </div>
                     </section>
@@ -1214,7 +1216,7 @@ app.get('/', (req, res) => {
                             <button id="dashboardClearCacheBtn" type="button" onclick="clearAppCache()">Ryd Efterkalk cache</button>
                         </div>
                     </div>
-                    <div id="dashboardWarmupNotice" class="dashboard-warmup-notice" aria-live="polite">
+                    <div id="dashboardWarmupNotice" class="dashboard-warmup-notice hidden" aria-live="polite">
                         <div class="dashboard-warmup-copy">
                             <strong>Efterkalk warmup</strong>
                             <div id="dashboardWarmupText">Forbereder ordre-cache i baggrunden...</div>
@@ -1255,7 +1257,7 @@ app.get('/', (req, res) => {
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Faktura</h4>
                                 <p>Fakturastatus, kreditnota og opfølgning på åbne poster.</p>
-                                <button onclick="openModule('faktura')">Åbn Faktura</button>
+                                <button type="button" disabled>Kommer snart</button>
                             </article>
                         </div>
                     </section>
@@ -1270,19 +1272,19 @@ app.get('/', (req, res) => {
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Ordreoversigt</h4>
                                 <p>Samlet status for produktionsordrer, levering og kapacitet.</p>
-                                <button onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button>
+                                <button type="button" disabled>Kommer snart</button>
                             </article>
                             <article class="dash-card">
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Bom</h4>
                                 <p>Styklister, komponenter og versionering med sporbarhed.</p>
-                                <button onclick="openModule('bom')">Åbn Bom</button>
+                                <button type="button" disabled>Kommer snart</button>
                             </article>
                             <article class="dash-card">
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Belastning</h4>
                                 <p>Kapacitetsbelastning, ressourcer, ordreflyt og planlægningsudsving.</p>
-                                <button onclick="openModule('belastning')">Åbn Belastning</button>
+                                <button type="button" disabled>Kommer snart</button>
                             </article>
                         </div>
                     </section>
@@ -1297,7 +1299,7 @@ app.get('/', (req, res) => {
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>APV</h4>
                                 <p>Arbejdsmiljøvurdering, opgaver, frister og opfølgning.</p>
-                                <button onclick="openModule('apv')">Åbn APV</button>
+                                <button type="button" disabled>Kommer snart</button>
                             </article>
                         </div>
                     </section>
@@ -4436,6 +4438,13 @@ app.get('/', (req, res) => {
                 const ordreindgang = document.getElementById('mainOrdreindgang');
 
                 if (moduleKey === 'efterkalk') {
+                    if (!warmupCombinedReady) {
+                        const msg = warmupCombinedTotal > 0
+                            ? ('Efterkalk er ikke klar endnu (' + warmupCombinedDone + '/' + warmupCombinedTotal + ', ' + warmupCombinedPct + '%). Vent til warmup er færdig.')
+                            : 'Efterkalk er ikke klar endnu. Vent et øjeblik til warmup/calculations er færdige.';
+                        alert(msg);
+                        return;
+                    }
                     if (dashboard) dashboard.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
@@ -4961,6 +4970,11 @@ app.get('/', (req, res) => {
             // Warmup progress bar polling
             let warmupPollTimer = null;
             let warmupTopBarHideScheduled = false;
+            let warmupCombinedReady = false;
+            let warmupCombinedPct = 0;
+            let warmupCombinedDone = 0;
+            let warmupCombinedTotal = 0;
+            let showDashboardWarmupNotice = false;
             function startWarmupPolling() {
                 if (warmupPollTimer) return;
                 const wrap = document.getElementById('warmupBarWrap');
@@ -4984,12 +4998,22 @@ app.get('/', (req, res) => {
                         const pctCombined = Number(d.combinedPct || d.pct || 0);
                         const readyCombined = d.ready === true;
 
+                        warmupCombinedPct = Math.max(0, Math.min(100, pctCombined));
+                        warmupCombinedDone = Math.max(0, doneCombined);
+                        warmupCombinedTotal = Math.max(0, totalCombined);
+                        warmupCombinedReady = readyCombined || (!d.running && warmupCombinedTotal === 0);
+
                         if (dashFill) dashFill.style.width = String(Math.max(0, Math.min(100, pctCombined))) + '%';
                         if (dashPct) dashPct.textContent = String(Math.max(0, Math.min(100, pctCombined))) + '%';
 
+                        // Keep warmup hidden on initial dashboard screen, unless user explicitly triggered cache reset.
+                        if (dashWrap) {
+                            const shouldShowDashWarmup = showDashboardWarmupNotice && (d.running || !readyCombined || totalCombined > 0);
+                            dashWrap.classList.toggle('hidden', !shouldShowDashWarmup);
+                        }
+
                         if (dashText) {
                             if (d.running) {
-                                if (dashWrap) dashWrap.classList.remove('hidden');
                                 dashText.textContent = 'Forbereder ' + doneCombined + '/' + totalCombined + ' ordredata...';
                                 if (dashMeta) dashMeta.textContent = 'Du kan bruge andre moduler imens.';
                             } else if (readyCombined && totalCombined > 0) {
@@ -4998,14 +5022,13 @@ app.get('/', (req, res) => {
                                 if (dashWrap) {
                                     setTimeout(() => {
                                         dashWrap.classList.add('hidden');
+                                        showDashboardWarmupNotice = false;
                                     }, 1800);
                                 }
                             } else if (totalCombined > 0) {
-                                if (dashWrap) dashWrap.classList.remove('hidden');
                                 dashText.textContent = 'Afventer baggrundsjob...';
                                 if (dashMeta) dashMeta.textContent = 'Du kan bruge andre moduler imens.';
                             } else {
-                                if (dashWrap) dashWrap.classList.remove('hidden');
                                 dashText.textContent = 'Venter på warmup-status...';
                                 if (dashMeta) dashMeta.textContent = 'Du kan bruge andre moduler imens.';
                             }
@@ -7602,6 +7625,11 @@ app.get('/', (req, res) => {
                 if (btn) { btn.disabled = true; btn.textContent = 'Rydder...'; }
                 if (dashBtn) { dashBtn.disabled = true; dashBtn.textContent = 'Rydder cache...'; }
                 try {
+                    showDashboardWarmupNotice = true;
+                    warmupCombinedReady = false;
+                    warmupCombinedPct = 0;
+                    warmupCombinedDone = 0;
+                    warmupCombinedTotal = 0;
                     const r = await fetch('/cache-clear', { method: 'POST' });
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     const d = await r.json();

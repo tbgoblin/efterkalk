@@ -777,7 +777,27 @@ function createApiRouter({
         orderListCache.data = [];
         orderListCache.loadedAt = 0;
         orderListCache.lastError = null;
+        warmupProgress.running = false;
+        warmupProgress.total = 0;
+        warmupProgress.cached = 0;
+        warmupProgress.loaded = 0;
+        warmupProgress.failed = 0;
+        warmupProgress.current = null;
+        warmupProgress.startedAt = null;
+        warmupProgress.completedAt = null;
         logEvent('CACHE CLEARED: ' + deleted + ' files deleted, in-memory caches reset');
+
+        // Rebuild caches immediately after manual clear so dashboard warmup can continue.
+        setTimeout(() => {
+            refreshOrderListCache(true)
+                .then(() => {
+                    logEvent('CACHE CLEAR: forced order-list refresh completed');
+                })
+                .catch(err => {
+                    logEvent('CACHE CLEAR: forced order-list refresh failed: ' + err.message);
+                });
+        }, 10);
+
         res.json({ ok: true, deleted });
     });
 
