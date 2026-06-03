@@ -518,15 +518,41 @@ app.get('/', (req, res) => {
             body { font-family: 'Sora', 'Segoe UI Variable', 'Segoe UI', sans-serif; background: radial-gradient(circle at 8% 0%, #f4f8ff 0%, #edf3fb 32%, #e8eef8 100%); padding: 20px; }
             .container { max-width: 1320px; margin: 0 auto; }
             .header-banner-wrapper { background: linear-gradient(135deg, #0f3560 0%, #14577e 62%, #123f6f 100%); color: #fff; font-weight: 800; font-size: 25px; padding: 10px 12px; border-radius: 10px; margin-bottom: 16px; letter-spacing: 0.2px; width: 100%; position: sticky; top: 0; z-index: 1200; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 12px 28px rgba(15,53,96,0.24); }
+            .header-left-controls { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+            .header-nav-btn { background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+            .header-nav-btn:hover { background:rgba(255,255,255,0.28); }
+            .side-menu-overlay { position:fixed; inset:0; background:rgba(10,20,35,0.42); backdrop-filter:blur(2px); z-index:15140; display:none; }
+            .side-menu-overlay.open { display:block; }
+            .side-menu-drawer { position:fixed; top:0; left:0; height:100vh; width:min(360px, 90vw); background:linear-gradient(180deg,#fdfefe 0%,#eef5ff 100%); border-right:1px solid #d5e6fb; box-shadow:14px 0 34px rgba(10,20,35,0.24); transform:translateX(-104%); transition:transform .24s ease; z-index:15150; display:flex; flex-direction:column; }
+            .side-menu-overlay.open .side-menu-drawer { transform:translateX(0); }
+            .side-menu-header { padding:14px 14px 10px 14px; border-bottom:1px solid #ddeafc; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+            .side-menu-title { color:#0f3560; font-size:15px; font-weight:800; }
+            .side-menu-close { border:none; border-radius:999px; background:#dce9fb; color:#0f3560; width:30px; height:30px; cursor:pointer; font-size:18px; line-height:1; }
+            .side-menu-content { padding:12px 14px 16px 14px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+            .side-menu-section { background:#fff; border:1px solid #dbe8fa; border-radius:12px; padding:10px; }
+            .side-menu-section h4 { margin:0 0 8px 0; font-size:13px; color:#0f3560; }
+            .side-menu-section p { margin:0; font-size:12px; color:#4d6680; line-height:1.35; }
+            .side-menu-login-row { display:flex; gap:8px; margin-top:8px; }
+            .side-menu-login-row input { flex:1; border:1px solid #c8d9ef; border-radius:8px; padding:8px 10px; font-size:13px; }
+            .side-menu-login-row button { border:none; border-radius:8px; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; font-weight:700; padding:8px 11px; cursor:pointer; }
+            .side-menu-auth-status { margin-top:7px; font-size:12px; color:#355675; }
+            .side-menu-auth-status.ok { color:#1b5e20; }
+            .side-menu-module-list { display:flex; flex-direction:column; gap:7px; }
+            .side-menu-module-list button { text-align:left; border:1px solid #cfe0f6; border-radius:10px; background:#fff; color:#0f3560; font-weight:700; padding:9px 10px; cursor:pointer; }
+            .side-menu-module-list button:hover { background:#f2f7ff; }
+            .side-menu-actions { display:flex; flex-direction:column; gap:8px; }
+            .side-menu-actions button { border:none; border-radius:10px; padding:9px 10px; font-weight:700; cursor:pointer; }
+            .side-menu-actions .logout { background:linear-gradient(180deg,#b71c1c 0%,#8f1717 100%); color:#fff; }
+            .side-menu-actions .logout[disabled] { opacity:0.5; cursor:not-allowed; }
             .header-brand { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
             .header-brand-logo { width:38px; height:38px; border-radius:8px; background:transparent; padding:5px; object-fit:contain; border:1px solid rgba(255,255,255,0.22); box-shadow:0 6px 16px rgba(4,16,30,0.25); filter:brightness(0) invert(1) contrast(1.08); flex-shrink:0; }
             .header-brand-text { min-width:0; font-size:20px; font-weight:800; letter-spacing:0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-            .header-status-badge { display: inline-block; font-size: 12px; font-weight: 700; color: #8a6d3b; background: #fff3cd; border: 1px solid #fff3cd; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
-            #warmupBarWrap { display:none; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }
+            .header-user-greeting { display:inline-block; font-size:13px; font-weight:700; color:#0f3560; background:linear-gradient(180deg,#e9f3ff 0%,#dbeaff 100%); border:1px solid #c9defa; border-radius:999px; padding:7px 12px; white-space:nowrap; }
+            #warmupBarWrap { display:none !important; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }
             #warmupBarWrap.active { display:flex; }
             #warmupBarBg { background:rgba(255,255,255,0.25); border-radius:999px; height:6px; width:110px; overflow:hidden; flex-shrink:0; }
             #warmupBarFill { background:#fff; height:100%; border-radius:999px; width:0%; transition:width 0.35s ease; }
-            .search-box { background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%); padding: 14px; margin-bottom: 18px; border-radius: 12px; box-shadow: 0 10px 24px rgba(15,53,96,0.10); border: 1px solid #d9e8f9; position: sticky; top: 58px; z-index: 1100; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+            .search-box { background: linear-gradient(180deg, #ffffff 0%, #f4f9ff 100%); padding: 14px; margin-bottom: 18px; border-radius: 12px; box-shadow: 0 10px 24px rgba(15,53,96,0.10); border: 1px solid #d9e8f9; position: sticky; top: var(--search-sticky-top, 58px); z-index: 1100; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
             .search-box.collapsed { padding: 8px 12px; height: 36px; }
             .search-box.collapsed > * { display: none; }
             .search-box.collapsed > #collapseToggleBtn { display: inline-block; }
@@ -558,7 +584,8 @@ app.get('/', (req, res) => {
             h3 { color: var(--ink-900); margin-bottom: 14px; border-bottom: 2px solid #7eb1e6; padding-bottom: 10px; font-size: clamp(15px, 1.5vw, 19px); letter-spacing: 0.01em; }
             table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; background: #fff; border: 1px solid var(--line-soft); border-radius: var(--radius-m); overflow: hidden; box-shadow: 0 6px 16px rgba(15,53,96,0.05); }
             th, td { padding: 10px 11px; text-align: left; border-bottom: 1px solid #e8eff8; font-size: 13px; color: var(--text-900); }
-            th { position: sticky; top: 0; z-index: 1; background: linear-gradient(180deg, #f4f9ff 0%, #eaf2ff 100%); font-weight: 700; color: var(--ink-900); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+            th { position: static; top: auto; z-index: 1; background: linear-gradient(180deg, #f4f9ff 0%, #eaf2ff 100%); font-weight: 700; color: var(--ink-900); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+            .order-list-table th { top: auto; }
             tr:last-child td { border-bottom: none; }
             tr:nth-child(even) td { background: #fcfdff; }
             tr:hover td { background: #f3f8ff; }
@@ -849,7 +876,10 @@ app.get('/', (req, res) => {
             @media (max-width: 900px) {
                 .modal-box { width: 99vw; max-height: 93vh; padding: 12px; }
                 .modal-box th, .modal-box td { padding: 8px 6px; font-size: 13px; }
-                .dashboard-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+                .dashboard-category-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+                .dashboard-warmup-notice { flex-direction:column; align-items:flex-start; }
+                .dashboard-warmup-progress { width:100%; justify-content:space-between; }
+                .dashboard-warmup-track { flex:1; }
                 .omsaetning-filters { grid-template-columns:1fr 1fr; }
                 .omsaetning-field.omsaetning-accounts-field,
                 .omsaetning-field.omsaetning-customer-field,
@@ -872,7 +902,7 @@ app.get('/', (req, res) => {
                 .oversigt-details table { min-width:0; }
             }
             @media (max-width: 640px) {
-                .dashboard-grid { grid-template-columns:1fr; }
+                .dashboard-category-grid { grid-template-columns:1fr; }
                 .order-detail-modal-overlay { padding: 6px; }
                 .order-detail-modal-shell { border-radius: 10px; }
                 .order-detail-modal-header { padding: 10px 12px; }
@@ -944,7 +974,21 @@ app.get('/', (req, res) => {
             .dashboard-update-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
             .dashboard-update-actions button { border:none; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; color:#fff; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); }
             .dashboard-update-actions button.install { background:linear-gradient(180deg,#2e7d32 0%,#1f5e24 100%); }
-            .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+            .dashboard-warmup-notice { margin-top:10px; border:1px solid #d4e7fb; background:linear-gradient(180deg,#fbfdff 0%,#f1f7ff 100%); border-radius:12px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+            .dashboard-warmup-notice.hidden { display:none; }
+            .dashboard-warmup-copy { font-size:12px; color:#355675; }
+            .dashboard-warmup-copy strong { color:#0f3560; }
+            .dashboard-warmup-meta { opacity:0.92; }
+            .dashboard-warmup-progress { display:flex; align-items:center; gap:8px; min-width:180px; justify-content:flex-end; }
+            .dashboard-warmup-track { width:140px; height:8px; border-radius:999px; background:#d9e9fb; overflow:hidden; }
+            .dashboard-warmup-track > div { height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,#1565c0 0%,#2e7d32 100%); transition:width .3s ease; }
+            .dashboard-warmup-pct { min-width:40px; text-align:right; font-size:12px; font-weight:700; color:#0f3560; }
+            .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:1fr; gap:12px; }
+            .dashboard-category { background:rgba(255,255,255,0.65); border:1px solid #d8e8fb; border-radius:14px; padding:10px; box-shadow:inset 0 1px 0 rgba(255,255,255,0.9); }
+            .dashboard-category-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 8px 0; }
+            .dashboard-category-head h3 { margin:0; border:none; padding:0; color:#0f3560; font-size:15px; font-weight:800; }
+            .dashboard-category-head span { font-size:11px; color:#5b7897; font-weight:700; }
+            .dashboard-category-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
             .dash-card { position:relative; isolation:isolate; border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08), inset 0 1px 0 rgba(255,255,255,0.90); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; transform:translateZ(0); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
             .dash-card::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.70), rgba(255,255,255,0.08)); z-index:-1; pointer-events:none; }
             .dash-card:hover { transform:translateY(-2px) scale(1.01); border-color:#c5dbf8; box-shadow:0 16px 26px rgba(15,53,96,0.16), inset 0 1px 0 rgba(255,255,255,0.95); }
@@ -1044,7 +1088,7 @@ app.get('/', (req, res) => {
             .omsaetning-collapse-btn:hover { background:#ebf4ff; }
             .omsaetning-table-wrap { margin-top:12px; overflow:auto; border:1px solid #dbe8f9; border-radius:10px; }
             .omsaetning-table { width:100%; border-collapse:collapse; min-width:760px; font-size:12px; }
-            .omsaetning-table th { background:#1565c0; color:#fff; text-align:left; padding:8px 10px; position:sticky; top:0; z-index:1; }
+            .omsaetning-table th { background:#1565c0; color:#fff; text-align:left; padding:8px 10px; position:static; top:auto; z-index:1; }
             .omsaetning-table td { padding:7px 10px; border-bottom:1px solid #e6eef9; }
             .ordreindgang-weekly-table { min-width:980px; table-layout:fixed; }
             .ordreindgang-weekly-table th:nth-child(n+2), .ordreindgang-weekly-table td:nth-child(n+2) { text-align:right; font-variant-numeric:tabular-nums; }
@@ -1074,6 +1118,12 @@ app.get('/', (req, res) => {
             .invoice-status-banner { margin: 0 0 10px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; }
             .invoice-status-banner.ok { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
             .invoice-status-banner.warn { background: #fff8e1; color: #8d6e00; border: 1px solid #ffe082; }
+            .manual-modal-body { display:grid; gap:12px; }
+            .manual-card { border:1px solid #d8e6fa; border-radius:10px; background:#f8fbff; padding:10px 12px; }
+            .manual-card h4 { margin:0 0 6px 0; color:#0f3560; }
+            .manual-card p { margin:0 0 6px 0; color:#355675; font-size:13px; }
+            .manual-card ul { margin:0; padding-left:18px; color:#23384f; font-size:13px; }
+            .manual-meta { font-size:12px; color:#4f6d8c; }
         </style>
     </head>
     <body>
@@ -1088,8 +1138,56 @@ app.get('/', (req, res) => {
                 <div id="accessGateError" class="access-gate-error"></div>
             </div>
         </div>
+        <div id="sideMenuOverlay" class="side-menu-overlay" onclick="closeSideMenu(event)">
+            <aside class="side-menu-drawer" onclick="event.stopPropagation()">
+                <div class="side-menu-header">
+                    <span class="side-menu-title">Navigation</span>
+                    <button class="side-menu-close" type="button" onclick="closeSideMenu()">×</button>
+                </div>
+                <div class="side-menu-content">
+                    <section class="side-menu-section">
+                        <h4>Login</h4>
+                        <p>Samme adgangskode som startskærm.</p>
+                        <div class="side-menu-login-row">
+                            <input id="sideMenuUserInput" type="text" placeholder="Navn (fx Marco)" autocomplete="off" />
+                        </div>
+                        <div class="side-menu-login-row">
+                            <input id="sideMenuLoginInput" type="password" placeholder="Kode" autocomplete="off" />
+                            <button id="sideMenuLoginBtn" type="button" onclick="submitAccessCodeFromSideMenu()">Åbn</button>
+                        </div>
+                        <div id="sideMenuAuthStatus" class="side-menu-auth-status">Ikke logget ind.</div>
+                    </section>
+
+                    <section class="side-menu-section">
+                        <h4>Moduler</h4>
+                        <div class="side-menu-module-list">
+                            <button type="button" onclick="navigateFromSideMenu('dashboard')">🏠 Dashboard</button>
+                            <button type="button" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
+                            <button type="button" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
+                            <button type="button" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
+                            <button type="button" onclick="navigateFromSideMenu('faktura')">Faktura</button>
+                            <button type="button" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
+                            <button type="button" onclick="navigateFromSideMenu('bom')">Bom</button>
+                            <button type="button" onclick="navigateFromSideMenu('apv')">APV</button>
+                            <button type="button" onclick="navigateFromSideMenu('belastning')">Belastning (kommer snart)</button>
+                            <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
+                        </div>
+                    </section>
+
+                    <section class="side-menu-section">
+                        <h4>Session</h4>
+                        <div class="side-menu-actions">
+                            <button id="sideMenuLogoutBtn" class="logout" type="button" onclick="logoutFromSideMenu()" disabled>Log ud</button>
+                        </div>
+                    </section>
+                </div>
+            </aside>
+        </div>
         <div class="header-banner-wrapper">
-            <button id="homeBtn" onclick="goToDashboard()" title="Tilbage til dashboard" style="background:rgba(255,255,255,0.18); border:none; border-radius:5px; color:#fff; font-size:20px; width:38px; height:38px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🏠</button>
+            <div class="header-left-controls">
+                <button id="menuBtn" class="header-nav-btn" onclick="toggleSideMenu()" title="Åbn menu">☰</button>
+                <button id="homeBtn" class="header-nav-btn" onclick="goToDashboard()" title="Tilbage til dashboard">🏠</button>
+            </div>
             <div class="header-brand">
                 <img class="header-brand-logo" src="/assets/brand/logo-gantech.png" alt="Gantech logo" />
                 <span class="header-brand-text">${APP_VERSION}</span>
@@ -1098,13 +1196,13 @@ app.get('/', (req, res) => {
                 <div id="warmupBarBg"><div id="warmupBarFill"></div></div>
                 <span id="warmupBarText">Forberegner...</span>
             </div>
-            <span class="header-status-badge" id="systemStatusBadge">System indlæser...</span>
+            <span class="header-user-greeting" id="headerUserGreeting">Hej, Bruger</span>
         </div>
         <div class="container main-dashboard" id="mainDashboard">
             <section class="dashboard-shell">
                 <div class="dashboard-head">
                     <h2>Gantech Operations Hub</h2>
-                    <p>Vælg modul for at gå videre. Efterkalk, Omsætning og Ordreindgang er aktive.</p>
+                    <p>Vælg makrokategori og modul. Salg, Produktion og HR er klar til at blive udbygget.</p>
                     <div id="dashboardUpdateNotice" class="dashboard-update-notice" aria-live="polite">
                         <div class="dashboard-update-copy">
                             <strong id="dashboardUpdateTitle">Opdateringsstatus</strong>
@@ -1113,34 +1211,96 @@ app.get('/', (req, res) => {
                         <div class="dashboard-update-actions">
                             <button id="dashboardUpdateCheckBtn" type="button" onclick="checkDesktopUpdateNow()">Tjek nu</button>
                             <button id="dashboardUpdateInstallBtn" type="button" class="install" onclick="installDesktopUpdateNow()" style="display:none;">Installer nu</button>
+                            <button id="dashboardClearCacheBtn" type="button" onclick="clearAppCache()">Ryd Efterkalk cache</button>
+                        </div>
+                    </div>
+                    <div id="dashboardWarmupNotice" class="dashboard-warmup-notice" aria-live="polite">
+                        <div class="dashboard-warmup-copy">
+                            <strong>Efterkalk warmup</strong>
+                            <div id="dashboardWarmupText">Forbereder ordre-cache i baggrunden...</div>
+                            <div id="dashboardWarmupMeta" class="dashboard-warmup-meta">Du kan bruge andre moduler imens.</div>
+                        </div>
+                        <div class="dashboard-warmup-progress">
+                            <div class="dashboard-warmup-track"><div id="dashboardWarmupFill"></div></div>
+                            <span id="dashboardWarmupPct" class="dashboard-warmup-pct">0%</span>
                         </div>
                     </div>
                 </div>
                 <div class="dashboard-grid">
-                    <article class="dash-card">
-                        <span class="dash-chip">Aktiv</span>
-                        <h4>Efterkalkulation</h4>
-                        <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
-                        <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
-                    </article>
-                    <article class="dash-card">
-                        <span class="dash-chip">Planlagt</span>
-                        <h4>Belastning</h4>
-                        <p>Kapacitetsbelastning, ressourcer, ordreflyt og planlægningsudsving.</p>
-                        <button onclick="openModule('belastning')" disabled>Kommer snart</button>
-                    </article>
-                    <article class="dash-card">
-                        <span class="dash-chip">Aktiv</span>
-                        <h4>Omsætning</h4>
-                        <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
-                        <button onclick="openModule('omsaetning')">Åbn Omsætning</button>
-                    </article>
-                    <article class="dash-card">
-                        <span class="dash-chip">Aktiv</span>
-                        <h4>Ordreindgang</h4>
-                        <p>Ordreindgang fra SSRS: budget, ordre, tilbud og udvikling pr. uge/periode.</p>
-                        <button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button>
-                    </article>
+                    <section class="dashboard-category">
+                        <div class="dashboard-category-head">
+                            <h3>Salg</h3>
+                            <span>Ordre, kunde og faktura</span>
+                        </div>
+                        <div class="dashboard-category-grid">
+                            <article class="dash-card">
+                                <span class="dash-chip">Aktiv</span>
+                                <h4>Efterkalkulation</h4>
+                                <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
+                                <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
+                            </article>
+                            <article class="dash-card">
+                                <span class="dash-chip">Aktiv</span>
+                                <h4>Omsætning</h4>
+                                <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
+                                <button onclick="openModule('omsaetning')">Åbn Omsætning</button>
+                            </article>
+                            <article class="dash-card">
+                                <span class="dash-chip">Aktiv</span>
+                                <h4>Ordreindgang</h4>
+                                <p>Ordreindgang fra SSRS: budget, ordre, tilbud og udvikling pr. uge/periode.</p>
+                                <button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button>
+                            </article>
+                            <article class="dash-card">
+                                <span class="dash-chip">Planlagt</span>
+                                <h4>Faktura</h4>
+                                <p>Fakturastatus, kreditnota og opfølgning på åbne poster.</p>
+                                <button onclick="openModule('faktura')">Åbn Faktura</button>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="dashboard-category">
+                        <div class="dashboard-category-head">
+                            <h3>Produktion</h3>
+                            <span>Planlægning, BOM og ordreflow</span>
+                        </div>
+                        <div class="dashboard-category-grid">
+                            <article class="dash-card">
+                                <span class="dash-chip">Planlagt</span>
+                                <h4>Ordreoversigt</h4>
+                                <p>Samlet status for produktionsordrer, levering og kapacitet.</p>
+                                <button onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button>
+                            </article>
+                            <article class="dash-card">
+                                <span class="dash-chip">Planlagt</span>
+                                <h4>Bom</h4>
+                                <p>Styklister, komponenter og versionering med sporbarhed.</p>
+                                <button onclick="openModule('bom')">Åbn Bom</button>
+                            </article>
+                            <article class="dash-card">
+                                <span class="dash-chip">Planlagt</span>
+                                <h4>Belastning</h4>
+                                <p>Kapacitetsbelastning, ressourcer, ordreflyt og planlægningsudsving.</p>
+                                <button onclick="openModule('belastning')">Åbn Belastning</button>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="dashboard-category">
+                        <div class="dashboard-category-head">
+                            <h3>HR</h3>
+                            <span>Arbejdsmiljø og medarbejderdata</span>
+                        </div>
+                        <div class="dashboard-category-grid">
+                            <article class="dash-card">
+                                <span class="dash-chip">Planlagt</span>
+                                <h4>APV</h4>
+                                <p>Arbejdsmiljøvurdering, opgaver, frister og opfølgning.</p>
+                                <button onclick="openModule('apv')">Åbn APV</button>
+                            </article>
+                        </div>
+                    </section>
                 </div>
             </section>
         </div>
@@ -1416,6 +1576,18 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 <div id="orderDetailModalBody" class="order-detail-modal-body"></div>
+            </div>
+        </div>
+
+        <div id="brugermanualModal" class="modal-overlay" onclick="closeBrugermanual(event)">
+            <div class="modal-box" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <h3>Brugermanual (kort)</h3>
+                    </div>
+                    <button class="modal-close" onclick="closeBrugermanual()">Luk</button>
+                </div>
+                <div id="brugermanualBody" class="manual-modal-body"></div>
             </div>
         </div>
 
@@ -2045,6 +2217,8 @@ app.get('/', (req, res) => {
             let summaryImageRegistryCounter = 0;
             const ACCESS_CODE = '12345';
             let accessGranted = false;
+            let loggedUserDisplayName = 'Bruger';
+            let sideMenuOpen = false;
             let dashboardUpdatePollTimer = null;
             const MARGIN_MAX_CONCURRENT = 2;
             const MARGIN_QUEUE_DELAY_MS = 120;
@@ -2089,6 +2263,163 @@ app.get('/', (req, res) => {
             let ordreindgangResizeTimer = null;
             const ORDREINDGANG_AUTO_RELOAD_DELAY_MS = 280;
             const ORDREINDGANG_SUMMARY_CACHE_TTL_MS = 15 * 60 * 1000;
+
+            function sanitizeDisplayName(name) {
+                const safe = String(name || '').trim();
+                return safe ? safe.slice(0, 32) : 'Bruger';
+            }
+
+            function updateHeaderGreeting() {
+                const greeting = document.getElementById('headerUserGreeting');
+                if (!greeting) return;
+                greeting.textContent = 'Hej, ' + sanitizeDisplayName(loggedUserDisplayName);
+            }
+
+            function setLoggedUserDisplayName(name, persist = true) {
+                loggedUserDisplayName = sanitizeDisplayName(name);
+                if (persist) {
+                    try {
+                        localStorage.setItem('afterkalk_logged_user_name', loggedUserDisplayName);
+                    } catch {}
+                }
+                updateHeaderGreeting();
+            }
+
+            function toggleSideMenu() {
+                if (sideMenuOpen) {
+                    closeSideMenu();
+                } else {
+                    openSideMenu();
+                }
+            }
+
+            function openSideMenu() {
+                const overlay = document.getElementById('sideMenuOverlay');
+                if (!overlay) return;
+                overlay.classList.add('open');
+                sideMenuOpen = true;
+                refreshSideMenuAuthState();
+                const input = document.getElementById('sideMenuLoginInput');
+                if (!accessGranted && input) {
+                    setTimeout(() => input.focus(), 30);
+                }
+            }
+
+            function closeSideMenu(event) {
+                if (event && event.target && event.target.id !== 'sideMenuOverlay') return;
+                const overlay = document.getElementById('sideMenuOverlay');
+                if (!overlay) return;
+                overlay.classList.remove('open');
+                sideMenuOpen = false;
+            }
+
+            function refreshSideMenuAuthState() {
+                const userInput = document.getElementById('sideMenuUserInput');
+                const input = document.getElementById('sideMenuLoginInput');
+                const loginBtn = document.getElementById('sideMenuLoginBtn');
+                const status = document.getElementById('sideMenuAuthStatus');
+                const logoutBtn = document.getElementById('sideMenuLogoutBtn');
+                if (!status) return;
+
+                if (accessGranted) {
+                    status.textContent = 'Logget ind som ' + sanitizeDisplayName(loggedUserDisplayName) + '.';
+                    status.classList.add('ok');
+                    if (userInput) userInput.disabled = true;
+                    if (input) {
+                        input.value = '';
+                        input.disabled = true;
+                    }
+                    if (loginBtn) loginBtn.disabled = true;
+                    if (logoutBtn) logoutBtn.disabled = false;
+                } else {
+                    status.textContent = 'Ikke logget ind.';
+                    status.classList.remove('ok');
+                    if (userInput) userInput.disabled = false;
+                    if (input) input.disabled = false;
+                    if (loginBtn) loginBtn.disabled = false;
+                    if (logoutBtn) logoutBtn.disabled = true;
+                }
+            }
+
+            function submitAccessCodeFromSideMenu() {
+                const sideUserInput = document.getElementById('sideMenuUserInput');
+                const sideInput = document.getElementById('sideMenuLoginInput');
+                const gateInput = document.getElementById('accessGateInput');
+                if (sideUserInput) {
+                    const desiredName = sanitizeDisplayName(sideUserInput.value);
+                    setLoggedUserDisplayName(desiredName);
+                }
+                if (sideInput && gateInput) {
+                    gateInput.value = sideInput.value || '';
+                }
+                submitAccessCode();
+            }
+
+            function navigateFromSideMenu(target) {
+                if (target === 'dashboard') {
+                    goToDashboard();
+                    closeSideMenu();
+                    return;
+                }
+                if (target === 'brugermanual') {
+                    openBrugermanual();
+                    closeSideMenu();
+                    return;
+                }
+                openModule(target);
+                closeSideMenu();
+            }
+
+            function logoutFromSideMenu() {
+                accessGranted = false;
+                setLoggedUserDisplayName('Bruger');
+                closeSideMenu();
+                goToDashboard();
+                showAccessGate();
+                const gateInput = document.getElementById('accessGateInput');
+                if (gateInput) gateInput.value = '';
+                refreshSideMenuAuthState();
+            }
+
+            function openBrugermanual() {
+                const modal = document.getElementById('brugermanualModal');
+                const body = document.getElementById('brugermanualBody');
+                if (!modal || !body) return;
+                body.innerHTML = ''
+                    + '<section class="manual-card">'
+                    + '<h4>1. Dashboard</h4>'
+                    + '<p>Overblik over makrokategorier og hurtig adgang til moduler.</p>'
+                    + '<ul><li>Brug kortene til at åbne modul.</li><li>Brug "Ryd Efterkalk cache" kun ved dataproblemer.</li><li>Warmup-status viser baggrundsindlæsning.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>2. Efterkalkulation</h4>'
+                    + '<p>Ordreliste, margin, produktion og rapportdetaljer.</p>'
+                    + '<ul><li>Klik på ordrelinje for fuld rapport.</li><li>"Opdater" på en ordre rydder cache for netop den ordre og henter frisk beregning.</li><li>Hvis tal ikke ændrer sig, er kilde-data sandsynligvis uændret.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>3. Omsætning</h4>'
+                    + '<p>Periode-, konto- og kundebaseret omsætningsanalyse.</p>'
+                    + '<ul><li>Vælg periode og konti.</li><li>Tryk "Opdater" for nye tal.</li><li>Print fra modulet efter opdatering.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>4. Ordreindgang</h4>'
+                    + '<p>Ugevis ordre- og tilbudsoverblik.</p>'
+                    + '<ul><li>Vælg ugeinterval (YYYYWW).</li><li>Tryk "Opdater".</li><li>Brug tabeller/grafer til opfølgning.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>5. Datadifferencer (NestKost)</h4>'
+                    + '<p>NestKost pr. stk kan afvige, hvis færdigmeldt antal på ordrelinjen ikke matcher nesting-fordeling.</p>'
+                    + '<ul><li>Pris pr. stk beregnes fra samme kilde som linjens totale kost.</li><li>Routedetaljer kan vise et andet antal pga. fordeling/split på ruter.</li></ul>'
+                    + '</section>'
+                    + '<div class="manual-meta">Tip: Brug side-menuen (☰) til hurtig navigation mellem moduler og manual.</div>';
+                modal.style.display = 'flex';
+            }
+
+            function closeBrugermanual(event) {
+                if (event && event.target && event.target.id !== 'brugermanualModal') return;
+                const modal = document.getElementById('brugermanualModal');
+                if (modal) modal.style.display = 'none';
+            }
 
             function setOmsaetningCacheEntry(cacheMap, key, value) {
                 cacheMap.set(key, {
@@ -4026,6 +4357,7 @@ app.get('/', (req, res) => {
                 if (!overlay) return;
                 if (err) err.textContent = '';
                 overlay.style.display = 'flex';
+                refreshSideMenuAuthState();
                 setTimeout(() => {
                     if (input) input.focus();
                 }, 30);
@@ -4035,6 +4367,7 @@ app.get('/', (req, res) => {
                 const overlay = document.getElementById('accessGateOverlay');
                 if (!overlay) return;
                 overlay.style.display = 'none';
+                refreshSideMenuAuthState();
             }
 
             function submitAccessCode() {
@@ -4061,6 +4394,7 @@ app.get('/', (req, res) => {
                     try {
                         accessGranted = true;
                         hideAccessGate();
+                        refreshSideMenuAuthState();
                         initializeAfterAccess();
                     } catch (e) {
                         accessGranted = false;
@@ -4106,7 +4440,9 @@ app.get('/', (req, res) => {
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (workspace) workspace.style.display = 'block';
+                    closeSideMenu();
                     goBackToList();
+                    setTimeout(syncStickyOffsets, 0);
                     return;
                 }
 
@@ -4115,7 +4451,9 @@ app.get('/', (req, res) => {
                     if (workspace) workspace.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'block';
+                    closeSideMenu();
                     initializeOmsaetningIfNeeded();
+                    setTimeout(syncStickyOffsets, 0);
                     return;
                 }
 
@@ -4124,7 +4462,9 @@ app.get('/', (req, res) => {
                     if (workspace) workspace.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'block';
+                    closeSideMenu();
                     initializeOrdreindgangIfNeeded();
+                    setTimeout(syncStickyOffsets, 0);
                     return;
                 }
 
@@ -4139,6 +4479,7 @@ app.get('/', (req, res) => {
                 const workspace = document.getElementById('mainWorkspace');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
+                closeSideMenu();
                 if (workspace) workspace.style.display = 'none';
                 if (omsaetning) omsaetning.style.display = 'none';
                 if (ordreindgang) ordreindgang.style.display = 'none';
@@ -4148,6 +4489,7 @@ app.get('/', (req, res) => {
                 if (detailModal) detailModal.style.display = 'none';
                 if (detailBody) detailBody.innerHTML = '';
                 document.body.classList.remove('report-modal-open');
+                setTimeout(syncStickyOffsets, 0);
             }
 
             async function initializeOmsaetningIfNeeded() {
@@ -4613,21 +4955,23 @@ app.get('/', (req, res) => {
             }
 
             function setSystemStatus(text, bgColor, textColor) {
-                const badge = document.getElementById('systemStatusBadge');
-                if (!badge) return;
-                badge.textContent = text;
-                badge.style.background = bgColor;
-                badge.style.color = textColor;
-                badge.style.borderColor = bgColor;
+                // Header right area now shows user greeting instead of system status.
             }
 
             // Warmup progress bar polling
             let warmupPollTimer = null;
+            let warmupTopBarHideScheduled = false;
             function startWarmupPolling() {
+                if (warmupPollTimer) return;
                 const wrap = document.getElementById('warmupBarWrap');
                 const fill = document.getElementById('warmupBarFill');
                 const txt  = document.getElementById('warmupBarText');
-                if (!wrap) return;
+                const dashText = document.getElementById('dashboardWarmupText');
+                const dashMeta = document.getElementById('dashboardWarmupMeta');
+                const dashFill = document.getElementById('dashboardWarmupFill');
+                const dashPct = document.getElementById('dashboardWarmupPct');
+                const dashWrap = document.getElementById('dashboardWarmupNotice');
+                if (!wrap && !dashText) return;
 
                 warmupPollTimer = setInterval(async () => {
                     try {
@@ -4635,25 +4979,59 @@ app.get('/', (req, res) => {
                         if (!r.ok) return;
                         const d = await r.json();
 
+                        const totalCombined = Number(d.combinedTotal || d.total || 0);
+                        const doneCombined = Number(d.combinedDone || d.done || 0);
+                        const pctCombined = Number(d.combinedPct || d.pct || 0);
+                        const readyCombined = d.ready === true;
+
+                        if (dashFill) dashFill.style.width = String(Math.max(0, Math.min(100, pctCombined))) + '%';
+                        if (dashPct) dashPct.textContent = String(Math.max(0, Math.min(100, pctCombined))) + '%';
+
+                        if (dashText) {
+                            if (d.running) {
+                                if (dashWrap) dashWrap.classList.remove('hidden');
+                                dashText.textContent = 'Forbereder ' + doneCombined + '/' + totalCombined + ' ordredata...';
+                                if (dashMeta) dashMeta.textContent = 'Du kan bruge andre moduler imens.';
+                            } else if (readyCombined && totalCombined > 0) {
+                                dashText.textContent = 'Klar! Efterkalk-data er forberedt.';
+                                if (dashMeta) dashMeta.textContent = 'Åbn Efterkalk når som helst.';
+                                if (dashWrap) {
+                                    setTimeout(() => {
+                                        dashWrap.classList.add('hidden');
+                                    }, 1800);
+                                }
+                            } else if (totalCombined > 0) {
+                                if (dashWrap) dashWrap.classList.remove('hidden');
+                                dashText.textContent = 'Afventer baggrundsjob...';
+                                if (dashMeta) dashMeta.textContent = 'Du kan bruge andre moduler imens.';
+                            } else {
+                                if (dashWrap) dashWrap.classList.remove('hidden');
+                                dashText.textContent = 'Venter på warmup-status...';
+                                if (dashMeta) dashMeta.textContent = 'Du kan bruge andre moduler imens.';
+                            }
+                        }
+
                         if (d.total === 0) {
-                            wrap.classList.remove('active');
-                            clearInterval(warmupPollTimer);
+                            if (wrap) wrap.classList.remove('active');
                             return;
                         }
 
-                        wrap.classList.add('active');
-                        fill.style.width = d.pct + '%';
+                        if (wrap) wrap.classList.add('active');
+                        if (fill) fill.style.width = d.pct + '%';
 
                         if (d.running) {
-                            txt.textContent = 'Forberegner ' + d.done + '/' + d.total + ' ordrer...';
+                            if (txt) txt.textContent = 'Forberegner ' + d.done + '/' + d.total + ' ordrer...';
+                            warmupTopBarHideScheduled = false;
                         } else {
-                            txt.textContent = 'Klar! ' + d.loaded + ' nye + ' + d.cached + ' fra cache';
-                            fill.style.width = '100%';
-                            setTimeout(() => {
-                                wrap.classList.remove('active');
-                                clearInterval(warmupPollTimer);
-                                warmupPollTimer = null;
-                            }, 3000);
+                            if (txt) txt.textContent = 'Klar! ' + d.loaded + ' nye + ' + d.cached + ' fra cache';
+                            if (fill) fill.style.width = '100%';
+                            if (!warmupTopBarHideScheduled) {
+                                warmupTopBarHideScheduled = true;
+                                setTimeout(() => {
+                                    if (wrap) wrap.classList.remove('active');
+                                    warmupTopBarHideScheduled = false;
+                                }, 3000);
+                            }
                         }
                     } catch(e) {
                         // ignore polling errors silently
@@ -6713,6 +7091,7 @@ app.get('/', (req, res) => {
             document.addEventListener('click', handlePreviewImageZoom);
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Escape') {
+                    closeSideMenu();
                     closeImageLightbox();
                     closeCompactImageModal();
                     closeOversigtModal();
@@ -6886,7 +7265,12 @@ app.get('/', (req, res) => {
                         } else {
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + (isLaserProdLine ? '-' : formatNumber(displayUnitCost)) + '</td>';
-                            html += '<td>' + formatNumber(line.NestingCost || 0) + '</td>';
+                            const hasLaserAllocationSpread = Boolean(line.UsesLaserAllocationSpread || line.usesLaserAllocationSpread);
+                            const allocationTitle = hasLaserAllocationSpread
+                                ? ' title="Nesting-fordeling bruger et andet antal end ordrelinjen; pris pr. stk kan afvige."'
+                                : '';
+                            const allocationHint = hasLaserAllocationSpread ? ' <span style="color:#b26a00; font-weight:700;">*</span>' : '';
+                            html += '<td' + allocationTitle + '>' + formatNumber(line.NestingCost || 0) + allocationHint + '</td>';
                         }
                         html += '<td><strong>' + (displayLineCost === null ? '-' : formatNumber(displayLineCost)) + '</strong></td>';
                         html += '</tr>';
@@ -6920,6 +7304,23 @@ app.get('/', (req, res) => {
                 const extraGap = 14;
                 const targetTop = window.pageYOffset + el.getBoundingClientRect().top - headerH - searchH - extraGap;
                 window.scrollTo({ top: Math.max(targetTop, 0), behavior: 'auto' });
+            }
+
+            function syncStickyOffsets() {
+                const root = document.documentElement;
+                const header = document.querySelector('.header-banner-wrapper');
+                const searchBox = document.getElementById('searchBox');
+
+                const headerH = header ? Math.ceil(header.getBoundingClientRect().height || 0) : 0;
+                const searchVisible = !!searchBox && getComputedStyle(searchBox).display !== 'none';
+                const searchH = searchVisible ? Math.ceil(searchBox.getBoundingClientRect().height || 0) : 0;
+
+                // Header height can increase on smaller viewports; keep sticky controls below it.
+                const searchTop = Math.max(headerH + 8, 58);
+                const tableTop = Math.max(headerH + (searchVisible ? searchH : 0) + 8, 0);
+
+                root.style.setProperty('--search-sticky-top', String(searchTop) + 'px');
+                root.style.setProperty('--table-sticky-top', String(tableTop) + 'px');
             }
 
             function openProduction(ordNo) {
@@ -7125,6 +7526,7 @@ app.get('/', (req, res) => {
                 if (!normalizedOrdNo) return;
                 const ordNoNum = Number(normalizedOrdNo);
                 aftercalcClientCache.delete(normalizedOrdNo);
+                let refreshSucceeded = false;
 
                 const btn = document.getElementById('refreshSingleOrderBtn');
                 if (btn) {
@@ -7158,8 +7560,19 @@ app.get('/', (req, res) => {
                     }
 
                     await loadOrderList(false);
+                    refreshSucceeded = true;
                     if (openAfter && Number.isFinite(ordNoNum)) {
                         await searchOrder();
+                    } else {
+                        const currentInputOrdNo = String((document.getElementById('orderInput') || {}).value || '').trim();
+                        const detailModal = document.getElementById('orderDetailModal');
+                        const detailOpen = detailModal && detailModal.style.display === 'flex';
+                        if (detailOpen && currentInputOrdNo === normalizedOrdNo) {
+                            await searchOrder();
+                        }
+                    }
+                    if (clickedBtn) {
+                        alert('Ordre ' + normalizedOrdNo + ' er opdateret fra kilden.');
                     }
                 } catch (e) {
                     alert('Fejl ved ordre-cache opdatering: ' + e.message);
@@ -7170,7 +7583,12 @@ app.get('/', (req, res) => {
                     }
                     if (clickedBtn) {
                         clickedBtn.disabled = false;
-                        clickedBtn.textContent = 'Opdater';
+                        clickedBtn.textContent = refreshSucceeded ? 'Opdateret' : 'Opdater';
+                        if (refreshSucceeded) {
+                            setTimeout(() => {
+                                if (clickedBtn && clickedBtn.isConnected) clickedBtn.textContent = 'Opdater';
+                            }, 1400);
+                        }
                     }
                 }
             }
@@ -7180,7 +7598,9 @@ app.get('/', (req, res) => {
                 if (!confirmed) return;
                 
                 const btn = document.getElementById('clearCacheBtn');
+                const dashBtn = document.getElementById('dashboardClearCacheBtn');
                 if (btn) { btn.disabled = true; btn.textContent = 'Rydder...'; }
+                if (dashBtn) { dashBtn.disabled = true; dashBtn.textContent = 'Rydder cache...'; }
                 try {
                     const r = await fetch('/cache-clear', { method: 'POST' });
                     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -7190,6 +7610,7 @@ app.get('/', (req, res) => {
                     alert('Fejl ved cache-rydning: ' + e.message);
                 } finally {
                     if (btn) { btn.disabled = false; btn.textContent = 'Ryd cache'; }
+                    if (dashBtn) { dashBtn.disabled = false; dashBtn.textContent = 'Ryd Efterkalk cache'; }
                 }
             }
 
@@ -7375,13 +7796,23 @@ app.get('/', (req, res) => {
                     collapseToggleBtn.style.display = 'none';
                     collapseExpandBtn.style.display = 'inline-block';
                 }
+                setTimeout(syncStickyOffsets, 0);
             }
 
             let uiBootstrapped = false;
             function bootstrapUiAfterLoad() {
                 if (uiBootstrapped) return;
                 uiBootstrapped = true;
+                try {
+                    const storedName = localStorage.getItem('afterkalk_logged_user_name');
+                    if (storedName) {
+                        loggedUserDisplayName = sanitizeDisplayName(storedName);
+                    }
+                } catch {}
+                updateHeaderGreeting();
                 showAccessGate();
+                syncStickyOffsets();
+                window.addEventListener('resize', syncStickyOffsets);
                 const orderInput = document.getElementById('orderInput');
                 const accessGateBtn = document.getElementById('accessGateBtn');
                 if (orderInput) {
@@ -7419,7 +7850,21 @@ app.get('/', (req, res) => {
                         }
                     });
                 }
+                const sideMenuLoginInput = document.getElementById('sideMenuLoginInput');
+                if (sideMenuLoginInput) {
+                    sideMenuLoginInput.addEventListener('keydown', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            submitAccessCodeFromSideMenu();
+                        }
+                    });
+                }
+                const sideMenuUserInput = document.getElementById('sideMenuUserInput');
+                if (sideMenuUserInput) {
+                    sideMenuUserInput.value = sanitizeDisplayName(loggedUserDisplayName);
+                }
                 updateReportOpenButtonState(Boolean(lastOrderReportHtml));
+                refreshSideMenuAuthState();
                 const orderListEl = document.getElementById('orderList');
                 if (orderListEl) {
                     orderListEl.addEventListener('pointerdown', function(e) {

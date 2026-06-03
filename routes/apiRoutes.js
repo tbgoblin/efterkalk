@@ -691,6 +691,7 @@ function createApiRouter({
                     diskCache.del(AFTERCALC_CACHE_KEY_PREFIX + ordNo);
                     diskCache.del('aftercalc_' + ordNo);
                     diskCache.del('prod_summary_' + ordNo);
+                    diskCache.del('prod_summary_' + ordNo + '_gr4_3');
                     orderMarginInFlight.delete(ordNo);
                     afterCalcInFlight.delete(ordNo);
 
@@ -711,16 +712,33 @@ function createApiRouter({
                         };
                         diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo, marginResult, CACHE_TTL_ORDER_MARGIN_MS);
                         logEvent('CACHE REFRESH ORDER: ordNo=' + ordNo + ' margin updated');
-                        orderRefreshStatus.set(ordNo, { status: 'done', startedAt: Date.now(), finishedAt: Date.now() });
+                        const currentState = orderRefreshStatus.get(ordNo) || {};
+                        orderRefreshStatus.set(ordNo, {
+                            status: 'done',
+                            startedAt: currentState.startedAt || Date.now(),
+                            finishedAt: Date.now()
+                        });
                     } else {
                         const errMsg = (aftercalc && aftercalc.error) ? aftercalc.error : 'unknown error';
-                        orderRefreshStatus.set(ordNo, { status: 'error', error: errMsg, startedAt: Date.now(), finishedAt: Date.now() });
+                        const currentState = orderRefreshStatus.get(ordNo) || {};
+                        orderRefreshStatus.set(ordNo, {
+                            status: 'error',
+                            error: errMsg,
+                            startedAt: currentState.startedAt || Date.now(),
+                            finishedAt: Date.now()
+                        });
                     }
 
                     logEvent('CACHE REFRESH ORDER: ordNo=' + ordNo + ' done');
                 })()
                     .catch(err => {
-                        orderRefreshStatus.set(ordNo, { status: 'error', error: err.message, startedAt: Date.now(), finishedAt: Date.now() });
+                        const currentState = orderRefreshStatus.get(ordNo) || {};
+                        orderRefreshStatus.set(ordNo, {
+                            status: 'error',
+                            error: err.message,
+                            startedAt: currentState.startedAt || Date.now(),
+                            finishedAt: Date.now()
+                        });
                         logEvent('ERROR cache-refresh-order worker ordNo=' + ordNo + ': ' + err.message);
                     })
                     .finally(() => {

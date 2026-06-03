@@ -975,7 +975,7 @@ function createAftercalcService({
         const nextVisited = new Set(visited);
         nextVisited.add(numericOrdNo);
 
-        const useSpecialLaserCost = true;
+        const useSpecialLaserCost = Number(options && options.orderGr4 || 0) === 3;
         const summaryCacheKey = 'prod_summary_' + numericOrdNo + (useSpecialLaserCost ? '_gr4_3' : '');
         const cachedSummary = diskCache.get(summaryCacheKey);
         if (cachedSummary && cachedSummary.cacheSchemaVersion === PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION) {
