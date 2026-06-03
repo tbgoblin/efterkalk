@@ -7625,19 +7625,17 @@ app.get('/', (req, res) => {
                     const d = await r.json();
                     if (!r.ok) throw new Error((d && d.message) ? d.message : ('HTTP ' + r.status));
 
-                    if (d.status === 'available' && d.version) {
-                        alert('Ny version fundet: ' + d.version + '. Den downloades i baggrunden.');
-                    } else if (d.status === 'up-to-date') {
-                        alert('Du har allerede den nyeste version.');
-                    } else if (d.status === 'busy') {
-                        alert('Opdateringskontrol kører allerede. Prøv igen om lidt.');
-                    } else if (d.status === 'checking') {
-                        alert('Opdateringskontrol startet. Vent lidt og prøv igen.');
-                    } else {
-                        alert((d && d.message) ? d.message : 'Opdateringskontrol sendt.');
-                    }
+                    // Show status only in dashboard update section (no popup alerts).
+                    applyDashboardUpdateNotice({
+                        status: d && d.status ? d.status : 'checking',
+                        latestVersion: d && (d.latestVersion || d.version) ? (d.latestVersion || d.version) : undefined,
+                        currentVersion: d && d.currentVersion ? d.currentVersion : undefined,
+                        downloaded: d && d.downloaded === true,
+                        canInstallNow: d && d.canInstallNow === true,
+                        message: d && d.message ? d.message : 'Opdateringskontrol sendt.'
+                    });
                 } catch (e) {
-                    alert('Fejl ved opdateringskontrol: ' + e.message);
+                    applyDashboardUpdateNotice({ status: 'error', message: 'Fejl ved opdateringskontrol: ' + e.message });
                 } finally {
                     if (btn) { btn.disabled = false; btn.textContent = 'Tjek opdatering nu'; }
                     if (dashBtn) { dashBtn.disabled = false; dashBtn.textContent = 'Tjek nu'; }
