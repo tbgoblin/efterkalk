@@ -48,12 +48,12 @@ try {
 const APP_VERSION = 'Gantech Operations Hub - v' + pkgVersion;
 
 const { logEvent } = createLogger(APP_VERSION);
-const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
+const ORDER_LIST_CACHE_TTL_MS = 8 * 60 * 60 * 1000;
 const ORDER_LIST_MAX_ROWS = 150;
 const ORDER_LIST_DAYS_BACK = 30;
 const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
-const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = 60;  // Startup gate: warm top orders quickly, remaining orders prefetch on demand/background
+const BACKGROUND_WARM_INTERVAL_MS = 8 * 60 * 60 * 1000;
+const BACKGROUND_AFTERCALC_WARM_COUNT = ORDER_LIST_MAX_ROWS;  // Warm full aftercalc for ALL orders in the list so clicking is instant
 const BACKGROUND_WARM_DELAY_MS = 10;  // Small stagger between queue submissions to keep DB stable
 const MAX_DB_CALC_CONCURRENCY = 2;  // Controlled parallel DB calculations for faster startup warmup
 const AFTERCALC_QUERY_TIMEOUT_MS = 45 * 1000;
@@ -9584,7 +9584,7 @@ function startScheduledRefresh() {
     scheduledRefreshTimer = setInterval(() => {
         refreshOrderListCache(true)
             .then(() => {
-                logEvent('Scheduled refresh completed (10 min)');
+                logEvent('Scheduled refresh completed (8h)');
             })
             .catch(err => {
                 logEvent('ERROR scheduled refresh: ' + err.message);
