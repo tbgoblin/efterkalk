@@ -1,498 +1,4 @@
-const express = require('express');
-const sql = require('mssql/msnodesqlv8');
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
-const getConnection = require('./db');
-const diskCache = require('./diskCache');
-const { createLogger } = require('./utils/logger');
-const {
-    isLaserLProduct,
-    isGloballyExcludedProdNo,
-    isExcludedOperationProdNo,
-    isEstimatedOperationMinutesFallback,
-    getEffectiveOperationMinutes,
-    adjustOperationLinePricing
-} = require('./utils/productRules');
-const {
-    isHttpUrl,
-    isAbsoluteWindowsPath,
-    normalizeWindowsPath,
-    buildImageItems,
-    isSupportedImagePath,
-    getLatestDrawingByProdNo
-} = require('./services/drawingService');
-const { createAftercalcService } = require('./services/aftercalcService');
-const { createApiRouter } = require('./routes/apiRoutes');
 
-const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
-const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
-const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
-const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v21_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v21_';
-const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
-
-const app = express();
-app.use(express.json({ limit: '256kb' }));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-
-// Read version from package.json
-let pkgVersion = '1.0.0';
-try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-    pkgVersion = pkg.version || '1.0.0';
-} catch (e) {
-    console.warn('Could not read package.json version');
-}
-const APP_VERSION = 'Gantech Operations Hub - v' + pkgVersion;
-
-const { logEvent } = createLogger(APP_VERSION);
-const ORDER_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
-const ORDER_LIST_MAX_ROWS = 150;
-const ORDER_LIST_DAYS_BACK = 30;
-const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
-const BACKGROUND_WARM_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_AFTERCALC_WARM_COUNT = 60;  // Startup gate: warm top orders quickly, remaining orders prefetch on demand/background
-const BACKGROUND_WARM_DELAY_MS = 10;  // Small stagger between queue submissions to keep DB stable
-const MAX_DB_CALC_CONCURRENCY = 2;  // Controlled parallel DB calculations for faster startup warmup
-const AFTERCALC_QUERY_TIMEOUT_MS = 45 * 1000;
-
-const orderListCache = {
-    data: [],
-    loadedAt: 0,
-    loading: false,
-    refreshPromise: null,
-    lastError: null,
-    lastModifiedTime: 0
-};
-
-const orderMarginCache = new Map();
-const orderMarginInFlight = new Map();
-const afterCalcInFlight = new Map();
-const orderRefreshInFlight = new Map();
-const orderRefreshStatus = new Map();
-const dbCalcQueue = [];
-let activeDbCalcs = 0;
-let backgroundAftercalcWarmRunning = false;
-
-const warmupProgress = {
-    running: false,
-    total: 0,
-    cached: 0,
-    loaded: 0,
-    failed: 0,
-    current: null,
-    startedAt: null,
-    completedAt: null
-};
-
-const {
-    getAfterCalc,
-    fetchOrderListBase,
-    getProductionSummary
-} = createAftercalcService({
-    getConnection,
-    sql,
-    diskCache,
-    logEvent,
-    getLatestDrawingByProdNo,
-    isGloballyExcludedProdNo,
-    isExcludedOperationProdNo,
-    isEstimatedOperationMinutesFallback,
-    getEffectiveOperationMinutes,
-    adjustOperationLinePricing,
-    isLaserLProduct,
-    orderListMaxRows: ORDER_LIST_MAX_ROWS,
-    orderListDaysBack: ORDER_LIST_DAYS_BACK,
-    cacheTtlProductionSummaryMs: CACHE_TTL_PRODUCTION_SUMMARY_MS
-});
-
-// Evita cache lato browser durante lo sviluppo: forza sempre il fetch dell'ultima UI/API.
-app.use((req, res, next) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    next();
-});
-
-
-function isOrderListCacheFresh() {
-    return orderListCache.loadedAt > 0 && (Date.now() - orderListCache.loadedAt) < ORDER_LIST_CACHE_TTL_MS;
-}
-
-function runWithDbCalcLimit(task, priority = 'normal') {
-    return new Promise((resolve, reject) => {
-        const job = { task, resolve, reject };
-        if (priority === 'high') {
-            dbCalcQueue.unshift(job);
-        } else {
-            dbCalcQueue.push(job);
-        }
-        pumpDbCalcQueue();
-    });
-}
-
-function pumpDbCalcQueue() {
-    while (activeDbCalcs < MAX_DB_CALC_CONCURRENCY && dbCalcQueue.length > 0) {
-        const job = dbCalcQueue.shift();
-        activeDbCalcs += 1;
-        Promise.resolve()
-            .then(job.task)
-            .then(job.resolve)
-            .catch(job.reject)
-            .finally(() => {
-                activeDbCalcs -= 1;
-                pumpDbCalcQueue();
-            });
-    }
-}
-
-function withTimeout(promise, timeoutMs, timeoutMessage) {
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-    });
-
-    return Promise.race([promise, timeoutPromise]).finally(() => {
-        clearTimeout(timeoutId);
-    });
-}
-
-function getAftercalcCacheWithFallback(ordNo, promoteToCurrent = false) {
-    const numericOrdNo = Number(ordNo);
-    if (!Number.isFinite(numericOrdNo)) return null;
-
-    const currentKey = AFTERCALC_CACHE_KEY_PREFIX + numericOrdNo;
-    const currentCached = diskCache.get(currentKey);
-    if (currentCached) return currentCached;
-
-    for (const prefix of LEGACY_AFTERCALC_CACHE_KEY_PREFIXES) {
-        const legacyKey = prefix + numericOrdNo;
-        const legacyCached = diskCache.get(legacyKey);
-        if (legacyCached) {
-            if (promoteToCurrent) {
-                diskCache.set(currentKey, legacyCached, CACHE_TTL_AFTERCALC_MS);
-            }
-            return legacyCached;
-        }
-    }
-
-    return null;
-}
-
-async function getOrComputeAftercalc(ordNo, options = {}) {
-    const priority = options.priority || 'normal';
-    const key = Number(ordNo);
-    if (!Number.isFinite(key)) {
-        throw new Error('Ordrenummer ugyldigt');
-    }
-
-    const cacheKey = AFTERCALC_CACHE_KEY_PREFIX + key;
-    const cached = getAftercalcCacheWithFallback(key, true);
-    if (cached) {
-        logEvent('AFTERCALC CACHE HIT: ordNo=' + key);
-        return cached;
-    }
-
-    let computePromise = afterCalcInFlight.get(key);
-    if (computePromise) {
-        logEvent('AFTERCALC IN-FLIGHT REUSE: ordNo=' + key);
-    }
-    if (!computePromise) {
-        logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
-        computePromise = runWithDbCalcLimit(async () => {
-            const data = await withTimeout(
-                getAfterCalc(key),
-                AFTERCALC_QUERY_TIMEOUT_MS,
-                'Aftercalc timeout for ordNo=' + key
-            );
-            if (!data.error) {
-                diskCache.set(cacheKey, data, CACHE_TTL_AFTERCALC_MS);
-            }
-            return data;
-        }, priority).finally(() => {
-            afterCalcInFlight.delete(key);
-        });
-        afterCalcInFlight.set(key, computePromise);
-    }
-
-    return computePromise;
-}
-
-
-async function getOrComputeOrderMargin(ordNo, options = {}) {
-    const forceRefresh = Boolean(options.forceRefresh);
-    const key = Number(ordNo);
-    if (!Number.isFinite(key)) {
-        throw new Error('Ordrenummer ugyldigt');
-    }
-
-    if (!forceRefresh && orderMarginCache.has(key)) {
-        return orderMarginCache.get(key);
-    }
-
-    if (!forceRefresh) {
-        const diskMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
-            || diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
-            || diskCache.getStale('order_margin_v6_' + key);
-        if (diskMargin && diskMargin.totalCost !== null && diskMargin.totalCost !== undefined) {
-            const marginInfo = {
-                ordNo: key,
-                totalRevenue: Number(diskMargin.totalRevenue || 0),
-                totalCost: Number(diskMargin.totalCost || 0),
-                hasInvoiceWarning: diskMargin.hasInvoiceWarning === true,
-                computedAt: Date.now()
-            };
-            orderMarginCache.set(key, marginInfo);
-            return marginInfo;
-        }
-    }
-
-    if (!forceRefresh && orderMarginInFlight.has(key)) {
-        return orderMarginInFlight.get(key);
-    }
-
-    const computePromise = runWithDbCalcLimit(async () => {
-        const data = await withTimeout(
-            getAfterCalc(key),
-            AFTERCALC_QUERY_TIMEOUT_MS,
-            'Aftercalc timeout for ordNo=' + key
-        );
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        const marginInfo = {
-            ordNo: key,
-            totalRevenue: Number(data.summary.totalRevenue || 0),
-            totalCost: Number(data.summary.totalCost || 0),
-            hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning),
-            computedAt: Date.now()
-        };
-
-        orderMarginCache.set(key, marginInfo);
-        // Also save to persistent disk cache (24 hours) for faster startup next time
-        diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + key, marginInfo, 24 * 60 * 60 * 1000);
-        return marginInfo;
-    }).finally(() => {
-        orderMarginInFlight.delete(key);
-    });
-
-    orderMarginInFlight.set(key, computePromise);
-    return computePromise;
-}
-
-function warmMarginsInBackground(ordNos) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) return;
-    logEvent('WARM-MARGIN: queueing ' + ordNos.length + ' orders');
-    for (const ordNo of ordNos) {
-        const numericOrdNo = Number(ordNo);
-        if (!Number.isFinite(numericOrdNo)) continue;
-        getOrComputeOrderMargin(numericOrdNo).catch(() => {});
-    }
-}
-
-async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKGROUND_WARM_DELAY_MS) {
-    if (!Array.isArray(ordNos) || ordNos.length === 0) {
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (empty array)');
-        return;
-    }
-    if (backgroundAftercalcWarmRunning) {
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): skipped (previous run is still active)');
-        return;
-    }
-
-    backgroundAftercalcWarmRunning = true;
-    const startMs = Date.now();
-    let total = 0;
-    let alreadyCached = 0;
-    let warmed = 0;
-    let failed = 0;
-
-    // Reset global progress tracker
-    warmupProgress.running = true;
-    warmupProgress.total = ordNos.filter(o => Number.isFinite(Number(o))).length;
-    warmupProgress.cached = 0;
-    warmupProgress.loaded = 0;
-    warmupProgress.failed = 0;
-    warmupProgress.current = null;
-    warmupProgress.startedAt = Date.now();
-    warmupProgress.completedAt = null;
-
-    const queuedComputations = [];
-
-    try {
-        for (const ordNo of ordNos) {
-            const numericOrdNo = Number(ordNo);
-            if (!Number.isFinite(numericOrdNo)) continue;
-            total += 1;
-
-            if (getAftercalcCacheWithFallback(numericOrdNo, false)) {
-                alreadyCached += 1;
-                warmupProgress.cached += 1;
-                warmupProgress.current = numericOrdNo;
-                continue;
-            }
-
-            warmupProgress.current = numericOrdNo;
-            const computePromise = getOrComputeAftercalc(numericOrdNo, { priority: 'normal' })
-                .then(() => {
-                    warmed += 1;
-                    warmupProgress.loaded += 1;
-                })
-                .catch((err) => {
-                    failed += 1;
-                    warmupProgress.failed += 1;
-                    logEvent('WARM-AFTERCALC ERROR ordNo=' + numericOrdNo + ': ' + err.message);
-                });
-            queuedComputations.push(computePromise);
-
-            if (maxDelayMs > 0) {
-                await new Promise(resolve => setTimeout(resolve, maxDelayMs));
-            }
-        }
-
-        if (queuedComputations.length > 0) {
-            await Promise.allSettled(queuedComputations);
-        }
-    } finally {
-        backgroundAftercalcWarmRunning = false;
-        warmupProgress.running = false;
-        warmupProgress.current = null;
-        warmupProgress.completedAt = Date.now();
-        const sec = ((Date.now() - startMs) / 1000).toFixed(1);
-        logEvent('WARM-AFTERCALC (' + sourceLabel + '): total=' + total + ', cached=' + alreadyCached + ', warmed=' + warmed + ', failed=' + failed + ', time=' + sec + 's');
-    }
-}
-
-function tryLoadOrderListFromCache() {
-    try {
-        const cached = diskCache.get('order_list');
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-            logEvent('ORDER-LIST: loaded ' + cached.length + ' rows from diskCache');
-            return cached;
-        }
-    } catch (e) {
-        logEvent('ORDER-LIST-CACHE READ ERROR: ' + e.message);
-    }
-    return null;
-}
-
-function preloadMarginsAndDetailsFromCache(ordNos) {
-    let marginsLoaded = 0;
-    let detailsLoaded = 0;
-    
-    for (const ordNo of ordNos) {
-        try {
-            const key = Number(ordNo);
-            if (!Number.isFinite(key)) continue;
-            
-            // Preload margins
-            const marginCached = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key);
-            if (marginCached) {
-                orderMarginCache.set(key, marginCached);
-                marginsLoaded += 1;
-            }
-            
-            // Preload aftercalc details
-            const detailsCached = getAftercalcCacheWithFallback(key, false);
-            if (detailsCached) {
-                detailsLoaded += 1;
-            }
-        } catch (e) {
-            // Silently skip errors during preload
-        }
-    }
-    
-    if (marginsLoaded > 0 || detailsLoaded > 0) {
-        logEvent('PRELOAD: loaded ' + marginsLoaded + ' margins + ' + detailsLoaded + ' details from diskCache');
-    }
-}
-
-async function refreshOrderListCache(force = false) {
-    if (!force && isOrderListCacheFresh()) {
-        return;
-    }
-
-    if (orderListCache.loading) {
-        if (orderListCache.refreshPromise) {
-            await orderListCache.refreshPromise;
-        }
-        return;
-    }
-
-    orderListCache.loading = true;
-    logEvent('ORDER-LIST-REFRESH: start force=' + (force ? '1' : '0'));
-    orderListCache.refreshPromise = (async () => {
-        try {
-            const rows = await fetchOrderListBase();
-            logEvent('ORDER-LIST-REFRESH: fetched ' + rows.length + ' rows from DB');
-            orderListCache.data = rows;
-            orderListCache.loadedAt = Date.now();
-            orderListCache.lastError = null;
-
-            // Save to persistent disk cache (TTL: 24 hours) for startup speedup
-            diskCache.set('order_list', rows, 24 * 60 * 60 * 1000);
-            logEvent('ORDER-LIST-REFRESH: saved ' + rows.length + ' rows to diskCache');
-
-            const warmOrdNos = rows.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
-            warmMarginsInBackground(warmOrdNos);
-            // Trigger warmup if not already running (avoid double-start during initial DB refresh)
-            if (!backgroundAftercalcWarmRunning) {
-                const warmAftercalcOrdNos = rows.slice(0, BACKGROUND_AFTERCALC_WARM_COUNT).map(r => r.OrdNo);
-                warmAftercalcInBackground(warmAftercalcOrdNos, force ? 'refresh-force' : 'refresh-auto', BACKGROUND_WARM_DELAY_MS);
-            }
-        } catch (err) {
-            orderListCache.lastError = err.message;
-            logEvent('ORDER-LIST-REFRESH ERROR: ' + err.message);
-            throw err;
-        } finally {
-            orderListCache.loading = false;
-            orderListCache.refreshPromise = null;
-            logEvent('ORDER-LIST-REFRESH: done force=' + (force ? '1' : '0'));
-        }
-    })();
-
-    await orderListCache.refreshPromise;
-}
-
-app.use(createApiRouter({
-    getConnection,
-    sql,
-    fs,
-    spawn,
-    diskCache,
-    logEvent,
-    getOrComputeAftercalc,
-    getOrComputeOrderMargin,
-    getProductionSummary,
-    AFTERCALC_CACHE_KEY_PREFIX,
-    ORDER_MARGIN_CACHE_KEY_PREFIX,
-    CACHE_TTL_ORDER_MARGIN_MS,
-    CACHE_TTL_LASER_METRICS_MS,
-    isHttpUrl,
-    normalizeWindowsPath,
-    isAbsoluteWindowsPath,
-    isSupportedImagePath,
-    buildImageItems,
-    orderListCache,
-    orderMarginCache,
-    orderRefreshInFlight,
-    orderRefreshStatus,
-    orderMarginInFlight,
-    afterCalcInFlight,
-    warmupProgress,
-    refreshOrderListCache,
-    isOrderListCacheFresh,
-    ORDER_LIST_DAYS_BACK,
-    pkgVersion
-}));
-
-// Endpoint per HTML
-app.get('/', (req, res) => {
-    logEvent('HTTP GET /');
-    res.send(`
     <!DOCTYPE html>
     <html>
     <head>
@@ -680,11 +186,6 @@ app.get('/', (req, res) => {
             .belastning-order-lines strong { color:#0f3560; }
             #belastningGrafiskWrap.omsaetning-charts { grid-template-columns:1fr; }
             .belastning-kunde-wrap { position:relative; }
-            .belastning-kunde-pill { display:none; align-items:center; justify-content:space-between; gap:6px; padding:7px 8px 7px 10px; border:1px solid #c7d9f3; border-radius:8px; background:linear-gradient(180deg,#ffffff 0%,#f4f9ff 100%); font-size:13px; color:#1a3a5c; font-weight:600; min-height:36px; box-sizing:border-box; }
-            .belastning-kunde-pill.active { display:flex; }
-            .belastning-kunde-pill .pill-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-            .belastning-kunde-clear { flex-shrink:0; width:22px; height:22px; border:none; border-radius:50%; background:#c7d9f3; color:#0f3560; font-size:14px; line-height:22px; text-align:center; cursor:pointer; padding:0; font-weight:bold; }
-            .belastning-kunde-clear:hover { background:#9bbce8; color:#fff; }
             .belastning-kunde-dropdown { position:absolute; z-index:220; left:0; right:0; top:calc(100% + 2px); border:1px solid #c7d9f3; border-radius:8px; background:#fff; box-shadow:0 4px 16px rgba(15,53,96,0.13); max-height:200px; overflow-y:auto; }
             .belastning-kunde-option { padding:7px 10px; cursor:pointer; font-size:13px; color:#1a3a5c; border-bottom:1px solid #e8f0fb; }
             .belastning-kunde-option:last-child { border-bottom:none; }
@@ -1347,7 +848,7 @@ app.get('/', (req, res) => {
             </div>
             <div class="header-brand">
                 <img class="header-brand-logo" src="/assets/brand/logo-gantech.png" alt="Gantech logo" />
-                <span class="header-brand-text">${APP_VERSION}</span>
+                <span class="header-brand-text">Gantech Operations Hub - v1.0.108</span>
             </div>
             <div id="warmupBarWrap" title="Forberegner ordredata i baggrunden">
                 <div id="warmupBarBg"><div id="warmupBarFill"></div></div>
@@ -1681,10 +1182,15 @@ app.get('/', (req, res) => {
                     </div>
                     <div class="omsaetning-field">
                         <label for="belastningKunde">Kunde</label>
-                        <input id="belastningKunde" class="belastning-order-filter" type="text" placeholder="fx Echolo"
-                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off"
-                            oninput="scheduleBelastningAutoReload()"
-                            onchange="scheduleBelastningAutoReload()" />
+                        <div class="belastning-kunde-wrap">
+                            <input id="belastningKunde" class="belastning-order-filter" type="text" placeholder="fx Echolo"
+                                autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off"
+                                oninput="scheduleBelastningAutoReload(); scheduleBelastningKundeSuggest()"
+                                onchange="scheduleBelastningAutoReload()"
+                                onfocus="scheduleBelastningKundeSuggest()"
+                                onblur="hideBelastningKundeSuggestions()" />
+                            <div id="belastningKundeDropdown" class="belastning-kunde-dropdown" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="omsaetning-field">
                         <label>Status</label>
@@ -2324,9 +1830,9 @@ app.get('/', (req, res) => {
                 const tables = Array.from(root.querySelectorAll('table'));
                 if (!tables.length) return;
 
-                const rightPattern = /færdigmeldt|minutter|min\.|kost|pris|margin|afvigelse|kg|%|beløb|antal|samlet|dkk|forbrugt|stykliste|icon vægt|nestkost|nestmulti/i;
-                const centerPattern = /linje|rute|prodtp4|prod\.ordre|prodordre|nestingordre|ordre$/i;
-                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\\/ref|hvem|status|message|beskrivelse/i;
+                const rightPattern = /færdigmeldt|minutter|min.|kost|pris|margin|afvigelse|kg|%|beløb|antal|samlet|dkk|forbrugt|stykliste|icon vægt|nestkost|nestmulti/i;
+                const centerPattern = /linje|rute|prodtp4|prod.ordre|prodordre|nestingordre|ordre$/i;
+                const leftPattern = /produkt|beskrivelse|kunde|type|linjer\/ref|hvem|status|message|beskrivelse/i;
 
                 for (const table of tables) {
                     table.classList.add('micro-grid-table');
@@ -2434,7 +1940,7 @@ app.get('/', (req, res) => {
                     (note.updatedAt ? '<div style="font-size:11px;color:#888;margin-bottom:10px;">Sidst opdateret: ' + note.updatedAt.slice(0,16).replace('T',' ') + '</div>' : '') +
                     '<div class="note-popup-actions">' +
                     '<button class="btn-note-delete" onclick="deleteOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Slet</button>' +
-                    '<button class="btn-note-cancel" onclick="document.getElementById(\\'notePopupOverlay\\').remove()">Annuller</button>' +
+                    '<button class="btn-note-cancel" onclick="document.getElementById(\'notePopupOverlay\').remove()">Annuller</button>' +
                     '<button class="btn-note-save" onclick="saveOrderNote(' + ordNo + ',' + fromOrderDetail + ')">Gem</button>' +
                     '</div></div>';
 
@@ -2598,44 +2104,14 @@ app.get('/', (req, res) => {
                 } catch(e) { /* silent */ }
             }
 
-            let _belastningKundeSelected = '';
-
-            function getBelastningKundeValue() {
-                if (_belastningKundeSelected) return _belastningKundeSelected;
-                var inp = document.getElementById('belastningKunde');
-                return inp ? String(inp.value || '').trim() : '';
-            }
-
             function selectBelastningKundeOption(idx, e) {
                 if (e) e.preventDefault();
                 var r = _belastningKundeResults[idx];
                 var name = r ? String(r.name || '') : '';
-                _belastningKundeSelected = name;
+                var inp = document.getElementById('belastningKunde');
+                if (inp) inp.value = name;
                 var d = document.getElementById('belastningKundeDropdown');
                 if (d) d.style.display = 'none';
-                var inp = document.getElementById('belastningKunde');
-                var pill = document.getElementById('belastningKundePill');
-                var pillName = document.getElementById('belastningKundePillName');
-                if (inp) {
-                    inp.blur();
-                    inp.value = '';
-                    inp.style.display = 'none';
-                }
-                if (pillName) pillName.textContent = name;
-                if (pill) pill.classList.add('active');
-                scheduleBelastningAutoReload();
-            }
-
-            function clearBelastningKunde() {
-                _belastningKundeSelected = '';
-                var inp = document.getElementById('belastningKunde');
-                var pill = document.getElementById('belastningKundePill');
-                if (inp) {
-                    inp.style.display = '';
-                    inp.value = '';
-                    inp.focus();
-                }
-                if (pill) pill.classList.remove('active');
                 scheduleBelastningAutoReload();
             }
             const BELASTNING_PERIODIC_REFRESH_MS = 15 * 60 * 1000;
@@ -3160,7 +2636,7 @@ app.get('/', (req, res) => {
                         return;
                     }
                     if (lbl) lbl.textContent = d.results.length + ' resultat' + (d.results.length !== 1 ? 'er' : '');
-                    const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+                    const terms = q.toLowerCase().split(/s+/).filter(Boolean);
                     list.innerHTML = d.results.map((res, i) => {
                         const title = phHighlight(res.title || res.url, terms);
                         const snip  = phHighlight(res.snippet, terms);
@@ -3441,7 +2917,7 @@ app.get('/', (req, res) => {
 
             function parseMonthInputToPeriod(monthValue) {
                 const raw = String(monthValue || '').trim();
-                const match = raw.match(/^(\\d{4})-(\\d{2})$/);
+                const match = raw.match(/^(\d{4})-(\d{2})$/);
                 if (!match) return null;
                 const year = Number(match[1]);
                 const month = Number(match[2]);
@@ -3811,7 +3287,7 @@ app.get('/', (req, res) => {
 
             async function loadOmsaetningThresholdForCustomer(custNo) {
                 const key = String(custNo || '').trim();
-                if (!/^\\d{1,20}$/.test(key)) return;
+                if (!/^\d{1,20}$/.test(key)) return;
                 const token = ++omsaetningThresholdLoadToken;
 
                 try {
@@ -3862,7 +3338,7 @@ app.get('/', (req, res) => {
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const selectedCustomers = Array.from(omsaetningSelectedCustomers.keys())
                     .map(v => String(v || '').trim())
-                    .filter(v => /^\\d{1,20}$/.test(v));
+                    .filter(v => /^\d{1,20}$/.test(v));
 
                 if (selectedCustomers.length === 0) {
                     omsaetningThresholdLoadToken += 1;
@@ -3914,7 +3390,7 @@ app.get('/', (req, res) => {
             async function persistOmsaetningThresholdsForCustomers(customerNos, warnThreshold, goodThreshold) {
                 const customerKeys = Array.from(new Set((Array.isArray(customerNos) ? customerNos : [])
                     .map(v => String(v || '').trim())
-                    .filter(v => /^\\d{1,20}$/.test(v))));
+                    .filter(v => /^\d{1,20}$/.test(v))));
                 if (customerKeys.length === 0) return;
 
                 await Promise.all(customerKeys.map(async custNo => {
@@ -4012,7 +3488,7 @@ app.get('/', (req, res) => {
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const customerKeys = Array.from(new Set((Array.isArray(selectedCustomers) ? selectedCustomers : [])
                     .map(v => String(v || '').trim())
-                    .filter(v => /^\\d{1,20}$/.test(v))));
+                    .filter(v => /^\d{1,20}$/.test(v))));
 
                 if (customerKeys.length === 0) return [];
                 if (safeOptions.silentValidation === true) return [];
@@ -4589,7 +4065,7 @@ app.get('/', (req, res) => {
                 const customerThresholdsHtml = (document.getElementById('omsaetningCustomerThresholds') || {}).innerHTML || '';
                 const selectedAccounts = Array.from(omsaetningSelectedAccounts.values()).filter(Boolean).map(v => String(v));
                 const selectedCustomerEntries = Array.from(omsaetningSelectedCustomers.entries());
-                const numericPeriods = Number(periods.replace(/\./g, '').replace(',', '.')) || 0;
+                const numericPeriods = Number(periods.replace(/./g, '').replace(',', '.')) || 0;
                 const orientationPreference = getPrintOrientationPreference('omsaetning');
                 const autoOrientation = chooseOmsaetningPrintOrientation({
                     detailsOpen,
@@ -4840,7 +4316,7 @@ app.get('/', (req, res) => {
 
                 const labels = safeRows.map(r => {
                     const key = String(r.weekKey || '');
-                    if (/^\\d{6}$/.test(key)) return key.slice(0, 4) + '-' + key.slice(4, 6);
+                    if (/^\d{6}$/.test(key)) return key.slice(0, 4) + '-' + key.slice(4, 6);
                     return formatWeekLabel(key);
                 });
                 const ordValues = safeRows.map(r => Number(r.totalOrd || 0));
@@ -5139,8 +4615,8 @@ app.get('/', (req, res) => {
                 const daysRaw = Number(daysInput && daysInput.value || 30);
                 const dage = Number.isFinite(daysRaw) ? Math.max(1, Math.min(180, Math.round(daysRaw))) : 30;
                 const resGr = String(resGrInput && resGrInput.value || '').trim();
-                const ord = String(orderInput && orderInput.value || '').replace(/\D+/g, '').slice(0, 12);
-                const kunde = String(customerInput && customerInput.value || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+                const ord = String(orderInput && orderInput.value || '').replace(/D+/g, '').slice(0, 12);
+                const kunde = String(customerInput && customerInput.value || '').trim().replace(/s+/g, ' ').slice(0, 80);
                 if (orderInput && orderInput.value !== ord) {
                     orderInput.value = ord;
                 }
@@ -5151,7 +4627,7 @@ app.get('/', (req, res) => {
             }
 
             function escapeJsSingle(value) {
-                return String(value || '').split('\\\\').join('\\\\\\\\').split("'").join("\\\\'");
+                return String(value || '').split('\\').join('\\\\').split("'").join("\\'");
             }
 
             function formatBelastningMinutes(value) {
@@ -5162,7 +4638,7 @@ app.get('/', (req, res) => {
 
             function normalizeBelastningDateKey(rawDate, dateLabel) {
                 const label = String(dateLabel || '').trim();
-                const fullDa = label.match(/^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})$/);
+                const fullDa = label.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
                 if (fullDa) {
                     const dd = fullDa[1].padStart(2, '0');
                     const mm = fullDa[2].padStart(2, '0');
@@ -5181,7 +4657,7 @@ app.get('/', (req, res) => {
 
             function normalizeBelastningDisplayDate(rawDate, dateLabel) {
                 const label = String(dateLabel || '').trim();
-                if (/^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$/.test(label)) return label;
+                if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(label)) return label;
                 const parsed = rawDate ? new Date(rawDate) : null;
                 if (parsed && !Number.isNaN(parsed.getTime())) {
                     return parsed.toLocaleDateString('da-DK');
@@ -5190,7 +4666,7 @@ app.get('/', (req, res) => {
             }
 
             function getBelastningDateSortValue(dateKey) {
-                if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(dateKey || ''))) return Number.MAX_SAFE_INTEGER;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ''))) return Number.MAX_SAFE_INTEGER;
                 const ts = new Date(dateKey + 'T00:00:00').getTime();
                 return Number.isNaN(ts) ? Number.MAX_SAFE_INTEGER : ts;
             }
@@ -5327,7 +4803,7 @@ app.get('/', (req, res) => {
                     const hitW = Math.max(barW * 3.8, 10);
                     const canClick = clickable && chartResGr && dayKey;
                     const clickAttr = canClick
-                        ? (' onclick="onBelastningDayColumnClick(\\'' + escapeJsSingle(chartResGr) + '\\',' + chartParity + ',\\'' + escapeJsSingle(dayKey) + '\\', event)"')
+                        ? (' onclick="onBelastningDayColumnClick(\'' + escapeJsSingle(chartResGr) + '\',' + chartParity + ',\'' + escapeJsSingle(dayKey) + '\', event)"')
                         : '';
                     const bandClass = 'belastning-day-band' + (activeDayKey && dayKey === activeDayKey ? ' active' : '');
                     return ''
@@ -5408,7 +4884,7 @@ app.get('/', (req, res) => {
                         && String(belastningDetailContext.resGr || '') === rg
                         && Number(belastningDetailContext.parity) === itemParity;
                     return ''
-                        + '<div class="belastning-resource-chart' + (isActive ? ' is-active' : '') + '" onclick="loadBelastningDetail(\\'' + escapeHtmlFE(rg) + '\\',' + itemParity + ')">'
+                        + '<div class="belastning-resource-chart' + (isActive ? ' is-active' : '') + '" onclick="loadBelastningDetail(\'' + escapeHtmlFE(rg) + '\',' + itemParity + ')">'
                         + '<h5>Kapacitetsbelastning: ' + escapeHtmlFE(rg + ' ' + String(item.nm || '')) + '</h5>'
                         + buildBelastningClusterSvg(chartRows, {
                             clickable: true,
@@ -5576,7 +5052,7 @@ app.get('/', (req, res) => {
                         const parentRow = '<tr class="belastning-order-row' + beforeClass + '" data-parent-date="' + dateKey + '" data-parent-order="' + detailKey + '">'
                             + '<td style="text-align:center;">'
                             + (hasChildren
-                                ? ('<button type="button" class="belastning-order-toggle" data-order-key="' + detailKey + '" data-collapsed="1" onclick="toggleBelastningOrderNode(\\'' + detailKey + '\\', this)">+</button>')
+                                ? ('<button type="button" class="belastning-order-toggle" data-order-key="' + detailKey + '" data-collapsed="1" onclick="toggleBelastningOrderNode(\'' + detailKey + '\', this)">+</button>')
                                 : '<span class="belastning-order-sub">-</span>')
                             + '</td>'
                             + '<td>' + escapeHtmlFE(dateGroup.dateTxt) + '</td>'
@@ -5619,7 +5095,7 @@ app.get('/', (req, res) => {
                     const groupHeader = '<tr class="' + groupHeaderClass + '" data-day-key="' + escapeHtmlFE(String(dateGroup.dateKey || '')) + '">'
                         + '<td colspan="12">'
                         + '<div class="belastning-date-header">'
-                        + '<button type="button" class="belastning-date-toggle" data-date-key="' + dateKey + '" data-collapsed="0" onclick="toggleBelastningDateGroup(\\'' + dateKey + '\\', this)">-</button>'
+                        + '<button type="button" class="belastning-date-toggle" data-date-key="' + dateKey + '" data-collapsed="0" onclick="toggleBelastningDateGroup(\'' + dateKey + '\', this)">-</button>'
                         + '<span class="belastning-date-badge">Dato: ' + escapeHtmlFE(dateGroup.dateTxt) + '</span>'
                         + '<span class="belastning-date-meta">'
                         + '<span class="belastning-date-meta-item"><span class="belastning-date-meta-lbl">S-Ordre:</span><span class="belastning-date-meta-val">' + escapeHtmlFE(String(groupsBySOrdre.size)) + '</span></span>'
@@ -7309,7 +6785,7 @@ app.get('/', (req, res) => {
                     '.order-report-table th, .order-report-table td { border-bottom:1px solid #dfe8f3; padding:8px 10px; }',
                     '.order-report-table th { background:#eef5ff; }',
                     '.summary-box { break-inside: avoid; page-break-inside: avoid; }'
-                ].join('\\n');
+                ].join('\n');
             }
 
             function buildStandaloneListPrintCss() {
@@ -7324,7 +6800,7 @@ app.get('/', (req, res) => {
                     '.order-list-table th, .order-list-table td { padding:3px 4px; line-height:1.15; }',
                     '.order-list-table th:nth-child(8), .order-list-table td:nth-child(8), .order-list-table th:nth-child(9), .order-list-table td:nth-child(9) { display:none; }',
                     '.order-list-table tr { break-inside: avoid; page-break-inside: avoid; }'
-                ].join('\\n');
+                ].join('\n');
             }
 
             function printStandaloneHtml(title, html, cssText) {
@@ -7341,7 +6817,7 @@ app.get('/', (req, res) => {
 
                 const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
                     .map(el => el.outerHTML)
-                    .join('\\n');
+                    .join('\n');
                 const safeTitle = escapeHtml(title || 'Udskrift');
                 const doc = iframe.contentWindow.document;
                 doc.open();
@@ -7620,13 +7096,13 @@ app.get('/', (req, res) => {
                     html += '<h4>Laseroversigt (L-linjer)</h4>';
                     html += '<div class="desc">Nesting, vægtafvigelser og kost på tværs af ruter.</div>';
                     html += '<div id="laserOversigtSummaryTeaser" class="oversigt-launcher-kpi"><span class="loading">Indlæser laser-KPI...</span></div>';
-                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\\\'laser\\\')" title="Åbn detaljeret laseroversigt">Åbn laseroversigt</button>';
+                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\'laser\')" title="Åbn detaljeret laseroversigt">Åbn laseroversigt</button>';
                     html += '</article>';
                     html += '<article class="oversigt-launcher-card">';
                     html += '<h4>Operation Oversigt</h4>';
                     html += '<div class="desc">Operationstid, afvigelser og omkostninger i én driftsvisning.</div>';
                     html += '<div id="operationOversigtSummaryTeaser" class="oversigt-launcher-kpi"><span class="loading">Indlæser operations-KPI...</span></div>';
-                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\\\'operation\\\')" title="Åbn detaljeret operationsoversigt">Åbn operationer</button>';
+                    html += '<button class="list-toggle-btn" onclick="openOversigtModal(\'operation\')" title="Åbn detaljeret operationsoversigt">Åbn operationer</button>';
                     html += '</article>';
                     html += '</div>';
                     html += '</div>';
@@ -7674,7 +7150,7 @@ app.get('/', (req, res) => {
                                 : getMarginBadge(lineMarginPercent);
                             html += '<tr>';
                             html += '<td>' + (hasProductionOrder
-                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\\'' + breakdownRowId + '\\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
+                                ? ('<button type="button" onclick="toggleSalesLineBreakdown(\'' + breakdownRowId + '\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
                                 : '') + (line.LnNo || 0) + '</td>';
 
                             const salesWarningFlag = getWarningFlagHtml(line, 'Tilknyttet produktionsordre har en advarsel.');
@@ -8410,14 +7886,14 @@ app.get('/', (req, res) => {
                             const rawFinDt = String(r.FinDt || '').trim();
                             const compactFinDt = rawFinDt.split('T')[0].replace(/-/g, '');
                             let finDt = '-';
-                            if (/^\\d{8}$/.test(compactFinDt)) {
+                            if (/^\d{8}$/.test(compactFinDt)) {
                                 finDt = compactFinDt.slice(6, 8) + '-' + compactFinDt.slice(4, 6) + '-' + compactFinDt.slice(0, 4);
                             } else if (rawFinDt) {
                                 finDt = rawFinDt;
                             }
                             const rawFinTm = r.FinTm != null ? String(r.FinTm).trim() : '';
                             const finTm = rawFinTm
-                                ? rawFinTm.padStart(4, '0').replace(/^(\\d{2})(\\d{2})$/, '$1:$2')
+                                ? rawFinTm.padStart(4, '0').replace(/^(\d{2})(\d{2})$/, '$1:$2')
                                 : '-';
                             html += '<tr>';
                             html += '<td>' + finDt + '</td>';
@@ -9459,82 +8935,4 @@ app.get('/', (req, res) => {
         </script>
     </body>
     </html>
-    `);
-});
-
-const PORT = Number(process.env.PORT || 3000);
-let startedServerPromise = null;
-let scheduledRefreshTimer = null;
-
-function startScheduledRefresh() {
-    if (scheduledRefreshTimer) return;
-    scheduledRefreshTimer = setInterval(() => {
-        refreshOrderListCache(true)
-            .then(() => {
-                logEvent('Scheduled refresh completed (10 min)');
-            })
-            .catch(err => {
-                logEvent('ERROR scheduled refresh: ' + err.message);
-            });
-    }, BACKGROUND_WARM_INTERVAL_MS);
-}
-
-function ensureServerStarted() {
-    if (startedServerPromise) return startedServerPromise;
-
-    startedServerPromise = new Promise((resolve, reject) => {
-        const server = app.listen(PORT, async () => {
-            try {
-                console.log('Server in ascolto su http://localhost:' + PORT);
-                logEvent('Server started - smart preload phase beginning');
-
-                // Try to load from persistent cache first for faster startup
-                const cachedList = tryLoadOrderListFromCache();
-                if (cachedList && cachedList.length > 0) {
-                    orderListCache.data = cachedList;
-                    orderListCache.loadedAt = Date.now();
-                    logEvent('Cache primed from disk: ' + cachedList.length + ' orders ready');
-                    
-                    // Preload margins AND aftercalc details from disk (instant load)
-                    const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
-                    preloadMarginsAndDetailsFromCache(preloadOrdNos);
-
-                    // Warm up margins in background (will check disk first, then refresh if needed)
-                    warmMarginsInBackground(preloadOrdNos);
-                    
-                    // Refresh from DB in background (don't block startup)
-                    refreshOrderListCache(true).catch(err => {
-                        logEvent('WARNING: background DB refresh failed: ' + err.message);
-                    });
-                } else {
-                    // No cache: load from DB (fresh startup)
-                    await refreshOrderListCache(true);
-                    logEvent('Cache primed from database (first startup)');
-                }
-
-                logEvent('Cache primed: order list loaded and ready');
-                startScheduledRefresh();
-                resolve(server);
-            } catch (err) {
-                logEvent('WARNING cache warmup error (non-fatal): ' + err.message);
-                resolve(server); // server is running — warmup error is not fatal
-            }
-        });
-
-        server.on('error', reject);
-    });
-
-    return startedServerPromise;
-}
-
-if (require.main === module) {
-    ensureServerStarted().catch(err => {
-        logEvent('FATAL server startup error: ' + err.message);
-        process.exit(1);
-    });
-}
-
-module.exports = {
-    app,
-    ensureServerStarted
-};
+    

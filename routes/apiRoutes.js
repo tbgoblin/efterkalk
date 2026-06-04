@@ -1,5 +1,877 @@
 const express = require('express');
+const http = require('http');
+const path = require('path');
 const orderNotesService = require('../services/orderNotesService');
+
+// ── Personalehåndbog crawler ────────────────────────────────────────────────
+let phIndex   = [];          // [{url, title, text}]
+let phStatus  = 'idle';      // 'idle' | 'indexing' | 'ready' | 'error'
+let phIndexedAt = null;
+let phError   = null;
+const PH_BASE = 'http://apv/GHB/';
+
+function phFetch(url) {
+    return new Promise((resolve, reject) => {
+        const req = http.get(url, { headers: { 'User-Agent': 'Gantech-Crawler/1.0' } }, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                return resolve({ redirect: res.headers.location });
+            }
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', c => body += c);
+            res.on('end', () => resolve({ body, status: res.statusCode }));
+        });
+        req.setTimeout(10000, () => { req.destroy(); reject(new Error('timeout')); });
+        req.on('error', reject);
+    });
+}
+
+function phLinks(html, base) {
+    const out = new Set();
+    const re = /href=["']([^"']+)["']/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+        try {
+            const abs = new URL(m[1], base).href.split('?')[0].split('#')[0];
+            if (abs.startsWith(PH_BASE) && !abs.match(/\.(jpg|jpeg|png|gif|svg|pdf|zip|docx?|xlsx?|css|js|ico|woff2?)$/i)) {
+                out.add(abs);
+            }
+        } catch {}
+    }
+    return [...out];
+}
+
+function phTitle(html) {
+    const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    return m ? m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '';
+}
+
+function phText(html) {
+    return html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+        .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+        .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#\d+;/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+}
+
+async function crawlPH() {
+    if (phStatus === 'indexing') return;
+    phStatus = 'indexing';
+    phError = null;
+    phIndex = [];
+    const visited = new Set();
+    const queue = [PH_BASE];
+    console.log('[PH-CRAWL] Starting crawl of', PH_BASE);
+    while (queue.length > 0) {
+        const url = queue.shift();
+        if (visited.has(url)) continue;
+        visited.add(url);
+        try {
+            const r = await phFetch(url);
+            if (r.redirect) {
+                try {
+                    const abs = new URL(r.redirect, url).href.split('?')[0].split('#')[0];
+                    if (abs.startsWith(PH_BASE) && !visited.has(abs)) queue.push(abs);
+                } catch {}
+                continue;
+            }
+            if (r.status !== 200) continue;
+            const title = phTitle(r.body);
+            const text  = phText(r.body);
+            phIndex.push({ url, title, text });
+            for (const link of phLinks(r.body, url)) {
+                if (!visited.has(link)) queue.push(link);
+            }
+        } catch { /* skip unreachable page */ }
+    }
+    phStatus = 'ready';
+    phIndexedAt = new Date().toISOString();
+    console.log('[PH-CRAWL] Done:', phIndex.length, 'pages indexed');
+}
+
+// Start crawl in background after module load
+setTimeout(() => crawlPH().catch(e => { phStatus = 'error'; phError = e.message; console.error('[PH-CRAWL] Error:', e.message); }), 3000);
+// ────────────────────────────────────────────────────────────────────────────
+
+const QMS_DATASET_PATH = path.join(__dirname, '..', 'data', 'qms-dataset.json');
+
+function defaultQmsDataset() {
+    return {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        folders: [
+            {
+                id: 'startside',
+                name: 'Startside',
+                description: 'Overordnet introduktion til kvalitetsledelsessystemet',
+                documents: [
+                    {
+                        id: 'qfp-00',
+                        title: 'QFP-00 Kvalitetsledelsessystemets startsidestartside',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-00%20Kvalitetsledelsessystemets%20startsidestartside.aspx',
+                        content: 'Kvalitetsledelsessystemet bygger på ISO 9001-principper med procesorienteret tilgang. Procesflowet er opdelt i teknisk forberedelse, fabrikation/service samt fakturering og sagsafslutning.',
+                        tags: ['ISO9001', 'procesflow'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'q-001',
+                        title: 'Q-001 Kvalitetsledelsessystemet - Gantech håndbogen',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/Q-001%20Kvalitetsledelsessystemet%20-%20Gantech%20h%C3%A5ndbogen.aspx',
+                        content: 'Forord og ramme for samspillet mellem kvalitetsledelsessystem, personalehåndbog, arbejdsmiljøportal og serviceportal.',
+                        tags: ['forord', 'styring'],
+                        updatedAt: new Date().toISOString()
+                    }
+                ]
+            },
+            {
+                id: 'ledelse',
+                name: 'Ledelse',
+                description: 'Politikker, retningslinjer og administration',
+                documents: [
+                    {
+                        id: 'qfp-01',
+                        title: 'QFP-01 Politikker og retningslinjer',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-01%20Politikker%20og%20retningslinjer.aspx',
+                        content: 'Overblik over certificeringer, godkendelser og overordnede politikker som virksomhedens styrende dokumentgrundlag.',
+                        tags: ['politik', 'certificering'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-02',
+                        title: 'QFP-02 Administration',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-02%20Administration.aspx',
+                        content: 'Årlig revision af administrative systemer og rutiner for at sikre effektivt workflow og tydelig styring.',
+                        tags: ['administration'],
+                        updatedAt: new Date().toISOString()
+                    }
+                ]
+            },
+            {
+                id: 'procesflow',
+                name: 'Procesflow',
+                description: 'Forespørgsel til produktion, levering og fakturering',
+                documents: [
+                    {
+                        id: 'qfp-15',
+                        title: 'QFP-15 Forespørgsel',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-15%20Foresp%C3%B8rgsel.aspx',
+                        content: 'Proces for vurdering og håndtering af kundeforepørgsler med systematisk sagsbehandling.',
+                        tags: ['forespørgsel'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-16',
+                        title: 'QFP-16 Tilbud',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-16%20Tilbud.aspx',
+                        content: 'Tilbudsproces med kravspecifikation og tekniske afklaringer.',
+                        tags: ['tilbud'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-17',
+                        title: 'QFP-17 Ordre eller kontrakt gennemgang',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-17%20Ordre%20eller%20kontrakt%20gennemgang.aspx',
+                        content: 'Ordre-/kontraktgennemgang med formel validering af krav før igangsættelse.',
+                        tags: ['ordre', 'kontrakt'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-18',
+                        title: 'QFP-18 Produktions forberedelse',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-18%20Produktions%20forberedelse.aspx',
+                        content: 'Planlægning, produktionsværktøjer og klargøring før produktion.',
+                        tags: ['produktion'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-19',
+                        title: 'QFP-19 Godkendelse og levering',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-19%20Godkendelse%20og%20levering.aspx',
+                        content: 'Kontrol, godkendelse og levering efter aftalte specifikationer.',
+                        tags: ['levering', 'kontrol'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-21',
+                        title: 'QFP-21 Fakturering og opfølgning',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-21%20Fakturering%20og%20opf%C3%B8lgning.aspx',
+                        content: 'Fakturering, sagsafslutning og opfølgning efter levering.',
+                        tags: ['fakturering'],
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: 'qfp-22',
+                        title: 'QFP-22 Produktion',
+                        url: 'https://gantech.sharepoint.com/handbook/Sider/QFP-22%20Produktion.aspx',
+                        content: 'Ordrestyring, produktionsforløb og overdragelse til levering.',
+                        tags: ['produktion'],
+                        updatedAt: new Date().toISOString()
+                    }
+                ]
+            }
+        ]
+    };
+}
+
+function ensureQmsDatasetFile(fsRef) {
+    const dataDir = path.dirname(QMS_DATASET_PATH);
+    if (!fsRef.existsSync(dataDir)) {
+        fsRef.mkdirSync(dataDir, { recursive: true });
+    }
+    if (!fsRef.existsSync(QMS_DATASET_PATH)) {
+        const seed = defaultQmsDataset();
+        fsRef.writeFileSync(QMS_DATASET_PATH, JSON.stringify(seed, null, 2), 'utf8');
+    }
+}
+
+function readQmsDataset(fsRef) {
+    ensureQmsDatasetFile(fsRef);
+    const raw = fsRef.readFileSync(QMS_DATASET_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.folders)) {
+        throw new Error('QMS dataset format invalid');
+    }
+    return parsed;
+}
+
+function validateQmsDataset(payload) {
+    if (!payload || typeof payload !== 'object') return 'Dataset mangler';
+    if (!Array.isArray(payload.folders)) return 'folders skal være en liste';
+    for (const folder of payload.folders) {
+        if (!folder || typeof folder !== 'object') return 'Ugyldig mappe';
+        if (!String(folder.id || '').trim()) return 'Mappe mangler id';
+        if (!String(folder.name || '').trim()) return 'Mappe mangler navn';
+        if (!Array.isArray(folder.documents)) return 'Mappe documents skal være en liste';
+        for (const doc of folder.documents) {
+            if (!doc || typeof doc !== 'object') return 'Ugyldigt dokument';
+            if (!String(doc.id || '').trim()) return 'Dokument mangler id';
+            if (!String(doc.title || '').trim()) return 'Dokument mangler titel';
+            if (doc.tags && !Array.isArray(doc.tags)) return 'tags skal være en liste';
+        }
+    }
+    return null;
+}
+
+function writeQmsDataset(fsRef, dataset) {
+    ensureQmsDatasetFile(fsRef);
+    const normalized = {
+        version: Number(dataset.version || 1),
+        updatedAt: new Date().toISOString(),
+        folders: dataset.folders.map(folder => ({
+            id: String(folder.id || '').trim(),
+            name: String(folder.name || '').trim(),
+            description: String(folder.description || '').trim(),
+            documents: folder.documents.map(doc => ({
+                id: String(doc.id || '').trim(),
+                title: String(doc.title || '').trim(),
+                url: String(doc.url || '').trim(),
+                content: String(doc.content || '').trim(),
+                tags: Array.isArray(doc.tags) ? doc.tags.map(t => String(t).trim()).filter(Boolean) : [],
+                updatedAt: new Date().toISOString()
+            }))
+        }))
+    };
+    fsRef.writeFileSync(QMS_DATASET_PATH, JSON.stringify(normalized, null, 2), 'utf8');
+    return normalized;
+}
+
+function parseBelastningDate(raw) {
+    const txt = String(raw || '').trim();
+    if (!txt) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(txt)) return txt;
+    return null;
+}
+
+function parseBelastningDays(raw, fallback = 30) {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(1, Math.min(180, Math.round(parsed)));
+}
+
+function normalizeResGrCsv(raw) {
+    return String(raw || '')
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean)
+        .join(',');
+}
+
+function normalizeBelastningOrderFilter(raw) {
+    return String(raw || '').replace(/\D+/g, '').slice(0, 12);
+}
+
+function normalizeBelastningCustomerFilter(raw) {
+    return String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+}
+
+function intCsvFromValues(values) {
+    const seen = new Set();
+    const out = [];
+    for (const value of values || []) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) continue;
+        const i = Math.trunc(n);
+        if (i <= 0) continue;
+        const key = String(i);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(key);
+    }
+    return out.join(',');
+}
+
+async function fetchBelastningRows({ getConnection, sql, toDay, dage, resGrCsv, parity, orderNo, customerFilter }) {
+    const pool = await getConnection();
+    const request = pool.request()
+        .input('ToDay', sql.DateTime, new Date(toDay + 'T00:00:00'))
+        .input('Dage', sql.Int, dage)
+        .input('ResGr', sql.VarChar, resGrCsv)
+        .input('Parity', sql.Int, parity)
+        .input('OrderNo', sql.VarChar, String(orderNo || '').trim())
+        .input('CustomerFilter', sql.VarChar, String(customerFilter || '').trim());
+
+    const result = await request.query(`
+        SET NOCOUNT ON;
+        SET DATEFORMAT DMY;
+
+        DECLARE @DD INT = dbo.EGD_Date2Int(@ToDay);
+        DECLARE @ToDt INT = dbo.EGD_Date2Int(DATEADD(day, @Dage + 1, @ToDay));
+        DECLARE @FrDt INT = dbo.EGD_Date2Int(DATEADD(day, -360, @ToDay));
+        DECLARE @OrdNoInt INT = TRY_CONVERT(int, NULLIF(@OrderNo, ''));
+
+        DECLARE @GemOrd INT;
+        DECLARE @SOrdre INT;
+        DECLARE @Dato datetime;
+        DECLARE @POrdre INT;
+        DECLARE @Antal float;
+        DECLARE @Resv float;
+        DECLARE @FM float;
+        DECLARE @SumFM float;
+        DECLARE @Aften float;
+        DECLARE @ResGrX varchar(40);
+        DECLARE @GemResGrX varchar(40);
+
+        DECLARE @TmpFree TABLE
+        (
+            ID int identity(1,1),
+            BeforeDD int,
+            ResGr varchar(20),
+            Dato datetime,
+            Resv float,
+            Antal float,
+            FM float,
+            SOrdre int,
+            SLnNo int,
+            POrdre int,
+            AntalRec int,
+            Aften float default 0
+        );
+
+        DECLARE @TmpKap TABLE
+        (
+            ID int identity(1,1),
+            BeforeDD int,
+            ResGr varchar(20),
+            Dato datetime,
+            Resv float,
+            Antal float,
+            FM float,
+            SOrdre int,
+            POrdre int,
+            Kunde varchar(100),
+            LevMode varchar(100),
+            LevDato datetime,
+            ULDato datetime,
+            RestResv float default 0,
+            Aften float default 0,
+            RestAften float default 0
+        );
+
+        INSERT INTO @TmpFree (BeforeDD, ResGr, Dato, Resv, Antal, FM, SOrdre, POrdre, SLnNo, Aften)
+        SELECT
+            (CASE WHEN f.Dt1 < @DD THEN 1 ELSE 0 END) AS BeforeDD,
+            R7.MainR7 AS ResGr,
+            dbo.EGD_Int2Date(f.Dt1) AS Dato,
+            SUM(CONVERT(float, ABS(f.Val1))) AS Resv,
+            AVG(CONVERT(float, l.NoInvoAb)) AS Antal,
+            AVG(CONVERT(float, l.NoFin)) AS FM,
+            so.OrdNo AS SOrdre,
+            po.OrdNo AS POrdre,
+            l.LnNo AS SLnNo,
+            SUM(CONVERT(float, ABS(CASE WHEN f.Txt4 <> '' THEN f.Val1 ELSE 0 END))) AS Aften
+        FROM FreeInf1 f WITH(NOLOCK)
+        INNER JOIN OrdLn l WITH(NOLOCK)
+            ON f.OrdNo = l.OrdNo
+           AND f.OrdLnNo = l.LnNo
+        INNER JOIN Ord po WITH(NOLOCK)
+            ON f.OrdNo = po.OrdNo
+        INNER JOIN Ord so WITH(NOLOCK)
+            ON po.OrdBasNo = so.OrdNo
+        INNER JOIN R7 WITH(NOLOCK)
+            ON f.R7 = R7.RNo
+        WHERE f.FrInfTp = 2
+          AND f.Val1 < 0
+          AND l.ProdTp4 IN (1,3)
+          AND l.TransGr3 < 80
+          AND l.NoInvoAb >= 0
+          AND f.Dt1 BETWEEN @FrDt AND @ToDt
+          AND R7.Gr10 > 0
+          AND (R7.Gr10 % 2) = @Parity
+          AND (@ResGr = '' OR R7.MainR7 IN (SELECT LTRIM(RTRIM(value)) FROM string_split(@ResGr, ',')))
+          AND (
+                @OrdNoInt IS NULL
+                OR so.OrdNo = @OrdNoInt
+                OR po.OrdNo = @OrdNoInt
+                OR f.OrdNo = @OrdNoInt
+              )
+          AND (
+                @CustomerFilter = ''
+                OR so.Nm LIKE '%' + @CustomerFilter + '%'
+              )
+        GROUP BY f.Dt1, l.LnNo, po.OrdNo, so.OrdNo, R7.MainR7;
+
+        UPDATE t
+        SET
+            FM = FM / ISNULL((SELECT COUNT(*) FROM @TmpFree k WHERE k.POrdre = t.POrdre AND k.ResGr = t.ResGr AND k.SLnNo = t.SLnNo), 1),
+            Antal = Antal / ISNULL((SELECT COUNT(*) FROM @TmpFree k WHERE k.POrdre = t.POrdre AND k.ResGr = t.ResGr AND k.SLnNo = t.SLnNo), 1),
+            AntalRec = ISNULL((SELECT COUNT(*) FROM @TmpFree k WHERE k.POrdre = t.POrdre AND k.ResGr = t.ResGr AND k.SLnNo = t.SLnNo), 1)
+        FROM @TmpFree t;
+
+        INSERT INTO @TmpKap (BeforeDD, ResGr, Dato, Resv, Antal, FM, Aften, SOrdre, POrdre, Kunde, LevMode, LevDato, ULDato)
+        SELECT
+            x.BeforeDD,
+            x.ResGr,
+            x.Dato,
+            SUM(x.Resv) AS Resv,
+            SUM(x.Antal) AS Antal,
+            SUM(x.FM) AS FM,
+            SUM(x.Aften) AS Aften,
+            x.SOrdre,
+            x.POrdre,
+            so.Nm AS Kunde,
+            ISNULL((SELECT TOP (1) Txt FROM Txt WITH(NOLOCK) WHERE Lang = 45 AND TxtTp = 5 AND TxtNo = so.DelMt), '') AS LevMode,
+            (CASE WHEN so.DelDt > 19800101 THEN dbo.EGD_Int2Date(so.DelDt) ELSE NULL END) AS LevDato,
+            (CASE WHEN po.ArDt > 19800101 THEN dbo.EGD_Int2Date(po.ArDt) ELSE NULL END) AS ULDato
+        FROM @TmpFree x
+        INNER JOIN Ord po WITH(NOLOCK)
+            ON x.POrdre = po.OrdNo
+        INNER JOIN Ord so WITH(NOLOCK)
+            ON po.OrdBasNo = so.OrdNo
+        GROUP BY x.BeforeDD, x.ResGr, x.Dato, x.SOrdre, x.POrdre, so.Nm, so.DelMt, so.DelDt, po.ArDt;
+
+        DECLARE Tmp_cursor CURSOR STATIC FOR
+        SELECT SOrdre, Dato, MIN(POrdre) AS POrdre, SUM(Antal) AS Antal, SUM(Resv) AS Resv, SUM(FM) AS FM, SUM(Aften) AS Aften, ResGr
+        FROM @TmpKap
+        GROUP BY SOrdre, ResGr, Dato
+        ORDER BY SOrdre, ResGr, Dato;
+
+        OPEN Tmp_cursor;
+        FETCH NEXT FROM Tmp_cursor INTO @SOrdre, @Dato, @POrdre, @Antal, @Resv, @FM, @Aften, @ResGrX;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            IF @GemOrd IS NULL OR @GemOrd <> @SOrdre OR @GemResGrX <> @ResGrX
+            BEGIN
+                SET @GemOrd = @SOrdre;
+                SET @GemResGrX = @ResGrX;
+                SET @SumFM = ISNULL((SELECT SUM(FM) FROM @TmpKap WHERE SOrdre = @GemOrd AND ResGr = @ResGrX), 0);
+            END
+
+            IF @Antal > 0
+            BEGIN
+                IF @SumFM > @Resv
+                BEGIN
+                    SET @SumFM = @SumFM - @Resv;
+                    SET @Resv = 0;
+                    SET @Aften = 0;
+                END
+                ELSE IF @Resv > @SumFM
+                BEGIN
+                    SET @Resv = @Resv - @SumFM;
+
+                    IF @Aften > 0 AND @Aften = @Resv
+                        SET @Aften = @Aften;
+                    ELSE IF @Aften > @SumFM AND @SumFM > 0
+                        SET @Aften = @Aften - @SumFM;
+                    ELSE
+                        SET @Aften = 0;
+
+                    SET @SumFM = 0;
+                END
+
+                UPDATE TOP (1) @TmpKap
+                SET RestResv = @Resv,
+                    RestAften = @Aften
+                WHERE SOrdre = @SOrdre
+                  AND Dato = @Dato
+                  AND ResGr = @ResGrX;
+            END
+
+            FETCH NEXT FROM Tmp_cursor INTO @SOrdre, @Dato, @POrdre, @Antal, @Resv, @FM, @Aften, @ResGrX;
+        END
+
+        CLOSE Tmp_cursor;
+        DEALLOCATE Tmp_cursor;
+
+        SELECT
+            x.ResGr,
+            x.Dato,
+            LEFT(CONVERT(varchar, x.Dato, 103), 5) AS DatoX,
+            x.Nm,
+            SUM(x.Resv) AS Resv,
+            SUM(x.Kap) AS Kap,
+            SUM(x.Aften) AS Aften,
+            DENSE_RANK() OVER (ORDER BY x.ResGr) AS Ranking
+        FROM (
+            SELECT
+                t.ResGr,
+                (CASE WHEN dbo.EGD_Date2Int(t.Dato) < @DD THEN NULL ELSE t.Dato END) AS Dato,
+                SUM(t.RestResv - t.RestAften) AS Resv,
+                0 AS Kap,
+                SUM(t.RestAften) AS Aften,
+                (SELECT Nm FROM R7 WHERE RNo = t.ResGr) AS Nm
+            FROM @TmpKap t
+            WHERE (t.Antal > 0 OR (t.Antal = 0 AND t.RestResv > 0))
+              AND (@OrdNoInt IS NULL OR t.SOrdre = @OrdNoInt OR t.POrdre = @OrdNoInt)
+              AND (t.LevDato >= @ToDay OR ((t.LevDato IS NULL OR t.LevDato < @ToDay) AND t.RestResv > 0))
+            GROUP BY t.ResGr, (CASE WHEN dbo.EGD_Date2Int(t.Dato) < @DD THEN NULL ELSE t.Dato END)
+
+            UNION ALL
+
+            SELECT
+                R7.MainR7 AS ResGr,
+                dbo.EGD_Int2Date(f.Dt1) AS Dato,
+                0 AS Resv,
+                CONVERT(float, ABS(SUM(f.Val1 * R7.Am1))) AS Kap,
+                0 AS Aften,
+                R7.Nm AS Nm
+            FROM FreeInf1 f WITH(NOLOCK)
+            INNER JOIN R7 WITH(NOLOCK)
+                ON f.R7 = R7.RNo
+            WHERE f.FrInfTp = 1
+              AND f.Dt1 BETWEEN @DD AND @ToDt
+              AND R7.Gr10 > 0
+              AND (R7.Gr10 % 2) = @Parity
+              AND (@ResGr = '' OR R7.MainR7 IN (SELECT LTRIM(RTRIM(value)) FROM string_split(@ResGr, ',')))
+            GROUP BY f.Dt1, R7.Nm, R7.MainR7
+            HAVING ABS(SUM(f.Val1 * R7.Am1)) > 0
+        ) x
+        GROUP BY x.ResGr, x.Dato, x.Nm
+        ORDER BY x.ResGr, x.Dato;
+    `);
+
+    return Array.isArray(result.recordset) ? result.recordset : [];
+}
+
+async function fetchBelastningOrderRows({ getConnection, sql, toDay, dage, resGrCsv, parity, orderNo, customerFilter }) {
+    const pool = await getConnection();
+    const request = pool.request()
+        .input('ToDay', sql.DateTime, new Date(toDay + 'T00:00:00'))
+        .input('Dage', sql.Int, dage)
+        .input('ResGr', sql.VarChar, resGrCsv)
+        .input('Parity', sql.Int, parity)
+        .input('OrderNo', sql.VarChar, String(orderNo || '').trim())
+        .input('CustomerFilter', sql.VarChar, String(customerFilter || '').trim());
+
+    const result = await request.query(`
+        SET NOCOUNT ON;
+        SET DATEFORMAT DMY;
+
+        DECLARE @DD INT = dbo.EGD_Date2Int(@ToDay);
+        DECLARE @ToDt INT = dbo.EGD_Date2Int(DATEADD(day, @Dage + 1, @ToDay));
+        DECLARE @FrDt INT = dbo.EGD_Date2Int(DATEADD(day, -360, @ToDay));
+        DECLARE @OrdNoInt INT = TRY_CONVERT(int, NULLIF(@OrderNo, ''));
+
+        DECLARE @GemOrd INT;
+        DECLARE @SOrdre INT;
+        DECLARE @Dato datetime;
+        DECLARE @POrdre INT;
+        DECLARE @Antal float;
+        DECLARE @Resv float;
+        DECLARE @FM float;
+        DECLARE @SumFM float;
+        DECLARE @Aften float;
+        DECLARE @ResGrX varchar(40);
+        DECLARE @GemResGrX varchar(40);
+
+        DECLARE @TmpFree TABLE
+        (
+            ID int identity(1,1),
+            BeforeDD int,
+            ResGr varchar(20),
+            Dato datetime,
+            Resv float,
+            Antal float,
+            FM float,
+            SOrdre int,
+            SLnNo int,
+            POrdre int,
+            AntalRec int,
+            Aften float default 0
+        );
+
+        DECLARE @TmpKap TABLE
+        (
+            ID int identity(1,1),
+            BeforeDD int,
+            ResGr varchar(20),
+            Dato datetime,
+            Resv float,
+            Antal float,
+            FM float,
+            SOrdre int,
+            POrdre int,
+            Kunde varchar(100),
+            LevMode varchar(100),
+            LevDato datetime,
+            ULDato datetime,
+            RestResv float default 0,
+            Aften float default 0,
+            RestAften float default 0
+        );
+
+        INSERT INTO @TmpFree (BeforeDD, ResGr, Dato, Resv, Antal, FM, SOrdre, POrdre, SLnNo, Aften)
+        SELECT
+            (CASE WHEN f.Dt1 < @DD THEN 1 ELSE 0 END) AS BeforeDD,
+            R7.MainR7 AS ResGr,
+            dbo.EGD_Int2Date(f.Dt1) AS Dato,
+            SUM(CONVERT(float, ABS(f.Val1))) AS Resv,
+            AVG(CONVERT(float, l.NoInvoAb)) AS Antal,
+            AVG(CONVERT(float, l.NoFin)) AS FM,
+            so.OrdNo AS SOrdre,
+            po.OrdNo AS POrdre,
+            l.LnNo AS SLnNo,
+            SUM(CONVERT(float, ABS(CASE WHEN f.Txt4 <> '' THEN f.Val1 ELSE 0 END))) AS Aften
+        FROM FreeInf1 f WITH(NOLOCK)
+        INNER JOIN OrdLn l WITH(NOLOCK)
+            ON f.OrdNo = l.OrdNo
+           AND f.OrdLnNo = l.LnNo
+        INNER JOIN Ord po WITH(NOLOCK)
+            ON f.OrdNo = po.OrdNo
+        INNER JOIN Ord so WITH(NOLOCK)
+            ON po.OrdBasNo = so.OrdNo
+        INNER JOIN R7 WITH(NOLOCK)
+            ON f.R7 = R7.RNo
+        WHERE f.FrInfTp = 2
+          AND f.Val1 < 0
+          AND l.ProdTp4 IN (1,3)
+          AND l.TransGr3 < 80
+          AND l.NoInvoAb >= 0
+          AND f.Dt1 BETWEEN @FrDt AND @ToDt
+          AND R7.Gr10 > 0
+          AND (R7.Gr10 % 2) = @Parity
+          AND (@ResGr = '' OR R7.MainR7 IN (SELECT LTRIM(RTRIM(value)) FROM string_split(@ResGr, ',')))
+          AND (
+                @OrdNoInt IS NULL
+                OR so.OrdNo = @OrdNoInt
+                OR po.OrdNo = @OrdNoInt
+                OR f.OrdNo = @OrdNoInt
+              )
+          AND (
+                @CustomerFilter = ''
+                OR so.Nm LIKE '%' + @CustomerFilter + '%'
+              )
+        GROUP BY f.Dt1, l.LnNo, po.OrdNo, so.OrdNo, R7.MainR7;
+
+        UPDATE t
+        SET
+            FM = FM / ISNULL((SELECT COUNT(*) FROM @TmpFree k WHERE k.POrdre = t.POrdre AND k.ResGr = t.ResGr AND k.SLnNo = t.SLnNo), 1),
+            Antal = Antal / ISNULL((SELECT COUNT(*) FROM @TmpFree k WHERE k.POrdre = t.POrdre AND k.ResGr = t.ResGr AND k.SLnNo = t.SLnNo), 1),
+            AntalRec = ISNULL((SELECT COUNT(*) FROM @TmpFree k WHERE k.POrdre = t.POrdre AND k.ResGr = t.ResGr AND k.SLnNo = t.SLnNo), 1)
+        FROM @TmpFree t;
+
+        INSERT INTO @TmpKap (BeforeDD, ResGr, Dato, Resv, Antal, FM, Aften, SOrdre, POrdre, Kunde, LevMode, LevDato, ULDato)
+        SELECT
+            x.BeforeDD,
+            x.ResGr,
+            x.Dato,
+            SUM(x.Resv) AS Resv,
+            SUM(x.Antal) AS Antal,
+            SUM(x.FM) AS FM,
+            SUM(x.Aften) AS Aften,
+            x.SOrdre,
+            x.POrdre,
+            so.Nm AS Kunde,
+            ISNULL((SELECT TOP (1) Txt FROM Txt WITH(NOLOCK) WHERE Lang = 45 AND TxtTp = 5 AND TxtNo = so.DelMt), '') AS LevMode,
+            (CASE WHEN so.DelDt > 19800101 THEN dbo.EGD_Int2Date(so.DelDt) ELSE NULL END) AS LevDato,
+            (CASE WHEN po.ArDt > 19800101 THEN dbo.EGD_Int2Date(po.ArDt) ELSE NULL END) AS ULDato
+        FROM @TmpFree x
+        INNER JOIN Ord po WITH(NOLOCK)
+            ON x.POrdre = po.OrdNo
+        INNER JOIN Ord so WITH(NOLOCK)
+            ON po.OrdBasNo = so.OrdNo
+        GROUP BY x.BeforeDD, x.ResGr, x.Dato, x.SOrdre, x.POrdre, so.Nm, so.DelMt, so.DelDt, po.ArDt;
+
+        DECLARE Tmp_cursor CURSOR STATIC FOR
+        SELECT SOrdre, Dato, MIN(POrdre) AS POrdre, SUM(Antal) AS Antal, SUM(Resv) AS Resv, SUM(FM) AS FM, SUM(Aften) AS Aften, ResGr
+        FROM @TmpKap
+        GROUP BY SOrdre, ResGr, Dato
+        ORDER BY SOrdre, ResGr, Dato;
+
+        OPEN Tmp_cursor;
+        FETCH NEXT FROM Tmp_cursor INTO @SOrdre, @Dato, @POrdre, @Antal, @Resv, @FM, @Aften, @ResGrX;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            IF @GemOrd IS NULL OR @GemOrd <> @SOrdre OR @GemResGrX <> @ResGrX
+            BEGIN
+                SET @GemOrd = @SOrdre;
+                SET @GemResGrX = @ResGrX;
+                SET @SumFM = ISNULL((SELECT SUM(FM) FROM @TmpKap WHERE SOrdre = @GemOrd AND ResGr = @ResGrX), 0);
+            END
+
+            IF @Antal > 0
+            BEGIN
+                IF @SumFM > @Resv
+                BEGIN
+                    SET @SumFM = @SumFM - @Resv;
+                    SET @Resv = 0;
+                    SET @Aften = 0;
+                END
+                ELSE IF @Resv > @SumFM
+                BEGIN
+                    SET @Resv = @Resv - @SumFM;
+
+                    IF @Aften > 0 AND @Aften = @Resv
+                        SET @Aften = @Aften;
+                    ELSE IF @Aften > @SumFM AND @SumFM > 0
+                        SET @Aften = @Aften - @SumFM;
+                    ELSE
+                        SET @Aften = 0;
+
+                    SET @SumFM = 0;
+                END
+
+                UPDATE TOP (1) @TmpKap
+                SET RestResv = @Resv,
+                    RestAften = @Aften
+                WHERE SOrdre = @SOrdre
+                  AND Dato = @Dato
+                  AND ResGr = @ResGrX;
+            END
+
+            FETCH NEXT FROM Tmp_cursor INTO @SOrdre, @Dato, @POrdre, @Antal, @Resv, @FM, @Aften, @ResGrX;
+        END
+
+        CLOSE Tmp_cursor;
+        DEALLOCATE Tmp_cursor;
+
+        SELECT
+            t.ResGr,
+            (SELECT Nm FROM R7 WHERE RNo = t.ResGr) AS Nm,
+            t.Dato,
+            LEFT(CONVERT(varchar, t.Dato, 103), 10) AS DatoX,
+            t.SOrdre,
+            t.POrdre,
+            t.POrdre AS OrdNo,
+            t.POrdre AS PurcNo,
+            t.Kunde,
+            t.LevMode,
+            t.LevDato,
+            t.ULDato,
+            CONVERT(float, t.Resv) AS Resv,
+            CONVERT(float, t.RestResv) AS RestResv,
+            CONVERT(float, t.Aften) AS Aften,
+            CONVERT(float, t.RestAften) AS RestAften,
+            CONVERT(float, t.Resv) AS ResvRaw,
+            CONVERT(float, t.Aften) AS AftenRaw,
+            CONVERT(float, t.RestResv) AS ResvNet,
+            ISNULL((
+                SELECT STUFF((
+                    SELECT '-' + LEFT(R7.Nm, 3)
+                    FROM OrdLn l WITH(NOLOCK)
+                    INNER JOIN R7 WITH(NOLOCK)
+                        ON l.R7 = R7.RNo
+                    WHERE l.OrdNo = t.POrdre
+                      AND l.ProdTp4 = 1
+                    ORDER BY l.LnNo
+                    FOR XML PATH('')
+                ), 1, 1, '')
+            ), '') AS Opr
+        FROM @TmpKap t
+        WHERE (t.Antal > 0 OR (t.Antal = 0 AND t.RestResv > 0))
+          AND (@OrdNoInt IS NULL OR t.SOrdre = @OrdNoInt OR t.POrdre = @OrdNoInt)
+          AND (t.LevDato >= @ToDay OR ((t.LevDato IS NULL OR t.LevDato < @ToDay) AND t.RestResv > 0))
+        ORDER BY t.Dato, t.ResGr, t.POrdre, t.SOrdre;
+    `);
+
+    return Array.isArray(result.recordset) ? result.recordset : [];
+}
+
+async function fetchBelastningSubOrderRows({ getConnection, sql, subOrderCsv }) {
+    if (!String(subOrderCsv || '').trim()) return [];
+
+    const pool = await getConnection();
+    const request = pool.request()
+        .input('SubOrderCsv', sql.VarChar, subOrderCsv);
+
+    const result = await request.query(`
+        SET NOCOUNT ON;
+
+        ;WITH SubOrders AS (
+            SELECT DISTINCT TRY_CONVERT(int, LTRIM(RTRIM(value))) AS OrdNo
+            FROM string_split(@SubOrderCsv, ',')
+            WHERE TRY_CONVERT(int, LTRIM(RTRIM(value))) IS NOT NULL
+        )
+        SELECT
+            l.OrdNo AS SubOrdNo,
+            l.LnNo AS SubLnNo,
+            l.ProdNo AS SubProdNo,
+            l.Descr AS SubDescr,
+            l.ProdTp4 AS SubProdTp4,
+            l.PurcNo AS NextSubOrdNo,
+            l.NoFin AS SubNoFin,
+            l.NoOrg AS SubNoOrg,
+            l.CCstPr AS SubCcstPr,
+            l.DPrice AS SubDPrice
+        FROM OrdLn l WITH(NOLOCK)
+        INNER JOIN SubOrders s
+            ON s.OrdNo = l.OrdNo
+        ORDER BY l.OrdNo, l.LnNo;
+    `);
+
+    return Array.isArray(result.recordset) ? result.recordset : [];
+}
+
+async function fetchBelastningOrderLineRows({ getConnection, sql, orderCsv }) {
+    if (!String(orderCsv || '').trim()) return [];
+
+    const pool = await getConnection();
+    const request = pool.request()
+        .input('OrderCsv', sql.VarChar, orderCsv);
+
+    const result = await request.query(`
+        SET NOCOUNT ON;
+
+        ;WITH SourceOrders AS (
+            SELECT DISTINCT TRY_CONVERT(int, LTRIM(RTRIM(value))) AS OrdNo
+            FROM string_split(@OrderCsv, ',')
+            WHERE TRY_CONVERT(int, LTRIM(RTRIM(value))) IS NOT NULL
+        )
+        SELECT
+            l.OrdNo,
+            l.LnNo,
+            l.ProdNo,
+            l.Descr,
+            l.ProdTp4,
+            l.PurcNo,
+            l.NoFin,
+            l.NoOrg,
+            l.CCstPr,
+            l.DPrice
+        FROM OrdLn l WITH(NOLOCK)
+        INNER JOIN SourceOrders s
+            ON s.OrdNo = l.OrdNo
+        ORDER BY l.OrdNo, l.LnNo;
+    `);
+
+    return Array.isArray(result.recordset) ? result.recordset : [];
+}
+
 const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
 const { createOmsaetningService } = require('../services/omsaetningService');
 const { createOrdreindgangService } = require('../services/ordreindgangService');
@@ -565,6 +1437,162 @@ function createApiRouter({
         }
     });
 
+    router.get('/belastning/resources', async (req, res) => {
+        try {
+            const parityRaw = String(req.query.parity || '').trim();
+            const parity = parityRaw === '' ? null : (parityRaw === '1' ? 1 : (parityRaw === '0' ? 0 : null));
+            const pool = await getConnection();
+            const request = pool.request();
+
+            let query = `
+                SELECT DISTINCT MainR7, MainR7 + ' - ' + (SELECT Nm FROM R7 r2 WHERE r2.RNo = R7.MainR7) AS R7Nm, Gr10
+                FROM R7
+                WHERE Gr10 > 0
+            `;
+            if (parity !== null) {
+                request.input('Parity', sql.Int, parity);
+                query += ` AND (Gr10 % 2) = @Parity`;
+            }
+            query += ` ORDER BY MainR7`;
+
+            const result = await request.query(query);
+            return res.json({ ok: true, resources: result.recordset || [] });
+        } catch (err) {
+            logEvent('ERROR belastning/resources: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/belastning/grafisk', async (req, res) => {
+        try {
+            const today = parseBelastningDate(req.query.toDay) || new Date().toISOString().slice(0, 10);
+            const dage = parseBelastningDays(req.query.dage, 30);
+            const resGrCsv = normalizeResGrCsv(req.query.resGr);
+            const orderNo = normalizeBelastningOrderFilter(req.query.ord);
+            const customerFilter = normalizeBelastningCustomerFilter(req.query.kunde);
+
+            const [oddRowsRaw, evenRowsRaw] = await Promise.all([
+                fetchBelastningRows({ getConnection, sql, toDay: today, dage, resGrCsv, parity: 1, orderNo, customerFilter }),
+                fetchBelastningRows({ getConnection, sql, toDay: today, dage, resGrCsv, parity: 0, orderNo, customerFilter })
+            ]);
+
+            const trimRowsForFocusedMode = (rows) => {
+                if (!orderNo && !customerFilter) return rows;
+                return rows.filter(row => Number(row && row.Resv || 0) > 0 || Number(row && row.Aften || 0) > 0);
+            };
+
+            const oddRows = trimRowsForFocusedMode(oddRowsRaw);
+            const evenRows = trimRowsForFocusedMode(evenRowsRaw);
+
+            const summarize = (rows) => {
+                const map = new Map();
+                for (const row of rows) {
+                    const key = String(row.ResGr || '').trim();
+                    if (!key) continue;
+                    if (!map.has(key)) {
+                        map.set(key, {
+                            resGr: key,
+                            nm: String(row.Nm || '').trim(),
+                            totalResv: 0,
+                            totalKap: 0,
+                            totalAften: 0
+                        });
+                    }
+                    const item = map.get(key);
+                    item.totalResv += Number(row.Resv || 0);
+                    item.totalKap += Number(row.Kap || 0);
+                    item.totalAften += Number(row.Aften || 0);
+                }
+                return Array.from(map.values())
+                    .sort((a, b) => a.resGr.localeCompare(b.resGr, 'da'));
+            };
+
+            return res.json({
+                ok: true,
+                toDay: today,
+                dage,
+                resGr: resGrCsv,
+                ord: orderNo,
+                kunde: customerFilter,
+                odd: {
+                    resources: summarize(oddRows),
+                    rows: oddRows
+                },
+                even: {
+                    resources: summarize(evenRows),
+                    rows: evenRows
+                }
+            });
+        } catch (err) {
+            logEvent('ERROR belastning/grafisk: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/belastning/detail', async (req, res) => {
+        try {
+            const today = parseBelastningDate(req.query.toDay) || new Date().toISOString().slice(0, 10);
+            const dage = parseBelastningDays(req.query.dage, 30);
+            const resGr = String(req.query.resGr || '').trim();
+            const parity = String(req.query.parity || '1').trim() === '0' ? 0 : 1;
+            const orderNo = normalizeBelastningOrderFilter(req.query.ord);
+            const customerFilter = normalizeBelastningCustomerFilter(req.query.kunde);
+            if (!resGr) {
+                return res.status(400).json({ ok: false, error: 'resGr er påkrævet' });
+            }
+
+            const rows = await fetchBelastningRows({
+                getConnection,
+                sql,
+                toDay: today,
+                dage,
+                resGrCsv: resGr,
+                parity,
+                orderNo,
+                customerFilter
+            });
+
+            const orderRows = await fetchBelastningOrderRows({
+                getConnection,
+                sql,
+                toDay: today,
+                dage,
+                resGrCsv: resGr,
+                parity,
+                orderNo,
+                customerFilter
+            });
+
+            const directSubOrderCsv = intCsvFromValues(orderRows.map(x => x && x.PurcNo));
+            const subOrderRowsLevel1 = await fetchBelastningSubOrderRows({
+                getConnection,
+                sql,
+                subOrderCsv: directSubOrderCsv
+            });
+
+            const nestedSubOrderCsv = intCsvFromValues(subOrderRowsLevel1.map(x => x && x.NextSubOrdNo));
+            const subOrderRowsLevel2 = await fetchBelastningSubOrderRows({
+                getConnection,
+                sql,
+                subOrderCsv: nestedSubOrderCsv
+            });
+
+            const subOrderRows = [...subOrderRowsLevel1, ...subOrderRowsLevel2];
+
+            const sourceOrderCsv = intCsvFromValues(orderRows.map(x => x && x.OrdNo));
+            const orderLineRows = await fetchBelastningOrderLineRows({
+                getConnection,
+                sql,
+                orderCsv: sourceOrderCsv
+            });
+
+            return res.json({ ok: true, toDay: today, dage, parity, resGr, ord: orderNo, kunde: customerFilter, rows, orderRows, subOrderRows, orderLineRows });
+        } catch (err) {
+            logEvent('ERROR belastning/detail: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
     router.get('/omsaetning/customer-threshold/:custno', (req, res) => {
         const custNo = String(req.params.custno || '').trim();
         if (!/^\d{1,20}$/.test(custNo)) {
@@ -1099,6 +2127,67 @@ function createApiRouter({
         orderNotesService.deleteNote(ordNo);
         res.json({ ok: true });
     });
+
+    // ── Personalehåndbog search API ─────────────────────────────────────────
+    router.get('/ph/status', (_req, res) => {
+        res.json({ status: phStatus, count: phIndex.length, indexedAt: phIndexedAt, error: phError });
+    });
+
+    router.get('/ph/search', (req, res) => {
+        const q = String(req.query.q || '').toLowerCase().trim();
+        if (!q) return res.json({ results: [], status: phStatus });
+        if (phStatus !== 'ready') return res.json({ results: [], status: phStatus });
+        const terms = q.split(/\s+/).filter(Boolean);
+        const results = [];
+        for (const page of phIndex) {
+            const haystack = (page.title + ' ' + page.text).toLowerCase();
+            const score = terms.reduce((s, t) => s + (haystack.split(t).length - 1), 0);
+            if (score === 0) continue;
+            const firstTerm = terms[0];
+            const idx = page.text.toLowerCase().indexOf(firstTerm);
+            let snippet = '';
+            if (idx >= 0) {
+                const s = Math.max(0, idx - 80);
+                const e = Math.min(page.text.length, idx + 200);
+                snippet = (s > 0 ? '…' : '') + page.text.slice(s, e) + (e < page.text.length ? '…' : '');
+            } else {
+                snippet = page.text.slice(0, 240) + '…';
+            }
+            results.push({ url: page.url, title: page.title || page.url, snippet, score });
+        }
+        results.sort((a, b) => b.score - a.score);
+        res.json({ results: results.slice(0, 40), status: phStatus });
+    });
+
+    router.post('/ph/reindex', (_req, res) => {
+        if (phStatus === 'indexing') return res.json({ ok: false, msg: 'Allerede i gang' });
+        crawlPH().catch(e => { phStatus = 'error'; phError = e.message; });
+        res.json({ ok: true });
+    });
+
+    router.get('/qms/dataset', (_req, res) => {
+        try {
+            const dataset = readQmsDataset(fs);
+            res.json({ ok: true, dataset });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: err.message || 'QMS dataset fejl' });
+        }
+    });
+
+    router.put('/qms/dataset', (req, res) => {
+        try {
+            const dataset = req.body && req.body.dataset;
+            const validationError = validateQmsDataset(dataset);
+            if (validationError) {
+                return res.status(400).json({ ok: false, error: validationError });
+            }
+            const saved = writeQmsDataset(fs, dataset);
+            res.json({ ok: true, dataset: saved });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: err.message || 'Kunne ikke gemme QMS dataset' });
+        }
+    });
+    // ────────────────────────────────────────────────────────────────────────
 
     return router;
 }

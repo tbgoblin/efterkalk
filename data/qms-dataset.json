@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "updatedAt": "2026-06-03T10:29:16.009Z",
+  "folders": [
+    {
+      "id": "startside",
+      "name": "Startside",
+      "description": "Overordnet introduktion til kvalitetsledelsessystemet",
+      "documents": [
+        {
+          "id": "qfp-00",
+          "title": "QFP-00 Kvalitetsledelsessystemets startsidestartside",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-00%20Kvalitetsledelsessystemets%20startsidestartside.aspx",
+          "content": "Kvalitetsledelsessystemet bygger på ISO 9001-principper med procesorienteret tilgang. Procesflowet er opdelt i teknisk forberedelse, fabrikation/service samt fakturering og sagsafslutning.",
+          "tags": [
+            "ISO9001",
+            "procesflow"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "q-001",
+          "title": "Q-001 Kvalitetsledelsessystemet - Gantech håndbogen",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/Q-001%20Kvalitetsledelsessystemet%20-%20Gantech%20h%C3%A5ndbogen.aspx",
+          "content": "Forord og ramme for samspillet mellem kvalitetsledelsessystem, personalehåndbog, arbejdsmiljøportal og serviceportal.",
+          "tags": [
+            "forord",
+            "styring"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        }
+      ]
+    },
+    {
+      "id": "ledelse",
+      "name": "Ledelse",
+      "description": "Politikker, retningslinjer og administration",
+      "documents": [
+        {
+          "id": "qfp-01",
+          "title": "QFP-01 Politikker og retningslinjer",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-01%20Politikker%20og%20retningslinjer.aspx",
+          "content": "Overblik over certificeringer, godkendelser og overordnede politikker som virksomhedens styrende dokumentgrundlag.",
+          "tags": [
+            "politik",
+            "certificering"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-02",
+          "title": "QFP-02 Administration",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-02%20Administration.aspx",
+          "content": "Årlig revision af administrative systemer og rutiner for at sikre effektivt workflow og tydelig styring.",
+          "tags": [
+            "administration"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        }
+      ]
+    },
+    {
+      "id": "procesflow",
+      "name": "Procesflow",
+      "description": "Forespørgsel til produktion, levering og fakturering",
+      "documents": [
+        {
+          "id": "qfp-15",
+          "title": "QFP-15 Forespørgsel",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-15%20Foresp%C3%B8rgsel.aspx",
+          "content": "Proces for vurdering og håndtering af kundeforepørgsler med systematisk sagsbehandling.",
+          "tags": [
+            "forespørgsel"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-16",
+          "title": "QFP-16 Tilbud",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-16%20Tilbud.aspx",
+          "content": "Tilbudsproces med kravspecifikation og tekniske afklaringer.",
+          "tags": [
+            "tilbud"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-17",
+          "title": "QFP-17 Ordre eller kontrakt gennemgang",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-17%20Ordre%20eller%20kontrakt%20gennemgang.aspx",
+          "content": "Ordre-/kontraktgennemgang med formel validering af krav før igangsættelse.",
+          "tags": [
+            "ordre",
+            "kontrakt"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-18",
+          "title": "QFP-18 Produktions forberedelse",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-18%20Produktions%20forberedelse.aspx",
+          "content": "Planlægning, produktionsværktøjer og klargøring før produktion.",
+          "tags": [
+            "produktion"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-19",
+          "title": "QFP-19 Godkendelse og levering",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-19%20Godkendelse%20og%20levering.aspx",
+          "content": "Kontrol, godkendelse og levering efter aftalte specifikationer.",
+          "tags": [
+            "levering",
+            "kontrol"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-21",
+          "title": "QFP-21 Fakturering og opfølgning",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-21%20Fakturering%20og%20opf%C3%B8lgning.aspx",
+          "content": "Fakturering, sagsafslutning og opfølgning efter levering.",
+          "tags": [
+            "fakturering"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        },
+        {
+          "id": "qfp-22",
+          "title": "QFP-22 Produktion",
+          "url": "https://gantech.sharepoint.com/handbook/Sider/QFP-22%20Produktion.aspx",
+          "content": "Ordrestyring, produktionsforløb og overdragelse til levering.",
+          "tags": [
+            "produktion"
+          ],
+          "updatedAt": "2026-06-03T10:29:16.009Z"
+        }
+      ]
+    }
+  ]
+}
