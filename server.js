@@ -1681,10 +1681,15 @@ app.get('/', (req, res) => {
                     </div>
                     <div class="omsaetning-field">
                         <label for="belastningKunde">Kunde</label>
-                        <input id="belastningKunde" class="belastning-order-filter" type="text" placeholder="fx Echolo"
-                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off"
-                            oninput="scheduleBelastningAutoReload()"
-                            onchange="scheduleBelastningAutoReload()" />
+                        <div class="belastning-kunde-wrap">
+                            <input id="belastningKunde" class="belastning-order-filter" type="text" placeholder="fx Echolo"
+                                autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off"
+                                oninput="scheduleBelastningAutoReload(); scheduleBelastningKundeSuggest()"
+                                onchange="scheduleBelastningAutoReload()"
+                                onfocus="scheduleBelastningKundeSuggest()"
+                                onblur="hideBelastningKundeSuggestions()" />
+                            <div id="belastningKundeDropdown" class="belastning-kunde-dropdown" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="omsaetning-field">
                         <label>Status</label>
@@ -2598,44 +2603,17 @@ app.get('/', (req, res) => {
                 } catch(e) { /* silent */ }
             }
 
-            let _belastningKundeSelected = '';
-
-            function getBelastningKundeValue() {
-                if (_belastningKundeSelected) return _belastningKundeSelected;
-                var inp = document.getElementById('belastningKunde');
-                return inp ? String(inp.value || '').trim() : '';
-            }
-
             function selectBelastningKundeOption(idx, e) {
                 if (e) e.preventDefault();
                 var r = _belastningKundeResults[idx];
                 var name = r ? String(r.name || '') : '';
-                _belastningKundeSelected = name;
                 var d = document.getElementById('belastningKundeDropdown');
                 if (d) d.style.display = 'none';
                 var inp = document.getElementById('belastningKunde');
-                var pill = document.getElementById('belastningKundePill');
-                var pillName = document.getElementById('belastningKundePillName');
                 if (inp) {
+                    inp.value = name;
                     inp.blur();
-                    inp.value = '';
-                    inp.style.display = 'none';
                 }
-                if (pillName) pillName.textContent = name;
-                if (pill) pill.classList.add('active');
-                scheduleBelastningAutoReload();
-            }
-
-            function clearBelastningKunde() {
-                _belastningKundeSelected = '';
-                var inp = document.getElementById('belastningKunde');
-                var pill = document.getElementById('belastningKundePill');
-                if (inp) {
-                    inp.style.display = '';
-                    inp.value = '';
-                    inp.focus();
-                }
-                if (pill) pill.classList.remove('active');
                 scheduleBelastningAutoReload();
             }
             const BELASTNING_PERIODIC_REFRESH_MS = 15 * 60 * 1000;
@@ -3160,7 +3138,7 @@ app.get('/', (req, res) => {
                         return;
                     }
                     if (lbl) lbl.textContent = d.results.length + ' resultat' + (d.results.length !== 1 ? 'er' : '');
-                    const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+                    const terms = q.toLowerCase().split(/\\s+/).filter(Boolean);
                     list.innerHTML = d.results.map((res, i) => {
                         const title = phHighlight(res.title || res.url, terms);
                         const snip  = phHighlight(res.snippet, terms);
@@ -5139,8 +5117,8 @@ app.get('/', (req, res) => {
                 const daysRaw = Number(daysInput && daysInput.value || 30);
                 const dage = Number.isFinite(daysRaw) ? Math.max(1, Math.min(180, Math.round(daysRaw))) : 30;
                 const resGr = String(resGrInput && resGrInput.value || '').trim();
-                const ord = String(orderInput && orderInput.value || '').replace(/\D+/g, '').slice(0, 12);
-                const kunde = String(customerInput && customerInput.value || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+                const ord = String(orderInput && orderInput.value || '').replace(/\\D+/g, '').slice(0, 12);
+                const kunde = String(customerInput && customerInput.value || '').trim().replace(/\\s+/g, ' ').slice(0, 80);
                 if (orderInput && orderInput.value !== ord) {
                     orderInput.value = ord;
                 }
