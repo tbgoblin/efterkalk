@@ -810,7 +810,11 @@ function createAftercalcService({
                 return detailsPromise;
             }
 
-            const PROD_ORDER_CONCURRENCY = 5;
+            const PROD_ORDER_CONCURRENCY = 4;
+            const isTransientSqlError = (err) => {
+                const n = err && (err.number ?? err.code);
+                return n === 1205 || n === 1222 || err?.code === 'ETIMEOUT' || err?.code === 'ECONNRESET';
+            };
             async function runProdOrderTasks(items, worker) {
                 const out = new Array(items.length);
                 let next = 0;
@@ -818,7 +822,18 @@ function createAftercalcService({
                     while (true) {
                         const i = next++;
                         if (i >= items.length) return;
-                        out[i] = await worker(items[i]);
+                        let attempt = 0;
+                        while (true) {
+                            try {
+                                out[i] = await worker(items[i]);
+                                break;
+                            } catch (err) {
+                                attempt++;
+                                if (attempt >= 3 || !isTransientSqlError(err)) throw err;
+                                console.warn(`[aftercalc] sub-PO ${items[i]?.PurcNo} transient error (${err.number || err.code}), retry ${attempt}/2`);
+                                await new Promise(r => setTimeout(r, 150 * attempt + Math.random() * 200));
+                            }
+                        }
                     }
                 }
                 await Promise.all(Array.from({ length: Math.min(PROD_ORDER_CONCURRENCY, items.length) }, pump));
