@@ -19,6 +19,12 @@ function buildImageItems(webPg, pictFNm) {
     const items = [];
     const seen = new Set();
 
+    function looksLikeConcreteFilePath(value) {
+        const cleanedValue = String(value || '').trim();
+        if (!cleanedValue) return false;
+        return isSupportedImagePath(cleanedValue) || /\.pdf(\?|#|$)/i.test(cleanedValue);
+    }
+
     function pushItem(type, value, label) {
         const cleanedValue = String(value || '').trim();
         if (!cleanedValue) return;
@@ -31,7 +37,13 @@ function buildImageItems(webPg, pictFNm) {
     const webPgValue = String(webPg || '').trim();
     const pictFNmValue = String(pictFNm || '').trim();
 
-    if (webPgValue && pictFNmValue) {
+    const pictIsAbsolute = isHttpUrl(pictFNmValue) || isAbsoluteWindowsPath(pictFNmValue);
+    const canJoinWebPgAndPict = webPgValue
+        && pictFNmValue
+        && !pictIsAbsolute
+        && !looksLikeConcreteFilePath(webPgValue);
+
+    if (canJoinWebPgAndPict) {
         if (isHttpUrl(webPgValue)) {
             const baseUrl = webPgValue.replace(/\\/g, '/').replace(/\/+$/, '');
             const fileName = pictFNmValue.replace(/^[/\\]+/, '');

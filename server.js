@@ -719,14 +719,18 @@ app.get('/', (req, res) => {
             .report-open-btn::before { content: '↗'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #5ca646; color: #fff; font-size: 11px; box-shadow: 0 4px 10px rgba(92,166,70,0.40); }
             .report-open-btn:disabled::before { background: #9ca3af; box-shadow: none; }
             .filter-input { width: 260px !important; margin-left: 10px; }
+            .order-value-filter-toggle { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #c9dbf2; border-radius:999px; background:#f6faff; color:#1d446b; font-size:12px; font-weight:700; }
+            .order-value-filter-toggle input { width:auto !important; margin:0; }
+            .order-value-filter-input { width:130px !important; }
+            .order-value-filter-input:disabled { opacity:0.65; background:#f0f4f9; }
             .filter-select { width: 180px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 3px; background: #fff; }
-            .section { background: white; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; }
-            .order-header { background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%); color: white; padding: 25px; border-radius: 6px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-            .order-header h2 { margin: 0 0 20px 0; font-size: 28px; font-weight: 700; }
-            .order-header-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-            .order-header-item { display: flex; flex-direction: column; }
-            .order-header-label { font-size: 12px; font-weight: 600; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-            .order-header-value { font-size: 22px; font-weight: 700; color: #fff; }
+            .section { background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); margin-bottom: 16px; border-radius: 16px; box-shadow: 0 12px 28px rgba(15,53,96,0.08); padding: 18px; border: 1px solid #d8e8fb; }
+            .order-header { background: radial-gradient(680px 180px at 92% -20%, rgba(126,177,230,0.36) 0%, rgba(126,177,230,0.08) 45%, rgba(126,177,230,0) 70%), linear-gradient(135deg, #0f3560 0%, #12426f 56%, #1565c0 100%); color: white; padding: 20px; border-radius: 16px; margin-bottom: 18px; box-shadow: 0 16px 32px rgba(15,53,96,0.24); border: 1px solid rgba(255,255,255,0.15); }
+            .order-header h2 { margin: 0 0 16px 0; font-size: clamp(22px, 2vw, 30px); font-weight: 800; letter-spacing: 0.01em; }
+            .order-header-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+            .order-header-item { display: flex; flex-direction: column; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 10px 12px; backdrop-filter: blur(2px); }
+            .order-header-label { font-size: 11px; font-weight: 700; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+            .order-header-value { font-size: 20px; font-weight: 800; color: #fff; }
             .invoice-status-badge { display: inline-block; font-size: 14px; font-weight: 700; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
             .status-in-production { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.4); }
             .status-partial-invoiced { background: #e65100; color: #fff; }
@@ -913,13 +917,13 @@ app.get('/', (req, res) => {
             .prod-link { color: #1976D2; text-decoration: underline; cursor: pointer; }
             .prod-link:hover { color: #0D47A1; }
             .po-highlight { box-shadow: 0 0 0 3px #90CAF9; }
-            .prodtp4-group { border: 1px solid #e5e5e5; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
-            .prodtp4-header { background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); padding: 10px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
-            .prodtp4-header:hover { background: linear-gradient(180deg, #eff6ff 0%, #e5efff 100%); }
-            .prodtp4-label { color: #2b2b2b; }
-            .prodtp4-subtotal { color: #1976D2; font-weight: 700; }
-            .prodtp4-body { padding: 8px 12px 12px; }
-            .po-total-row { margin-top: 10px; padding: 10px 12px; border-top: 1px solid #d8e5f7; font-weight: 800; text-align: right; background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%); color: var(--ink-900); }
+            .prodtp4-group { border: 1px solid #d8e7fb; border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 6px 16px rgba(15,53,96,0.05); background: #fff; }
+            .prodtp4-header { background: linear-gradient(180deg, #f4f9ff 0%, #eaf3ff 100%); padding: 11px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 800; }
+            .prodtp4-header:hover { background: linear-gradient(180deg, #eef6ff 0%, #e2eeff 100%); }
+            .prodtp4-label { color: #173b62; }
+            .prodtp4-subtotal { color: #1565c0; font-weight: 800; }
+            .prodtp4-body { padding: 10px 12px 12px; }
+            .po-total-row { margin-top: 10px; padding: 10px 12px; border-top: 1px solid #d8e5f7; font-weight: 800; text-align: right; background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%); color: var(--ink-900); border-radius: 8px; }
             .prodtp4-hint { color: #555; margin: 6px 0 10px; font-size: 13px; }
             .main-product-box { background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%); border: 1px solid #bdd8f6; border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; box-shadow: 0 8px 20px rgba(15,53,96,0.08); }
             .main-product-box .value { font-size: 20px; font-weight: 800; color: #0d47a1; margin-top: 3px; }
@@ -1075,12 +1079,12 @@ app.get('/', (req, res) => {
                 .order-list-table { min-width: 820px; }
                 .belastning-order-table { min-width: 700px; }
             }
-            .order-list-section { background: #fff; padding: 16px 20px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-            .order-list-section h3 { color: #333; margin-bottom: 12px; border-bottom: 2px solid #2196F3; padding-bottom: 8px; }
-            .order-list-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            .order-list-table th { background: #1565C0; color: #fff; padding: 8px 10px; text-align: left; }
-            .order-list-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; cursor: pointer; }
-            .order-list-table tr:hover td { background: #e3f2fd; }
+            .order-list-section { background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); padding: 14px 16px; margin-bottom: 16px; border-radius: 14px; box-shadow: 0 10px 22px rgba(15,53,96,0.07); border: 1px solid #d9e8fb; }
+            .order-list-section h3 { color: #0f3560; margin-bottom: 10px; border-bottom: 1px solid #cfe1f8; padding-bottom: 8px; }
+            .order-list-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; border: 1px solid #dce8f8; border-radius: 12px; overflow: hidden; }
+            .order-list-table th { background: linear-gradient(180deg, #eef5ff 0%, #e4efff 100%); color: #0f3560; padding: 8px 10px; text-align: left; border-bottom: 1px solid #d8e6f8; }
+            .order-list-table td { padding: 8px 10px; border-bottom: 1px solid #e7eff9; cursor: pointer; }
+            .order-list-table tr:hover td { background: #edf5ff; }
             .note-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; border:1px solid; cursor:pointer; white-space:nowrap; }
             .note-badge.ok  { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
             .note-badge.error { background:#ffebee; color:#b71c1c; border-color:#ef9a9a; }
@@ -1757,6 +1761,11 @@ app.get('/', (req, res) => {
                     <option value="">Alle brugere</option>
                 </select>
                 <input type="text" id="customerFilterInput" class="filter-input" placeholder="Søg kunde i listen..." oninput="setOrderListFilter()" />
+                <label class="order-value-filter-toggle" for="orderMinDkkEnabled">
+                    <input type="checkbox" id="orderMinDkkEnabled" onchange="setOrderValueFilter()" />
+                    <span>Skjul ordre &lt;</span>
+                </label>
+                <input type="number" id="orderMinDkkInput" class="order-value-filter-input" min="0" step="100" value="0" placeholder="DKK" oninput="setOrderValueFilter()" disabled />
                 <button id="collapseExpandBtn" class="list-toggle-btn" onclick="toggleSearchBox()" style="margin-left:auto;" title="Skjul sogefelt og filtre">▲ Luk</button>
             </div>
             <div id="orderList"></div>
@@ -2272,6 +2281,8 @@ app.get('/', (req, res) => {
             let reportOriginState = null;
             let orderListFilter = '';
             let orderListBrugerFilter = '';
+            let orderListMinDkkEnabled = false;
+            let orderListMinDkkValue = 0;
             let marginStateByOrdNo = {};
             let marginJobQueue = [];
             let marginWorkerActiveCount = 0;
@@ -2283,6 +2294,8 @@ app.get('/', (req, res) => {
             let marginSortRefreshTimer = null;
             let currentOversigtModalType = null;
             const aftercalcClientCache = new Map();
+            const routeMetricsClientCache = new Map();
+            const ROUTE_METRICS_CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
 
             function normalizeOrdNoValue(ordNo) {
                 return String(ordNo || '').trim();
@@ -2294,6 +2307,80 @@ app.get('/', (req, res) => {
                 for (let i = 0; i < keys.length - 80; i++) {
                     aftercalcClientCache.delete(keys[i]);
                 }
+            }
+
+            function pruneRouteMetricsClientCache() {
+                if (routeMetricsClientCache.size <= 100) return;
+                const keys = Array.from(routeMetricsClientCache.keys());
+                for (let i = 0; i < keys.length - 100; i++) {
+                    routeMetricsClientCache.delete(keys[i]);
+                }
+            }
+
+            async function requestRouteMetricsData(endpoint, options = {}) {
+                const cacheKey = String(endpoint || '').trim();
+                if (!cacheKey) throw new Error('Route metrics endpoint mangler');
+
+                const forceReload = Boolean(options.forceReload);
+                const now = Date.now();
+                const existing = routeMetricsClientCache.get(cacheKey);
+
+                if (!forceReload && existing) {
+                    if (existing.data && (now - Number(existing.ts || 0)) < ROUTE_METRICS_CLIENT_CACHE_TTL_MS) {
+                        return existing.data;
+                    }
+                    if (existing.promise) {
+                        return existing.promise;
+                    }
+                }
+
+                const fetchPromise = (async () => {
+                    const response = await fetch(cacheKey);
+                    const data = await response.json();
+                    if (!response.ok || (data && data.error)) {
+                        throw new Error((data && data.error) ? data.error : ('HTTP ' + response.status));
+                    }
+                    routeMetricsClientCache.set(cacheKey, { data, ts: Date.now(), promise: null });
+                    pruneRouteMetricsClientCache();
+                    return data;
+                })();
+
+                routeMetricsClientCache.set(cacheKey, { data: null, ts: now, promise: fetchPromise });
+                try {
+                    return await fetchPromise;
+                } catch (err) {
+                    routeMetricsClientCache.delete(cacheKey);
+                    throw err;
+                }
+            }
+
+            function buildLaserRouteMetricsEndpoint(ordine, route, prodNo, showAllRoutes) {
+                return '/laser-route-metrics?ordine=' + encodeURIComponent(String(ordine || '').trim())
+                    + (showAllRoutes ? '' : ('&route=' + encodeURIComponent(String(route || '').trim())))
+                    + '&prodNo=' + encodeURIComponent(String(prodNo || '').trim())
+                    + '&showAllRoutes=' + (showAllRoutes ? '1' : '0')
+                    + (currentSalesOrderGr4 === 3 ? '&gr4=3' : '');
+            }
+
+            async function prefetchRouteMetricsForProduct(prodNo, ordNo, trInf2, trInf4, showAllRoutes) {
+                if (!prodNo) return;
+                const effectiveOrdine = String(ordNo || trInf2 || '').trim();
+                if (!effectiveOrdine) return;
+
+                let effectiveRoute = String(trInf4 || '').trim();
+                if (!showAllRoutes && !effectiveRoute) {
+                    try {
+                        const fallbackResponse = await fetch('/nesting-detail/' + encodeURIComponent(effectiveOrdine) + '/' + encodeURIComponent(prodNo));
+                        const fallbackRows = await fallbackResponse.json();
+                        if (fallbackResponse.ok && Array.isArray(fallbackRows) && fallbackRows.length > 0) {
+                            effectiveRoute = String(fallbackRows[0].TrInf4 || '').trim();
+                        }
+                    } catch (_) {}
+                }
+
+                if (!showAllRoutes && !effectiveRoute) return;
+                const endpoint = buildLaserRouteMetricsEndpoint(effectiveOrdine, effectiveRoute, prodNo, showAllRoutes);
+                requestRouteMetricsData(endpoint).catch(() => {});
             }
 
             async function requestAftercalcData(ordNo, options = {}) {
@@ -6831,6 +6918,27 @@ app.get('/', (req, res) => {
                 renderOrderList();
             }
 
+            function setOrderValueFilter() {
+                const enabledInput = document.getElementById('orderMinDkkEnabled');
+                const thresholdInput = document.getElementById('orderMinDkkInput');
+                orderListMinDkkEnabled = !!(enabledInput && enabledInput.checked);
+
+                const raw = Number(thresholdInput && thresholdInput.value || 0);
+                orderListMinDkkValue = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+
+                if (thresholdInput) {
+                    thresholdInput.disabled = !orderListMinDkkEnabled;
+                    if (!thresholdInput.disabled && String(thresholdInput.value || '') !== String(orderListMinDkkValue)) {
+                        thresholdInput.value = String(orderListMinDkkValue);
+                    }
+                }
+
+                if (!orderListVisible && orderListMinDkkEnabled && orderListMinDkkValue > 0) {
+                    orderListVisible = true;
+                }
+                renderOrderList();
+            }
+
             function populateBrugerFilterOptions() {
                 const select = document.getElementById('brugerFilterSelect');
                 if (!select) return;
@@ -6873,7 +6981,9 @@ app.get('/', (req, res) => {
                     const ord = String(o.OrdNo || '');
                     const matchesText = !orderListFilter || customer.includes(orderListFilter) || ord.includes(orderListFilter);
                     const matchesBruger = !orderListBrugerFilter || bruger === orderListBrugerFilter;
-                    return matchesText && matchesBruger;
+                    const invoDkk = Number(o.InvoAm || 0);
+                    const matchesMinDkk = !orderListMinDkkEnabled || invoDkk >= orderListMinDkkValue;
+                    return matchesText && matchesBruger && matchesMinDkk;
                 });
 
                 const dir = orderListSortDir === 'asc' ? 1 : -1;
@@ -6970,6 +7080,7 @@ app.get('/', (req, res) => {
                 const activeFilters = [];
                 if (orderListFilter) activeFilters.push('kunde/søgning: "' + escapeHtml(orderListFilter) + '"');
                 if (orderListBrugerFilter) activeFilters.push('bruger: "' + escapeHtml(orderListBrugerFilter) + '"');
+                if (orderListMinDkkEnabled) activeFilters.push('minimum fakturabeløb: ' + formatNumber(orderListMinDkkValue) + ' DKK');
                 const filterText = activeFilters.length > 0 ? activeFilters.join(', ') : 'ingen aktive filtre';
                 let html = '<div><strong>Filtreret ordrelisteoversigt</strong> (vist: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + listSummary.excludedCredit + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
                 html += '<div style="margin-top:4px; font-size:12px; color:#57718f;">Genereret: ' + escapeHtml(new Date().toLocaleString('da-DK')) + ' • Filtre: ' + filterText + '</div>';
@@ -8458,7 +8569,7 @@ app.get('/', (req, res) => {
                             return;
                         }
 
-                        if (!effectiveRoute) {
+                        if (!showAllRoutes && !effectiveRoute) {
                             const encProdNo = encodeURIComponent(prodNo || '');
                             const fallbackResponse = await fetch('/nesting-detail/' + encodeURIComponent(effectiveOrdine) + '/' + encProdNo);
                             const fallbackRows = await fallbackResponse.json();
@@ -8467,33 +8578,24 @@ app.get('/', (req, res) => {
                             }
                         }
 
-                        if (!effectiveRoute) {
+                        if (!showAllRoutes && !effectiveRoute) {
                             body.innerHTML = '<div class="error">Fejl: TrInf4 (route) mangler paa den valgte linje.</div>';
                             return;
                         }
 
-                        const endpoint = '/laser-route-metrics?ordine=' + encodeURIComponent(effectiveOrdine)
-                            + '&route=' + encodeURIComponent(effectiveRoute)
-                            + '&prodNo=' + encodeURIComponent(prodNo || '')
-                            + '&showAllRoutes=' + (showAllRoutes ? '1' : '0')
-                            + (currentSalesOrderGr4 === 3 ? '&gr4=3' : '');
-                        const response = await fetch(endpoint);
-                        const data = await response.json();
-                        if (!response.ok || data.error) {
-                            body.innerHTML = '<div class="error">Fejl: ' + (data.error || 'Uventet fejl') + '</div>';
-                            return;
-                        }
+                        const endpoint = buildLaserRouteMetricsEndpoint(effectiveOrdine, effectiveRoute, prodNo, showAllRoutes);
+                        const data = await requestRouteMetricsData(endpoint);
 
                         let finalData = data;
                         let usedProdFilter = Boolean(prodNo);
 
                         if (usedProdFilter && Array.isArray(data.products) && data.products.length === 0) {
                             const fallbackEndpoint = '/laser-route-metrics?ordine=' + encodeURIComponent(effectiveOrdine)
-                                + '&route=' + encodeURIComponent(effectiveRoute)
+                                + (showAllRoutes ? '' : ('&route=' + encodeURIComponent(effectiveRoute)))
+                                + '&showAllRoutes=' + (showAllRoutes ? '1' : '0')
                                 + (currentSalesOrderGr4 === 3 ? '&gr4=3' : '');
-                            const fallbackResponse = await fetch(fallbackEndpoint);
-                            const fallbackData = await fallbackResponse.json();
-                            if (fallbackResponse.ok && !fallbackData.error && Array.isArray(fallbackData.products) && fallbackData.products.length > 0) {
+                            const fallbackData = await requestRouteMetricsData(fallbackEndpoint);
+                            if (Array.isArray(fallbackData.products) && fallbackData.products.length > 0) {
                                 finalData = fallbackData;
                                 usedProdFilter = false;
                             }
@@ -8521,6 +8623,30 @@ app.get('/', (req, res) => {
                         let totalLaserCost = 0;
                         const clickedNoFinNum = Number(clickedNoFin || 0);
                         const clickedNestingCostNum = Number(clickedNestingCost || 0);
+                        const anchorShowAllRoutes = showAllRoutes && clickedNestingCostNum > 0 && clickedNoFinNum > 0;
+                        const anchorProdNo = String(prodNo || '').trim().toUpperCase();
+                        let anchorBaseTotal = 0;
+                        let anchorQtyTotal = 0;
+
+                        if (anchorShowAllRoutes) {
+                            for (const anchorRow of products) {
+                                const anchorProdNoForCost = anchorRow ? String(anchorRow.ProdNo || '').trim().toUpperCase() : '';
+                                if (anchorProdNoForCost !== anchorProdNo) continue;
+                                const anchorNoFinNum = Number(anchorRow && anchorRow.QtaPezzi || 0);
+                                const anchorHintedNestCost = getLaserNestCostHint(effectiveOrdine, anchorRow ? anchorRow.ProdNo : prodNo);
+                                const anchorCostPerPiece = (anchorRow && anchorRow.CostoPerPezzo !== null && anchorRow.CostoPerPezzo !== undefined)
+                                    ? anchorRow.CostoPerPezzo
+                                    : anchorHintedNestCost;
+                                const anchorBaseCost = (anchorRow && anchorRow.QuotaCosto !== null && anchorRow.QuotaCosto !== undefined)
+                                    ? Number(anchorRow.QuotaCosto || 0)
+                                    : ((anchorCostPerPiece === null || anchorCostPerPiece === undefined || anchorNoFinNum <= 0)
+                                        ? 0
+                                        : (anchorNoFinNum * Number(anchorCostPerPiece || 0)));
+                                anchorBaseTotal += Math.max(0, Number(anchorBaseCost || 0));
+                                anchorQtyTotal += Math.max(0, anchorNoFinNum);
+                            }
+                        }
+
                         for (const rowProduct of products) {
                             const oldExpected = rowProduct ? rowProduct.OldNWgtU_medio : null;
                             const expected = rowProduct ? rowProduct.NWgtU_medio : null;
@@ -8528,7 +8654,6 @@ app.get('/', (req, res) => {
                             const routeNoFin = rowProduct ? rowProduct.QtaPezzi : null;
                             const prodNoForCost = rowProduct ? (rowProduct.ProdNo || prodNo) : prodNo;
                             const isClickedProd = String(prodNoForCost || '').trim().toUpperCase() === String(prodNo || '').trim().toUpperCase();
-                            // In showAllRoutes mode use per-route API data; clickedNestCost/clickedNoFin are order-level totals and must not override per-route values.
                             const hasClickedNestCost = !showAllRoutes && isClickedProd && clickedNestingCostNum > 0;
                             const noFin = (hasClickedNestCost && clickedNoFinNum > 0) ? clickedNoFinNum : routeNoFin;
                             const hintedNestCost = getLaserNestCostHint(effectiveOrdine, prodNoForCost);
@@ -8540,13 +8665,28 @@ app.get('/', (req, res) => {
                             const noFinNum = Number(noFin || 0);
                             const expectedNum = Number(expected || 0);
                             const effectiveNum = Number(effective || 0);
-                            const totalCost = hasClickedNestCost
+                            const baseTotalCost = hasClickedNestCost
                                 ? (noFinNum > 0 ? (noFinNum * Number(costPerPiece || 0)) : null)
                                 : ((rowProduct && rowProduct.QuotaCosto !== null && rowProduct.QuotaCosto !== undefined)
                                     ? rowProduct.QuotaCosto
                                 : ((costPerPiece === null || costPerPiece === undefined || noFin === null || noFin === undefined)
                                     ? null
                                     : (noFinNum * Number(costPerPiece || 0))));
+                            let totalCost = baseTotalCost;
+                            let displayCostPerPiece = costPerPiece;
+
+                            // Keep route detail visible, but force popup total to match the Materiale Laser line total.
+                            if (anchorShowAllRoutes && isClickedProd) {
+                                const anchorTotal = clickedNoFinNum * clickedNestingCostNum;
+                                if (anchorBaseTotal > 0 && baseTotalCost !== null) {
+                                    totalCost = (Number(baseTotalCost || 0) / anchorBaseTotal) * anchorTotal;
+                                } else if (anchorQtyTotal > 0 && noFinNum > 0) {
+                                    totalCost = (noFinNum / anchorQtyTotal) * anchorTotal;
+                                }
+                                if (totalCost !== null && totalCost !== undefined && noFinNum > 0) {
+                                    displayCostPerPiece = totalCost / noFinNum;
+                                }
+                            }
                             totalKgIcon += noFinNum * Number(oldExpected || 0);
                             totalKgPrevisti += noFinNum * expectedNum;
                             totalKgUtilizzati += noFinNum * effectiveNum;
@@ -8563,7 +8703,7 @@ app.get('/', (req, res) => {
                             html += '<td>' + formatNullable(oldExpected) + '</td>';
                             html += '<td>' + formatNullable(expected) + '</td>';
                             html += '<td>' + formatNullable(effective) + '</td>';
-                            html += '<td>' + formatNullable(costPerPiece) + '</td>';
+                            html += '<td>' + formatNullable(displayCostPerPiece) + '</td>';
                             html += '<td>' + formatNullable(totalCost) + '</td>';
                             html += '<td>' + (extraPct === null ? 'NULL' : (formatNumber(extraPct) + '%')) + '</td>';
                             if (Array.isArray(rowProduct.ImageItems) && rowProduct.ImageItems.length > 0) {
@@ -8604,6 +8744,21 @@ app.get('/', (req, res) => {
                 if (prodNo) onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, noFin, nestingCost);
             }
 
+            function handleProdNoHover(e) {
+                const span = e.target.closest('.prod-no-link');
+                if (!span) return;
+                if (span.dataset.prodtp4 !== '2') return;
+                if (span.dataset.routePrefetchStarted === '1') return;
+                span.dataset.routePrefetchStarted = '1';
+                prefetchRouteMetricsForProduct(
+                    span.dataset.prodno,
+                    span.dataset.ordno,
+                    span.dataset.trinf2,
+                    span.dataset.trinf4,
+                    span.dataset.showallroutes === '1'
+                );
+            }
+
             function handleImagePreviewClick(e) {
                 const btn = e.target.closest('.image-preview-btn');
                 if (!btn) return;
@@ -8641,6 +8796,8 @@ app.get('/', (req, res) => {
 
             // Outside modal content.
             document.addEventListener('click', handleProdNoClick);
+            document.addEventListener('mouseover', handleProdNoHover);
+            document.addEventListener('focusin', handleProdNoHover);
             document.addEventListener('click', handleImagePreviewClick);
             document.addEventListener('click', handleDrawingOpenClick);
             document.addEventListener('click', handlePreviewImageZoom);
@@ -8656,6 +8813,8 @@ app.get('/', (req, res) => {
             const summaryModalBodyEl = document.getElementById('summaryModalBody');
             if (summaryModalBodyEl) {
                 summaryModalBodyEl.addEventListener('click', handleProdNoClick);
+                summaryModalBodyEl.addEventListener('mouseover', handleProdNoHover);
+                summaryModalBodyEl.addEventListener('focusin', handleProdNoHover);
                 summaryModalBodyEl.addEventListener('click', handleImagePreviewClick);
                 summaryModalBodyEl.addEventListener('click', handlePreviewImageZoom);
             }
