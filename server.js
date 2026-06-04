@@ -5315,7 +5315,8 @@ app.get('/', (req, res) => {
                         + '<rect class="belastning-series-aften" x="' + (x + barW * 0.5) + '" y="' + ay + '" width="' + barW + '" height="' + aH + '"><title>' + escapeHtmlFE(dateLabel + ' Rest Aften: ' + formatBelastningMinutes(aften)) + '</title></rect>';
                 }).join('');
 
-                const labelStep = Math.max(1, Math.ceil(rows.length / 14));
+                // Show every day label; dates are already rotated to reduce overlap.
+                const labelStep = 1;
                 const labels = rows.map((row, i) => {
                     const isToday = row.__dayKey === todayRaw;
                     if (i % labelStep !== 0 && i !== rows.length - 1 && !isToday) return '';
