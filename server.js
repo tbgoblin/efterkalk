@@ -1747,14 +1747,8 @@ app.get('/', (req, res) => {
                 <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Åbn søgefelt og filtre">▼ Søg</button>
                 <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." style="display:none;" />
                 <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret" style="display:none;">Søg</button>
-                <select id="updateActionSelect" class="filter-select" onchange="handleUpdateActionSelection()" title="Vaelg hvad du vil opdatere">
-                    <option value="">Opdater...</option>
-                    <option value="order-cache">Ordre cache</option>
-                    <option value="list">Liste</option>
-                    <option value="program">Program</option>
-                </select>
+                <button id="refreshListBtn" class="list-toggle-btn" onclick="refreshOrderList()" title="Hent seneste ordreliste">Opdater liste</button>
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
-                <button class="mode-btn" onclick="openOrderListPrintPreview()" title="Vis forhåndsvisning af den filtrerede ordreliste">Liste / PDF</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
                 <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
                 <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
@@ -2626,7 +2620,6 @@ app.get('/', (req, res) => {
             const ORDER_LIST_AUTO_REFRESH_MS = 2 * 60 * 1000;
             let lastOrderListCheckTime = 0;
             let lastOrderListRemoteTime = 0;
-            let updateActionRunning = false;
             let omsaetningInitialized = false;
             let omsaetningAccounts = [];
             let omsaetningSelectedAccounts = new Set();
@@ -6729,8 +6722,6 @@ app.get('/', (req, res) => {
 
             function toggleMarginMode() {
                 currentMarginMode = currentMarginMode === 'new' ? 'classic' : 'new';
-                const ordNo = document.getElementById('orderInput').value;
-                if (ordNo) searchOrder();
                 renderOrderList();
             }
 
@@ -8056,7 +8047,15 @@ app.get('/', (req, res) => {
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1" data-nofin="' + Number(line.NoFin || 0) + '" data-nestingcost="' + Number(line.NestingCost || 0) + '">' + safeProdLabel + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        const linkNoFin = Number(line.NoFin || 0);
+                                        const linkHasNestingCost = Number(line.NestingCost || 0) > 0;
+                                        const linkHasEffectiveLaserCost = linkNoFin > 0
+                                            && line.EffectiveLineCost !== undefined
+                                            && line.EffectiveLineCost !== null;
+                                        const linkDisplayLaserUnitCost = linkHasEffectiveLaserCost
+                                            ? ((line.EffectiveLineCost || 0) / linkNoFin)
+                                            : (linkHasNestingCost ? (line.NestingCost || 0) : (line.CCstPr || 0));
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '" data-showallroutes="1" data-nofin="' + linkNoFin + '" data-nestingcost="' + Number(linkDisplayLaserUnitCost || 0) + '">' + safeProdLabel + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (hasChildProductionOrder) {
                                         const safeChildProdNoForSummary = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const childSummaryArgs = shouldFilterChildSummary(key, line.ProdNo, line.PurcNo)
@@ -8586,20 +8585,8 @@ app.get('/', (req, res) => {
                         const endpoint = buildLaserRouteMetricsEndpoint(effectiveOrdine, effectiveRoute, prodNo, showAllRoutes);
                         const data = await requestRouteMetricsData(endpoint);
 
-                        let finalData = data;
-                        let usedProdFilter = Boolean(prodNo);
-
-                        if (usedProdFilter && Array.isArray(data.products) && data.products.length === 0) {
-                            const fallbackEndpoint = '/laser-route-metrics?ordine=' + encodeURIComponent(effectiveOrdine)
-                                + (showAllRoutes ? '' : ('&route=' + encodeURIComponent(effectiveRoute)))
-                                + '&showAllRoutes=' + (showAllRoutes ? '1' : '0')
-                                + (currentSalesOrderGr4 === 3 ? '&gr4=3' : '');
-                            const fallbackData = await requestRouteMetricsData(fallbackEndpoint);
-                            if (Array.isArray(fallbackData.products) && fallbackData.products.length > 0) {
-                                finalData = fallbackData;
-                                usedProdFilter = false;
-                            }
-                        }
+                        const finalData = data;
+                        const usedProdFilter = Boolean(prodNo);
 
                         const s = finalData.summary || {};
                         const products = Array.isArray(finalData.products) ? finalData.products : [];
@@ -8610,7 +8597,9 @@ app.get('/', (req, res) => {
                         };
 
                         if (!products.length) {
-                            body.innerHTML = '<div>Ingen faerdigvarer (TrTp=7) fundet for valgt rute.</div>';
+                            body.innerHTML = usedProdFilter
+                                ? '<div>Ingen faerdigvarer (TrTp=7) fundet for valgt produkt/route.</div>'
+                                : '<div>Ingen faerdigvarer (TrTp=7) fundet for valgt rute.</div>';
                             return;
                         }
 
@@ -8623,29 +8612,6 @@ app.get('/', (req, res) => {
                         let totalLaserCost = 0;
                         const clickedNoFinNum = Number(clickedNoFin || 0);
                         const clickedNestingCostNum = Number(clickedNestingCost || 0);
-                        const anchorShowAllRoutes = showAllRoutes && clickedNestingCostNum > 0 && clickedNoFinNum > 0;
-                        const anchorProdNo = String(prodNo || '').trim().toUpperCase();
-                        let anchorBaseTotal = 0;
-                        let anchorQtyTotal = 0;
-
-                        if (anchorShowAllRoutes) {
-                            for (const anchorRow of products) {
-                                const anchorProdNoForCost = anchorRow ? String(anchorRow.ProdNo || '').trim().toUpperCase() : '';
-                                if (anchorProdNoForCost !== anchorProdNo) continue;
-                                const anchorNoFinNum = Number(anchorRow && anchorRow.QtaPezzi || 0);
-                                const anchorHintedNestCost = getLaserNestCostHint(effectiveOrdine, anchorRow ? anchorRow.ProdNo : prodNo);
-                                const anchorCostPerPiece = (anchorRow && anchorRow.CostoPerPezzo !== null && anchorRow.CostoPerPezzo !== undefined)
-                                    ? anchorRow.CostoPerPezzo
-                                    : anchorHintedNestCost;
-                                const anchorBaseCost = (anchorRow && anchorRow.QuotaCosto !== null && anchorRow.QuotaCosto !== undefined)
-                                    ? Number(anchorRow.QuotaCosto || 0)
-                                    : ((anchorCostPerPiece === null || anchorCostPerPiece === undefined || anchorNoFinNum <= 0)
-                                        ? 0
-                                        : (anchorNoFinNum * Number(anchorCostPerPiece || 0)));
-                                anchorBaseTotal += Math.max(0, Number(anchorBaseCost || 0));
-                                anchorQtyTotal += Math.max(0, anchorNoFinNum);
-                            }
-                        }
 
                         for (const rowProduct of products) {
                             const oldExpected = rowProduct ? rowProduct.OldNWgtU_medio : null;
@@ -8655,7 +8621,7 @@ app.get('/', (req, res) => {
                             const prodNoForCost = rowProduct ? (rowProduct.ProdNo || prodNo) : prodNo;
                             const isClickedProd = String(prodNoForCost || '').trim().toUpperCase() === String(prodNo || '').trim().toUpperCase();
                             const hasClickedNestCost = !showAllRoutes && isClickedProd && clickedNestingCostNum > 0;
-                            const noFin = (hasClickedNestCost && clickedNoFinNum > 0) ? clickedNoFinNum : routeNoFin;
+                            const noFin = (!showAllRoutes && hasClickedNestCost && clickedNoFinNum > 0) ? clickedNoFinNum : routeNoFin;
                             const hintedNestCost = getLaserNestCostHint(effectiveOrdine, prodNoForCost);
                             const costPerPiece = hasClickedNestCost
                                 ? clickedNestingCostNum
@@ -8674,19 +8640,6 @@ app.get('/', (req, res) => {
                                     : (noFinNum * Number(costPerPiece || 0))));
                             let totalCost = baseTotalCost;
                             let displayCostPerPiece = costPerPiece;
-
-                            // Keep route detail visible, but force popup total to match the Materiale Laser line total.
-                            if (anchorShowAllRoutes && isClickedProd) {
-                                const anchorTotal = clickedNoFinNum * clickedNestingCostNum;
-                                if (anchorBaseTotal > 0 && baseTotalCost !== null) {
-                                    totalCost = (Number(baseTotalCost || 0) / anchorBaseTotal) * anchorTotal;
-                                } else if (anchorQtyTotal > 0 && noFinNum > 0) {
-                                    totalCost = (noFinNum / anchorQtyTotal) * anchorTotal;
-                                }
-                                if (totalCost !== null && totalCost !== undefined && noFinNum > 0) {
-                                    displayCostPerPiece = totalCost / noFinNum;
-                                }
-                            }
                             totalKgIcon += noFinNum * Number(oldExpected || 0);
                             totalKgPrevisti += noFinNum * expectedNum;
                             totalKgUtilizzati += noFinNum * effectiveNum;
@@ -8715,8 +8668,11 @@ app.get('/', (req, res) => {
                             html += '</tr>';
                         }
                         html += '</table>';
+                        const displayedLaserTotal = (showAllRoutes && clickedNoFinNum > 0 && clickedNestingCostNum > 0)
+                            ? (clickedNoFinNum * clickedNestingCostNum)
+                            : totalLaserCost;
                         html += '<div class="summary-box" style="margin-top:12px;">'
-                            + '<div><strong>Samlet L-kost (NestKost):</strong> ' + formatNumber(totalLaserCost) + ' DKK</div>'
+                            + '<div><strong>Samlet L-kost (NestKost):</strong> ' + formatNumber(displayedLaserTotal) + ' DKK</div>'
                             + '<div><strong>Ordre icon kg:</strong> ' + formatNumber(totalKgIcon) + ' kg</div>'
                             + '<div><strong>Ordre stykliste kg:</strong> ' + formatNumber(totalKgPrevisti) + ' kg</div>'
                             + '<div><strong>Ordre forbrugt kg:</strong> ' + formatNumber(totalKgUtilizzati) + ' kg</div>'
@@ -9273,7 +9229,7 @@ app.get('/', (req, res) => {
                         }
                     }
 
-                    await loadOrderList(false);
+                    await loadOrderList(true);
                     refreshSucceeded = true;
                     if (openAfter && Number.isFinite(ordNoNum)) {
                         await searchOrder();
@@ -9447,36 +9403,6 @@ app.get('/', (req, res) => {
                         installBtn.textContent = 'Installer nu';
                     }
                     refreshDashboardUpdateNotice().catch(() => {});
-                }
-            }
-
-            async function handleUpdateActionSelection() {
-                const select = document.getElementById('updateActionSelect');
-                if (!select) return;
-
-                const action = String(select.value || '');
-                if (!action) return;
-
-                if (updateActionRunning) {
-                    alert('En opdatering koerer allerede. Vent venligst.');
-                    select.value = '';
-                    return;
-                }
-
-                updateActionRunning = true;
-                select.disabled = true;
-                try {
-                    if (action === 'order-cache') {
-                        await refreshSingleOrderCache();
-                    } else if (action === 'list') {
-                        await refreshOrderList();
-                    } else if (action === 'program') {
-                        await checkDesktopUpdateNow();
-                    }
-                } finally {
-                    select.disabled = false;
-                    select.value = '';
-                    updateActionRunning = false;
                 }
             }
 

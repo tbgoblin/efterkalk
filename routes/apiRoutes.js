@@ -908,6 +908,7 @@ function createApiRouter({
     pkgVersion
 }) {
     const router = express.Router();
+    const legacyAftercalcPrefixes = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
     const ordreindgangService = createOrdreindgangService({ getConnection, sql });
 
@@ -1717,9 +1718,14 @@ function createApiRouter({
                     orderRefreshStatus.set(ordNo, { status: 'running', startedAt: Date.now() });
 
                     diskCache.del(AFTERCALC_CACHE_KEY_PREFIX + ordNo);
-                    diskCache.del('aftercalc_' + ordNo);
+                    for (const prefix of legacyAftercalcPrefixes) {
+                        diskCache.del(prefix + ordNo);
+                    }
                     diskCache.del('prod_summary_' + ordNo);
                     diskCache.del('prod_summary_' + ordNo + '_gr4_3');
+                    diskCache.del(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo);
+                    diskCache.del('order_margin_v6_' + ordNo);
+                    orderMarginCache.delete(ordNo);
                     orderMarginInFlight.delete(ordNo);
                     afterCalcInFlight.delete(ordNo);
 

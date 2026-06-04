@@ -166,7 +166,7 @@ function createAftercalcService({
             const linkedFinishedRowsResult = await pool.request()
                 .input('ordNo', sql.Numeric, numericOrdNo)
                 .query(`
-                    SELECT OrdNo, TrInf4, ProdNo, TrTp, NoFin, Free3, CstPr
+                    SELECT OrdNo, TrInf4, ProdNo, TrTp, NoFin, Free3, CstPr, IncCst
                     FROM OrdLn
                     WHERE TrInf2 = CAST(@ordNo AS VARCHAR(20))
                       AND TrTp = 7
@@ -195,7 +195,7 @@ function createAftercalcService({
                 routeRowsRequest.input(`nest${i}`, sql.Numeric, ordNoValue);
             });
             const routeRowsResult = await routeRowsRequest.query(`
-                SELECT OrdNo, TrInf4, ProdNo, TrTp, NoFin, Free3, CstPr
+                SELECT OrdNo, TrInf4, ProdNo, TrTp, NoFin, Free3, CstPr, IncCst
                 FROM OrdLn
                 WHERE OrdNo IN (${ordPlaceholders})
                   AND TrTp IN (5, 7)
@@ -231,93 +231,131 @@ function createAftercalcService({
                 }
             }
 
-            const routeSheetStats = new Map();
-            const prodRouteKgStats = new Map();
+            // Per-product nestingOrdNos: una stampa di laser può condividere
+            // route (es. "04") con prodotti diversi su nesting orders diversi.
+            // Il popup /laser-route-metrics scopa il calcolo ai soli nesting
+            // orders che contengono il prodotto target → riproduciamo lo stesso
+            // qui, altrimenti la riga riga raddoppia/triplica i kg di lastre
+            // condivise con altri prodotti.
+            const nestingOrdNosByProd = new Map();
+            for (const row of rows) {
+                if (Number(row.TrTp) !== 7) continue;
+                const prodKey = String(row.ProdNo || '').trim().toUpperCase();
+                const ordKey = String(row.OrdNo || '').trim();
+                if (!prodKey || !ordKey) continue;
+                if (!nestingOrdNosByProd.has(prodKey)) nestingOrdNosByProd.set(prodKey, new Set());
+                nestingOrdNosByProd.get(prodKey).add(ordKey);
+            }
+
+            // Stat per (OrdNo, route) — una entry per ogni combinazione, così
+            // sheet e finished sono allineati esattamente come fa /laser-route-metrics.
+            const routeStatsByOrdRoute = new Map();
+            const finishedRowsByProd = new Map();
 
             for (const row of rows) {
                 const routeKey = String(row.TrInf4 || '').trim().toUpperCase();
-                const prodKey = String(row.ProdNo || '').trim().toUpperCase();
-                if (!routeKey) continue;
+                const ordKey = String(row.OrdNo || '').trim();
+                if (!routeKey || !ordKey) continue;
+                const statsKey = ordKey + '|' + routeKey;
 
-                if (!routeSheetStats.has(routeKey)) {
-                    routeSheetStats.set(routeKey, { sum: 0, count: 0, kgConsumati: 0, kgFiniti: 0 });
+                if (!routeStatsByOrdRoute.has(statsKey)) {
+                    routeStatsByOrdRoute.set(statsKey, { kgConsumati: 0, kgFiniti: 0, costoLastre: 0, cstPrSum: 0, cstPrCount: 0 });
                 }
+                const stats = routeStatsByOrdRoute.get(statsKey);
 
-                const routeStats = routeSheetStats.get(routeKey);
                 if (Number(row.TrTp) === 5) {
                     const cstPr = Number(row.CstPr || 0);
                     if (cstPr > 0) {
-                        routeStats.sum += cstPr;
-                        routeStats.count += 1;
+                        stats.cstPrSum += cstPr;
+                        stats.cstPrCount += 1;
                     }
-                    routeStats.kgConsumati += Number(row.NoFin || 0);
+                    stats.kgConsumati += Number(row.NoFin || 0);
+                    stats.costoLastre += Number(row.IncCst || 0);
                     continue;
                 }
 
-                if (Number(row.TrTp) === 7 && prodKey) {
+                if (Number(row.TrTp) === 7) {
+                    const prodKey = String(row.ProdNo || '').trim().toUpperCase();
                     const noFin = Number(row.NoFin || 0);
                     const free3ExpectedUnitWeight = normalizeExpectedWeight(row.Free3);
-                    const structExpectedUnitWeight = normalizeExpectedWeight(structMap.get(prodKey));
+                    const structExpectedUnitWeight = prodKey ? normalizeExpectedWeight(structMap.get(prodKey)) : 0;
                     const oldExpectedUnitWeight = free3ExpectedUnitWeight > 0
                         ? free3ExpectedUnitWeight
                         : structExpectedUnitWeight;
                     const oldKgProdotto = oldExpectedUnitWeight > 0 && noFin > 0
                         ? (oldExpectedUnitWeight * noFin)
                         : 0;
-                    routeStats.kgFiniti += oldKgProdotto;
+                    stats.kgFiniti += oldKgProdotto;
 
-                    if (oldKgProdotto > 0 && noFin > 0) {
-                        const key = routeKey + '|' + prodKey;
-                        const stats = prodRouteKgStats.get(key) || { oldKgProdottoSum: 0, qtySum: 0 };
-                        stats.oldKgProdottoSum += oldKgProdotto;
-                        stats.qtySum += noFin;
-                        prodRouteKgStats.set(key, stats);
+                    if (prodKey && oldKgProdotto > 0 && noFin > 0) {
+                        if (!finishedRowsByProd.has(prodKey)) finishedRowsByProd.set(prodKey, []);
+                        finishedRowsByProd.get(prodKey).push({ statsKey, routeKey, ordKey, noFin, oldKgProdotto });
                     }
                 }
             }
 
-            const avgSheetCstPrByRoute = new Map();
-            for (const [routeKey, stats] of routeSheetStats.entries()) {
-                if (stats.count > 0) {
-                    avgSheetCstPrByRoute.set(routeKey, Number(stats.sum / stats.count));
-                }
-            }
-
             const kgPerPieceByProdRoute = new Map();
+            const unitCostByProdRoute = new Map();
+            const totalCostByProdRoute = new Map();
+            const qtyByProdRoute = new Map();
+            const kgStatsByProdRoute = new Map();
+            const cstPrStatsByRoute = new Map();
             const unitCostByProd = new Map();
             const totalCostByProd = new Map();
             const qtyByProd = new Map();
-            const unitCostStatsByProd = new Map();
-            for (const [key, stats] of prodRouteKgStats.entries()) {
-                if (stats.qtySum <= 0) continue;
-                const [routeKey, prodKey] = key.split('|');
-                const routeStats = routeSheetStats.get(routeKey) || { kgConsumati: 0, kgFiniti: 0 };
-                const kgUtilizzatiEffettivi = routeStats.kgFiniti > 0
-                    ? ((stats.oldKgProdottoSum / routeStats.kgFiniti) * routeStats.kgConsumati)
-                    : 0;
-                const kgPerPiece = stats.qtySum > 0 ? Number(kgUtilizzatiEffettivi / stats.qtySum) : 0;
-                kgPerPieceByProdRoute.set(key, kgPerPiece);
 
-                const avgSheetCstPr = Number(avgSheetCstPrByRoute.get(routeKey) || 0);
-                if (avgSheetCstPr > 0 && kgPerPiece > 0 && prodKey) {
-                    const prodStats = unitCostStatsByProd.get(prodKey) || { costSum: 0, qtySum: 0 };
-                    prodStats.costSum += kgPerPiece * avgSheetCstPr * stats.qtySum;
-                    prodStats.qtySum += stats.qtySum;
-                    unitCostStatsByProd.set(prodKey, prodStats);
+            for (const [prodKey, finishedRows] of finishedRowsByProd.entries()) {
+                let totalCost = 0;
+                let totalQty = 0;
+                for (const fr of finishedRows) {
+                    const stats = routeStatsByOrdRoute.get(fr.statsKey);
+                    if (!stats || stats.kgFiniti <= 0) continue;
+                    if (stats.costoLastre <= 0) continue;
+                    const quotaCosto = (fr.oldKgProdotto / stats.kgFiniti) * stats.costoLastre;
+                    const kgUtilizzatiEffettivi = (fr.oldKgProdotto / stats.kgFiniti) * stats.kgConsumati;
+
+                    totalCost += quotaCosto;
+                    totalQty += fr.noFin;
+
+                    const routeProdKey = fr.routeKey + '|' + prodKey;
+                    totalCostByProdRoute.set(routeProdKey, (totalCostByProdRoute.get(routeProdKey) || 0) + quotaCosto);
+                    qtyByProdRoute.set(routeProdKey, (qtyByProdRoute.get(routeProdKey) || 0) + fr.noFin);
+                    const kgAcc = kgStatsByProdRoute.get(routeProdKey) || { kgUtilizzati: 0, qty: 0 };
+                    kgAcc.kgUtilizzati += kgUtilizzatiEffettivi;
+                    kgAcc.qty += fr.noFin;
+                    kgStatsByProdRoute.set(routeProdKey, kgAcc);
+
+                    if (stats.cstPrCount > 0) {
+                        const cs = cstPrStatsByRoute.get(fr.routeKey) || { sum: 0, count: 0 };
+                        cs.sum += stats.cstPrSum;
+                        cs.count += stats.cstPrCount;
+                        cstPrStatsByRoute.set(fr.routeKey, cs);
+                    }
+                }
+                if (totalQty > 0) {
+                    totalCostByProd.set(prodKey, totalCost);
+                    qtyByProd.set(prodKey, totalQty);
+                    unitCostByProd.set(prodKey, totalCost / totalQty);
                 }
             }
 
-            for (const [prodKey, stats] of unitCostStatsByProd.entries()) {
-                if (stats.qtySum > 0) {
-                    totalCostByProd.set(prodKey, Number(stats.costSum));
-                    unitCostByProd.set(prodKey, Number(stats.costSum / stats.qtySum));
-                    qtyByProd.set(prodKey, Number(stats.qtySum));
-                }
+            for (const [routeProdKey, totalCost] of totalCostByProdRoute.entries()) {
+                const qty = qtyByProdRoute.get(routeProdKey) || 0;
+                if (qty > 0) unitCostByProdRoute.set(routeProdKey, totalCost / qty);
+            }
+            for (const [routeProdKey, kgAcc] of kgStatsByProdRoute.entries()) {
+                if (kgAcc.qty > 0) kgPerPieceByProdRoute.set(routeProdKey, kgAcc.kgUtilizzati / kgAcc.qty);
+            }
+            const avgSheetCstPrByRoute = new Map();
+            for (const [routeKey, cs] of cstPrStatsByRoute.entries()) {
+                if (cs.count > 0) avgSheetCstPrByRoute.set(routeKey, cs.sum / cs.count);
             }
 
             return {
                 avgSheetCstPrByRoute,
                 kgPerPieceByProdRoute,
+                unitCostByProdRoute,
+                totalCostByProdRoute,
                 unitCostByProd,
                 totalCostByProd,
                 qtyByProd
@@ -347,8 +385,19 @@ function createAftercalcService({
             : '';
 
         if (routeKey) {
+            const routeProdKey = routeKey + '|' + prodKey;
+            const routeAllocatedUnitCost = Number((pricingData.unitCostByProdRoute && pricingData.unitCostByProdRoute.get(routeProdKey)) || 0);
+            if (routeAllocatedUnitCost > 0) {
+                return {
+                    unitCost: parseFloat(Number(routeAllocatedUnitCost).toFixed(6)),
+                    totalCost: qty > 0 ? parseFloat(Number(routeAllocatedUnitCost * qty).toFixed(2)) : null,
+                    allocatedQty,
+                    usesAllocationSpread: qtyMismatch,
+                    infoText: allocationInfoText
+                };
+            }
             const avgSheetCstPr = Number(pricingData.avgSheetCstPrByRoute.get(routeKey) || 0);
-            const kgPerPiece = Number(pricingData.kgPerPieceByProdRoute.get(routeKey + '|' + prodKey) || 0);
+            const kgPerPiece = Number(pricingData.kgPerPieceByProdRoute.get(routeProdKey) || 0);
             if (avgSheetCstPr > 0 && kgPerPiece > 0) {
                 const unitCost = parseFloat(Number(avgSheetCstPr * kgPerPiece).toFixed(6));
                 return {
@@ -607,11 +656,11 @@ function createAftercalcService({
                             ORDER BY LnNo
                         `);
 
-                    const needsSpecialLaserPricing = Boolean(useSpecialLaserCost) && (prodLinesResult.recordset || []).some(row => {
+                    const hasLaserLLines = (prodLinesResult.recordset || []).some(row => {
                         const key = (row.ProdTp4 === null || row.ProdTp4 === undefined) ? 'NA' : String(row.ProdTp4);
                         return key === '2' && isLaserLProduct(row.ProdNo);
                     });
-                    const specialLaserPricingData = needsSpecialLaserPricing
+                    const specialLaserPricingData = hasLaserLLines
                         ? await loadLaserRoutePricingData(pool, numericProdOrdNo).catch(() => null)
                         : null;
 
@@ -680,7 +729,7 @@ function createAftercalcService({
                             const costQty = isPurchasedPartLine(line) ? (noFinValue || noOrgValue) : ydelseCostInfo.effectiveQuantity;
                             effectiveLineCost = Number(costQty * ydelseSourceUnitCost);
                         } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
-                            specialLaserCostInfo = useSpecialLaserCost
+                            specialLaserCostInfo = specialLaserPricingData
                                 ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
                                 : null;
                             if (specialLaserCostInfo && specialLaserCostInfo.unitCost !== null) {
@@ -783,7 +832,7 @@ function createAftercalcService({
                 }
                 const prodOrder = prodOrderResult.recordset[0];
 
-                if (useRouteSpecificLaserCost && Array.isArray(prodDetails.lines) && prodDetails.lines.some(line => {
+                if (Array.isArray(prodDetails.lines) && prodDetails.lines.some(line => {
                     const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
                     return key === '2' && isLaserLProduct(line.ProdNo);
                 })) {
@@ -1022,11 +1071,11 @@ function createAftercalcService({
                 ORDER BY LnNo
             `);
 
-        const needsSpecialLaserPricing = Boolean(useSpecialLaserCost) && (linesResult.recordset || []).some(row => {
+        const hasLaserLLinesSales = (linesResult.recordset || []).some(row => {
             const key = (row.ProdTp4 === null || row.ProdTp4 === undefined) ? 'NA' : String(row.ProdTp4);
             return key === '2' && isLaserLProduct(row.ProdNo);
         });
-        const specialLaserPricingData = needsSpecialLaserPricing
+        const specialLaserPricingData = hasLaserLLinesSales
             ? await loadLaserRoutePricingData(pool, numericOrdNo).catch(() => null)
             : null;
 
@@ -1064,7 +1113,7 @@ function createAftercalcService({
                             : noFinValue));
                 const warningMessages = buildLineWarnings(line);
                 const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
-                const specialLaserCostInfo = (key === '2' && isLaserLProduct(line.ProdNo) && useSpecialLaserCost)
+                const specialLaserCostInfo = (key === '2' && isLaserLProduct(line.ProdNo) && specialLaserPricingData)
                     ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
                     : null;
                 if (specialLaserCostInfo && specialLaserCostInfo.unitCost !== null) {
