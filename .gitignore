@@ -17,3 +17,9 @@ Thumbs.db
 # Electron builder artifacts
 *.blockmap
 latest*.yml
+.tmp_*.json
+tmp_margin_*.json
+.server-*.log
+inspect_*.js
+_page_dump.html
+tmp_page.html

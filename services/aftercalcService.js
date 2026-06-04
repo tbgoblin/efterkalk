@@ -810,8 +810,21 @@ function createAftercalcService({
                 return detailsPromise;
             }
 
-            const productionOrderResults = [];
-            for (const prodLine of productionLinesResult.recordset) {
+            const PROD_ORDER_CONCURRENCY = 5;
+            async function runProdOrderTasks(items, worker) {
+                const out = new Array(items.length);
+                let next = 0;
+                async function pump() {
+                    while (true) {
+                        const i = next++;
+                        if (i >= items.length) return;
+                        out[i] = await worker(items[i]);
+                    }
+                }
+                await Promise.all(Array.from({ length: Math.min(PROD_ORDER_CONCURRENCY, items.length) }, pump));
+                return out;
+            }
+            const productionOrderResults = await runProdOrderTasks(productionLinesResult.recordset, async (prodLine) => {
                 const purcNo = prodLine.PurcNo;
 
                 const [prodOrderResult, prodDetails] = await Promise.all([
@@ -827,8 +840,7 @@ function createAftercalcService({
                 ]);
 
                 if (prodOrderResult.recordset.length === 0) {
-                    productionOrderResults.push(null);
-                    continue;
+                    return null;
                 }
                 const prodOrder = prodOrderResult.recordset[0];
 
@@ -864,7 +876,7 @@ function createAftercalcService({
                     }
                 }
 
-                productionOrderResults.push({
+                return {
                     ordNo: purcNo,
                     trTp: prodOrder.TrTp,
                     revenue: prodOrder.InvoAm || 0,
@@ -873,8 +885,8 @@ function createAftercalcService({
                     hasWarnings: Boolean(prodDetails.hasWarnings),
                     hasEstimatedOperationTime: Boolean(prodDetails.hasEstimatedOperationTime),
                     warningText: String(prodDetails.warningText || '')
-                });
-            }
+                };
+            });
             const productionOrders = productionOrderResults.filter(Boolean);
 
             const productionTotalByOrdNo = new Map(

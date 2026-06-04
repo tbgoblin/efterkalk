@@ -56,7 +56,7 @@ const BACKGROUND_WARM_INTERVAL_MS = 8 * 60 * 60 * 1000;
 const BACKGROUND_AFTERCALC_WARM_COUNT = ORDER_LIST_MAX_ROWS;  // Warm full aftercalc for ALL orders in the list so clicking is instant
 const BACKGROUND_WARM_DELAY_MS = 10;  // Small stagger between queue submissions to keep DB stable
 const MAX_DB_CALC_CONCURRENCY = 2;  // Controlled parallel DB calculations for faster startup warmup
-const AFTERCALC_QUERY_TIMEOUT_MS = 45 * 1000;
+const AFTERCALC_QUERY_TIMEOUT_MS = 4 * 60 * 1000;
 
 const orderListCache = {
     data: [],
