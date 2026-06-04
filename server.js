@@ -1109,13 +1109,19 @@ app.get('/', (req, res) => {
             .order-note-banner .note-body { flex:1; }
             .order-list-summary { margin-top:12px; margin-bottom:14px; background:#f7fbff; border:1px solid #d6e9ff; border-radius:8px; padding:10px 12px; font-size:13px; color:#0f3560; }
             .order-list-summary strong { color:#0d47a1; }
-            .access-gate-overlay { position: fixed; inset: 0; background: rgba(20, 26, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 12000; }
-            .access-gate-box { width: min(430px, 92vw); background: #ffffff; border-radius: 10px; padding: 22px; box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
-            .access-gate-box h3 { margin: 0 0 10px 0; border: none; padding: 0; color: #1f2937; }
-            .access-gate-box p { margin: 0 0 14px 0; color: #4b5563; }
-            .access-gate-row { display: flex; gap: 8px; }
-            .access-gate-row input { flex: 1; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 16px; }
-            .access-gate-row button { border: none; border-radius: 6px; background: #1565c0; color: #fff; font-weight: 700; padding: 9px 14px; cursor: pointer; }
+            .access-gate-overlay { position: fixed; inset: 0; background: radial-gradient(920px 320px at 12% -8%, rgba(46,125,50,0.22) 0%, rgba(46,125,50,0.02) 46%, transparent 72%), linear-gradient(135deg, rgba(8,26,48,0.78) 0%, rgba(18,56,95,0.84) 55%, rgba(14,41,71,0.9) 100%); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; z-index: 12000; }
+            .access-gate-box { width: min(500px, 92vw); background: linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); border: 1px solid #d8e8fb; border-radius: 16px; padding: 24px; box-shadow: 0 26px 52px rgba(3,14,28,0.34); }
+            .access-gate-brand { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+            .access-gate-brand h3 { margin:0; border:none; padding:0; color:#0f3560; font-size:24px; letter-spacing:0.01em; }
+            .access-gate-badge { font-size:11px; font-weight:800; color:#1f5e24; background:#e6f5e8; border:1px solid #b8dfbd; border-radius:999px; padding:4px 10px; }
+            .access-gate-box p { margin: 0 0 16px 0; color: #4b6380; font-size:13px; }
+            .access-gate-fields { display:flex; flex-direction:column; gap:10px; }
+            .access-gate-field label { display:block; margin:0 0 4px 1px; font-size:12px; color:#355675; font-weight:700; }
+            .access-gate-field input { width:100%; padding:10px 11px; border:1px solid #c9dbf2; border-radius:8px; font-size:15px; background:#fff; color:#173452; }
+            .access-gate-field input:focus { outline:none; border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.14); }
+            .access-gate-row { display: flex; gap: 8px; margin-top:14px; }
+            .access-gate-row button { border: none; border-radius: 999px; background: linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color: #fff; font-weight: 800; padding: 10px 18px; cursor: pointer; min-width:130px; margin-left:auto; }
+            .access-gate-row button:disabled { opacity:0.7; cursor:not-allowed; }
             .access-gate-error { margin-top: 10px; min-height: 18px; color: #b71c1c; font-weight: 600; font-size: 13px; }
             .main-dashboard { display:none; margin-bottom:16px; }
             .dashboard-shell { position:relative; overflow:hidden; background:radial-gradient(1100px 360px at 8% -12%, rgba(22,101,192,0.19) 0%, rgba(22,101,192,0.03) 40%, transparent 70%), linear-gradient(160deg, #ffffff 0%, #f3f8ff 62%, #edf4ff 100%); border:1px solid #d7e6fb; border-radius:16px; box-shadow:0 14px 30px rgba(15,53,96,0.10); padding:16px; }
@@ -1285,11 +1291,22 @@ app.get('/', (req, res) => {
     <body>
         <div id="accessGateOverlay" class="access-gate-overlay" style="display:flex;">
             <div class="access-gate-box">
-                <h3>Adgangskode</h3>
-                <p>Indtast kode for at se ordreliste og detaljer.</p>
+                <div class="access-gate-brand">
+                    <h3>Login Dashboard</h3>
+                </div>
+                <p>Indtast brugernavn og kode for at åbne dashboard og moduler.</p>
+                <div class="access-gate-fields">
+                    <div class="access-gate-field">
+                        <label for="accessGateUserInput">Brugernavn</label>
+                        <input id="accessGateUserInput" type="text" placeholder="fx Marco" autocomplete="off" />
+                    </div>
+                    <div class="access-gate-field">
+                        <label for="accessGateInput">Kode</label>
+                        <input id="accessGateInput" type="password" placeholder="Indtast kode" autocomplete="off" />
+                    </div>
+                </div>
                 <div class="access-gate-row">
-                    <input id="accessGateInput" type="password" placeholder="Kode" autocomplete="off" />
-                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn</button>
+                    <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn dashboard</button>
                 </div>
                 <div id="accessGateError" class="access-gate-error"></div>
             </div>
@@ -5832,13 +5849,24 @@ app.get('/', (req, res) => {
 
             function showAccessGate() {
                 const overlay = document.getElementById('accessGateOverlay');
+                const userInput = document.getElementById('accessGateUserInput');
                 const input = document.getElementById('accessGateInput');
                 const err = document.getElementById('accessGateError');
                 if (!overlay) return;
                 if (err) err.textContent = '';
+                if (userInput) {
+                    const currentName = sanitizeDisplayName(loggedUserDisplayName);
+                    if (!String(userInput.value || '').trim() && currentName && currentName !== 'Bruger') {
+                        userInput.value = currentName;
+                    }
+                }
                 overlay.style.display = 'flex';
                 refreshSideMenuAuthState();
                 setTimeout(() => {
+                    if (userInput && !String(userInput.value || '').trim()) {
+                        userInput.focus();
+                        return;
+                    }
                     if (input) input.focus();
                 }, 30);
             }
@@ -5851,9 +5879,11 @@ app.get('/', (req, res) => {
             }
 
             function submitAccessCode() {
+                const userInput = document.getElementById('accessGateUserInput');
                 const input = document.getElementById('accessGateInput');
                 const err = document.getElementById('accessGateError');
                 const btn = document.getElementById('accessGateBtn');
+                const userName = sanitizeDisplayName(userInput ? userInput.value : '');
                 const value = input ? String(input.value || '').trim() : '';
                 if (value !== ACCESS_CODE) {
                     if (err) err.textContent = 'Forkert kode.';
@@ -5872,6 +5902,9 @@ app.get('/', (req, res) => {
 
                 setTimeout(() => {
                     try {
+                        if (userName && userName !== 'Bruger') {
+                            setLoggedUserDisplayName(userName);
+                        }
                         accessGranted = true;
                         hideAccessGate();
                         refreshSideMenuAuthState();
@@ -5890,7 +5923,12 @@ app.get('/', (req, res) => {
             }
 
             function initializeAfterAccess() {
+                startWarmupPolling();
                 loadOrderList(false);
+                // Trigger fresh rebuild/warmup only after access is granted (dashboard flow).
+                setTimeout(() => {
+                    loadOrderList(true);
+                }, 250);
                 setTimeout(() => {
                     if (!orderListData || orderListData.length === 0) {
                         loadOrderList(true);
@@ -6504,7 +6542,7 @@ app.get('/', (req, res) => {
 
                         // Keep warmup hidden on initial dashboard screen, unless user explicitly triggered cache reset.
                         if (dashWrap) {
-                            const shouldShowDashWarmup = showDashboardWarmupNotice && (d.running || !readyCombined || totalCombined > 0);
+                            const shouldShowDashWarmup = d.running || (!readyCombined && totalCombined > 0) || showDashboardWarmupNotice;
                             dashWrap.classList.toggle('hidden', !shouldShowDashWarmup);
                         }
 
@@ -6557,8 +6595,6 @@ app.get('/', (req, res) => {
                     }
                 }, 800);
             }
-            startWarmupPolling();
-
             function updateSystemStatusFromOrders(orders) {
                 if (!orders || orders.length === 0) {
                     setSystemStatus('System klar', '#e8f5e9', '#1b5e20');
@@ -9372,6 +9408,19 @@ app.get('/', (req, res) => {
                         }
                     });
                 }
+                const accessGateUserInput = document.getElementById('accessGateUserInput');
+                if (accessGateUserInput) {
+                    accessGateUserInput.addEventListener('keydown', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            const codeInput = document.getElementById('accessGateInput');
+                            if (codeInput) {
+                                codeInput.focus();
+                                codeInput.select();
+                            }
+                        }
+                    });
+                }
                 const sideMenuLoginInput = document.getElementById('sideMenuLoginInput');
                 if (sideMenuLoginInput) {
                     sideMenuLoginInput.addEventListener('keydown', function(event) {
@@ -9477,18 +9526,9 @@ function ensureServerStarted() {
                     // Preload margins AND aftercalc details from disk (instant load)
                     const preloadOrdNos = cachedList.slice(0, STARTUP_MARGIN_WARM_COUNT).map(r => r.OrdNo);
                     preloadMarginsAndDetailsFromCache(preloadOrdNos);
-
-                    // Warm up margins in background (will check disk first, then refresh if needed)
-                    warmMarginsInBackground(preloadOrdNos);
-                    
-                    // Refresh from DB in background (don't block startup)
-                    refreshOrderListCache(true).catch(err => {
-                        logEvent('WARNING: background DB refresh failed: ' + err.message);
-                    });
                 } else {
-                    // No cache: load from DB (fresh startup)
-                    await refreshOrderListCache(true);
-                    logEvent('Cache primed from database (first startup)');
+                    // No cache: defer DB fetch until dashboard/open-after-access flow.
+                    logEvent('No disk cache found: DB warmup deferred until dashboard access');
                 }
 
                 logEvent('Cache primed: order list loaded and ready');
