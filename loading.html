@@ -266,11 +266,10 @@
             }
         }, 1400);
 
-        // Phase 1: Poll /health — wait for server
-        // Phase 2: Poll /warmup-status — show real startup progress and navigate only when fully ready
+        // Poll /health and open the dashboard as soon as the app is reachable.
+        // Background warmup continues from inside the dashboard UI.
         let pollCount = 0;
         let serverReady = false;
-        let warmupPollCount = 0;
 
         function navigateToApp() {
             if (navigationRequested) return;
@@ -290,43 +289,14 @@
             pollCount++;
             try {
                 if (!serverReady) {
-                    // Phase 1: wait for server
                     const r = await fetch(appUrl + '/health', { cache: 'no-store' });
                     if (r.ok) {
                         serverReady = true;
                         clearInterval(timer);
                         bar.style.width = '30%';
-                        txt.textContent = 'Forberegner ordrer...';
-                    }
-                } else {
-                    // Phase 2: show real startup progress (aftercalc + margin prefetch)
-                    warmupPollCount++;
-                    const r = await fetch(appUrl + '/warmup-status', { cache: 'no-store' });
-                    if (r.ok) {
-                        const data = await r.json();
-                        const combinedDone = Number(data.combinedDone || 0);
-                        const combinedTotal = Number(data.combinedTotal || 0);
-                        const combinedPct = Number(data.combinedPct || 0);
-                        const marginDone = Number(data.marginDone || 0);
-                        const marginTotal = Number(data.marginTotal || 0);
-
-                        if (combinedTotal > 0) {
-                            const pct = Math.round(30 + (combinedPct / 100) * 65);
-                            bar.style.width = Math.min(pct, 95) + '%';
-                            pctEl.textContent = Math.min(pct, 95) + '%';
-                            txt.textContent = 'Forberegner: ' + combinedDone + '/' + combinedTotal + ' (margin ' + marginDone + '/' + marginTotal + ')';
-                        } else {
-                            bar.style.width = '35%';
-                            pctEl.textContent = '35%';
-                            txt.textContent = 'Forbereder ordreliste...';
-                        }
-
-                        const warmupFinished = Boolean(data.ready);
-                        if (warmupFinished) {
-                            navigateToApp();
-                        }
-                    } else {
-                        txt.textContent = 'Venter pa startup-status...';
+                        pctEl.textContent = '30%';
+                        txt.textContent = 'Åbner dashboard...';
+                        navigateToApp();
                     }
                 }
             } catch(e) {

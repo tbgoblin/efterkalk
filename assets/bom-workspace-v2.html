@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BOMe+ Beta - Gantech</title>
+    <style>
+        :root {
+            --bg: #eef4fb;
+            --card: #ffffff;
+            --line: #d4e1f0;
+            --line-2: #e7eef7;
+            --ink: #11375b;
+            --muted: #587493;
+            --brand: #1565c0;
+            --brand-2: #0f3560;
+            --green: #2e7d32;
+            --amber: #a96a00;
+            --shadow: 0 14px 30px rgba(15, 53, 96, 0.10);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Sora", "Segoe UI Variable", "Segoe UI", sans-serif;
+            color: var(--ink);
+            background: linear-gradient(165deg, #f9fbff 0%, var(--bg) 100%);
+        }
+        .wrap { max-width: 1600px; margin: 0 auto; padding: 18px; }
+        .hero {
+            border-radius: 20px;
+            background: linear-gradient(135deg, var(--brand-2) 0%, #155988 56%, #1f7b72 100%);
+            color: #fff;
+            padding: 22px 24px;
+            box-shadow: 0 20px 48px rgba(15, 53, 96, 0.28);
+        }
+        .hero h1 { margin: 0; font-size: 30px; }
+        .hero p { margin: 10px 0 0 0; max-width: 920px; font-size: 14px; }
+        .metrics {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .metric-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+        .metric-label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+        .metric-value { margin-top: 8px; font-size: 28px; font-weight: 800; }
+        .metric-meta { margin-top: 4px; font-size: 12px; color: var(--muted); }
+        .workspace {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr);
+            gap: 14px;
+        }
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--line);
+            background: linear-gradient(180deg, #fbfdff, #f2f7ff);
+        }
+        .panel-head h2, .panel-head h3 { margin: 0; font-size: 14px; }
+        .panel-head small { color: var(--muted); }
+        .nav-list { padding: 10px; display: grid; gap: 8px; }
+        .nav-btn {
+            text-align: left;
+            border: 1px solid var(--line);
+            background: linear-gradient(180deg, #fff, #f6faff);
+            color: var(--ink);
+            border-radius: 14px;
+            padding: 12px;
+            cursor: pointer;
+        }
+        .nav-btn.active {
+            border-color: transparent;
+            background: linear-gradient(180deg, var(--brand), var(--brand-2));
+            color: #fff;
+        }
+        .nav-btn strong { display: block; margin-bottom: 4px; }
+        .nav-btn span { display: block; font-size: 12px; opacity: 0.88; }
+        .left-pad { padding: 12px; display: grid; gap: 12px; }
+        .mini-note {
+            border: 1px solid var(--line-2);
+            border-radius: 14px;
+            background: #f8fbff;
+            padding: 12px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+        .mini-note strong { display: block; margin-bottom: 6px; color: var(--ink); }
+        .content-pad { padding: 14px; }
+        .view { display: none; }
+        .view.active { display: block; }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 12px;
+            border: 1px solid var(--line-2);
+            border-radius: 12px;
+            background: #f8fbff;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 12px; }
+        .field { display: grid; gap: 6px; min-width: 160px; flex: 1; }
+        .field label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+        input, select, button { font: inherit; border-radius: 10px; border: 1px solid #bfd0e6; padding: 9px 11px; }
+        button { border: 0; color: #fff; cursor: pointer; font-weight: 700; background: linear-gradient(180deg, var(--brand), var(--brand-2)); }
+        button.alt { background: linear-gradient(180deg, #6581a2, #456382); }
+        .board-grid {
+            display: grid;
+            grid-template-columns: 320px minmax(0, 1fr) minmax(320px, 0.95fr);
+            gap: 12px;
+        }
+        .list-panel, .detail-panel, .table-shell {
+            border: 1px solid var(--line-2);
+            border-radius: 16px;
+            background: #fff;
+            overflow: hidden;
+        }
+        .subhead {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--line-2);
+            background: linear-gradient(180deg, #fbfdff, #f2f7ff);
+        }
+        .scroll, .table-wrap { max-height: 620px; overflow: auto; }
+        .list-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--line-2);
+            cursor: pointer;
+        }
+        .list-item.active { background: #eaf4ff; }
+        .list-item strong { display: block; margin-bottom: 4px; }
+        .list-item span { display: block; font-size: 12px; color: var(--muted); }
+        .detail-pad { padding: 12px; display: grid; gap: 12px; }
+        .kv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .kv {
+            border: 1px solid var(--line-2);
+            border-radius: 12px;
+            background: #fbfdff;
+            padding: 10px;
+        }
+        .kv label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; font-weight: 800; margin-bottom: 5px; }
+        .kv div { font-size: 13px; font-weight: 700; word-break: break-word; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        thead th {
+            position: sticky; top: 0; z-index: 1;
+            background: #edf4ff; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
+        }
+        tbody td { padding: 8px 10px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+        .overview-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 14px; }
+        .stack { display: grid; gap: 14px; }
+        .flow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .flow-card {
+            border: 1px solid var(--line-2);
+            border-radius: 16px;
+            padding: 14px;
+            background: linear-gradient(180deg, #ffffff, #f7fbff);
+        }
+        .chip-row { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip { border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 700; background: #edf5ff; color: #355675; border: 1px solid #d2e1f4; }
+        .chip.warn { background: #fff6e6; color: var(--amber); border-color: #f0ddb3; }
+        .empty { padding: 30px 16px; color: var(--muted); font-size: 13px; text-align: center; }
+        .list-item.draft { background: #f1f9ff; }
+        .list-item .tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #0f4f87;
+            border: 1px solid #b9d8f7;
+            background: #e6f3ff;
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 16, 30, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            z-index: 40;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            width: min(700px, 96vw);
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: #fff;
+            box-shadow: 0 24px 60px rgba(9, 30, 56, 0.35);
+            overflow: hidden;
+        }
+        .modal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--line-2);
+            background: linear-gradient(180deg, #fbfdff, #f2f7ff);
+        }
+        .modal-body { padding: 14px; display: grid; gap: 12px; }
+        .modal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .muted { color: var(--muted); font-size: 12px; }
+        .modal-actions { display: flex; justify-content: end; gap: 8px; }
+        .tree { padding: 10px 12px; font-size: 13px; }
+        .tree-node { border: 1px solid var(--line-2); border-radius: 12px; padding: 9px 11px; margin-bottom: 8px; background: #fbfdff; }
+        .tree-node.parent { background: #eaf4ff; border-color: #bcd8f5; }
+        .tree-node .tree-kind { display: inline-block; margin-right: 8px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; background: #e6f3ff; color: #0f4f87; border: 1px solid #b9d8f7; }
+        .tree-node .tree-kind.route { background: #fff6e6; color: var(--amber); border-color: #f0ddb3; }
+        .tree-node .tree-kind.laser { background: #e9f9ef; color: var(--green); border-color: #bfe7cc; }
+        .tree-children { margin: 8px 0 0 22px; }
+        .note-item { padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 12px; }
+        .sub-editor { border: 1px solid var(--line-2); border-radius: 12px; background: #f8fbff; padding: 10px; display: grid; gap: 8px; }
+        .sub-row { display: grid; grid-template-columns: 1.4fr 1.2fr 1.2fr auto auto; gap: 6px; align-items: center; }
+        .sub-row input { padding: 7px 9px; font-size: 12px; }
+        .sub-row .laser-check { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+        .sub-row button { padding: 6px 10px; font-size: 12px; }
+        .calc-grid { display: grid; grid-template-columns: minmax(520px, 1fr) minmax(560px, 1fr); gap: 18px; align-items: start; }
+        #view-beregner .stack { gap: 16px; }
+        #view-beregner .table-shell { border-radius: 14px; }
+        #view-beregner .detail-pad { gap: 14px; }
+        .calc-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .calc-form .full { grid-column: 1 / -1; }
+        .viewer-box { border: 1px solid var(--line-2); border-radius: 12px; padding: 10px; background: #fff; }
+        .viewer-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-bottom: 8px; }
+        .viewer-toolbar .field { min-width: 120px; flex: 0 0 auto; }
+        .viewer-canvas { width: 100%; height: auto; border-radius: 8px; background: #0e1722; border: 1px solid #26374a; cursor: crosshair; }
+        .live-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+        .live-row label { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); font-weight: 600; }
+        .result-box { border: 1px solid var(--line-2); border-radius: 14px; background: #fbfdff; padding: 12px; }
+        .result-box h4 { margin: 0 0 8px 0; font-size: 13px; }
+        .price-big { font-size: 26px; font-weight: 800; color: var(--brand-2); }
+        .picker { position: relative; }
+        .picker input { width: 100%; }
+        .picker-list {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 200;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            max-height: 260px;
+            overflow: auto;
+            box-shadow: 0 18px 40px rgba(9, 30, 56, 0.22);
+            display: none;
+        }
+        /* paneler med søge-dropdown må ikke klippe listen */
+        .table-shell:has(.picker-list), .detail-panel:has(.picker-list), .modal:has(.picker-list) { overflow: visible; }
+        .picker-list.open { display: block; }
+        .picker-item { padding: 8px 11px; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--line-2); }
+        .picker-item:last-child { border-bottom: 0; }
+        .picker-item:hover { background: #eaf4ff; }
+        .picker-item small { display: block; color: var(--muted); }
+        .picker-chosen { margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--brand-2); }
+        .proc-card { border: 1px solid var(--line-2); border-radius: 12px; background: #fbfdff; overflow: visible; }
+        .proc-card.on { border-color: #8fbdea; background: #f0f7ff; }
+        .proc-head { display: flex; gap: 10px; align-items: center; padding: 10px 12px; cursor: pointer; font-weight: 700; font-size: 13px; }
+        .proc-head input[type=checkbox] { width: 16px; height: 16px; }
+        .proc-head .proc-res-label { font-weight: 400; font-size: 11px; color: var(--muted); }
+        .proc-body { display: none; padding: 0 12px 12px; gap: 8px; }
+        .proc-card.on .proc-body { display: grid; }
+        .proc-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .comp-lines { display: grid; gap: 4px; margin-top: 8px; }
+        .comp-line { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line-2); font-size: 12px; background: #fff; border-radius: 8px; }
+        @media (max-width: 1300px) {
+            .calc-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 1300px) {
+            .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .board-grid, .overview-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 980px) {
+            .workspace { grid-template-columns: 1fr; }
+            .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .kv-grid, .flow-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <section class="hero">
+            <h1>BOMe+ <small style="font-size: 0.6em; color: #f2a33c; font-weight: bold;">Beta</small></h1>
+            <p>Tilbuds- og styklisteberegner på linje med BOM-regnearket: kunde-, produkt- og revisionsopslag, råvarer med lager, ressourcer og priskalkulation for laser, buk, svejs, flad og stykliste. Alt er læsning — der skrives aldrig til Visma.</p>
+        </section>
+
+        <section class="metrics">
+            <div class="metric-card"><div class="metric-label">Kunder</div><div class="metric-value" id="metricCustomers">-</div><div class="metric-meta">Actor-katalog</div></div>
+            <div class="metric-card"><div class="metric-label">Produkter</div><div class="metric-value" id="metricProducts">-</div><div class="metric-meta">For valgt kunde</div></div>
+            <div class="metric-card"><div class="metric-label">Revisioner</div><div class="metric-value" id="metricRevisions">-</div><div class="metric-meta">TgNo-opslag</div></div>
+            <div class="metric-card"><div class="metric-label">Ressourcer</div><div class="metric-value" id="metricResources">-</div><div class="metric-meta">Maskiner og processer</div></div>
+            <div class="metric-card"><div class="metric-label">Materialer</div><div class="metric-value" id="metricMaterials">-</div><div class="metric-meta">Råvarer</div></div>
+            <div class="metric-card"><div class="metric-label">Parametre</div><div class="metric-value" id="metricCalculators">-</div><div class="metric-meta">Laser/Buk/Svejs/Flad</div></div>
+        </section>
+
+        <section class="workspace">
+            <aside class="panel">
+                <div class="panel-head"><h2>Områder</h2><small id="cachePill">Cache: klar</small></div>
+                <div class="nav-list" id="navList"></div>
+                <div class="left-pad">
+                    <div class="mini-note"><strong>Kun læsning</strong>Der skrives aldrig til Visma. Revision, PDF-eksport og eksterne automatiseringer er bevidst holdt udenfor.</div>
+                    <div class="mini-note"><strong>Forespørgsler fra regnearket</strong>Kunder, materialer og opslag bruger de samme forespørgsler som BOM.xlsm.</div>
+                </div>
+            </aside>
+
+            <main class="panel">
+                <div class="panel-head">
+                    <div><h2 id="viewTitle">Overview</h2><small id="viewSubtitle">Workbook flow</small></div>
+                    <button type="button" class="alt" id="invalidateBtn">Ryd aktiv cache</button>
+                </div>
+                <div class="content-pad">
+                    <div class="status-bar"><span id="statusText">Klar</span><strong id="countText">0 rækker</strong></div>
+
+                    <section class="view active" id="view-overview">
+                        <div class="overview-grid">
+                            <div class="stack">
+                                <div class="table-shell">
+                                    <div class="panel-head"><h3>Arbejdsgang</h3><small>BOM-regnearkets flow</small></div>
+                                    <div class="content-pad">
+                                        <div class="flow-grid">
+                                            <div class="flow-card"><strong>1. Kunder / Produkter / TgNo</strong><div>Nøgleopslag for kunde, produkt og revision — som i regnearket.</div><div class="chip-row"><span class="chip">Actor</span><span class="chip">Prod</span></div></div>
+                                            <div class="flow-card"><strong>2. Råvarer</strong><div>Materialer fra råvarer-arkets forespørgsel med lagerstatus.</div><div class="chip-row"><span class="chip">Prod</span><span class="chip">Txt</span><span class="chip">StcBal</span></div></div>
+                                            <div class="flow-card"><strong>3. Ressourcer</strong><div>Ressource- og rutekatalog med kost- og salgssatser pr minut.</div><div class="chip-row"><span class="chip">BgtLn</span><span class="chip">PrDcMat</span></div></div>
+                                            <div class="flow-card"><strong>4. Beregner</strong><div>Fil-analyse, nesting med rest-bevaring, prisberegning og prismatrix — laser, buk, svejs, flad og stykliste.</div><div class="chip-row"><span class="chip warn">Beta v1.1</span></div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="stack">
+                                <div class="table-shell">
+                                    <div class="panel-head"><h3>Kontekst</h3><small>Valgt tilstand</small></div>
+                                    <div class="detail-pad">
+                                        <div class="kv-grid">
+                                            <div class="kv"><label>Kunde</label><div id="ctxCustomer">Ikke valgt</div></div>
+                                            <div class="kv"><label>Varenr.</label><div id="ctxCustomerCode">Ikke valgt</div></div>
+                                            <div class="kv"><label>Produkt</label><div id="ctxProduct">Ikke valgt</div></div>
+                                            <div class="kv"><label>TgNo</label><div id="ctxTgn">Ikke valgt</div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="view" id="view-stykliste">
+                        <div class="toolbar">
+                            <div class="field"><label>Kunde filter</label><input id="customerSearchInput" placeholder="søg kunde nr / navn" /></div>
+                            <div class="field"><label>Valgt kunde</label><select id="customerSelect"></select></div>
+                            <div class="field"><label>Produktsøgning (live)</label><input id="productSearchInput" placeholder="skriv varenr, tekst eller tgno" /></div>
+                            <div class="field"><label>TgNo</label><input id="tgnInput" placeholder="fx 1013300026L" /></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadStyklisteBtn">Hent stykliste-data</button></div>
+                            <div class="field" style="flex:0 0 220px;"><label>&nbsp;</label><button type="button" class="alt" id="openDraftProductBtn">Nyt produkt (lokal)</button></div>
+                        </div>
+                        <div class="board-grid">
+                            <div class="list-panel"><div class="subhead"><strong>Kunder</strong><small id="customersMeta">-</small></div><div class="scroll" id="customersList"></div></div>
+                            <div class="list-panel"><div class="subhead"><strong>Produkter</strong><small id="productsMeta">Vælg kunde</small></div><div class="scroll" id="productsList"></div></div>
+                            <div class="detail-panel">
+                                <div class="subhead"><strong>Revision / produktdetalje</strong><small id="revisionsMeta">Ingen valgt</small></div>
+                                <div class="detail-pad">
+                                    <div class="kv-grid" id="productDetailGrid"></div>
+                                    <div class="table-shell"><div class="subhead"><strong>Produkt-træ (underniveauer)</strong><small id="treeMeta">-</small></div><div class="tree" id="productTree"><div class="empty">Vælg et produkt for at se træet.</div></div></div>
+                                    <div class="table-shell"><div class="subhead"><strong>Revisioner</strong><small id="revisionsCountMeta">0 rækker</small></div><div class="table-wrap"><table><thead id="revisionsHead"></thead><tbody id="revisionsBody"></tbody></table></div></div>
+                                    <div class="table-shell"><div class="subhead"><strong>Kundenoter (BOM-instruktioner)</strong><small id="notesMeta">-</small></div><div class="scroll" id="customerNotesList" style="max-height:220px;"><div class="empty">Vælg en kunde.</div></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="view" id="view-komponenter">
+                        <div class="toolbar">
+                            <div class="field"><label>Komponentsøgning</label><input id="componentsSearchInput" placeholder="fx bolt, møtrik, varenr" /></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadComponentsBtn">Hent komponenter</button></div>
+                        </div>
+                        <div class="table-shell"><div class="table-wrap"><table><thead id="componentsHead"></thead><tbody id="componentsBody"></tbody></table></div></div>
+                    </section>
+
+                    <section class="view" id="view-resources">
+                        <div class="toolbar"><div class="field"><label>Ressourcefilter</label><input id="resourcesSearchInput" placeholder="laser, buk, svejs, flad, R21" /></div><div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadResourcesBtn">Opdater ressourcer</button></div></div>
+                        <div class="table-shell"><div class="table-wrap"><table><thead id="resourcesHead"></thead><tbody id="resourcesBody"></tbody></table></div></div>
+                    </section>
+
+                    <section class="view" id="view-materials">
+                        <div class="toolbar"><div class="field"><label>Materialesøgning</label><input id="materialsSearchInput" placeholder="fx rustfri, dc01, 3,0, 3010" /></div><div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadMaterialsBtn">Hent materialer</button></div></div>
+                        <div class="table-shell"><div class="table-wrap"><table><thead id="materialsHead"></thead><tbody id="materialsBody"></tbody></table></div></div>
+                    </section>
+
+                    <section class="view" id="view-calculators">
+                        <div class="toolbar">
+                            <div class="field"><label>Lasermaskine</label><input id="laserMachineInput" value="R1100" placeholder="R1100, R1103..." /></div>
+                            <div class="field"><label>Procesfamilie</label><select id="processFilterSelect"><option value="">Alle</option><option value="laser">Laser</option><option value="buk">Buk</option><option value="svejs">Svejs</option><option value="flad">Flad</option></select></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadCalculatorsBtn">Hent parametre</button></div>
+                        </div>
+                        <div class="stack">
+                            <div class="table-shell"><div class="subhead"><strong>Laser parametre</strong><small>FreeInf2 FrInfTp=100</small></div><div class="table-wrap"><table><thead id="laserHead"></thead><tbody id="laserBody"></tbody></table></div></div>
+                            <div class="table-shell"><div class="subhead"><strong>Process matrix</strong><small>FreeInf1 FrInfTp 61/62</small></div><div class="table-wrap"><table><thead id="processHead"></thead><tbody id="processBody"></tbody></table></div></div>
+                            <div class="table-shell"><div class="subhead"><strong>Process resources</strong><small>Laser / Buk / Svejs / Flad fra resource catalog</small></div><div class="table-wrap"><table><thead id="processResourceHead"></thead><tbody id="processResourceBody"></tbody></table></div></div>
+                        </div>
+                    </section>
+
+                    <section class="view" id="view-beregner">
+                        <div class="calc-grid">
+                            <div class="stack">
+                                <div class="table-shell">
+                                    <div class="subhead"><strong>1. Kunde &amp; pristype</strong><small>valgfrit — indstilling huskes pr kunde</small></div>
+                                    <div class="detail-pad">
+                                        <div class="calc-form">
+                                            <div class="field full picker"><label>Kunde (søg)</label><input id="calcCustomerSearch" placeholder="skriv kundenavn eller nr..." autocomplete="off" /><div class="picker-list" id="calcCustomerList"></div><div class="picker-chosen" id="calcCustomerChosen">Ingen kunde valgt — standard prisliste</div><div class="picker-chosen muted" id="calcCustomerPriceInfo">Kundens prisliste: -</div><div class="picker-chosen muted" id="calcCustomerProductInfo">Seneste produktnr: - · Næste forslag: -</div></div>
+                                            <div class="field"><label>Pristype</label><select id="calcPriceBasis"><option value="sale">Salgspris (m. avance)</option><option value="cost">Kostpris (u. avance)</option></select></div>
+                                            <div class="field"><label>Laseropstart (pr ordre)</label><div style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="calcLaserOpstartChk" checked style="width:auto; margin:0;" /><input id="calcLaserOpstartMin" type="number" step="1" min="0" value="15" style="flex:1;" /><span class="muted" style="white-space:nowrap;">min</span></div></div>
+                                            <div class="field"><label>Minimumsbeløb (dkk pr ordre)</label><input id="calcMinAmount" type="number" step="50" min="0" value="0" /></div>
+                                            <div class="field"><label>Minimum antal (stk)</label><input id="calcMinQty" type="number" step="1" min="0" value="0" /></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-shell">
+                                    <div class="subhead"><strong>2. Plade / materiale</strong><small>søg som i Excel — med lagerstatus</small></div>
+                                    <div class="detail-pad">
+                                        <div class="calc-form">
+                                            <div class="field"><label>Filter: tykkelse (mm)</label><input id="calcThicknessFilter" type="number" step="0.05" min="0" placeholder="alle" /></div>
+                                            <div class="field"><label>Filter: lager</label><label style="display:flex; gap:8px; align-items:center; font-weight:400; text-transform:none; letter-spacing:0; font-size:13px; color:inherit; cursor:pointer;"><input type="checkbox" id="calcOnlyStock" style="width:auto; margin:0;" /> Kun varer på lager</label></div>
+                                            <div class="field full picker"><label>Søg plade (varenr, kvalitet, tykkelse, format)</label><input id="calcMaterialSearch" placeholder="skriv fx rustfri 3,0 eller dc01 1,25 3000..." autocomplete="off" /><div class="picker-list" id="calcMaterialList"></div><div class="picker-chosen" id="calcMaterialChosen">Ingen plade valgt</div></div>
+                                            <div class="field full"><label style="display:flex; gap:8px; align-items:center; font-weight:600; text-transform:none; letter-spacing:0; font-size:13px; color:inherit; cursor:pointer;"><input type="checkbox" id="calcUseCustomSheet" style="width:auto; margin:0;" /> Tilpasset plade (brug egne mål i pris og nesting)</label></div>
+                                            <div class="field"><label>Tilpasset plade bredde (mm)</label><input id="calcCustomSheetW" type="number" min="1" step="1" value="1500" disabled /></div>
+                                            <div class="field"><label>Tilpasset plade længde (mm)</label><input id="calcCustomSheetL" type="number" min="1" step="1" value="3000" disabled /></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-shell">
+                                    <div class="subhead"><strong>3. Emne</strong><small>upload tegning eller indtast manuelt</small></div>
+                                    <div class="detail-pad">
+                                        <div class="field"><label>Tegningsfil (DXF / STEP / PDF)</label><input type="file" id="drawingFileInput" accept=".dxf,.step,.stp,.pdf" /></div>
+                                        <div class="muted" id="fileAnalysisStatus">Ingen fil — udfyld felterne manuelt.</div>
+                                        <div class="kv-grid" id="fileAnalysisGrid"></div>
+                                        <div class="calc-form" style="margin-top:10px;">
+                                            <div class="field"><label>Emnebredde (mm)</label><input id="calcPieceW" type="number" step="0.1" value="100" /></div>
+                                            <div class="field"><label>Emnelængde (mm)</label><input id="calcPieceL" type="number" step="0.1" value="200" /></div>
+                                            <div class="field"><label>Antal (stk)</label><input id="calcQty" type="number" min="1" value="1" /></div>
+                                            <div class="field"><label>Skærelængde (m pr emne)</label><input id="calcCutLength" type="number" step="0.01" value="0.6" /></div>
+                                            <div class="field"><label>Piercings</label><input id="calcPiercings" type="number" min="0" value="1" /></div>
+                                            <div class="field"><label>Kant-margin (mm)</label><input id="calcMargin" type="number" step="1" value="10" /></div>
+                                            <div class="field"><label>Afstand mellem emner (mm)</label><input id="calcGap" type="number" step="1" value="5" /></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-shell">
+                                    <div class="subhead"><strong>4. Processer</strong><small>aktivér som i Excel — tider, satser og opstart kan rettes</small></div>
+                                    <div class="detail-pad">
+                                        <div class="stack" id="processCards" style="gap:8px;"></div>
+                                        <div class="calc-form">
+                                            <div class="field"><label>Prismatrix-trin (antal)</label><input id="calcMatrixTiers" value="1, 5, 10, 25, 50, 100" /></div>
+                                            <div class="field"><label>Nesting-visning (antal plader)</label><input id="calcPreviewSheets" type="number" min="1" max="6" step="1" value="3" /></div>
+                                        </div>
+                                        <div class="live-row">
+                                            <label><input type="checkbox" id="calcLiveUpdateChk" checked style="width:auto; margin:0;" /> Live-opdatering ved ændringer</label>
+                                            <small class="muted">Pris, nesting og matrix opdateres automatisk</small>
+                                        </div>
+                                        <div style="display:flex; gap:8px;">
+                                            <button type="button" id="runQuoteBtn" style="flex:1;">Beregn pris</button>
+                                            <button type="button" class="alt" id="resetQuoteBtn" style="flex:0 0 160px;">Ny beregning</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="stack">
+                                <div class="table-shell">
+                                    <div class="subhead"><strong>DXF-visning</strong><small id="dxfViewerMeta">2D forhåndsvisning og måling</small></div>
+                                    <div class="detail-pad">
+                                        <div class="viewer-box">
+                                            <div class="viewer-toolbar">
+                                                <div class="field" style="min-width:260px;"><label>Måling</label><div class="muted" id="dxfMeasureInfo">Klik på to punkter i konturen for at måle afstand (mm)</div></div>
+                                                <div class="field" style="max-width:180px;"><label>&nbsp;</label><button type="button" class="alt" id="dxfMeasureResetBtn">Nulstil måling</button></div>
+                                            </div>
+                                            <canvas id="dxfViewerCanvas" class="viewer-canvas" width="640" height="280"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="result-box">
+                                    <h4>Pris-resultat</h4>
+                                    <div class="price-big" id="quotePriceBig">-</div>
+                                    <div class="muted" id="quoteStatus">Følg trin 1-4 og tryk Beregn pris.</div>
+                                </div>
+                                <div class="table-shell"><div class="subhead"><strong>Nesting på pladen</strong><small id="nestingMeta">-</small></div><div class="detail-pad"><div class="calc-form"><div class="field"><label>Nesting-basis</label><select id="nestingQtyMode"><option value="order">Ordreantal</option><option value="full">Fuld plade</option><option value="custom">Tilpasset antal</option></select></div><div class="field"><label>Tilpasset antal</label><input id="nestingCustomQty" type="number" min="1" step="1" value="1" /></div></div><canvas id="nestingCanvas" width="640" height="360" style="width:100%; height:auto; border-radius:8px; display:none;"></canvas><div class="kv-grid" id="nestingGrid" style="margin-top:8px;"></div></div></div>
+                                <div class="table-shell"><div class="subhead"><strong>Prismatrix</strong><small id="matrixMeta">-</small></div><div class="table-wrap"><table><thead><tr><th>Antal</th><th>Pris pr stk</th><th>I alt</th><th>Note</th></tr></thead><tbody id="matrixBody"></tbody></table></div></div>
+                                <div class="table-shell"><div class="subhead"><strong>Prisopdeling pr emne</strong><small id="quoteMeta">-</small></div><div class="detail-pad"><div class="kv-grid" id="quoteGrid"></div></div></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="view" id="view-leverandorer">
+                        <div class="toolbar">
+                            <div class="field"><label>Leverandørsøgning</label><input id="suppliersSearchInput" placeholder="navn, nr, område" /></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadSuppliersBtn">Hent leverandører</button></div>
+                        </div>
+                        <div class="table-shell"><div class="table-wrap"><table><thead id="suppliersHead"></thead><tbody id="suppliersBody"></tbody></table></div></div>
+                    </section>
+                </div>
+            </main>
+        </section>
+    </div>
+
+    <div class="modal-backdrop" id="draftProductModal">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="draftTitle">
+            <div class="modal-head">
+                <div>
+                    <strong id="draftTitle">Nyt produkt - lokal kladde</strong>
+                    <div class="muted">Denne funktion sender intet til Visma. Kladden gemmes kun lokalt i browseren.</div>
+                </div>
+                <button type="button" class="alt" id="closeDraftProductBtn">Luk</button>
+            </div>
+            <form class="modal-body" id="draftProductForm">
+                <div class="modal-grid">
+                    <div class="field"><label>Kunde</label><input id="draftCustomerText" readonly /></div>
+                    <div class="field"><label>Produktnr</label><input id="draftProdNo" required placeholder="fx 1014709999L" /></div>
+                    <div class="field"><label>Beskrivelse</label><input id="draftDescr" required placeholder="Produktbeskrivelse" /></div>
+                    <div class="field"><label>TgNo</label><input id="draftTgNo" placeholder="fx 1014709999" /></div>
+                    <div class="field"><label>Revision</label><input id="draftRevNo" value="KLADDE" /></div>
+                    <div class="field"><label>Note</label><input id="draftNote" placeholder="kun lokal note" /></div>
+                    <div class="field picker"><label>Plade / materiale (søg)</label><input id="draftMaterialSearch" placeholder="skriv for at søge..." autocomplete="off" /><div class="picker-list" id="draftMaterialList"></div><div class="picker-chosen" id="draftMaterialChosen">Ingen valgt</div></div>
+                    <div class="field picker"><label>Ressourcer / processer (søg + klik)</label><input id="draftResourceSearch" placeholder="skriv fx laser, buk, svejs..." autocomplete="off" /><div class="picker-list" id="draftResourceList"></div><div class="chip-row" id="draftResourceChips"></div></div>
+                </div>
+                <div class="sub-editor">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong style="font-size:12px;">Underniveauer (valgfrit)</strong>
+                        <button type="button" class="alt" id="addSublevelBtn" style="padding:6px 10px; font-size:12px;">+ Tilf&oslash;j underniveau</button>
+                    </div>
+                    <div class="muted">Underniveauer f&aring;r nummer som far + "-1", "-2" osv. Marker "L" hvis det er en laserdel.</div>
+                    <div id="sublevelRows"></div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="alt" id="cancelDraftProductBtn">Annullér</button>
+                    <button type="submit" id="saveDraftProductBtn">Gem lokal kladde</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/assets/bom/bom-core.js"></script>
+    <script src="/assets/bom/bom-views.js"></script>
+    <script src="/assets/bom/bom-beregner.js"></script>
+    <script src="/assets/bom/bom-main.js"></script>
+</body>
+</html>

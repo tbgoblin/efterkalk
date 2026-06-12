@@ -6,6 +6,7 @@ const path = require('path');
 
 let mainWindow = null;
 let autoUpdaterConfigured = false;
+let autoUpdateRetryTimer = null;
 
 // RDS / virtual desktop compatibility: disable GPU acceleration
 // These must be set BEFORE app is ready
@@ -130,7 +131,12 @@ function waitForSingleUpdateResult(timeoutMs = 15000) {
         };
 
         const onError = (err) => {
-            finish({ ok: false, status: 'error', message: err && err.message ? err.message : 'Ukendt updater-fejl.' });
+            const transient = isTransientGitHubUpdateError(err);
+            finish({
+                ok: transient,
+                status: transient ? 'retrying' : 'error',
+                message: formatUpdaterErrorMessage(err)
+            });
         };
 
         autoUpdater.on('update-available', onAvailable);
@@ -140,6 +146,56 @@ function waitForSingleUpdateResult(timeoutMs = 15000) {
         setTimeout(() => {
             finish({ ok: true, status: 'checking', message: 'Opdateringskontrol startet. Proev igen om lidt.' });
         }, timeoutMs);
+    });
+}
+
+function isTransientGitHubUpdateError(err) {
+    const message = String(err && err.message ? err.message : err || '').toLowerCase();
+    return (
+        message.includes('unable to find latest version on github') ||
+        message.includes('cannot parse releases feed') ||
+        (message.includes('releases/latest') && message.includes('504')) ||
+        message.includes('gateway time-out') ||
+        message.includes('httperror: 504')
+    );
+}
+
+function formatUpdaterErrorMessage(err) {
+    if (isTransientGitHubUpdateError(err)) {
+        return 'GitHub svarer ikke lige nu. Appen prøver automatisk igen senere.';
+    }
+    return err && err.message ? err.message : 'Ukendt updater-fejl.';
+}
+
+function scheduleAutoUpdateRetry(delayMs, source) {
+    if (autoUpdateRetryTimer || !app.isPackaged) return;
+
+    autoUpdateRetryTimer = setTimeout(() => {
+        autoUpdateRetryTimer = null;
+        runAutoUpdateCheck(source || 'auto').catch(() => {});
+    }, Math.max(5000, Number(delayMs) || 60000));
+}
+
+function runAutoUpdateCheck(source = 'auto') {
+    if (!app.isPackaged) return Promise.resolve(null);
+
+    return autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        const transient = isTransientGitHubUpdateError(err);
+        const message = formatUpdaterErrorMessage(err);
+        console.warn('Update check failed:', err && err.message ? err.message : err);
+        setDesktopUpdateState({
+            ok: transient,
+            status: transient ? 'retrying' : 'error',
+            message,
+            source
+        });
+        if (transient) {
+            scheduleAutoUpdateRetry(5 * 60 * 1000, source);
+        }
+        if (!transient) {
+            throw err;
+        }
+        return null;
     });
 }
 
@@ -193,9 +249,26 @@ async function triggerManualUpdateCheck() {
             source: 'manual'
         });
         const waitResultPromise = waitForSingleUpdateResult();
-        autoUpdater.checkForUpdates().catch((err) => {
-            console.warn('Manual update check failed:', err.message);
-        });
+        try {
+            await autoUpdater.checkForUpdates();
+        } catch (err) {
+            const transient = isTransientGitHubUpdateError(err);
+            const result = {
+                ok: transient,
+                status: transient ? 'retrying' : 'error',
+                message: formatUpdaterErrorMessage(err)
+            };
+            setDesktopUpdateState({
+                ok: result.ok,
+                status: result.status,
+                message: result.message,
+                source: 'manual'
+            });
+            if (transient) {
+                scheduleAutoUpdateRetry(2 * 60 * 1000, 'auto');
+            }
+            return result;
+        }
         const result = await waitResultPromise;
         setDesktopUpdateState({
             ok: !!(result && result.ok),
@@ -237,15 +310,7 @@ function setupAutoUpdater() {
     if (autoUpdaterConfigured) return;
     autoUpdaterConfigured = true;
 
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-        console.warn('Update check failed:', err.message);
-        setDesktopUpdateState({
-            ok: false,
-            status: 'error',
-            message: err.message || 'Opdateringskontrol fejlede.',
-            source: 'auto'
-        });
-    });
+    runAutoUpdateCheck('auto').catch(() => {});
 
     autoUpdater.on('update-available', (info) => {
         console.info('Update available:', info.version);
@@ -305,13 +370,18 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on('error', (err) => {
+        const transient = isTransientGitHubUpdateError(err);
+        const message = formatUpdaterErrorMessage(err);
         console.error('Updater error:', err.message);
         setDesktopUpdateState({
-            ok: false,
-            status: 'error',
-            message: err.message || 'Updater fejl.',
+            ok: transient,
+            status: transient ? 'retrying' : 'error',
+            message,
             source: 'auto'
         });
+        if (transient) {
+            scheduleAutoUpdateRetry(5 * 60 * 1000, 'auto');
+        }
     });
 }
 

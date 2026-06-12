@@ -1,0 +1,978 @@
+{
+  "analyzedAt": "2026-06-11T13:21:37",
+  "workbook": "BOM.xlsm",
+  "sheetMap": [
+    {
+      "name": "Behandlingsmåder",
+      "sheetId": "35",
+      "xmlPath": "xl/worksheets/sheet1.xml",
+      "formulaCount": 0,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table1.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL13",
+          "ref": "A1:U18",
+          "columns": [
+            "FrInfTp",
+            "Gr4",
+            "Gr5",
+            "Val1",
+            "Val2",
+            "Val3",
+            "Val4",
+            "Val5",
+            "Val6",
+            "Val7",
+            "Val8",
+            "Val9",
+            "Val10",
+            "Val11",
+            "Val12",
+            "Val13",
+            "Val14",
+            "Val15",
+            "Val16",
+            "Val17",
+            "Val18"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Opsætning",
+      "sheetId": "36",
+      "xmlPath": "xl/worksheets/sheet2.xml",
+      "formulaCount": 0,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Ny rev",
+      "sheetId": "61",
+      "xmlPath": "xl/worksheets/sheet3.xml",
+      "formulaCount": 146,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Ny revision",
+      "sheetId": "62",
+      "xmlPath": "xl/worksheets/sheet4.xml",
+      "formulaCount": 0,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "ProdBeskr",
+      "sheetId": "69",
+      "xmlPath": "xl/worksheets/sheet5.xml",
+      "formulaCount": 3,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Vareoplysninger",
+      "sheetId": "37",
+      "xmlPath": "xl/worksheets/sheet6.xml",
+      "formulaCount": 213,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Stykliste",
+      "sheetId": "38",
+      "xmlPath": "xl/worksheets/sheet7.xml",
+      "formulaCount": 643,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Stk.liste opr.",
+      "sheetId": "19",
+      "xmlPath": "xl/worksheets/sheet8.xml",
+      "formulaCount": 818,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Prisliste",
+      "sheetId": "41",
+      "xmlPath": "xl/worksheets/sheet9.xml",
+      "formulaCount": 137,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "NyRevision",
+      "sheetId": "65",
+      "xmlPath": "xl/worksheets/sheet10.xml",
+      "formulaCount": 249,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table2.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma15",
+          "ref": "X19:AB20",
+          "columns": [
+            "ProdNo",
+            "Descr",
+            "Inf2",
+            "Inf7",
+            "Inf8"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Laserberegner",
+      "sheetId": "23",
+      "xmlPath": "xl/worksheets/sheet11.xml",
+      "formulaCount": 31,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Laserberegner2",
+      "sheetId": "72",
+      "xmlPath": "xl/worksheets/sheet12.xml",
+      "formulaCount": 443,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table4.xml",
+          "tableName": "Tabel24",
+          "ref": "X4:AK23",
+          "columns": [
+            "Maskine",
+            "Tech",
+            "L mm/min",
+            "M mm/min",
+            "S mt/min",
+            "Piercing",
+            "Dkk/N2/min",
+            "OpTid",
+            "Minutsats",
+            "Pris.Stk",
+            "Tech2",
+            "Pris.Stk2",
+            "OpTid2",
+            "Laser"
+          ]
+        },
+        {
+          "tablePath": "xl/tables/table3.xml",
+          "tableName": "Tabel22",
+          "ref": "B2:P305",
+          "columns": [
+            "Teknologi",
+            "Material",
+            "Tykkelse",
+            "Linse",
+            "Piercing time",
+            "Power vapor",
+            "Power reduced",
+            "feedrate L",
+            "feedrate M",
+            "feedrate S",
+            "feedrate ENGRAV",
+            "Kolonne2",
+            "GasTryk",
+            "Dåsestorrelse",
+            "Kolonne1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "U-lev",
+      "sheetId": "44",
+      "xmlPath": "xl/worksheets/sheet13.xml",
+      "formulaCount": 91,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table5.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma16",
+          "ref": "R3:Y69",
+          "columns": [
+            "key",
+            "Sup",
+            "Shrt",
+            "ProdNo",
+            "Descr",
+            "Inf8",
+            "NoOfEmp",
+            "Gr8"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "U-lev Doc",
+      "sheetId": "70",
+      "xmlPath": "xl/worksheets/sheet14.xml",
+      "formulaCount": 0,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table6.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma_124",
+          "ref": "A3:C12",
+          "columns": [
+            "SupNo",
+            "Shrt",
+            "FileNm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Visma FV",
+      "sheetId": "34",
+      "xmlPath": "xl/worksheets/sheet15.xml",
+      "formulaCount": 40065,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table7.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL",
+          "ref": "C10:M34",
+          "columns": [
+            "ProdNo",
+            "Descr",
+            "Inf3",
+            "chck",
+            "Inf2",
+            "Inf4",
+            "Inf7",
+            "Inf8",
+            "Inf9",
+            "tjek",
+            "Kolonne1"
+          ]
+        },
+        {
+          "tablePath": "xl/pivotTables/pivotTable1.xml",
+          "tableName": null,
+          "ref": null,
+          "columns": [
+            null
+          ]
+        },
+        {
+          "tablePath": "xl/tables/table8.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL_15",
+          "ref": "L2:L3",
+          "columns": [
+            "Kolonne1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TgNo",
+      "sheetId": "60",
+      "xmlPath": "xl/worksheets/sheet16.xml",
+      "formulaCount": 1,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table9.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma12",
+          "ref": "A609:F610",
+          "columns": [
+            "ProdNo",
+            "Beskrivelse",
+            "KundeNo",
+            "TgNo",
+            "RevNo",
+            "PosNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Komp",
+      "sheetId": "54",
+      "xmlPath": "xl/worksheets/sheet17.xml",
+      "formulaCount": 251393,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table10.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma18",
+          "ref": "A4:J251395",
+          "columns": [
+            "ProdNo",
+            "Descr",
+            "ProdTp",
+            "Gr5",
+            "Inf",
+            "Txt",
+            "Free2",
+            "Inf3",
+            "Val19",
+            "chk"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Enh",
+      "sheetId": "53",
+      "xmlPath": "xl/worksheets/sheet18.xml",
+      "formulaCount": 0,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table12.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma_1",
+          "ref": "F1:G8",
+          "columns": [
+            "Txt",
+            "TxtNo"
+          ]
+        },
+        {
+          "tablePath": "xl/tables/table11.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma14",
+          "ref": "A1:B5",
+          "columns": [
+            "Txt",
+            "TxtNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RevStKun",
+      "sheetId": "67",
+      "xmlPath": "xl/worksheets/sheet19.xml",
+      "formulaCount": 35,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table15.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma_2",
+          "ref": "V3:X4",
+          "columns": [
+            "Cust",
+            "Gr8",
+            "Txt"
+          ]
+        },
+        {
+          "tablePath": "xl/tables/table14.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma_120",
+          "ref": "M7:S22",
+          "columns": [
+            "Gr",
+            "Nm",
+            "R8",
+            "Nm2",
+            "Nm3",
+            "Tp",
+            "Typer"
+          ]
+        },
+        {
+          "tablePath": "xl/tables/table13.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma11",
+          "ref": "B2:G16",
+          "columns": [
+            "Gr",
+            "Txt1",
+            "InfTp",
+            "LnNo",
+            "Qty1",
+            "CustNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LevPiv",
+      "sheetId": "59",
+      "xmlPath": "xl/worksheets/sheet20.xml",
+      "formulaCount": 0,
+      "hasTableParts": false,
+      "tables": [
+        {
+          "tablePath": "xl/pivotTables/pivotTable2.xml",
+          "tableName": null,
+          "ref": null,
+          "columns": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lev",
+      "sheetId": "56",
+      "xmlPath": "xl/worksheets/sheet21.xml",
+      "formulaCount": 2644,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table16.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma",
+          "ref": "A4:J885",
+          "columns": [
+            "SupNo",
+            "Nm",
+            "Navn",
+            "Ad1",
+            "Ad2",
+            "Ad3",
+            "Ad4",
+            "PArea",
+            "LevNr",
+            "Kolonne1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Kunder",
+      "sheetId": "43",
+      "xmlPath": "xl/worksheets/sheet22.xml",
+      "formulaCount": 2,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table17.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL_19",
+          "ref": "A4:K1135",
+          "columns": [
+            "Varenr.",
+            "Kundernr.",
+            "Kundenavn",
+            "Adresse1",
+            "Adresse2",
+            "Postnr.",
+            "By",
+            "Tlf.",
+            "Prisliste",
+            "Kunde",
+            "Kortnavn"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ressourcer",
+      "sheetId": "20",
+      "xmlPath": "xl/worksheets/sheet23.xml",
+      "formulaCount": 0,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table18.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL_1",
+          "ref": "A1:I100",
+          "columns": [
+            "ProdNo",
+            "Descr",
+            "CstPr",
+            "SalePr",
+            "ProdGr",
+            "DensU",
+            "R7",
+            "Gr4",
+            "Inf3"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Svejseberegner",
+      "sheetId": "71",
+      "xmlPath": "xl/worksheets/sheet24.xml",
+      "formulaCount": 94,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "MatrBeregn",
+      "sheetId": "21",
+      "xmlPath": "xl/worksheets/sheet25.xml",
+      "formulaCount": 255,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "råvarer",
+      "sheetId": "22",
+      "xmlPath": "xl/worksheets/sheet26.xml",
+      "formulaCount": 2575,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table19.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL_16",
+          "ref": "A2:N2576",
+          "columns": [
+            "ProdNo",
+            "Lager",
+            "Beholdn.",
+            "tykklese",
+            "varegrp",
+            "beskrivelse",
+            "Bredde",
+            "Længde",
+            "Enhed",
+            "Pris",
+            "VægtFylde",
+            "RV",
+            "Avance",
+            "NWgtU"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RV-beholdn",
+      "sheetId": "68",
+      "xmlPath": "xl/worksheets/sheet27.xml",
+      "formulaCount": 4592,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table20.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL_1621",
+          "ref": "A2:H4594",
+          "columns": [
+            "ProdNo",
+            "beskrivelse",
+            "Enhed",
+            "PoPhStB",
+            "NWgtU",
+            "Bal",
+            "StcInc",
+            "Beholdning"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "skæreparametre",
+      "sheetId": "45",
+      "xmlPath": "xl/worksheets/sheet28.xml",
+      "formulaCount": 1107,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table21.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL8",
+          "ref": "A1:I1108",
+          "columns": [
+            "ProdNo",
+            "Descr",
+            "Tykkelse",
+            "Maskine",
+            "Nøgle",
+            "Skærehast.",
+            "Pircing",
+            "Tillæg",
+            "Linse"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bukkeberegner",
+      "sheetId": "25",
+      "xmlPath": "xl/worksheets/sheet29.xml",
+      "formulaCount": 19,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table22.xml",
+          "tableName": "Tabel_Forespørgsel_fra_VISMA_EXCEL3",
+          "ref": "B34:F39",
+          "columns": [
+            "ProdNo",
+            "Descr",
+            "CstPr",
+            "SalePr",
+            "ProdGr"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ark1",
+      "sheetId": "52",
+      "xmlPath": "xl/worksheets/sheet30.xml",
+      "formulaCount": 0,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table23.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma7",
+          "ref": "A1:C22301",
+          "columns": [
+            "ProdNo",
+            "ProdGr",
+            "Descr"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "API WEB",
+      "sheetId": "73",
+      "xmlPath": "xl/worksheets/sheet31.xml",
+      "formulaCount": 3,
+      "hasTableParts": false,
+      "tables": []
+    },
+    {
+      "name": "Usr",
+      "sheetId": "55",
+      "xmlPath": "xl/worksheets/sheet32.xml",
+      "formulaCount": 0,
+      "hasTableParts": true,
+      "tables": [
+        {
+          "tablePath": "xl/tables/table24.xml",
+          "tableName": "Tabel_Forespørgsel_fra_Visma19",
+          "ref": "A1:D199",
+          "columns": [
+            "Usr",
+            "EmpNo",
+            "Nm",
+            "Usr2"
+          ]
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "1",
+      "name": "Forespørgsel fra Visma",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.SupNo, Actor.Nm, Actor.Ad1, Actor.Ad2, Actor.Ad3, Actor.Ad4, Actor.PArea FROM F0001.dbo.Actor Actor WHERE (Actor.SupNo<>0)",
+      "tables": "Actor",
+      "parameters": []
+    },
+    {
+      "id": "2",
+      "name": "Forespørgsel fra VISMA_EXCEL",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Descr, Prod.Inf3, 1 AS 'chck', Prod.Inf2, Prod.Inf4, Prod.Inf7, Prod.Inf8 FROM F0001.dbo.Prod Prod WHERE (Prod.Inf3=?) AND (Prod.ProdGr<>99999) ORDER BY Prod.ProdNo",
+      "tables": "Prod",
+      "parameters": [
+        {
+          "name": "kundenummer",
+          "sqlType": "12",
+          "parameterType": "cell",
+          "cell": "'Visma FV'!$C$2",
+          "refreshOnChange": "1"
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "Forespørgsel fra VISMA_EXCEL1",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Descr, PrDcMat.CstPr, PrDcMat.SalePr, Prod.ProdGr, Prod.DensU, BgtLn.R7, Prod.Gr4, Prod.Inf3 FROM F0001.dbo.BgtLn BgtLn, F0001.dbo.PrDcMat PrDcMat, F0001.dbo.Prod Prod WHERE PrDcMat.ProdNo = Prod.ProdNo AND BgtLn.ProdNo = PrDcMat.ProdNo AND ((Prod.ProdGr=3))",
+      "tables": [
+        "BgtLn",
+        "PrDcMat",
+        "Prod"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "4",
+      "name": "Forespørgsel fra VISMA_EXCEL10",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT FreeInf1.FrInfTp, FreeInf1.Gr4, FreeInf1.Gr5, FreeInf1.Val1, FreeInf1.Val2, FreeInf1.Val3, FreeInf1.Val4, FreeInf1.Val5, FreeInf1.Val6, FreeInf1.Val7, FreeInf1.Val8, FreeInf1.Val9, FreeInf1.Val10, FreeInf1.Val11, FreeInf1.Val12, FreeInf1.Val13, FreeInf1.Val14, FreeInf1.Val15, FreeInf1.Val16, FreeInf1.Val17, FreeInf1.Val18 FROM F0001.dbo.FreeInf1 FreeInf1 WHERE (FreeInf1.FrInfTp=61) OR (FreeInf1.FrInfTp=62) ORDER BY FreeInf1.FrInfTp",
+      "tables": "FreeInf1",
+      "parameters": []
+    },
+    {
+      "id": "5",
+      "name": "Forespørgsel fra VISMA_EXCEL2",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Inf6 AS 'Lager', Prod.HgtU AS 'tykklese', Prod.Descr AS 'beskrivelse', Prod.WdtU AS 'Bredde', Prod.LgtU AS 'Længde', Txt.Txt AS 'Enhed', Prod.Inf AS 'Pris', Prod.DensU AS 'VægtFylde', Prod.R3 AS 'RV', Prod.Free2 AS 'Avance', Prod.NWgtU FROM F0001.dbo.Prod Prod, F0001.dbo.Txt Txt WHERE Txt.TxtNo = Prod.StSaleUn AND ((Txt.TxtTp=16) AND Txt.Lang=45 AND (Prod.ProdGr=2) AND (Prod.ProdNo Not Like '1%' And Prod.ProdNo<>'301001'))",
+      "tables": [
+        "Prod",
+        "Txt"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "6",
+      "name": "Forespørgsel fra VISMA_EXCEL21",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Descr AS 'beskrivelse', Txt.Txt AS 'Enhed', StcBal.PoPhStB, Prod.NWgtU, StcBal.Bal, StcBal.StcInc FROM F0001.dbo.Prod Prod, F0001.dbo.StcBal StcBal, F0001.dbo.Txt Txt WHERE Txt.TxtNo = Prod.StSaleUn AND StcBal.ProdNo = Prod.ProdNo AND ((Txt.TxtTp=16) AND (Prod.ProdGr=2) AND (Prod.ProdNo Not Like '1%' And Prod.ProdNo<>'301001') AND (StcBal.StcNo=1))",
+      "tables": [
+        "Prod",
+        "StcBal",
+        "Txt"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "7",
+      "name": "Forespørgsel fra VISMA_EXCEL4",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Descr, PrDcMat.CstPr, PrDcMat.SalePr, Prod.ProdGr FROM F0001.dbo.PrDcMat PrDcMat, F0001.dbo.Prod Prod WHERE PrDcMat.ProdNo = Prod.ProdNo AND ((Prod.ProdGr=3) AND (Prod.ProdNo Like 'R21%'))",
+      "tables": [
+        "PrDcMat",
+        "Prod"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "8",
+      "name": "Forespørgsel fra VISMA_EXCEL5",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Count(Prod.PrNo) FROM F0001.dbo.Prod Prod WHERE (Prod.Inf3=?) AND (Prod.ProdNo Not Like 'U%' And Prod.ProdNo Not Like 'V%') AND (Prod.ProdGr<>99999)",
+      "tables": "Prod",
+      "parameters": [
+        {
+          "name": "Parameter1",
+          "sqlType": "12",
+          "parameterType": "cell",
+          "cell": "'Visma FV'!$C$2",
+          "refreshOnChange": "1"
+        }
+      ]
+    },
+    {
+      "id": "9",
+      "name": "Forespørgsel fra VISMA_EXCEL6",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.Gr AS 'Varenr.', Actor.CustNo AS 'Kundernr.', Actor.Nm AS 'Kundenavn', Actor.Ad1 AS 'Adresse1', Actor.Ad2 AS 'Adresse2', Actor.PNo AS 'Postnr.', Actor.PArea AS 'By', Actor.Phone AS 'Tlf.', Actor.CustPrGr AS 'Prisliste', Inf6 AS 'Kunde', Actor.Shrt AS 'Kortnavn' FROM F0001.dbo.Actor Actor WHERE (Actor.CustNo<>0)",
+      "tables": "Actor",
+      "parameters": []
+    },
+    {
+      "id": "10",
+      "name": "Forespørgsel fra VISMA_EXCEL8",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT FreeInf2.ProdNo, Prod.Descr, Prod.HgtU AS 'Tykkelse', FreeInf2.Txt1 AS 'Maskine', FreeInf2.Val1 AS 'Skærehast.', FreeInf2.Val2 AS 'Pircing', FreeInf2.Val3 AS 'Tillæg', FreeInf2.Txt2 AS 'Linse' FROM F0001.dbo.FreeInf2 FreeInf2, F0001.dbo.Prod Prod WHERE FreeInf2.ProdNo = Prod.ProdNo AND ((FreeInf2.FrInfTp=100))",
+      "tables": [
+        "FreeInf2",
+        "Prod"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "11",
+      "name": "Forespørgsel fra Visma1",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2013;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.Gr, ActInf.Txt1, ActInf.InfTp, ActInf.LnNo, ActInf.Qty1, Actor.CustNo FROM F0001.dbo.ActInf ActInf, F0001.dbo.Actor Actor WHERE Actor.ActNo = ActInf.ActNo AND ((ActInf.InfTp=5) AND (Actor.Gr=?))  UNION  SELECT DISTINCT Actor.Gr, ActInf.Txt1, ActInf.InfTp, ActInf.LnNo, 9999, 99999999  FROM F0001.dbo.ActInf ActInf, F0001.dbo.Actor Actor WHERE ActInf.ActNo = Actor.ActNo AND (((ActInf.InfTp=10) AND Actor.CustNo=75757522))",
+      "tables": [
+        "ActInf",
+        "Actor"
+      ],
+      "parameters": [
+        {
+          "name": "kunde nummer",
+          "sqlType": "4",
+          "parameterType": "cell",
+          "cell": "'Stk.liste opr.'!$H$8",
+          "refreshOnChange": "1"
+        }
+      ]
+    },
+    {
+      "id": "12",
+      "name": "Forespørgsel fra Visma10",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2013;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.Gr, Actor.Nm, 1, AssLink.R8, R8.Nm FROM F0001.dbo.Actor Actor, F0001.dbo.AssLink AssLink, F0001.dbo.R8 R8 WHERE AssLink.ActNo = Actor.ActNo AND R8.RNo = AssLink.R8 AND ((Actor.Gr=?))  UNION  SELECT DISTINCT Actor.Gr, ActInf.Txt1,  ActInf.LnNo, 9999, '' FROM F0001.dbo.ActInf ActInf, F0001.dbo.Actor Actor WHERE ActInf.ActNo = Actor.ActNo AND ((ActInf.InfTp=10) AND (Actor.CustNo=75757522))",
+      "tables": [
+        "Actor",
+        "AssLink",
+        "R8",
+        "ActInf"
+      ],
+      "parameters": [
+        {
+          "name": "KUNDENUMMER",
+          "sqlType": "4",
+          "parameterType": "cell",
+          "cell": "'Stk.liste opr.'!$H$8",
+          "refreshOnChange": "1"
+        }
+      ]
+    },
+    {
+      "id": "13",
+      "name": "Forespørgsel fra Visma11",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2013;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT FreeInf2.Cust, FreeInf2.Gr8, Txt.Txt FROM F0001.dbo.Actor Actor, F0001.dbo.FreeInf2 FreeInf2, F0001.dbo.Txt Txt WHERE Actor.CustNo = FreeInf2.Cust AND FreeInf2.Gr8 = Txt.TxtNo AND ((FreeInf2.Gr8<>0) AND (FreeInf2.Cust<>0) AND (Actor.Gr=?) AND (Txt.TxtTp=198))",
+      "tables": [
+        "Actor",
+        "FreeInf2",
+        "Txt"
+      ],
+      "parameters": [
+        {
+          "name": "kundenummer",
+          "sqlType": "4",
+          "parameterType": "cell",
+          "cell": "'Stk.liste opr.'!$H$8",
+          "refreshOnChange": "1"
+        }
+      ]
+    },
+    {
+      "id": "14",
+      "name": "Forespørgsel fra Visma12",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2016;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.SupNo, Actor.Shrt, Doc.FileNm FROM F0001.dbo.Actor Actor, F0001.dbo.Doc Doc, F0001.dbo.DocLink DocLink WHERE DocLink.ActNo = Actor.ActNo AND Doc.DocNo = DocLink.DocNo AND Doc.VerNo = DocLink.VerNo AND ((Actor.Gr3=20)) ORDER BY Actor.Inf7",
+      "tables": [
+        "Actor",
+        "Doc",
+        "DocLink"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "15",
+      "name": "Forespørgsel fra Visma2",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.ProdGr, Prod.Descr FROM F0001.dbo.Prod Prod WHERE (Prod.ProdGr=99)",
+      "tables": "Prod",
+      "parameters": []
+    },
+    {
+      "id": "16",
+      "name": "Forespørgsel fra Visma3",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Txt.Txt, Txt.TxtNo FROM F0001.dbo.Txt Txt WHERE (Txt.TxtTp=16) AND (Txt.TxtNo=1) OR (Txt.TxtTp=16) AND (Txt.TxtNo=13)",
+      "tables": "Txt",
+      "parameters": []
+    },
+    {
+      "id": "17",
+      "name": "Forespørgsel fra Visma4",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Descr, Prod.ProdTp, Prod.Gr5, Prod.Inf, Txt.Txt, Prod.Inf3, Prod.Free2, FreeInf1.Val19 FROM F0001.dbo.FreeInf1 FreeInf1, F0001.dbo.Prod Prod, F0001.dbo.Txt Txt WHERE Prod.StSaleUn = Txt.TxtNo AND Prod.Gr5 = FreeInf1.Gr5 AND ((Prod.Gr5 In (2,3,6,10,11)) AND (Prod.ProdNo Not Like '%L%' And Prod.ProdNo Not Like '%!%') AND (Txt.TxtTp=16) AND (Prod.ProdGr<>99999) AND (FreeInf1.FrInfTp=62))",
+      "tables": [
+        "FreeInf1",
+        "Prod",
+        "Txt"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "18",
+      "name": "Forespørgsel fra Visma5",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.Usr, Actor.EmpNo, Actor.Nm, Actor.Usr FROM F0001.dbo.Actor Actor WHERE (Actor.EmpNo<>0) ORDER BY Actor.EmpNo",
+      "tables": "Actor",
+      "parameters": []
+    },
+    {
+      "id": "19",
+      "name": "Forespørgsel fra Visma6",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2010;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo AS 'ProdNo', Prod.Descr AS 'Beskrivelse', Prod.Inf4 AS 'KundeNo', Prod.Inf2 AS 'TgNo', Prod.Inf7 AS 'RevNo', Prod.Inf8 AS 'PosNo' FROM F0001.dbo.Prod Prod WHERE (Prod.Inf2=? And Prod.Inf2<>'') AND (Prod.Inf3=?)",
+      "tables": "Prod",
+      "parameters": [
+        {
+          "name": "Parameter1",
+          "sqlType": "12",
+          "parameterType": "cell",
+          "cell": "NyRevision!$AG$7",
+          "refreshOnChange": "1"
+        },
+        {
+          "name": "Parameter2",
+          "sqlType": "12",
+          "parameterType": "cell",
+          "cell": "NyRevision!$T$3",
+          "refreshOnChange": "1"
+        }
+      ]
+    },
+    {
+      "id": "20",
+      "name": "Forespørgsel fra Visma7",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2013;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Prod.ProdNo, Prod.Descr, Prod.Inf2, Prod.Inf7, Prod.Inf8 FROM F0001.dbo.Prod Prod WHERE (Prod.ProdNo=?) OR (Prod.ProdNo=?) OR (Prod.ProdNo=?) OR (Prod.ProdNo=?)",
+      "tables": "Prod",
+      "parameters": [
+        {
+          "name": "vnr1",
+          "sqlType": "12",
+          "parameterType": "cell",
+          "cell": "NyRevision!$Y$18",
+          "refreshOnChange": "1"
+        },
+        {
+          "name": "vnr2",
+          "sqlType": "12",
+          "parameterType": "cell",
+          "cell": "NyRevision!$Z$18",
+          "refreshOnChange": "1"
+        },
+        {
+          "name": "Parameter3",
+          "sqlType": null,
+          "parameterType": "cell",
+          "cell": "NyRevision!$AA$18",
+          "refreshOnChange": null
+        },
+        {
+          "name": "Parameter4",
+          "sqlType": null,
+          "parameterType": "cell",
+          "cell": "NyRevision!$AB$18",
+          "refreshOnChange": null
+        }
+      ]
+    },
+    {
+      "id": "21",
+      "name": "Forespørgsel fra Visma8",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2013;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Actor.NoOfEmp, FreeInf1.Sup, Actor.Shrt, FreeInf1.ProdNo, Prod.Descr, Actor.Inf8, Actor.Gr8 FROM F0001.dbo.Actor Actor, F0001.dbo.FreeInf1 FreeInf1, F0001.dbo.Prod Prod WHERE Actor.SupNo = FreeInf1.Sup AND Prod.ProdNo = FreeInf1.ProdNo AND ((FreeInf1.Sup<>0)) ORDER BY Actor.Inf7",
+      "tables": [
+        "Actor",
+        "FreeInf1",
+        "Prod"
+      ],
+      "parameters": []
+    },
+    {
+      "id": "22",
+      "name": "Forespørgsel fra Visma9",
+      "type": "1",
+      "connectionString": "DSN=Visma;UID=sj;Trusted_Connection=Yes;APP=Microsoft Office 2013;WSID=SJ;DATABASE=F0001;AutoTranslate=No;QuotedId=No;AnsiNPW=No",
+      "command": "SELECT Txt.Txt, Txt.TxtNo FROM F0001.dbo.Txt Txt WHERE (Txt.TxtTp=99)",
+      "tables": "Txt",
+      "parameters": []
+    }
+  ]
+}

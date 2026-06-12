@@ -1,0 +1,125 @@
+{
+  "analyzedAt": "2026-06-11T13:18:18",
+  "workbook": "BOM.xlsm",
+  "sheetCount": 32,
+  "sheets": [
+    "Behandlingsmåder",
+    "Opsætning",
+    "Ny rev",
+    "Ny revision",
+    "ProdBeskr",
+    "Vareoplysninger",
+    "Stykliste",
+    "Stk.liste opr.",
+    "Prisliste",
+    "NyRevision",
+    "Laserberegner",
+    "Laserberegner2",
+    "U-lev",
+    "U-lev Doc",
+    "Visma FV",
+    "TgNo",
+    "Komp",
+    "Enh",
+    "RevStKun",
+    "LevPiv",
+    "Lev",
+    "Kunder",
+    "Ressourcer",
+    "Svejseberegner",
+    "MatrBeregn",
+    "råvarer",
+    "RV-beholdn",
+    "skæreparametre",
+    "Bukkeberegner",
+    "Ark1",
+    "API WEB",
+    "Usr"
+  ],
+  "connectionCount": 22,
+  "dbTablesRead": [
+    "ActInf",
+    "Actor",
+    "AssLink",
+    "BgtLn",
+    "Doc",
+    "DocLink",
+    "FreeInf1",
+    "FreeInf2",
+    "PrDcMat",
+    "Prod",
+    "R8",
+    "StcBal",
+    "Txt"
+  ],
+  "keyProcedures": [
+    {
+      "Name": "EseguiScriptPython",
+      "Tags": "shell_exec",
+      "Preview": "Dim scriptPath As String Dim pythonExe As String Dim cmd As String Dim token As String Dim WaitTime As Double ' Percorso dell'eseguibile Python (ad esempio \"python\" se Python è nel"
+    },
+    {
+      "Name": "EseguiScriptPythonConSelezioneDXF",
+      "Tags": [
+        "shell_exec",
+        "file_picker"
+      ],
+      "Preview": "Dim fd As FileDialog Dim percorsoDXF As String Dim pythonExe As String Dim scriptPath As String Dim cmd As String Dim WaitTime As Double ' Crea e configura il FileDialog per selezi"
+    },
+    {
+      "Name": "GemSomPDF",
+      "Tags": [
+        "pdf_export",
+        "filesystem_write"
+      ],
+      "Preview": "Calculate With ActiveSheet.PageSetup .LeftMargin = Application.InchesToPoints(0.1) .RightMargin = Application.InchesToPoints(0.1) .TopMargin = Application.InchesToPoints(0.1) .Bott"
+    },
+    {
+      "Name": "GåTil_NyRev",
+      "Tags": "env_user",
+      "Preview": "Attribute GåTil_NyRev.VB_ProcData.VB_Invoke_Func = \" \\n14\" ' ' ' Hente bruger inietialer ind Range(\"BD7\").Value = Environ(\"USERNAME\") ' GåTil_NyRev Makro ' ' Måske slette 'Range(\"A"
+    },
+    {
+      "Name": "Knap248_Klik",
+      "Tags": [
+        "query_refresh",
+        "pivot_refresh"
+      ],
+      "Preview": "Attribute Knap248_Klik.VB_ProcData.VB_Invoke_Func = \" \\n14\" ' ' Knap248_Klik Makro ' ' Sheets(\"Lev\").Select Range(\"A5\").Select Selection.ListObject.QueryTable.Refresh BackgroundQue"
+    },
+    {
+      "Name": "Knap251_Klik",
+      "Tags": [
+        "query_refresh",
+        "pivot_refresh"
+      ],
+      "Preview": "Attribute Knap251_Klik.VB_ProcData.VB_Invoke_Func = \" \\n14\" ' ' Knap251_Klik Makro ' ' Sheets(\"Lev\").Select Range(\"A6\").Select Selection.ListObject.QueryTable.Refresh BackgroundQue"
+    },
+    {
+      "Name": "Opd_Prod_vn",
+      "Tags": [
+        "refresh_all",
+        "db_write",
+        "db_direct"
+      ],
+      "Preview": "Attribute Opd_Prod_vn.VB_ProcData.VB_Invoke_Func = \" \\n14\" ' Kopier indhold fra \"Ny rev\" til \"Ny revision\" som data Sheets(\"Ny rev\").Select Range(\"A30:F40\").Select Selection.Copy S"
+    },
+    {
+      "Name": "Tegnnr_i_Visma",
+      "Tags": [
+        "query_refresh",
+        "pivot_refresh"
+      ],
+      "Preview": "Attribute Tegnnr_i_Visma.VB_ProcData.VB_Invoke_Func = \" \\n14\" ' ' Tegnnr_i_Visma Makro ' ' Sheets(\"Visma FV\").Select Range(\"Tabel_Forespørgsel_fra_VISMA_EXCEL[[#Headers],[ProdNo]]\""
+    },
+    {
+      "Name": "Åben_tjek_indbakke",
+      "Tags": "open_external_workbook",
+      "Preview": "Attribute Åben_tjek_indbakke.VB_ProcData.VB_Invoke_Func = \" \\n14\" ' ' Åben_tjek_indbakke Makro ' ' Workbooks.Open \"Indhold af indbakke.xlsm\" Windows(\"Indhold af indbakke.xlsm\").Act"
+    }
+  ],
+  "notes": [
+    "Static read-only analysis; no DB write executed by this analysis.",
+    "Workbook contains VBA, ActiveX controls, external connections, and shell integrations."
+  ]
+}

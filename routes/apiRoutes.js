@@ -875,6 +875,7 @@ async function fetchBelastningOrderLineRows({ getConnection, sql, orderCsv }) {
 const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
 const { createOmsaetningService } = require('../services/omsaetningService');
 const { createOrdreindgangService } = require('../services/ordreindgangService');
+const { createBomService } = require('../services/bomService');
 
 function createApiRouter({
     getConnection,
@@ -911,6 +912,7 @@ function createApiRouter({
     const legacyAftercalcPrefixes = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
     const ordreindgangService = createOrdreindgangService({ getConnection, sql });
+    const bomService = createBomService({ getConnection, sql, diskCache, logEvent });
 
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
@@ -2177,6 +2179,193 @@ function createApiRouter({
             res.json({ ok: true, dataset });
         } catch (err) {
             res.status(500).json({ ok: false, error: err.message || 'QMS dataset fejl' });
+        }
+    });
+
+    router.get('/bom/customers', async (req, res) => {
+        try {
+            const q = String(req.query.q || '').trim();
+            const limit = req.query.limit === undefined ? undefined : Number(req.query.limit);
+            const payload = await bomService.fetchCustomers({ q, limit });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/customers: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM customers fejl' });
+        }
+    });
+
+    router.get('/bom/products', async (req, res) => {
+        try {
+            const customerNo = String(req.query.customerNo || req.query.cust || '').trim();
+            const customerCode = String(req.query.customerCode || req.query.gr || '').trim();
+            if (!customerNo) {
+                return res.status(400).json({ error: 'customerNo er paakraevet' });
+            }
+            const limit = req.query.limit === undefined ? undefined : Number(req.query.limit);
+            const payload = await bomService.fetchProductsByCustomer({ customerNo, customerCode, limit });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/products: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM products fejl' });
+        }
+    });
+
+    router.get('/bom/revisions/by-drawing', async (req, res) => {
+        try {
+            const tgn = String(req.query.tgn || '').trim();
+            const customerNo = String(req.query.customerNo || req.query.cust || '').trim();
+            const customerCode = String(req.query.customerCode || req.query.gr || '').trim();
+            if (!tgn || !customerNo) {
+                return res.status(400).json({ error: 'tgn og customerNo er paakraevet' });
+            }
+            const payload = await bomService.fetchRevisionsByDrawing({ tgn, customerNo, customerCode });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/revisions/by-drawing: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM revisions fejl' });
+        }
+    });
+
+    router.get('/bom/resources', async (_req, res) => {
+        try {
+            const payload = await bomService.fetchResources();
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/resources: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM resources fejl' });
+        }
+    });
+
+    router.get('/bom/materials', async (req, res) => {
+        try {
+            const q = String(req.query.q || '').trim();
+            const limit = Number(req.query.limit || 2500);
+            const payload = await bomService.fetchMaterials({ q, limit });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/materials: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM materials fejl' });
+        }
+    });
+
+    router.get('/bom/calculators/laser-params', async (req, res) => {
+        try {
+            const machine = String(req.query.machine || '').trim();
+            const payload = await bomService.fetchLaserParameters({ machine });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/calculators/laser-params: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM laser params fejl' });
+        }
+    });
+
+    router.get('/bom/calculators/process-params', async (_req, res) => {
+        try {
+            const payload = await bomService.fetchProcessParameters();
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/calculators/process-params: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM process params fejl' });
+        }
+    });
+
+    router.get('/bom/components', async (req, res) => {
+        try {
+            const q = String(req.query.q || '').trim();
+            const limit = req.query.limit === undefined ? undefined : Number(req.query.limit);
+            const payload = await bomService.fetchComponents({ q, limit });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/components: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM components fejl' });
+        }
+    });
+
+    router.get('/bom/customer-notes', async (req, res) => {
+        try {
+            const customerCode = String(req.query.customerCode || req.query.gr || '').trim();
+            if (!customerCode) {
+                return res.status(400).json({ error: 'customerCode er paakraevet' });
+            }
+            const payload = await bomService.fetchCustomerNotes({ customerCode });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/customer-notes: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM customer notes fejl' });
+        }
+    });
+
+    router.get('/bom/suppliers', async (req, res) => {
+        try {
+            const q = String(req.query.q || '').trim();
+            const payload = await bomService.fetchSuppliers({ q });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/suppliers: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM suppliers fejl' });
+        }
+    });
+
+    router.get('/bom/product-tree', async (req, res) => {
+        try {
+            const prodNo = String(req.query.prodNo || '').trim();
+            if (!prodNo) {
+                return res.status(400).json({ error: 'prodNo er paakraevet' });
+            }
+            const payload = await bomService.fetchProductTree({ prodNo });
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR bom/product-tree: ' + err.message);
+            res.status(500).json({ error: err.message || 'BOM product tree fejl' });
+        }
+    });
+
+    router.post('/bom/calc/nesting', express.json(), (req, res) => {
+        try {
+            const result = bomService.computeNesting(req.body || {});
+            res.json(result);
+        } catch (err) {
+            res.status(400).json({ error: err.message || 'Nesting beregning fejl' });
+        }
+    });
+
+    router.post('/bom/calc/quote', express.json(), async (req, res) => {
+        try {
+            const result = await bomService.computeQuote(req.body || {});
+            res.json(result);
+        } catch (err) {
+            logEvent('ERROR bom/calc/quote: ' + err.message);
+            res.status(400).json({ error: err.message || 'Prisberegning fejl' });
+        }
+    });
+
+    router.post('/bom/analyze-file', express.json({ limit: '40mb' }), (req, res) => {
+        try {
+            const filename = String((req.body && req.body.filename) || '').trim();
+            const dataBase64 = (req.body && req.body.data) || '';
+            if (!filename || !dataBase64) {
+                return res.status(400).json({ error: 'filename og data (base64) er paakraevet' });
+            }
+            const buffer = Buffer.from(dataBase64, 'base64');
+            if (buffer.length === 0) {
+                return res.status(400).json({ error: 'Tom fil' });
+            }
+            const result = bomService.analyzeDrawingFile(filename, buffer);
+            res.json({ filename, sizeBytes: buffer.length, ...result });
+        } catch (err) {
+            logEvent('ERROR bom/analyze-file: ' + err.message);
+            res.status(400).json({ error: err.message || 'Filanalyse fejl' });
+        }
+    });
+
+    router.post('/bom/cache/invalidate', (req, res) => {
+        try {
+            const scope = String((req.body && req.body.scope) || req.query.scope || 'all');
+            const result = bomService.invalidate(scope);
+            res.json({ ok: true, ...result });
+        } catch (err) {
+            logEvent('ERROR bom/cache/invalidate: ' + err.message);
+            res.status(500).json({ ok: false, error: err.message || 'BOM cache invalidate fejl' });
         }
     });
 

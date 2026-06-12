@@ -25,7 +25,7 @@ const {
 const { createAftercalcService } = require('./services/aftercalcService');
 const { createApiRouter } = require('./routes/apiRoutes');
 
-const CACHE_TTL_AFTERCALC_MS        = 30 * 60 * 1000;  // 30 min
+const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match background refresh cadence
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
@@ -34,7 +34,12 @@ const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v21_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
-app.use(express.json({ limit: '256kb' }));
+// Parser JSON globale 256kb, ma /bom/analyze-file ha il proprio parser 40mb a livello di route
+const jsonBodyParser = express.json({ limit: '256kb' });
+app.use((req, res, next) => {
+    if (req.path === '/bom/analyze-file') return next();
+    return jsonBodyParser(req, res, next);
+});
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // Read version from package.json
@@ -639,8 +644,15 @@ app.get('/', (req, res) => {
             .belastning-resource-chart { min-width:0; max-width:100%; overflow:hidden; border:1px solid #d7e5fa; border-radius:12px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); padding:10px 10px 9px; cursor:pointer; box-shadow:0 8px 18px rgba(15,53,96,0.05); transition:transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease; }
             .belastning-resource-chart:hover { border-color:#9cb9e4; box-shadow:0 12px 24px rgba(15,53,96,0.10); transform:translateY(-1px); }
             .belastning-resource-chart.is-active { border-color:#3f82d5; box-shadow:0 14px 28px rgba(21,101,192,0.20); }
+            .belastning-resource-chart[draggable="true"] { cursor:grab; }
+            .belastning-resource-chart.is-dragging { opacity:0.55; transform:scale(0.985); box-shadow:0 18px 36px rgba(15,53,96,0.16); }
+            .belastning-resource-chart.drag-target-before { border-top:3px solid #1565c0; }
+            .belastning-resource-chart.drag-target-after { border-bottom:3px solid #1565c0; }
             .belastning-resource-title { font-size:12px; font-weight:800; color:#1f3f69; margin-bottom:6px; }
+            .belastning-card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
             .belastning-resource-chart h5 { margin:0 0 6px 0; color:#1e4768; font-size:13px; font-weight:800; letter-spacing:0.01em; }
+            .belastning-resource-chart .belastning-card-top h5 { margin:0; flex:1; }
+            .belastning-drag-chip { display:inline-flex; align-items:center; gap:4px; border:1px solid #c7d9f3; border-radius:999px; background:linear-gradient(180deg,#ffffff 0%,#edf5ff 100%); color:#476685; font-size:10px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; padding:4px 7px; white-space:nowrap; }
             .belastning-mini-meta { margin-top:4px; font-size:11px; color:#567395; display:flex; gap:8px; flex-wrap:wrap; }
             .belastning-section-title { margin:10px 0 6px 0; font-size:12px; font-weight:800; color:#1e4768; letter-spacing:0.02em; text-transform:uppercase; }
             .belastning-subrows { margin-top:4px; font-size:11px; line-height:1.4; color:#4b6584; background:#f5f9ff; border:1px dashed #c9d9f1; border-radius:6px; padding:6px 8px; }
@@ -2661,6 +2673,7 @@ app.get('/', (req, res) => {
             let belastningLastPayload = null;
             let belastningSelectedDayKey = '';
             let belastningDetailContext = { resGr: '', parity: 1 };
+            let belastningDraggedCardKey = '';
             const BELASTNING_FILTER_DEBOUNCE_MS = 280;
             let _belastningKundeSuggestTimer = null;
             let _belastningKundeResults = [];
@@ -5235,6 +5248,123 @@ app.get('/', (req, res) => {
                 return new Intl.NumberFormat('da-DK', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(num));
             }
 
+            function getBelastningLayoutStorageKey() {
+                return 'afterkalk_belastning_layout_v1_' + sanitizeDisplayName(loggedUserDisplayName).toLowerCase();
+            }
+
+            function getBelastningCardKey(item) {
+                const rg = String(item && item.resGr || '').trim();
+                const parity = item && Number(item.parity) === 0 ? 0 : 1;
+                return rg ? (String(parity) + ':' + rg) : '';
+            }
+
+            function readBelastningLayoutOrder() {
+                try {
+                    const raw = localStorage.getItem(getBelastningLayoutStorageKey());
+                    const parsed = JSON.parse(String(raw || '[]'));
+                    return Array.isArray(parsed) ? parsed.map(v => String(v || '').trim()).filter(Boolean) : [];
+                } catch {
+                    return [];
+                }
+            }
+
+            function writeBelastningLayoutOrder(keys) {
+                try {
+                    localStorage.setItem(getBelastningLayoutStorageKey(), JSON.stringify(Array.from(new Set((Array.isArray(keys) ? keys : []).map(v => String(v || '').trim()).filter(Boolean)))));
+                } catch {}
+            }
+
+            function sortBelastningItemsBySavedLayout(items) {
+                const safeItems = Array.isArray(items) ? items.slice() : [];
+                const order = readBelastningLayoutOrder();
+                const orderIndex = new Map(order.map((key, index) => [key, index]));
+                return safeItems.sort((a, b) => {
+                    const keyA = getBelastningCardKey(a);
+                    const keyB = getBelastningCardKey(b);
+                    const idxA = orderIndex.has(keyA) ? orderIndex.get(keyA) : Number.MAX_SAFE_INTEGER;
+                    const idxB = orderIndex.has(keyB) ? orderIndex.get(keyB) : Number.MAX_SAFE_INTEGER;
+                    if (idxA !== idxB) return idxA - idxB;
+                    return String(a && a.resGr || '').localeCompare(String(b && b.resGr || ''), 'da');
+                });
+            }
+
+            function clearBelastningDragMarkers(root) {
+                const host = root || document;
+                host.querySelectorAll('.belastning-resource-chart.drag-target-before, .belastning-resource-chart.drag-target-after').forEach(el => {
+                    el.classList.remove('drag-target-before', 'drag-target-after');
+                });
+            }
+
+            function persistBelastningLayoutFromDom(targetId) {
+                const wrap = document.getElementById(targetId);
+                if (!wrap) return;
+                const visibleKeys = Array.from(wrap.querySelectorAll('.belastning-resource-chart[data-belastning-key]'))
+                    .map(el => String(el.getAttribute('data-belastning-key') || '').trim())
+                    .filter(Boolean);
+                if (visibleKeys.length === 0) return;
+                const previousKeys = readBelastningLayoutOrder().filter(key => !visibleKeys.includes(key));
+                writeBelastningLayoutOrder([...visibleKeys, ...previousKeys]);
+            }
+
+            function attachBelastningDragAndDrop(targetId) {
+                const wrap = document.getElementById(targetId);
+                if (!wrap || wrap.dataset.dragReady === '1') return;
+                wrap.dataset.dragReady = '1';
+
+                wrap.addEventListener('dragstart', event => {
+                    const card = event.target && event.target.closest ? event.target.closest('.belastning-resource-chart[data-belastning-key]') : null;
+                    if (!card) return;
+                    belastningDraggedCardKey = String(card.getAttribute('data-belastning-key') || '').trim();
+                    if (!belastningDraggedCardKey) return;
+                    card.classList.add('is-dragging');
+                    if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', belastningDraggedCardKey);
+                    }
+                });
+
+                wrap.addEventListener('dragover', event => {
+                    if (!belastningDraggedCardKey) return;
+                    event.preventDefault();
+                    const target = event.target && event.target.closest ? event.target.closest('.belastning-resource-chart[data-belastning-key]') : null;
+                    clearBelastningDragMarkers(wrap);
+                    if (!target || String(target.getAttribute('data-belastning-key') || '').trim() === belastningDraggedCardKey) return;
+                    const rect = target.getBoundingClientRect();
+                    const insertBefore = event.clientY < rect.top + (rect.height / 2);
+                    target.classList.add(insertBefore ? 'drag-target-before' : 'drag-target-after');
+                });
+
+                wrap.addEventListener('drop', event => {
+                    if (!belastningDraggedCardKey) return;
+                    event.preventDefault();
+                    const dragged = wrap.querySelector('.belastning-resource-chart[data-belastning-key="' + cssEscape(belastningDraggedCardKey) + '"]');
+                    const target = event.target && event.target.closest ? event.target.closest('.belastning-resource-chart[data-belastning-key]') : null;
+                    clearBelastningDragMarkers(wrap);
+                    if (!dragged || !target || dragged === target) return;
+                    const rect = target.getBoundingClientRect();
+                    const insertBefore = event.clientY < rect.top + (rect.height / 2);
+                    if (insertBefore) {
+                        wrap.insertBefore(dragged, target);
+                    } else {
+                        wrap.insertBefore(dragged, target.nextSibling);
+                    }
+                    persistBelastningLayoutFromDom(targetId);
+                });
+
+                wrap.addEventListener('dragend', () => {
+                    clearBelastningDragMarkers(wrap);
+                    wrap.querySelectorAll('.belastning-resource-chart.is-dragging').forEach(el => el.classList.remove('is-dragging'));
+                    belastningDraggedCardKey = '';
+                });
+            }
+
+            function cssEscape(value) {
+                const bs = String.fromCharCode(92);
+                return String(value || '')
+                    .split(bs).join(bs + bs)
+                    .split('"').join(bs + '"');
+            }
+
             function normalizeBelastningDateKey(rawDate, dateLabel) {
                 const label = String(dateLabel || '').trim();
                 const fullDa = label.match(/^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})$/);
@@ -5454,7 +5584,7 @@ app.get('/', (req, res) => {
             function renderBelastningBars(targetId, items, allRows) {
                 const wrap = document.getElementById(targetId);
                 if (!wrap) return;
-                const rows = Array.isArray(items) ? items : [];
+                const rows = sortBelastningItemsBySavedLayout(items);
                 const fullRows = Array.isArray(allRows) ? allRows : [];
                 if (rows.length === 0) {
                     wrap.innerHTML = '<div class="qms-empty">Ingen data i valgt periode.</div>';
@@ -5483,9 +5613,13 @@ app.get('/', (req, res) => {
                     const isActive = belastningDetailContext
                         && String(belastningDetailContext.resGr || '') === rg
                         && Number(belastningDetailContext.parity) === itemParity;
+                    const cardKey = getBelastningCardKey(item);
                     return ''
-                        + '<div class="belastning-resource-chart' + (isActive ? ' is-active' : '') + '" onclick="loadBelastningDetail(\\'' + escapeHtmlFE(rg) + '\\',' + itemParity + ')">'
+                        + '<div class="belastning-resource-chart' + (isActive ? ' is-active' : '') + '" draggable="true" data-belastning-key="' + escapeHtmlFE(cardKey) + '" onclick="loadBelastningDetail(\\'' + escapeHtmlFE(rg) + '\\',' + itemParity + ')">'
+                        + '<div class="belastning-card-top">'
                         + '<h5>Kapacitetsbelastning: ' + escapeHtmlFE(rg + ' ' + String(item.nm || '')) + '</h5>'
+                        + '<span class="belastning-drag-chip" title="Træk kortet for at gemme din egen rækkefølge">Flyt</span>'
+                        + '</div>'
                         + buildBelastningClusterSvg(chartRows, {
                             clickable: true,
                             resGr: rg,
@@ -5499,6 +5633,8 @@ app.get('/', (req, res) => {
                         + '<span>Aften: ' + escapeHtmlFE(formatBelastningMinutes(aften)) + '</span>'
                         + '</div></div>';
                 }).join('');
+
+                    attachBelastningDragAndDrop(targetId);
 
                 const svgTarget = targetId === 'belastningBarsCombined' ? 'belastningSvgCombined' : null;
                 const svgWrap = document.getElementById(svgTarget);
@@ -6005,10 +6141,6 @@ app.get('/', (req, res) => {
             function initializeAfterAccess() {
                 startWarmupPolling();
                 loadOrderList(false);
-                // Trigger fresh rebuild/warmup only after access is granted (dashboard flow).
-                setTimeout(() => {
-                    loadOrderList(true);
-                }, 250);
                 setTimeout(() => {
                     if (!orderListData || orderListData.length === 0) {
                         loadOrderList(true);
