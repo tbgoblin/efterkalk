@@ -1356,7 +1356,7 @@ app.get('/', (req, res) => {
                             <button type="button" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
                             <button type="button" disabled>Faktura - Kommer snart</button>
                             <button type="button" disabled>Ordreoversigt - Kommer snart</button>
-                            <button type="button" disabled>Bom - Kommer snart</button>
+                            <button type="button" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
                             <button type="button" disabled>APV - Kommer snart</button>
                             <button type="button" onclick="openModule('belastning')">Belastning</button>
                             <button type="button" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
