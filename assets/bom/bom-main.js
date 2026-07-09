@@ -12,13 +12,115 @@ document.getElementById('cancelDraftProductBtn').addEventListener('click', close
 draftProductModal.addEventListener('click', evt => {
     if (evt.target === draftProductModal) closeDraftModal();
 });
+
+// ── Auto-preview produktnr. mens bruger skriver ──
+if (draftProdNoSuffix) {
+    draftProdNoSuffix.addEventListener('input', () => {
+        const custCode = state.selectedCustomer ? String(state.selectedCustomer.Gr || state.selectedCustomer.CustNo || '') : '';
+        const suffix = String(draftProdNoSuffix.value || '').trim();
+        const preview = custCode + suffix;
+        if (draftProdNoPreview) draftProdNoPreview.textContent = preview || '—';
+        // Skjul preview-panel ved ændring
+        if (vismaPreviewPanel) vismaPreviewPanel.style.display = 'none';
+        if (createVismaBtn) { createVismaBtn.style.display = 'none'; createVismaBtn.disabled = true; }
+    });
+}
+
+// ── "Tjek Visma" — preview hvad der vil blive oprettet ──
+document.getElementById('previewVismaBtn').addEventListener('click', async () => {
+    if (!state.selectedCustomer) { setStatus('Vælg en kunde først.'); return; }
+    const custCode = String(state.selectedCustomer.Gr || state.selectedCustomer.CustNo || '');
+    const suffix   = String(draftProdNoSuffix ? draftProdNoSuffix.value || '' : '').trim();
+    const descr    = String(draftDescr.value || '').trim();
+    if (!suffix || !descr) {
+        setStatus('Udfyld produktnr.-suffiks og beskrivelse.');
+        return;
+    }
+    const btn = document.getElementById('previewVismaBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Tjekker…';
+    try {
+        const body = {
+            customerCode:    custCode,
+            customerNo:      String(state.selectedCustomer.CustNo || ''),
+            prodNoSuffix:    suffix,
+            descr,
+            tgNo:            String(draftTgNo ? draftTgNo.value || '' : '').trim(),
+            revNo:           String(draftRevNo ? draftRevNo.value || '' : '').trim(),
+            tgForm:          draftTgForm ? draftTgForm.value : 'A4',
+            customerNoAlt:   draftCustomerNoAlt ? String(draftCustomerNoAlt.value || '').trim() : '',
+            createRoute:     !!(draftCreateRoute && draftCreateRoute.checked),
+            createLaserPart: !!(draftCreateLaser && draftCreateLaser.checked),
+            prodPrGr:        state.selectedCustomer.CustPrGr || 0
+        };
+        const resp = await fetchJson('/bom/create-products/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (vismaPreviewPanel) vismaPreviewPanel.style.display = 'block';
+        if (vismaPreviewBody) {
+            vismaPreviewBody.innerHTML = (resp.records || []).map(r =>
+                '<div style="padding:3px 0;border-bottom:1px solid #dde;"><strong>' + escapeHtml(r.ProdNo) + '</strong> — ' +
+                escapeHtml(r.Descr) + ' <span style="color:#57718f;">(ProdGr=' + r.ProdGr + ')</span></div>'
+            ).join('');
+        }
+        const conflicts = resp.conflicts || [];
+        if (vismaPreviewConflict) {
+            if (conflicts.length > 0) {
+                vismaPreviewConflict.style.display = 'block';
+                vismaPreviewConflict.textContent = '⚠️ Eksisterer allerede: ' + conflicts.join(', ');
+            } else {
+                vismaPreviewConflict.style.display = 'none';
+            }
+        }
+        if (createVismaBtn) {
+            createVismaBtn.style.display = 'inline-block';
+            createVismaBtn.disabled = conflicts.length > 0;
+            createVismaBtn.dataset.payload = JSON.stringify(body);
+        }
+    } catch (err) {
+        setStatus('Fejl ved tjek: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '👁 Tjek Visma';
+    }
+});
+
+// ── "Opret i Visma" — udfør INSERT ──
+if (createVismaBtn) {
+    createVismaBtn.addEventListener('click', async () => {
+        if (!confirm('Er du sikker på, at du vil oprette disse produkter direkte i Visma?\nDenne handling kan ikke fortrydes automatisk.')) return;
+        createVismaBtn.disabled = true;
+        createVismaBtn.textContent = '⏳ Opretter…';
+        try {
+            const payload = JSON.parse(createVismaBtn.dataset.payload || '{}');
+            const resp = await fetchJson('/bom/create-products/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const created = (resp.created || []).map(r => r.ProdNo).join(', ');
+            setStatus('✅ Oprettet i Visma: ' + created);
+            closeDraftModal();
+            await loadProducts();
+        } catch (err) {
+            setStatus('❌ Fejl ved oprettelse i Visma: ' + err.message);
+            createVismaBtn.disabled = false;
+            createVismaBtn.textContent = '✅ Opret i Visma';
+        }
+    });
+}
+
 draftProductForm.addEventListener('submit', evt => {
     evt.preventDefault();
     if (!state.selectedCustomer) return;
-    const prodNo = String(draftProdNo.value || '').trim();
-    const descr = String(draftDescr.value || '').trim();
-    if (!prodNo || !descr) {
-        setStatus('Produktnr og beskrivelse er påkrævet for lokal kladde.');
+    const custCode = String(state.selectedCustomer.Gr || state.selectedCustomer.CustNo || '');
+    const suffix   = String(draftProdNoSuffix ? draftProdNoSuffix.value || '' : '').trim();
+    const prodNo   = custCode + suffix;
+    const descr    = String(draftDescr.value || '').trim();
+    if (!suffix || !descr) {
+        setStatus('Produktnr.-suffiks og beskrivelse er påkrævet for lokal kladde.');
         return;
     }
     const rows = loadDraftProducts(state.selectedCustomer.CustNo);
@@ -33,11 +135,11 @@ draftProductForm.addEventListener('submit', evt => {
     const draftRow = {
         ProdNo: prodNo,
         Descr: descr,
-        TgNo: String(draftTgNo.value || '').trim(),
-        RevNo: String(draftRevNo.value || '').trim() || 'KLADDE',
+        TgNo: String(draftTgNo ? draftTgNo.value || '' : '').trim(),
+        RevNo: String(draftRevNo ? draftRevNo.value || '' : '').trim() || 'KLADDE',
         PosNo: '',
         Inf3: state.selectedCustomer ? state.selectedCustomer.CustNo : '',
-        Inf4: String(draftNote.value || '').trim(),
+        Inf4: draftCustomerNoAlt ? String(draftCustomerNoAlt.value || '').trim() : '',
         chck: 'LOCAL_DRAFT',
         IsLocalDraft: true,
         MaterialProdNo: state.draftMaterial ? (state.draftMaterial.ProdNo || '') : '',
@@ -69,6 +171,51 @@ suppliersSearchInput.addEventListener('input', () => { loadSuppliers().catch(() 
 document.getElementById('addSublevelBtn').addEventListener('click', () => addSublevelRow());
 document.getElementById('runQuoteBtn').addEventListener('click', runQuote);
 document.getElementById('resetQuoteBtn').addEventListener('click', resetBeregner);
+if (copyQuoteBtn) copyQuoteBtn.addEventListener('click', copyQuoteToClipboard);
+
+// ── Tastaturgenveje: Alt+1..8 skifter område, "/" fokuserer søgning ──
+const viewSearchFocus = {
+    stykliste: 'customerSearchInput',
+    komponenter: 'componentsSearchInput',
+    resources: 'resourcesSearchInput',
+    materials: 'materialsSearchInput',
+    calculators: 'laserMachineInput',
+    beregner: 'calcMaterialSearch',
+    leverandorer: 'suppliersSearchInput'
+};
+document.addEventListener('keydown', evt => {
+    if (evt.altKey && !evt.ctrlKey && !evt.shiftKey && !evt.metaKey) {
+        const idx = Number(evt.key);
+        if (idx >= 1 && idx <= navItems.length) {
+            evt.preventDefault();
+            switchView(navItems[idx - 1].key);
+        }
+        return;
+    }
+    if (evt.key === '/' && !evt.ctrlKey && !evt.metaKey) {
+        const tag = String((evt.target && evt.target.tagName) || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        const id = viewSearchFocus[state.view];
+        const el = id ? document.getElementById(id) : null;
+        if (el) {
+            evt.preventDefault();
+            el.focus();
+            if (el.select) el.select();
+        }
+    }
+});
+// Enter/Space aktiverer kunde-/produktkort (tastatur-navigation)
+[customersList, productsList].forEach(listEl => {
+    if (!listEl) return;
+    listEl.addEventListener('keydown', evt => {
+        if (evt.key !== 'Enter' && evt.key !== ' ') return;
+        const item = evt.target && evt.target.closest ? evt.target.closest('.list-item') : null;
+        if (item) {
+            evt.preventDefault();
+            item.click();
+        }
+    });
+});
 document.getElementById('drawingFileInput').addEventListener('change', evt => {
     const file = evt.target.files && evt.target.files[0];
     if (file) analyzeDrawingFile(file);

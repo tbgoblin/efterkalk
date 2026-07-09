@@ -14,6 +14,9 @@ cache/
 Thumbs.db
 .vscode/
 
+# Office lock-filer (Excel åben)
+~$*
+
 # Electron builder artifacts
 *.blockmap
 latest*.yml

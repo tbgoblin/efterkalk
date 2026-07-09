@@ -1392,6 +1392,146 @@ function createBomService({ getConnection, sql, diskCache, logEvent }) {
         };
     }
 
+    // ── TgForm kode → Gr8 int (som Enh-ark: A4=1, A3=2, A2=3, A1=4, A0=5) ──
+    const TG_FORM_MAP = { 'A4': 1, 'A3': 2, 'A2': 3, 'A1': 4, 'A0': 5, '-': 6 };
+    function tgFormToGr8(tgForm) {
+        return TG_FORM_MAP[String(tgForm || 'A4').trim().toUpperCase()] || 1;
+    }
+
+    // ── Byg liste af Prod-records ud fra input (som Vareoplysninger) ──
+    function buildProductRecords(input) {
+        const custCode  = String(input.customerCode  || input.customerNo || '').trim();
+        const suffix    = String(input.prodNoSuffix  || '').trim();
+        const descr     = String(input.descr || '').slice(0, 60);
+        const tgNo      = String(input.tgNo  || '').trim();
+        const revNo     = String(input.revNo || '').trim();
+        const tgForm    = String(input.tgForm || 'A4').trim();
+        const custNoAlt = String(input.customerNoAlt || '').trim();
+        const lager     = String(input.lager || '').trim();
+        const creDate   = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+        // Dimensioner (mm → meter for Visma-formatet på færdigvarer)
+        const hgtU   = Number(input.thickness || 0);           // tykkelse mm
+        const lgtU   = Number(input.lengthMm  || 0) / 1000;   // mm → m
+        const wdtU   = Number(input.widthMm   || 0) / 1000;   // mm → m
+        const densU  = Number(input.density   || 7.85);
+        const free2  = Number(input.margin    || 0);
+        const stSaleUn = Number(input.stSaleUn || 1);
+        const prodPrGr = Number(input.prodPrGr || 0);
+        const prCatNo  = Number(input.prCatNo  || 1);
+        const gr8      = tgFormToGr8(tgForm);
+
+        const mainProdNo  = custCode + suffix;
+        const routeProdNo = 'V' + mainProdNo;
+        const laserProdNo = mainProdNo + 'L';
+
+        const base = {
+            Inf2: tgNo, Inf3: custCode, Inf4: custNoAlt, Inf6: lager,
+            Inf7: revNo, Inf8: tgForm, HgtU: hgtU, LgtU: lgtU, WdtU: wdtU,
+            DensU: densU, Inf: 0, Free2: free2, StSaleUn: stSaleUn,
+            ProdPrGr: prodPrGr, PrCatNo: prCatNo, Gr8: gr8,
+            NWgtU: 0, CreDt: creDate, Rsp: 0
+        };
+
+        const records = [];
+
+        // R2: Hovedvare (ProdGr=1, assembly/salgsartikel)
+        if (mainProdNo) {
+            records.push({ ...base, ProdNo: mainProdNo, Descr: descr, ProdGr: 1, _role: 'main' });
+        }
+        // R3: Rute (ProdGr=1, ProdNo=V+main, beskrivelse = "Rute for ...")
+        if (input.createRoute && mainProdNo) {
+            records.push({ ...base, ProdNo: routeProdNo, Descr: ('Rute for ' + descr).slice(0, 60), ProdGr: 1, _role: 'route' });
+        }
+        // R4: Laserpart (ProdGr=2, ProdNo=main+L)
+        if (input.createLaserPart && mainProdNo) {
+            const laserDescr = 'Laser ' + descr;
+            records.push({ ...base, ProdNo: laserProdNo, Descr: laserDescr.slice(0, 60), ProdGr: 2, _role: 'laser' });
+        }
+
+        return records;
+    }
+
+    // ── Anteprima: hvad vil blive oprettet, tjek duplikater ──
+    async function previewCreateProducts(input) {
+        const records = buildProductRecords(input);
+        if (records.length === 0) throw new Error('Ingen produkter at oprette — udfyld kundenr. og produktnr.-suffiks');
+
+        const pool = await getConnection();
+        const prodNos = records.map(r => r.ProdNo).filter(Boolean);
+        const placeholders = prodNos.map((_, i) => '@pn' + i).join(', ');
+        const req = pool.request();
+        prodNos.forEach((pn, i) => req.input('pn' + i, sql.VarChar, pn));
+        const existing = await req.query(`SELECT ProdNo, Descr FROM Prod WHERE ProdNo IN (${placeholders})`);
+        const conflicts = (existing.recordset || []).map(r => String(r.ProdNo));
+
+        return {
+            records: records.map(r => ({ ...r })),
+            conflicts,
+            canCreate: conflicts.length === 0
+        };
+    }
+
+    // ── Opret produkter i Visma via transaktion ──
+    async function createProductsInVisma(input) {
+        const preview = await previewCreateProducts(input);
+        if (preview.conflicts.length > 0) {
+            const err = new Error('Produkterne eksisterer allerede i Visma: ' + preview.conflicts.join(', '));
+            err.statusCode = 409;
+            throw err;
+        }
+
+        const pool = await getConnection();
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        const created = [];
+        try {
+            for (const rec of preview.records) {
+                const req = new sql.Request(transaction);
+                req.input('ProdNo',    sql.VarChar(50),  rec.ProdNo);
+                req.input('Descr',     sql.VarChar(60),  rec.Descr);
+                req.input('ProdGr',    sql.Int,           rec.ProdGr);
+                req.input('Inf2',      sql.VarChar(60),  rec.Inf2);
+                req.input('Inf3',      sql.VarChar(60),  rec.Inf3);
+                req.input('Inf4',      sql.VarChar(60),  rec.Inf4);
+                req.input('Inf6',      sql.VarChar(20),  rec.Inf6);
+                req.input('Inf7',      sql.VarChar(20),  rec.Inf7);
+                req.input('Inf8',      sql.VarChar(20),  rec.Inf8);
+                req.input('HgtU',      sql.Float,         rec.HgtU);
+                req.input('LgtU',      sql.Float,         rec.LgtU);
+                req.input('WdtU',      sql.Float,         rec.WdtU);
+                req.input('DensU',     sql.Float,         rec.DensU);
+                req.input('Inf',       sql.Float,         rec.Inf);
+                req.input('Free2',     sql.Float,         rec.Free2);
+                req.input('StSaleUn',  sql.Int,           rec.StSaleUn);
+                req.input('ProdPrGr',  sql.Int,           rec.ProdPrGr);
+                req.input('PrCatNo',   sql.Int,           rec.PrCatNo);
+                req.input('Gr8',       sql.Int,           rec.Gr8);
+                req.input('NWgtU',     sql.Float,         rec.NWgtU);
+                req.input('CreDt',     sql.VarChar(8),   rec.CreDt);
+                req.input('Rsp',       sql.Float,         rec.Rsp);
+                await req.query(`
+                    INSERT INTO Prod
+                        (ProdNo, Descr, ProdGr, Inf2, Inf3, Inf4, Inf6, Inf7, Inf8,
+                         HgtU, LgtU, WdtU, DensU, Inf, Free2, StSaleUn,
+                         ProdPrGr, PrCatNo, Gr8, NWgtU, CreDt, Rsp)
+                    VALUES
+                        (@ProdNo, @Descr, @ProdGr, @Inf2, @Inf3, @Inf4, @Inf6, @Inf7, @Inf8,
+                         @HgtU, @LgtU, @WdtU, @DensU, @Inf, @Free2, @StSaleUn,
+                         @ProdPrGr, @PrCatNo, @Gr8, @NWgtU, @CreDt, @Rsp)
+                `);
+                created.push({ ProdNo: rec.ProdNo, Descr: rec.Descr, role: rec._role });
+            }
+            await transaction.commit();
+            // Invalider relevante caches
+            invalidate('products');
+            return { ok: true, created };
+        } catch (err) {
+            await transaction.rollback();
+            throw err;
+        }
+    }
+
     return {
         fetchCustomers,
         fetchProductsByCustomer,
@@ -1408,6 +1548,8 @@ function createBomService({ getConnection, sql, diskCache, logEvent }) {
         computeShapeNesting,
         computeQuote,
         analyzeDrawingFile,
+        previewCreateProducts,
+        createProductsInVisma,
         invalidate
     };
 }

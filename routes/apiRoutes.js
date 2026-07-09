@@ -873,6 +873,8 @@ async function fetchBelastningOrderLineRows({ getConnection, sql, orderCsv }) {
 }
 
 const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
+const settingsService = require('../services/settingsService');
+const getConnectionModule = require('../db');
 const { createOmsaetningService } = require('../services/omsaetningService');
 const { createOrdreindgangService } = require('../services/ordreindgangService');
 const { createBomService } = require('../services/bomService');
@@ -1656,7 +1658,53 @@ function createApiRouter({
     });
 
     router.get('/health', (req, res) => {
-        res.json({ ok: true, version: pkgVersion });
+        const activeProfile = settingsService.getActiveProfile();
+        res.json({ ok: true, version: pkgVersion, db: activeProfile.database, dbServer: activeProfile.server, dbProfile: activeProfile.id, dbLabel: activeProfile.label });
+    });
+
+    // ── Settings: database profiler ─────────────────────────────────────────
+    router.get('/settings/db-profiles', (_req, res) => {
+        try {
+            res.json({ ok: true, ...settingsService.getSettingsSummary() });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/settings/db-profiles/active', express.json(), (req, res) => {
+        try {
+            const profileId = String((req.body && req.body.profileId) || '').trim();
+            if (!profileId) return res.status(400).json({ ok: false, error: 'profileId mangler' });
+            const profile = settingsService.setActiveProfile(profileId);
+            if (typeof getConnectionModule.resetConnection === 'function') {
+                getConnectionModule.resetConnection();
+            }
+            logEvent('SETTINGS: active DB profile changed to ' + profileId + ' (' + profile.label + ')');
+            res.json({ ok: true, activeProfile: profile, ...settingsService.getSettingsSummary() });
+        } catch (err) {
+            res.status(400).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/settings/db-profiles/upsert', express.json(), (req, res) => {
+        try {
+            const profile = settingsService.upsertProfile(req.body || {});
+            logEvent('SETTINGS: profile upserted: ' + profile.id);
+            res.json({ ok: true, profile, ...settingsService.getSettingsSummary() });
+        } catch (err) {
+            res.status(400).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.delete('/settings/db-profiles/:id', (req, res) => {
+        try {
+            const profileId = String(req.params.id || '').trim();
+            settingsService.deleteProfile(profileId);
+            logEvent('SETTINGS: profile deleted: ' + profileId);
+            res.json({ ok: true, ...settingsService.getSettingsSummary() });
+        } catch (err) {
+            res.status(400).json({ ok: false, error: err.message });
+        }
     });
 
     router.get('/warmup-status', (req, res) => {
@@ -2114,7 +2162,7 @@ function createApiRouter({
         const ordNo = parseInt(req.params.ordno);
         if (Number.isNaN(ordNo)) return res.status(400).json({ error: 'Ugyldigt ordrenummer' });
         const note = orderNotesService.getNote(ordNo);
-        res.json(note || { status: '', text: '', isCreditNote: false, updatedAt: null });
+        res.json(note || { status: '', text: '', isCreditNote: false, isUB: false, updatedAt: null });
     });
 
     router.get('/order-notes-all', (req, res) => {
@@ -2124,9 +2172,9 @@ function createApiRouter({
     router.post('/order-note/:ordno', express.json(), (req, res) => {
         const ordNo = parseInt(req.params.ordno);
         if (Number.isNaN(ordNo)) return res.status(400).json({ error: 'Ugyldigt ordrenummer' });
-        const { status = '', text = '', isCreditNote = false } = req.body || {};
-        const note = orderNotesService.setNote(ordNo, { status, text, isCreditNote });
-        res.json(note || { status: '', text: '', isCreditNote: false, updatedAt: null });
+        const { status = '', text = '', isCreditNote = false, isUB = false } = req.body || {};
+        const note = orderNotesService.setNote(ordNo, { status, text, isCreditNote, isUB });
+        res.json(note || { status: '', text: '', isCreditNote: false, isUB: false, updatedAt: null });
     });
 
     router.delete('/order-note/:ordno', (req, res) => {
@@ -2366,6 +2414,30 @@ function createApiRouter({
         } catch (err) {
             logEvent('ERROR bom/cache/invalidate: ' + err.message);
             res.status(500).json({ ok: false, error: err.message || 'BOM cache invalidate fejl' });
+        }
+    });
+
+    // ── BOM: Opret produkter i Visma ────────────────────────────────────────
+    router.post('/bom/create-products/preview', express.json(), async (req, res) => {
+        try {
+            const result = await bomService.previewCreateProducts(req.body || {});
+            res.json({ ok: true, ...result });
+        } catch (err) {
+            logEvent('ERROR bom/create-products/preview: ' + err.message);
+            const status = err.statusCode || 400;
+            res.status(status).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/bom/create-products/execute', express.json(), async (req, res) => {
+        try {
+            const result = await bomService.createProductsInVisma(req.body || {});
+            logEvent('BOM CREATE: ' + (result.created || []).map(r => r.ProdNo).join(', '));
+            res.json({ ok: true, ...result });
+        } catch (err) {
+            logEvent('ERROR bom/create-products/execute: ' + err.message);
+            const status = err.statusCode || 500;
+            res.status(status).json({ ok: false, error: err.message });
         }
     });
 

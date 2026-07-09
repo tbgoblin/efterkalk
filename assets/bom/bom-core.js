@@ -22,6 +22,7 @@ const state = {
     calcCustomer: null,
     calcCustomerMetaCache: {},
     calcComponents: [],
+    lastQuote: null,
     draftMaterial: null,
     draftResources: []
 };
@@ -64,11 +65,22 @@ const productsList = document.getElementById('productsList');
 const draftProductModal = document.getElementById('draftProductModal');
 const draftProductForm = document.getElementById('draftProductForm');
 const draftCustomerText = document.getElementById('draftCustomerText');
-const draftProdNo = document.getElementById('draftProdNo');
+const draftProdNo = null; // replaced by suffix+prefix pattern
+const draftProdNoSuffix = document.getElementById('draftProdNoSuffix');
+const draftProdNoPrefix = document.getElementById('draftProdNoPrefix');
+const draftProdNoPreview = document.getElementById('draftProdNoPreview');
 const draftDescr = document.getElementById('draftDescr');
 const draftTgNo = document.getElementById('draftTgNo');
 const draftRevNo = document.getElementById('draftRevNo');
+const draftTgForm = document.getElementById('draftTgForm');
+const draftCustomerNoAlt = document.getElementById('draftCustomerNoAlt');
 const draftNote = document.getElementById('draftNote');
+const draftCreateRoute = document.getElementById('draftCreateRoute');
+const draftCreateLaser = document.getElementById('draftCreateLaser');
+const vismaPreviewPanel = document.getElementById('vismaPreviewPanel');
+const vismaPreviewBody = document.getElementById('vismaPreviewBody');
+const vismaPreviewConflict = document.getElementById('vismaPreviewConflict');
+const createVismaBtn = document.getElementById('createVismaBtn');
 const customersMeta = document.getElementById('customersMeta');
 const productsMeta = document.getElementById('productsMeta');
 const revisionsMeta = document.getElementById('revisionsMeta');
@@ -116,7 +128,9 @@ const nestingMeta = document.getElementById('nestingMeta');
 const quoteGrid = document.getElementById('quoteGrid');
 const quoteMeta = document.getElementById('quoteMeta');
 const quotePriceBig = document.getElementById('quotePriceBig');
+const quotePriceTotal = document.getElementById('quotePriceTotal');
 const quoteStatus = document.getElementById('quoteStatus');
+const copyQuoteBtn = document.getElementById('copyQuoteBtn');
 
 // ── Hjælpefunktioner ──
 function setStatus(text, count) {
@@ -155,6 +169,54 @@ async function fetchJson(url, options) {
 function setMetric(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
+}
+function showToast(message, kind) {
+    let stack = document.getElementById('toastStack');
+    if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'toastStack';
+        stack.className = 'toast-stack';
+        document.body.appendChild(stack);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast' + (kind ? ' ' + kind : '');
+    toast.textContent = message;
+    stack.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('leave');
+        setTimeout(() => toast.remove(), 350);
+    }, 2600);
+}
+function animateMoney(el, value, suffix) {
+    if (!el) return;
+    const to = Number(value || 0);
+    const from = Number(el.dataset.animVal || 0);
+    el.dataset.animVal = String(to);
+    const sfx = suffix || '';
+    if (el._animFrame) cancelAnimationFrame(el._animFrame);
+    const start = performance.now();
+    const dur = 450;
+    function step(now) {
+        const t = Math.min(1, (now - start) / dur);
+        const eased = 1 - Math.pow(1 - t, 3);
+        el.textContent = formatMoney(from + (to - from) * eased) + sfx;
+        if (t < 1) el._animFrame = requestAnimationFrame(step);
+    }
+    el._animFrame = requestAnimationFrame(step);
+}
+function tableSkeleton(headEl, bodyEl, cols, rows) {
+    const c = Math.max(1, cols || 5);
+    const r = Math.max(1, rows || 8);
+    if (headEl) headEl.innerHTML = '<tr>' + Array.from({ length: c }).map(() => '<th><span class="skl" style="width:60%;"></span></th>').join('') + '</tr>';
+    if (bodyEl) bodyEl.innerHTML = Array.from({ length: r }).map(() =>
+        '<tr class="skl-row">' + Array.from({ length: c }).map((_, i) => '<td><span class="skl" style="width:' + (85 - (i * 9) % 40) + '%;"></span></td>').join('') + '</tr>'
+    ).join('');
+}
+function listSkeleton(el, count) {
+    if (!el) return;
+    el.innerHTML = Array.from({ length: Math.max(1, count || 6) }).map(() =>
+        '<div class="list-item"><span class="skl" style="width:72%;"></span><span class="skl" style="width:46%;"></span></div>'
+    ).join('');
 }
 
 // ── Data-hentning (cache i state) ──

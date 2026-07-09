@@ -3,9 +3,9 @@
 // parametre, leverandører og lokale produktkladder.
 
 function renderNav() {
-    navList.innerHTML = navItems.map(item => {
+    navList.innerHTML = navItems.map((item, idx) => {
         const active = item.key === state.view ? 'active' : '';
-        return '<button class="nav-btn ' + active + '" data-view="' + item.key + '"><strong>' + escapeHtml(item.title) + '</strong><span>' + escapeHtml(item.description) + '</span></button>';
+        return '<button class="nav-btn ' + active + '" data-view="' + item.key + '" title="Genvej: Alt+' + (idx + 1) + '"><kbd class="nav-kbd">Alt+' + (idx + 1) + '</kbd><strong>' + escapeHtml(item.title) + '</strong><span>' + escapeHtml(item.description) + '</span></button>';
     }).join('');
     navList.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.getAttribute('data-view'))));
 }
@@ -35,6 +35,7 @@ function renderSimpleTable(headEl, bodyEl, rows) {
     const safeRows = Array.isArray(rows) ? rows : [];
     const columns = safeRows.length ? Object.keys(safeRows[0]) : [];
     headEl.innerHTML = columns.length ? '<tr>' + columns.map(col => '<th>' + escapeHtml(col) + '</th>').join('') + '</tr>' : '<tr><th>Ingen data</th></tr>';
+    bodyEl.classList.add('reveal-stagger');
     bodyEl.innerHTML = safeRows.length ? safeRows.map(row => '<tr>' + columns.map(col => '<td>' + escapeHtml(row[col]) + '</td>').join('') + '</tr>').join('') : '<tr><td class="empty">Ingen rækker fundet.</td></tr>';
 }
 function currentProductRows() {
@@ -51,9 +52,10 @@ function renderCustomers() {
         const selected = state.selectedCustomer && String(state.selectedCustomer.CustNo) === String(row.CustNo) ? ' selected' : '';
         return '<option value="' + escapeHtml(row.CustNo) + '"' + selected + '>' + escapeHtml((row.CustNo || '') + ' · ' + (row.Gr || '') + ' · ' + (row.Nm || '')) + '</option>';
     }).join('');
+    customersList.classList.toggle('reveal-stagger', !!customersList.querySelector('.skl'));
     customersList.innerHTML = rows.length ? rows.map(row => {
         const active = state.selectedCustomer && String(state.selectedCustomer.CustNo) === String(row.CustNo) ? ' active' : '';
-        return '<div class="list-item' + active + '" data-customer="' + escapeHtml(row.CustNo) + '"><strong>' + escapeHtml((row.CustNo || '') + ' · ' + (row.Gr || '') + ' · ' + (row.Nm || '')) + '</strong><span>' + escapeHtml((row.Shrt || '') + ' · ' + (row.PArea || '')) + '</span></div>';
+        return '<div class="list-item' + active + '" data-customer="' + escapeHtml(row.CustNo) + '" tabindex="0" role="button"><strong>' + escapeHtml((row.CustNo || '') + ' · ' + (row.Gr || '') + ' · ' + (row.Nm || '')) + '</strong><span>' + escapeHtml((row.Shrt || '') + ' · ' + (row.PArea || '')) + '</span></div>';
     }).join('') : '<div class="empty">Ingen kunder fundet.</div>';
     customersList.querySelectorAll('[data-customer]').forEach(el => {
         el.addEventListener('click', () => {
@@ -72,11 +74,12 @@ function renderCustomers() {
 function renderProducts() {
     const filtered = currentProductRows();
     productsMeta.textContent = state.selectedCustomer ? ('Kundenøgler ' + state.selectedCustomer.CustNo + ' / ' + state.selectedCustomer.Gr + ' · ' + filtered.length + ' af ' + state.products.length + ' produkter') : 'Vælg kunde';
+    productsList.classList.toggle('reveal-stagger', !!productsList.querySelector('.skl'));
     productsList.innerHTML = filtered.length ? filtered.map(row => {
         const active = state.selectedProduct && String(state.selectedProduct.ProdNo) === String(row.ProdNo) ? ' active' : '';
         const draftClass = row.IsLocalDraft ? ' draft' : '';
         const draftTag = row.IsLocalDraft ? '<span class="tag">LOKAL</span>' : '';
-        return '<div class="list-item' + active + draftClass + '" data-product="' + escapeHtml(row.ProdNo) + '"><strong>' + escapeHtml((row.ProdNo || '-') + ' · ' + (row.Descr || '')) + draftTag + '</strong><span>' + escapeHtml('TgNo: ' + (row.TgNo || '-') + ' · Rev: ' + (row.RevNo || '-')) + '</span></div>';
+        return '<div class="list-item' + active + draftClass + '" data-product="' + escapeHtml(row.ProdNo) + '" tabindex="0" role="button"><strong>' + escapeHtml((row.ProdNo || '-') + ' · ' + (row.Descr || '')) + draftTag + '</strong><span>' + escapeHtml('TgNo: ' + (row.TgNo || '-') + ' · Rev: ' + (row.RevNo || '-')) + '</span></div>';
     }).join('') : '<div class="empty">Ingen produkter matcher søgningen.</div>';
     productsList.querySelectorAll('[data-product]').forEach(el => {
         el.addEventListener('click', () => {
@@ -184,6 +187,7 @@ async function loadCustomerNotes() {
 }
 async function loadComponents() {
     setStatus('Henter komponenter...');
+    tableSkeleton(componentsHead, componentsBody, 5, 8);
     const q = encodeURIComponent(String(componentsSearchInput.value || '').trim());
     const data = await fetchJson('/bom/components?q=' + q + '&limit=1000');
     state.components = data.rows || [];
@@ -192,6 +196,7 @@ async function loadComponents() {
 }
 async function loadSuppliers() {
     setStatus('Henter leverandører...');
+    tableSkeleton(suppliersHead, suppliersBody, 5, 8);
     const q = encodeURIComponent(String(suppliersSearchInput.value || '').trim());
     const data = await fetchJson('/bom/suppliers?q=' + q);
     state.suppliers = data.rows || [];
@@ -200,6 +205,7 @@ async function loadSuppliers() {
 }
 async function loadCustomers() {
     setStatus('Henter kunder...');
+    if (!state.customers.length) listSkeleton(customersList, 8);
     const q = encodeURIComponent(String(customerSearchInput.value || '').trim());
     const data = await fetchJson('/bom/customers?q=' + q);
     state.customers = data.rows || [];
@@ -217,6 +223,7 @@ async function loadProducts() {
         return;
     }
     setStatus('Henter produkter for kunde ' + state.selectedCustomer.CustNo + '...');
+    listSkeleton(productsList, 6);
     const data = await fetchJson('/bom/products?customerNo=' + encodeURIComponent(state.selectedCustomer.CustNo) + '&customerCode=' + encodeURIComponent(state.selectedCustomer.Gr || state.selectedCustomer['Varenr.'] || ''));
     const backendRows = data.rows || [];
     const draftRows = loadDraftProducts(state.selectedCustomer.CustNo);
@@ -254,6 +261,7 @@ async function loadRevisions() {
 }
 async function loadResources() {
     setStatus('Henter ressourcer...');
+    if (!state.resources.length) tableSkeleton(resourcesHead, resourcesBody, 6, 8);
     const data = await fetchJson('/bom/resources');
     state.resources = data.rows || [];
     const filter = String(resourcesSearchInput.value || '').trim().toLowerCase();
@@ -265,6 +273,7 @@ async function loadResources() {
 }
 async function loadMaterials() {
     setStatus('Henter materialer...');
+    if (!state.materials.length) tableSkeleton(materialsHead, materialsBody, 6, 8);
     const q = encodeURIComponent(String(materialsSearchInput.value || '').trim());
     const data = await fetchJson('/bom/materials?q=' + q);
     state.materials = data.rows || [];
@@ -275,6 +284,11 @@ async function loadMaterials() {
 }
 async function loadCalculators() {
     setStatus('Henter parametre...');
+    if (!laserBody.children.length) {
+        tableSkeleton(laserHead, laserBody, 5, 4);
+        tableSkeleton(processHead, processBody, 5, 4);
+        tableSkeleton(processResourceHead, processResourceBody, 5, 4);
+    }
     const machine = encodeURIComponent(String(document.getElementById('laserMachineInput').value || '').trim());
     const family = String(document.getElementById('processFilterSelect').value || '').trim().toLowerCase();
     const [laserData, processData, resourceData] = await Promise.all([
@@ -326,11 +340,16 @@ function openDraftModal() {
         setStatus('Vælg en kunde først for at oprette lokal produktkladde.');
         return;
     }
+    const custCode = String(state.selectedCustomer.Gr || state.selectedCustomer.CustNo || '');
     draftCustomerText.value = (state.selectedCustomer.CustNo || '-') + ' - ' + (state.selectedCustomer.Nm || '');
-    draftProdNo.value = '';
+    if (draftProdNoPrefix) draftProdNoPrefix.textContent = custCode ? (custCode + ' +') : '';
+    if (draftProdNoSuffix) draftProdNoSuffix.value = '';
+    if (draftProdNoPreview) draftProdNoPreview.textContent = '—';
     draftDescr.value = '';
     draftTgNo.value = '';
-    draftRevNo.value = 'KLADDE';
+    if (draftRevNo) draftRevNo.value = '';
+    if (draftTgForm) draftTgForm.value = 'A4';
+    if (draftCustomerNoAlt) draftCustomerNoAlt.value = '';
     draftNote.value = '';
     sublevelRows.innerHTML = '';
     state.draftMaterial = null;
@@ -339,9 +358,11 @@ function openDraftModal() {
     draftMaterialChosen.textContent = 'Ingen valgt';
     draftResourceSearch.value = '';
     renderDraftResourceChips();
+    if (vismaPreviewPanel) vismaPreviewPanel.style.display = 'none';
+    if (createVismaBtn) { createVismaBtn.style.display = 'none'; createVismaBtn.disabled = true; }
     Promise.all([ensureMaterials(), ensureResources()]).catch(() => {});
     draftProductModal.classList.add('open');
-    draftProdNo.focus();
+    if (draftProdNoSuffix) draftProdNoSuffix.focus();
 }
 function closeDraftModal() {
     draftProductModal.classList.remove('open');

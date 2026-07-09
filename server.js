@@ -710,6 +710,44 @@ app.get('/', (req, res) => {
             .header-brand-logo { width:38px; height:38px; border-radius:8px; background:transparent; padding:5px; object-fit:contain; border:1px solid rgba(255,255,255,0.22); box-shadow:0 6px 16px rgba(4,16,30,0.25); filter:brightness(0) invert(1) contrast(1.08); flex-shrink:0; }
             .header-brand-text { min-width:0; font-size:20px; font-weight:800; letter-spacing:0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
             .header-user-greeting { display:inline-block; font-size:13px; font-weight:700; color:#0f3560; background:linear-gradient(180deg,#e9f3ff 0%,#dbeaff 100%); border:1px solid #c9defa; border-radius:999px; padding:7px 12px; white-space:nowrap; }
+            .db-profile-badge { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:800; border-radius:999px; padding:6px 11px; cursor:pointer; border:1px solid transparent; white-space:nowrap; transition:filter .15s ease; }
+            .db-profile-badge:hover { filter:brightness(0.92); }
+            .db-profile-badge.prod { background:#ffeaea; color:#8b0000; border-color:#f5a5a5; }
+            .db-profile-badge.test { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
+            .db-profile-badge.other { background:#fff8e1; color:#7a5200; border-color:#ffe082; }
+            /* Settings modal */
+            .settings-modal-overlay { position:fixed; inset:0; z-index:15500; background:rgba(5,15,30,0.60); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; padding:16px; }
+            .settings-modal-overlay.open { display:flex; }
+            .settings-modal { width:min(580px,96vw); background:#fff; border-radius:14px; box-shadow:0 22px 52px rgba(5,20,40,0.34); border:1px solid #d9e8fb; overflow:hidden; }
+            .settings-modal-head { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px; background:linear-gradient(135deg,#0f3560 0%,#1565c0 100%); color:#fff; }
+            .settings-modal-head strong { font-size:16px; }
+            .settings-modal-head button { border:none; background:rgba(255,255,255,0.18); color:#fff; border-radius:6px; padding:6px 12px; cursor:pointer; font-weight:700; }
+            .settings-modal-body { padding:16px; }
+            .settings-section { margin-bottom:18px; }
+            .settings-section h4 { margin:0 0 10px 0; font-size:13px; font-weight:800; color:#0f3560; text-transform:uppercase; letter-spacing:0.04em; border-bottom:1px solid #e0eaf8; padding-bottom:6px; }
+            .settings-profile-list { display:flex; flex-direction:column; gap:8px; }
+            .settings-profile-card { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #d8e7fb; border-radius:10px; background:#f8fbff; }
+            .settings-profile-card.active { border-color:#1565c0; background:#e8f3ff; }
+            .settings-profile-card .pinfo { flex:1; min-width:0; }
+            .settings-profile-card .pname { font-weight:800; font-size:13px; color:#0f3560; }
+            .settings-profile-card .pconn { font-size:11px; color:#4f6d8c; margin-top:2px; word-break:break-all; }
+            .settings-profile-card .pactive { font-size:11px; font-weight:800; color:#1565c0; background:#dbeeff; border:1px solid #90caf9; border-radius:999px; padding:2px 8px; }
+            .settings-profile-card button { border:none; border-radius:999px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer; }
+            .settings-profile-card .btn-select { background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; }
+            .settings-profile-card .btn-select:disabled { background:#a0b8d8; cursor:not-allowed; }
+            .settings-profile-card .btn-del { background:#ffebee; color:#b71c1c; margin-left:4px; }
+            .settings-form { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+            .settings-form .full { grid-column:1/-1; }
+            .settings-form label { display:block; font-size:12px; font-weight:700; color:#355675; margin-bottom:3px; }
+            .settings-form input, .settings-form select { width:100%; border:1px solid #c9dbf2; border-radius:6px; padding:7px 9px; font-size:13px; }
+            .settings-form-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
+            .settings-form-actions button { border:none; border-radius:999px; padding:8px 16px; font-weight:700; cursor:pointer; }
+            .settings-form-actions .primary { background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; }
+            .settings-form-actions .ghost { background:#eaf0fb; color:#0f3560; border:1px solid #c9dbf2; }
+            .settings-db-warning { margin-top:10px; padding:10px 12px; border-radius:8px; font-size:13px; font-weight:700; display:none; }
+            .settings-db-warning.show { display:block; }
+            .settings-db-warning.prod { background:#fff3f3; border:1px solid #f5a5a5; color:#8b0000; }
+            .settings-db-warning.test { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; }
             #warmupBarWrap { display:none !important; align-items:center; gap:8px; background:rgba(0,0,0,0.15); border-radius:8px; padding:4px 10px; font-size:12px; color:#fff; white-space:nowrap; }
             #warmupBarWrap.active { display:flex; }
             #warmupBarBg { background:rgba(255,255,255,0.25); border-radius:999px; height:6px; width:110px; overflow:hidden; flex-shrink:0; }
@@ -1361,6 +1399,7 @@ app.get('/', (req, res) => {
                             <button type="button" onclick="openModule('belastning')">Belastning</button>
                             <button type="button" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
                             <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
+                            <button type="button" onclick="closeSideMenu();openSettingsModal()">⚙️ Database settings</button>
                         </div>
                     </section>
 
@@ -1387,6 +1426,7 @@ app.get('/', (req, res) => {
                 <span id="warmupBarText">Forberegner...</span>
             </div>
             <span class="header-user-greeting" id="headerUserGreeting">Hej, Bruger</span>
+            <button id="dbProfileBadge" class="db-profile-badge" onclick="openSettingsModal()" title="Aktiv database — klik for at ændre">🗄 …</button>
         </div>
         <div class="container main-dashboard" id="mainDashboard">
             <section class="dashboard-shell">
@@ -1931,6 +1971,40 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 <div id="oversigtModalBody" class="oversigt-modal-body"></div>
+            </div>
+        </div>
+
+        <!-- ── Settings modal ─────────────────────────────────────────── -->
+        <div id="settingsModalOverlay" class="settings-modal-overlay" onclick="if(event.target===this)closeSettingsModal()">
+            <div class="settings-modal" onclick="event.stopPropagation()">
+                <div class="settings-modal-head">
+                    <strong>⚙️ Database Settings</strong>
+                    <button onclick="closeSettingsModal()">Luk</button>
+                </div>
+                <div class="settings-modal-body">
+                    <div id="settingsDbWarning" class="settings-db-warning"></div>
+                    <div class="settings-section">
+                        <h4>Aktive profiler</h4>
+                        <div id="settingsProfileList" class="settings-profile-list">
+                            <div style="color:#888;font-size:13px;">Indlæser...</div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h4>Ny / rediger profil</h4>
+                        <div class="settings-form">
+                            <div class="full"><label>ID (unik nøgle, ingen mellemrum)</label><input id="sfId" placeholder="fx test" /></div>
+                            <div class="full"><label>Navn (visningsnavn)</label><input id="sfLabel" placeholder="fx Test DB" /></div>
+                            <div><label>Server</label><input id="sfServer" placeholder="fx 10.2.0.3\\VISMA" /></div>
+                            <div><label>Database</label><input id="sfDatabase" placeholder="fx F0001_TEST" /></div>
+                            <div class="full"><label style="display:flex;align-items:center;gap:7px;"><input type="checkbox" id="sfReadOnly" style="width:15px;height:15px;" /> Kun-læsning (deaktiverer skrivning til Visma)</label></div>
+                        </div>
+                        <div class="settings-form-actions">
+                            <button class="ghost" onclick="clearSettingsForm()">Ryd</button>
+                            <button class="primary" onclick="saveSettingsProfile()">Gem profil</button>
+                        </div>
+                        <div id="settingsFormStatus" style="font-size:12px;color:#c00;margin-top:6px;"></div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -2504,18 +2578,24 @@ app.get('/', (req, res) => {
 
             function getOrderNoteHtml(ordNo) {
                 const note = orderNotesCache[String(ordNo)];
-                if (!note || (!note.status && !note.text && !note.isCreditNote)) return '<span style="color:#bbb;font-size:12px;">-</span>';
+                if (!note || (!note.status && !note.text && !note.isCreditNote && !note.isUB)) return '<span style="color:#bbb;font-size:12px;">-</span>';
                 const icons = { ok: '✅', error: '❌', check: '⚠️', credit: '🧾' };
                 const icon = note.isCreditNote ? icons.credit : (icons[note.status] || '📝');
                 const cls = note.isCreditNote ? 'credit' : (note.status || 'text');
+                const creditLabel = note.isCreditNote ? (' Kreditnota' + (note.isUB ? ' · U/B' : '')) : '';
                 const preview = note.text ? escapeHtmlFE(note.text.slice(0, 40)) + (note.text.length > 40 ? '…' : '') : '';
                 return '<span class="note-badge ' + cls + '" onclick="event.stopPropagation();openNotePopup(' + Number(ordNo) + ')">'
-                    + icon + (note.isCreditNote ? ' Kreditnota' : '') + (preview ? ' ' + preview : '') + '</span>';
+                    + icon + creditLabel + (preview ? ' ' + preview : '') + '</span>';
             }
 
             function isOrderMarkedCreditNote(ordNo) {
                 const note = orderNotesCache[String(ordNo)];
                 return Boolean(note && note.isCreditNote === true);
+            }
+
+            function isOrderMarkedUB(ordNo) {
+                const note = orderNotesCache[String(ordNo)];
+                return Boolean(note && note.isCreditNote === true && note.isUB === true);
             }
 
             function escapeHtmlFE(s) {
@@ -2541,8 +2621,12 @@ app.get('/', (req, res) => {
                     '<option value="check">⚠️ Tjek</option>' +
                     '</select>' +
                     '<label style="display:flex;align-items:center;gap:8px;margin:-2px 0 10px 0;font-weight:600;">' +
-                    '<input id="noteCreditChk" type="checkbox" ' + (note.isCreditNote ? 'checked' : '') + ' style="width:16px;height:16px;" />' +
+                    '<input id="noteCreditChk" type="checkbox" ' + (note.isCreditNote ? 'checked' : '') + ' style="width:16px;height:16px;" onchange="var u=document.getElementById(\'noteUBRow\');u.style.display=this.checked?\'flex\':\'none\';if(!this.checked)document.getElementById(\'noteUBChk\').checked=false;" />' +
                     'Kreditnota (udeluk fra samlet resoconto)' +
+                    '</label>' +
+                    '<label id="noteUBRow" style="display:' + (note.isCreditNote ? 'flex' : 'none') + ';align-items:center;gap:8px;margin:-8px 0 12px 24px;font-weight:600;">' +
+                    '<input id="noteUBChk" type="checkbox" ' + (note.isUB ? 'checked' : '') + ' style="width:15px;height:15px;" />' +
+                    'U/B (udeluk fra samlet sum)' +
                     '</label>' +
                     '<label>Note</label>' +
                     '<textarea id="noteTextArea" placeholder="Skriv en note til denne ordre...">' + escapeHtmlFE(note.text || '') + '</textarea>' +
@@ -2562,11 +2646,12 @@ app.get('/', (req, res) => {
                 const status = document.getElementById('noteStatusSel').value;
                 const text = document.getElementById('noteTextArea').value.trim();
                 const isCreditNote = Boolean(document.getElementById('noteCreditChk') && document.getElementById('noteCreditChk').checked);
+                const isUB = isCreditNote && Boolean(document.getElementById('noteUBChk') && document.getElementById('noteUBChk').checked);
                 try {
                     const r = await fetch('/order-note/' + ordNo, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status, text, isCreditNote })
+                        body: JSON.stringify({ status, text, isCreditNote, isUB })
                     });
                     if (r.ok) {
                         const note = await r.json();
@@ -2603,14 +2688,14 @@ app.get('/', (req, res) => {
                 const el = document.getElementById('order-note-banner-' + ordNo);
                 if (!el) return;
                 const note = orderNotesCache[String(ordNo)];
-                if (!note || (!note.status && !note.text && !note.isCreditNote)) { el.style.display = 'none'; return; }
+                if (!note || (!note.status && !note.text && !note.isCreditNote && !note.isUB)) { el.style.display = 'none'; return; }
                 const icons = { ok: '✅', error: '❌', check: '⚠️', credit: '🧾' };
                 const icon = note.isCreditNote ? icons.credit : (icons[note.status] || '📝');
                 const cls = note.isCreditNote ? 'credit' : (note.status || 'text');
                 el.className = 'order-note-banner ' + cls;
                 el.style.display = 'flex';
                 const label = note.isCreditNote
-                    ? 'Kreditnota'
+                    ? ('Kreditnota' + (note.isUB ? ' · U/B' : ''))
                     : (note.status === 'ok' ? 'OK' : note.status === 'error' ? 'Fejl' : note.status === 'check' ? 'Tjek' : 'Note');
                 el.innerHTML = '<span class="note-icon">' + icon + '</span><div class="note-body"><strong>' +
                     label +
@@ -2747,6 +2832,172 @@ app.get('/', (req, res) => {
                     } catch {}
                 }
                 updateHeaderGreeting();
+            }
+
+            // ── Settings: database profiler ──────────────────────────────
+            let _settingsProfiles = [];
+            let _settingsActiveId = '';
+
+            function _updateDbBadge(profile) {
+                const badge = document.getElementById('dbProfileBadge');
+                if (!badge) return;
+                const id = String((profile && profile.id) || '');
+                const label = String((profile && profile.label) || id || '?');
+                const isDefault = id === 'production';
+                badge.className = 'db-profile-badge ' + (isDefault ? 'prod' : (id === 'test' ? 'test' : 'other'));
+                badge.title = (isDefault ? '⚠️ PRODUKTION' : '✅ TEST/ALT') + ' — ' + String((profile && profile.server) || '') + '/' + String((profile && profile.database) || '') + ' — klik for at ændre';
+                badge.textContent = (isDefault ? '🔴' : '🟢') + ' ' + escapeHtml(label);
+            }
+
+            async function loadSettingsProfiles() {
+                try {
+                    const r = await fetch('/settings/db-profiles');
+                    const d = await r.json();
+                    _settingsProfiles = d.profiles || [];
+                    _settingsActiveId = d.activeProfileId || 'production';
+                    _updateDbBadge(d.activeProfile);
+                    renderSettingsProfileList();
+                    renderSettingsWarning(d.activeProfile);
+                } catch (err) {
+                    console.warn('[settings] load failed:', err.message);
+                }
+            }
+
+            function renderSettingsProfileList() {
+                const list = document.getElementById('settingsProfileList');
+                if (!list) return;
+                if (!_settingsProfiles.length) { list.innerHTML = '<div style="color:#888;font-size:13px;">Ingen profiler</div>'; return; }
+                list.innerHTML = _settingsProfiles.map(p => {
+                    const isActive = p.id === _settingsActiveId;
+                    return '<div class="settings-profile-card' + (isActive ? ' active' : '') + '">' +
+                        '<div class="pinfo">' +
+                        '<div class="pname">' + escapeHtml(p.label) + (p.readOnly ? ' <span style="font-size:10px;color:#e65100;font-weight:700;">[KUN LÆSNING]</span>' : '') + '</div>' +
+                        '<div class="pconn">' + escapeHtml(p.server) + ' / ' + escapeHtml(p.database) + '</div>' +
+                        '</div>' +
+                        (isActive ? '<span class="pactive">AKTIV</span>' : '') +
+                        '<button class="btn-select" ' + (isActive ? 'disabled' : 'onclick="switchDbProfile(\'' + p.id + '\')"') + '>' +
+                        (isActive ? 'Valgt' : 'Vælg') + '</button>' +
+                        (p.id !== 'production' ? '<button class="btn-del" onclick="editSettingsProfile(' + JSON.stringify(p).replace(/"/g, '&quot;') + ')">Rediger</button>' : '') +
+                        (p.id !== 'production' && !isActive ? '<button class="btn-del" onclick="deleteSettingsProfile(\'' + p.id + '\')">Slet</button>' : '') +
+                        '</div>';
+                }).join('');
+            }
+
+            function renderSettingsWarning(profile) {
+                const el = document.getElementById('settingsDbWarning');
+                if (!el) return;
+                const id = String((profile && profile.id) || '');
+                if (id === 'production') {
+                    el.className = 'settings-db-warning show prod';
+                    el.textContent = '⚠️ PRODUKTION AKTIV — Alle skrivninger (opret produkt i Visma) går til det rigtige produktionssystem!';
+                } else {
+                    el.className = 'settings-db-warning show test';
+                    el.textContent = '✅ TEST/ALTERNATIV DATABASE AKTIV (' + escapeHtml((profile && profile.label) || '') + ') — Sikkert at teste oprettelse af produkter.';
+                }
+            }
+
+            async function switchDbProfile(profileId) {
+                try {
+                    const r = await fetch('/settings/db-profiles/active', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ profileId })
+                    });
+                    const d = await r.json();
+                    if (!d.ok) throw new Error(d.error || 'Fejl');
+                    _settingsProfiles = d.profiles || [];
+                    _settingsActiveId = d.activeProfileId || profileId;
+                    _updateDbBadge(d.activeProfile);
+                    renderSettingsProfileList();
+                    renderSettingsWarning(d.activeProfile);
+                } catch (err) {
+                    alert('Fejl ved skift: ' + err.message);
+                }
+            }
+
+            function editSettingsProfile(profile) {
+                const sfId       = document.getElementById('sfId');
+                const sfLabel    = document.getElementById('sfLabel');
+                const sfServer   = document.getElementById('sfServer');
+                const sfDatabase = document.getElementById('sfDatabase');
+                const sfReadOnly = document.getElementById('sfReadOnly');
+                if (sfId)       sfId.value       = profile.id || '';
+                if (sfLabel)    sfLabel.value    = profile.label || '';
+                if (sfServer)   sfServer.value   = profile.server || '';
+                if (sfDatabase) sfDatabase.value = profile.database || '';
+                if (sfReadOnly) sfReadOnly.checked = Boolean(profile.readOnly);
+            }
+
+            async function deleteSettingsProfile(profileId) {
+                if (!confirm('Slet profil "' + escapeHtml(profileId) + '"?')) return;
+                try {
+                    const r = await fetch('/settings/db-profiles/' + encodeURIComponent(profileId), { method: 'DELETE' });
+                    const d = await r.json();
+                    if (!d.ok) throw new Error(d.error || 'Fejl');
+                    _settingsProfiles = d.profiles || [];
+                    _settingsActiveId = d.activeProfileId || _settingsActiveId;
+                    renderSettingsProfileList();
+                } catch (err) {
+                    alert('Fejl ved sletning: ' + err.message);
+                }
+            }
+
+            async function saveSettingsProfile() {
+                const sfId       = document.getElementById('sfId');
+                const sfLabel    = document.getElementById('sfLabel');
+                const sfServer   = document.getElementById('sfServer');
+                const sfDatabase = document.getElementById('sfDatabase');
+                const sfReadOnly = document.getElementById('sfReadOnly');
+                const status     = document.getElementById('settingsFormStatus');
+                const profile = {
+                    id:       sfId ? sfId.value.trim().replace(/\s+/g,'_') : '',
+                    label:    sfLabel ? sfLabel.value.trim() : '',
+                    server:   sfServer ? sfServer.value.trim() : '',
+                    database: sfDatabase ? sfDatabase.value.trim() : '',
+                    readOnly: sfReadOnly ? sfReadOnly.checked : false
+                };
+                if (!profile.id || !profile.label || !profile.server || !profile.database) {
+                    if (status) status.textContent = 'Alle felter er påkrævet.';
+                    return;
+                }
+                try {
+                    const r = await fetch('/settings/db-profiles/upsert', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(profile)
+                    });
+                    const d = await r.json();
+                    if (!d.ok) throw new Error(d.error || 'Fejl');
+                    _settingsProfiles = d.profiles || [];
+                    _settingsActiveId = d.activeProfileId || _settingsActiveId;
+                    renderSettingsProfileList();
+                    clearSettingsForm();
+                    if (status) status.textContent = '';
+                } catch (err) {
+                    if (status) status.textContent = 'Fejl: ' + err.message;
+                }
+            }
+
+            function clearSettingsForm() {
+                ['sfId','sfLabel','sfServer','sfDatabase'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                const sfReadOnly = document.getElementById('sfReadOnly');
+                if (sfReadOnly) sfReadOnly.checked = false;
+                const status = document.getElementById('settingsFormStatus');
+                if (status) status.textContent = '';
+            }
+
+            function openSettingsModal() {
+                const overlay = document.getElementById('settingsModalOverlay');
+                if (overlay) overlay.classList.add('open');
+                loadSettingsProfiles();
+            }
+
+            function closeSettingsModal() {
+                const overlay = document.getElementById('settingsModalOverlay');
+                if (overlay) overlay.classList.remove('open');
             }
 
             function toggleSideMenu() {
@@ -5694,6 +5945,14 @@ app.get('/', (req, res) => {
                 }
 
                 const groupedByDate = new Map();
+                const orderRowsWork = orderRows.map(row => ({
+                    ...row,
+                    SOrdre: String((row && row.SOrdre) || '').trim(),
+                    POrdre: String((row && row.POrdre) || '').trim(),
+                    OrdNo: String((row && row.OrdNo) || '').trim(),
+                    Kunde: String((row && row.Kunde) || '').trim(),
+                    Opr: String((row && row.Opr) || '').trim()
+                }));
                 const activeDateInput = document.getElementById('belastningToDay');
                 const todayCut = (() => {
                     const raw = activeDateInput && activeDateInput.value
@@ -5706,7 +5965,7 @@ app.get('/', (req, res) => {
                 const readRest = row => Number((row && (row.RestResv !== undefined ? row.RestResv : row.ResvNet)) || 0);
                 const readAften = row => Number((row && (row.RestAften !== undefined ? row.RestAften : (row.Aften !== undefined ? row.Aften : row.AftenRaw))) || 0);
 
-                for (const row of orderRows) {
+                for (const row of orderRowsWork) {
                     const dateKey = normalizeBelastningDateKey(row && row.Dato, row && row.DatoX);
                     const dateSort = getBelastningDateSortValue(dateKey);
                     const dateTxt = normalizeBelastningDisplayDate(row && row.Dato, row && row.DatoX);
@@ -7166,11 +7425,17 @@ app.get('/', (req, res) => {
                 const safeOrders = Array.isArray(orders) ? orders : [];
                 let considered = 0;
                 let excludedCredit = 0;
+                let excludedUB = 0;
                 let pendingMargin = 0;
                 let totalRevenue = 0;
                 let totalCost = 0;
 
                 for (const o of safeOrders) {
+                    if (isOrderMarkedUB(o.OrdNo)) {
+                        excludedUB += 1;
+                        excludedCredit += 1;
+                        continue;
+                    }
                     if (isOrderMarkedCreditNote(o.OrdNo)) {
                         excludedCredit += 1;
                         continue;
@@ -7190,6 +7455,7 @@ app.get('/', (req, res) => {
                 return {
                     considered,
                     excludedCredit,
+                    excludedUB,
                     pendingMargin,
                     totalRevenue,
                     totalCost,
@@ -7205,7 +7471,8 @@ app.get('/', (req, res) => {
                 if (orderListBrugerFilter) activeFilters.push('bruger: "' + escapeHtml(orderListBrugerFilter) + '"');
                 if (orderListMinDkkEnabled) activeFilters.push('minimum fakturabeløb: ' + formatNumber(orderListMinDkkValue) + ' DKK');
                 const filterText = activeFilters.length > 0 ? activeFilters.join(', ') : 'ingen aktive filtre';
-                let html = '<div><strong>Filtreret ordrelisteoversigt</strong> (vist: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + listSummary.excludedCredit + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
+                const excludedCreditOnly = listSummary.excludedCredit - listSummary.excludedUB;
+                let html = '<div><strong>Filtreret ordrelisteoversigt</strong> (vist: ' + orders.length + ', medtaget: ' + listSummary.considered + ', kreditnota udelukket: ' + excludedCreditOnly + (listSummary.excludedUB > 0 ? ', u/b udelukket: ' + listSummary.excludedUB : '') + ', mangler margin: ' + listSummary.pendingMargin + ')</div>';
                 html += '<div style="margin-top:4px; font-size:12px; color:#57718f;">Genereret: ' + escapeHtml(new Date().toLocaleString('da-DK')) + ' • Filtre: ' + filterText + '</div>';
                 html += '<div style="margin-top:6px;display:flex;gap:18px;flex-wrap:wrap;">';
                 html += '<span>Samlet omsætning: <strong>' + formatNumber(listSummary.totalRevenue) + ' DKK</strong></span>';
@@ -9653,6 +9920,7 @@ app.get('/', (req, res) => {
                 }
                 updateReportOpenButtonState(Boolean(lastOrderReportHtml));
                 refreshSideMenuAuthState();
+                loadSettingsProfiles().catch(() => {});
                 const orderListEl = document.getElementById('orderList');
                 if (orderListEl) {
                     orderListEl.addEventListener('pointerdown', function(e) {

@@ -4,7 +4,7 @@
  * (GANTECH_NOTES_DIR or LOCALAPPDATA\Gantech Efterkalk) with legacy migration.
  * Never deleted by "Ryd cache" — survives all cache clears.
  *
- * Schema: { "403668": { status: "ok"|"error"|"check"|"", text: "...", isCreditNote: bool, updatedAt: "ISO8601" } }
+ * Schema: { "403668": { status: "ok"|"error"|"check"|"" text: "...", isCreditNote: bool, isUB: bool, updatedAt: "ISO8601" } }
  */
 const fs = require('fs');
 const path = require('path');
@@ -88,10 +88,11 @@ function getAllNotes() {
     return { ..._notes };
 }
 
-function setNote(ordNo, { status = '', text = '', isCreditNote = false } = {}) {
+function setNote(ordNo, { status = '', text = '', isCreditNote = false, isUB = false } = {}) {
     _load();
     const key = String(ordNo);
     const creditFlag = Boolean(isCreditNote);
+    const ubFlag = creditFlag ? Boolean(isUB) : false;
     if (!status && !text.trim() && !creditFlag) {
         delete _notes[key];
     } else {
@@ -99,6 +100,7 @@ function setNote(ordNo, { status = '', text = '', isCreditNote = false } = {}) {
             status: status || '',
             text: String(text || '').slice(0, 2000),
             isCreditNote: creditFlag,
+            isUB: ubFlag,
             updatedAt: new Date().toISOString()
         };
     }

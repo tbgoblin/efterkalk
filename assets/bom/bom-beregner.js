@@ -877,6 +877,7 @@ async function runQuote() {
     try {
         const body = buildQuoteBody();
         const result = await postQuote(body);
+        runQuote._lastErrToast = null;
         renderQuoteResult(result, body);
         if (!body.__skipMatrix) {
             renderPriceMatrix(body).catch(() => {});
@@ -884,6 +885,14 @@ async function runQuote() {
     } catch (err) {
         quoteStatus.textContent = 'Fejl: ' + err.message;
         quotePriceBig.textContent = '-';
+        if (quotePriceTotal) quotePriceTotal.textContent = '-';
+        const bd = document.getElementById('quoteBreakdown');
+        if (bd) bd.hidden = true;
+        if (copyQuoteBtn) copyQuoteBtn.disabled = true;
+        if (runQuote._lastErrToast !== err.message) {
+            runQuote._lastErrToast = err.message;
+            showToast('Beregning fejlede: ' + err.message, 'err');
+        }
     }
 }
 
@@ -896,9 +905,95 @@ function scheduleQuoteRecalc(delayMs) {
         runQuote().catch(() => {});
     }, wait);
 }
+function renderCostBreakdown(result) {
+    const wrap = document.getElementById('quoteBreakdown');
+    const bar = document.getElementById('breakdownBar');
+    const legend = document.getElementById('breakdownLegend');
+    if (!wrap || !bar || !legend) return;
+    const p = result.perPiece;
+    const segs = [
+        { label: 'Materiale', value: Number(p.materialPrice || 0), color: '#4fc3f7' },
+        { label: 'Laser', value: Number(p.laserCost || 0), color: '#ffb74d' },
+        { label: 'Processer', value: Number(p.resourceCost || 0), color: '#9575cd' },
+        { label: 'Komponenter', value: Number(p.componentsCost || 0), color: '#4db6ac' },
+        { label: 'Opstart', value: Number(p.opstartShare || 0), color: '#f06292' }
+    ].filter(s => s.value > 0);
+    const sum = segs.reduce((acc, s) => acc + s.value, 0);
+    if (sum <= 0) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    bar.innerHTML = segs.map(s =>
+        '<div class="breakdown-seg" style="width:' + ((s.value / sum) * 100).toFixed(2) + '%; background:' + s.color + ';" title="'
+        + escapeHtml(s.label + ': ' + formatMoney(s.value) + ' dkk/stk (' + ((s.value / sum) * 100).toFixed(1) + ' %)') + '"></div>'
+    ).join('');
+    legend.innerHTML = segs.map(s =>
+        '<span class="legend-item"><span class="legend-dot" style="background:' + s.color + ';"></span>'
+        + escapeHtml(s.label) + ' ' + ((s.value / sum) * 100).toFixed(0) + ' % · ' + formatMoney(s.value) + ' dkk</span>'
+    ).join('');
+}
+
+function buildQuoteClipboardText(result, body) {
+    const fmt = formatMoney;
+    const p = result.perPiece;
+    const lines = [];
+    lines.push('Tilbud — Gantech BOM-beregner');
+    if (state.calcCustomer) lines.push('Kunde: ' + (state.calcCustomer.Nm || '') + ' (' + state.calcCustomer.CustNo + ')');
+    lines.push('Materiale: ' + (result.material.prodNo || '') + ' · ' + (result.material.descr || ''));
+    lines.push('Emne: ' + body.pieceWidth + ' x ' + body.pieceLength + ' mm · ' + result.total.qty + ' stk');
+    lines.push('Pristype: ' + (result.material.priceBasis === 'cost' ? 'kostpris' : 'salgspris'));
+    lines.push('');
+    lines.push('Materiale: ' + fmt(p.materialPrice) + ' dkk/stk');
+    if (Number(p.laserCost || 0) > 0) lines.push('Laser (' + p.laserMinutes + ' min): ' + fmt(p.laserCost) + ' dkk/stk');
+    (result.operations || []).forEach(op => {
+        lines.push(op.label + (op.prodNo ? ' (' + op.prodNo + ')' : '') + ': ' + op.minutes + ' min · ' + fmt(op.cost) + ' dkk/stk');
+    });
+    (result.components || []).forEach(c => {
+        lines.push('Komponent ' + c.prodNo + ': ' + c.qty + ' stk × ' + fmt(c.unitPrice) + ' = ' + fmt(c.lineCost) + ' dkk/stk');
+    });
+    const perOrder = result.perOrder || {};
+    if (Number(perOrder.opstartCost || 0) > 0) lines.push('Opstart pr ordre: ' + fmt(perOrder.opstartCost) + ' dkk (' + fmt(p.opstartShare) + ' dkk/stk)');
+    if (result.total.minimumApplied) lines.push('Minimumsbeløb anvendt: ' + fmt(result.total.totalPrice) + ' dkk');
+    lines.push('----------------------------------------');
+    lines.push('Pris pr stk: ' + fmt(p.unitPrice) + ' dkk');
+    lines.push('I alt (' + result.total.qty + ' stk): ' + fmt(result.total.totalPrice) + ' dkk');
+    if (result.total.sheetsNeeded != null) lines.push('Plader til ordren: ' + result.total.sheetsNeeded);
+    return lines.join('\n');
+}
+
+async function copyQuoteToClipboard() {
+    if (!state.lastQuote) return;
+    const text = buildQuoteClipboardText(state.lastQuote.result, state.lastQuote.body);
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+        }
+        showToast('Tilbud kopieret til udklipsholderen', 'ok');
+    } catch (err) {
+        showToast('Kunne ikke kopiere: ' + err.message, 'err');
+    }
+}
+
 function renderQuoteResult(result, body) {
     const fmt = formatMoney;
-    quotePriceBig.textContent = fmt(result.perPiece.unitPrice) + ' dkk/stk · ' + fmt(result.total.totalPrice) + ' dkk i alt';
+    state.lastQuote = { result, body };
+    animateMoney(quotePriceBig, result.perPiece.unitPrice, ' dkk');
+    if (quotePriceTotal) animateMoney(quotePriceTotal, result.total.totalPrice, ' dkk');
+    [quotePriceBig, quotePriceTotal].forEach(el => {
+        if (!el) return;
+        el.classList.remove('price-flash');
+        void el.offsetWidth;
+        el.classList.add('price-flash');
+    });
+    renderCostBreakdown(result);
+    if (copyQuoteBtn) copyQuoteBtn.disabled = false;
     const laserOn = body.laserEnabled;
     quoteStatus.textContent = laserOn
         ? (result.cutParam ? ('Skæredata: ' + (result.cutParam.maskine || '') + ' · ' + result.cutParam.skaerehast + ' m/min') : 'OBS: ingen skæreparametre fundet for materialet — laser-tid er 0.')
@@ -1064,7 +1159,16 @@ function resetBeregner() {
     populateProcessDefaults();
     syncSpacingFromGlobalToLaserCard();
     // ryd resultater
+    state.lastQuote = null;
     quotePriceBig.textContent = '-';
+    delete quotePriceBig.dataset.animVal;
+    if (quotePriceTotal) {
+        quotePriceTotal.textContent = '-';
+        delete quotePriceTotal.dataset.animVal;
+    }
+    const bd = document.getElementById('quoteBreakdown');
+    if (bd) bd.hidden = true;
+    if (copyQuoteBtn) copyQuoteBtn.disabled = true;
     quoteStatus.textContent = 'Følg trin 1-4 og tryk Beregn pris.';
     quoteGrid.innerHTML = '';
     quoteMeta.textContent = '-';
