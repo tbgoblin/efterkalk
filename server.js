@@ -2621,7 +2621,7 @@ app.get('/', (req, res) => {
                     '<option value="check">⚠️ Tjek</option>' +
                     '</select>' +
                     '<label style="display:flex;align-items:center;gap:8px;margin:-2px 0 10px 0;font-weight:600;">' +
-                    '<input id="noteCreditChk" type="checkbox" ' + (note.isCreditNote ? 'checked' : '') + ' style="width:16px;height:16px;" onchange="var u=document.getElementById(\'noteUBRow\');u.style.display=this.checked?\'flex\':\'none\';if(!this.checked)document.getElementById(\'noteUBChk\').checked=false;" />' +
+                    '<input id="noteCreditChk" type="checkbox" ' + (note.isCreditNote ? 'checked' : '') + ' style="width:16px;height:16px;" onchange="var u=document.getElementById(\\'noteUBRow\\');u.style.display=this.checked?\\'flex\\':\\'none\\';if(!this.checked)document.getElementById(\\'noteUBChk\\').checked=false;" />' +
                     'Kreditnota (udeluk fra samlet resoconto)' +
                     '</label>' +
                     '<label id="noteUBRow" style="display:' + (note.isCreditNote ? 'flex' : 'none') + ';align-items:center;gap:8px;margin:-8px 0 12px 24px;font-weight:600;">' +
@@ -2875,10 +2875,10 @@ app.get('/', (req, res) => {
                         '<div class="pconn">' + escapeHtml(p.server) + ' / ' + escapeHtml(p.database) + '</div>' +
                         '</div>' +
                         (isActive ? '<span class="pactive">AKTIV</span>' : '') +
-                        '<button class="btn-select" ' + (isActive ? 'disabled' : 'onclick="switchDbProfile(\'' + p.id + '\')"') + '>' +
+                        '<button class="btn-select" ' + (isActive ? 'disabled' : 'onclick="switchDbProfile(\\'' + p.id + '\\')"') + '>' +
                         (isActive ? 'Valgt' : 'Vælg') + '</button>' +
                         (p.id !== 'production' ? '<button class="btn-del" onclick="editSettingsProfile(' + JSON.stringify(p).replace(/"/g, '&quot;') + ')">Rediger</button>' : '') +
-                        (p.id !== 'production' && !isActive ? '<button class="btn-del" onclick="deleteSettingsProfile(\'' + p.id + '\')">Slet</button>' : '') +
+                        (p.id !== 'production' && !isActive ? '<button class="btn-del" onclick="deleteSettingsProfile(\\'' + p.id + '\\')">Slet</button>' : '') +
                         '</div>';
                 }).join('');
             }
