@@ -3414,8 +3414,7 @@ app.get('/', (req, res) => {
                     input.value = ordNo;
                     input.style.display = '';
                 }
-                openModule('efterkalk');
-                setTimeout(() => { searchOrder(); }, 100);
+                searchOrder();
             }
 
             function openSideMenu() {
@@ -6763,7 +6762,10 @@ app.get('/', (req, res) => {
                 refreshSideMenuAuthState();
             }
 
+            let _accessLoginInProgress = false;
+
             function submitAccessCode() {
+                if (_accessLoginInProgress) return;
                 const userInput = document.getElementById('accessGateUserInput');
                 const input = document.getElementById('accessGateInput');
                 const err = document.getElementById('accessGateError');
@@ -6784,6 +6786,7 @@ app.get('/', (req, res) => {
                     btn.disabled = true;
                     btn.textContent = 'Åbner...';
                 }
+                _accessLoginInProgress = true;
 
                 setTimeout(() => {
                     try {
@@ -6803,11 +6806,16 @@ app.get('/', (req, res) => {
                             btn.disabled = false;
                             btn.textContent = 'Åbn';
                         }
+                        _accessLoginInProgress = false;
                     }
                 }, 0);
             }
 
+            let _accessInitialized = false;
+
             function initializeAfterAccess() {
+                if (_accessInitialized) return;
+                _accessInitialized = true;
                 startWarmupPolling();
                 loadOrderList(false);
                 setTimeout(() => {
