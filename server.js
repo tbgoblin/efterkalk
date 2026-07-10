@@ -869,7 +869,7 @@ app.get('/', (req, res) => {
             .print-preview-body .order-list-section { margin-bottom:0; box-shadow:none; }
             .print-preview-body .order-report-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
             body.print-preview-lock { overflow:hidden; }
-            .order-detail-modal-overlay { position:fixed; inset:0; z-index:15100; display:none; align-items:stretch; justify-content:center; background:rgba(7,18,35,0.68); backdrop-filter:blur(6px); padding:16px; }
+            .order-detail-modal-overlay { position:fixed; inset:0; z-index:15600; display:none; align-items:stretch; justify-content:center; background:rgba(7,18,35,0.68); backdrop-filter:blur(6px); padding:16px; }
             .order-detail-modal-shell { width:min(1540px, 100%); height:100%; background:linear-gradient(180deg, #0f3560 0%, #123f6f 56%, #0e2f4c 100%); border-radius:18px; box-shadow:0 24px 72px rgba(0,0,0,0.42); display:flex; flex-direction:column; overflow:hidden; }
             .order-detail-modal-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid rgba(255,255,255,0.10); color:#fff; }
             .order-detail-modal-title { display:flex; flex-direction:column; gap:4px; }
@@ -3235,9 +3235,21 @@ app.get('/', (req, res) => {
 
             function _kfMarginClass(pct) {
                 if (!Number.isFinite(pct)) return 'na';
+                if (currentMarginMode === 'new') {
+                    if (pct >= 125) return 'ok';
+                    if (pct >= 105) return 'warn';
+                    return 'bad';
+                }
                 if (pct > 20) return 'ok';
                 if (pct >= 5)  return 'warn';
                 return 'bad';
+            }
+
+            function _kfCalcMarginPct(rev, cost) {
+                if (rev == null || cost == null) return null;
+                return Number.isFinite(rev) && Number.isFinite(cost)
+                    ? calculateOrderMarginPercent(rev, cost)
+                    : null;
             }
 
             function _resetKfKpis() {
@@ -3256,10 +3268,10 @@ app.get('/', (req, res) => {
                     const cost     = m ? m.totalCost    : null;
                     const rev      = m ? m.totalRevenue : null;
                     const margDkk  = (cost !== null && rev !== null) ? (rev - cost) : null;
-                    const margPct  = (cost > 0 && rev !== null) ? ((rev - cost) / cost * 100) : null;
+                    const margPct  = _kfCalcMarginPct(rev, cost);
                     const cls      = _kfMarginClass(margPct);
                     return '<tr>' +
-                        '<td class="ordno-link" onclick="closeKundefakturaModal();searchOrderByNo(' + row.OrdNo + ')">' + row.OrdNo + '</td>' +
+                        '<td class="ordno-link" onclick="searchOrderByNo(' + row.OrdNo + ')">' + row.OrdNo + '</td>' +
                         '<td>' + _fmtKfDateFromInt(row.LstInvDt) + '</td>' +
                         '<td>' + escapeHtml(String(row.InvoNo || '')) + '</td>' +
                         '<td>' + escapeHtml(String(row.SellerUsr || '—')) + '</td>' +
@@ -3285,7 +3297,7 @@ app.get('/', (req, res) => {
                 }
                 const hasCost  = countWithMargin > 0;
                 const margDkk  = hasCost ? (totalRev - totalCost) : null;
-                const margPct  = (hasCost && totalCost > 0) ? ((totalRev - totalCost) / totalCost * 100) : null;
+                const margPct  = hasCost ? _kfCalcMarginPct(totalRev, totalCost) : null;
 
                 const setText = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
                 setText('kfKpiOrders',  _kfInvoiceRows.length);
@@ -3355,7 +3367,7 @@ app.get('/', (req, res) => {
                 const cost    = m.totalCost;
                 const rev     = m.totalRevenue;
                 const margDkk = rev - cost;
-                const margPct = cost > 0 ? ((rev - cost) / cost * 100) : null;
+                const margPct = _kfCalcMarginPct(rev, cost);
                 const cls     = _kfMarginClass(margPct);
                 const setCellClass = (id, txt, c) => {
                     const el = document.getElementById(id);
@@ -3382,7 +3394,7 @@ app.get('/', (req, res) => {
                     if (m) { totalCost += m.totalCost || 0; totalRev += m.totalRevenue || 0; n++; }
                 }
                 const margDkk = n > 0 ? (totalRev - totalCost) : null;
-                const margPct = (n > 0 && totalCost > 0) ? ((totalRev - totalCost) / totalCost * 100) : null;
+                const margPct = n > 0 ? _kfCalcMarginPct(totalRev, totalCost) : null;
                 const cls     = _kfMarginClass(margPct);
 
                 const tr = document.createElement('tr');
