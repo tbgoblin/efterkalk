@@ -136,8 +136,9 @@ function createOrdreindgangService({ getConnection, sql }) {
             .input('fromWeek', sql.Int, range.fromWeek)
             .input('toWeek', sql.Int, range.toWeek)
             .query(`
-                WITH base AS (
-                    SELECT
+                WITH deduped AS (
+                    SELECT DISTINCT
+                        o.OrdNo,
                         o.CustNo,
                         LTRIM(RTRIM(ISNULL(a.Nm, ''))) AS CustNm,
                         CASE
@@ -145,7 +146,7 @@ function createOrdreindgangService({ getConnection, sql }) {
                             WHEN o.TrTp = 1 AND o.OrdTp = 5 THEN 'TILBUD'
                             ELSE 'OTHER'
                         END AS Bucket,
-                        CAST(ISNULL(o.OrdSum, 0) AS decimal(38, 6)) AS OrdSum
+                        (o.InvoSF + o.InvoIF) * (o.ExRt / 100.0) AS OrdAmt
                     FROM F0001.dbo.Ord o
                     INNER JOIN F0001.dbo.FreeInf2 FreeInf2
                         ON o.OrdDt = FreeInf2.Dt1
@@ -160,16 +161,16 @@ function createOrdreindgangService({ getConnection, sql }) {
                 )
                 SELECT TOP (50)
                     CustNo,
-                    CustNm,
-                    SUM(CASE WHEN Bucket = 'ORDRE' THEN OrdSum ELSE 0 END) / 1000.0 AS OrdSum,
-                    SUM(CASE WHEN Bucket = 'TILBUD' THEN OrdSum ELSE 0 END) / 1000.0 AS TilbudSum,
-                    SUM(CASE WHEN Bucket = 'ORDRE' THEN 1 ELSE 0 END) AS CntOrd,
+                    MAX(CustNm) AS CustNm,
+                    SUM(CASE WHEN Bucket = 'ORDRE'  THEN OrdAmt ELSE 0 END) / 1000.0 AS OrdSum,
+                    SUM(CASE WHEN Bucket = 'TILBUD' THEN OrdAmt ELSE 0 END) / 1000.0 AS TilbudSum,
+                    SUM(CASE WHEN Bucket = 'ORDRE'  THEN 1 ELSE 0 END) AS CntOrd,
                     SUM(CASE WHEN Bucket = 'TILBUD' THEN 1 ELSE 0 END) AS CntTilbud
-                FROM base
-                GROUP BY CustNo, CustNm
-                HAVING SUM(CASE WHEN Bucket = 'ORDRE' THEN OrdSum ELSE 0 END) <> 0
-                    OR SUM(CASE WHEN Bucket = 'TILBUD' THEN OrdSum ELSE 0 END) <> 0
-                ORDER BY SUM(CASE WHEN Bucket = 'ORDRE' THEN OrdSum ELSE 0 END) DESC;
+                FROM deduped
+                GROUP BY CustNo
+                HAVING SUM(CASE WHEN Bucket = 'ORDRE'  THEN OrdAmt ELSE 0 END) <> 0
+                    OR SUM(CASE WHEN Bucket = 'TILBUD' THEN OrdAmt ELSE 0 END) <> 0
+                ORDER BY SUM(CASE WHEN Bucket = 'ORDRE' THEN OrdAmt ELSE 0 END) DESC;
             `);
 
         const weeklyRows = (weeklyResult.recordset || []).map(row => {
