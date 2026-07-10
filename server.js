@@ -715,6 +715,49 @@ app.get('/', (req, res) => {
             .db-profile-badge.prod { background:#ffeaea; color:#8b0000; border-color:#f5a5a5; }
             .db-profile-badge.test { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
             .db-profile-badge.other { background:#fff8e1; color:#7a5200; border-color:#ffe082; }
+            /* Kundefaktura-oversigt modal */
+            .kf-modal-overlay { position:fixed; inset:0; z-index:15480; background:rgba(5,15,30,0.65); backdrop-filter:blur(3px); display:none; align-items:flex-start; justify-content:center; padding:16px; overflow-y:auto; }
+            .kf-modal-overlay.open { display:flex; }
+            .kf-modal { width:min(1100px,97vw); margin:auto; background:#fff; border-radius:14px; box-shadow:0 24px 56px rgba(5,20,40,0.36); border:1px solid #d9e8fb; overflow:hidden; }
+            .kf-modal-head { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:13px 16px; background:linear-gradient(135deg,#0f3560 0%,#1565c0 100%); color:#fff; }
+            .kf-modal-head strong { font-size:16px; }
+            .kf-modal-head button { border:none; background:rgba(255,255,255,0.18); color:#fff; border-radius:6px; padding:6px 12px; cursor:pointer; font-weight:700; }
+            .kf-modal-body { padding:16px; }
+            .kf-filters { display:grid; grid-template-columns:minmax(260px,1fr) 140px 140px auto; gap:10px; align-items:end; margin-bottom:14px; }
+            @media(max-width:700px){ .kf-filters { grid-template-columns:1fr 1fr; } .kf-filters .kf-search-col { grid-column:1/-1; } }
+            .kf-field label { display:block; font-size:12px; font-weight:700; color:#355675; margin-bottom:3px; }
+            .kf-field input { width:100%; border:1px solid #c9dbf2; border-radius:6px; padding:8px 9px; font-size:13px; box-sizing:border-box; }
+            .kf-customer-wrap { position:relative; }
+            .kf-customer-dropdown { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #c9dbf2; border-top:none; border-radius:0 0 8px 8px; max-height:220px; overflow-y:auto; z-index:200; box-shadow:0 8px 18px rgba(15,53,96,0.14); }
+            .kf-customer-option { padding:8px 10px; font-size:13px; cursor:pointer; border-bottom:1px solid #edf3fb; }
+            .kf-customer-option:last-child { border-bottom:none; }
+            .kf-customer-option:hover { background:#edf5ff; }
+            .kf-customer-option .kf-cno { font-size:11px; color:#5f7892; margin-left:6px; }
+            .kf-load-btn { border:none; border-radius:8px; padding:9px 16px; background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; font-weight:800; cursor:pointer; white-space:nowrap; height:38px; }
+            .kf-load-btn:disabled { opacity:0.6; cursor:not-allowed; }
+            .kf-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+            @media(max-width:700px){ .kf-kpis { grid-template-columns:1fr 1fr; } }
+            .kf-kpi { background:#f8fbff; border:1px solid #d6e7fb; border-radius:10px; padding:10px 12px; }
+            .kf-kpi .lbl { font-size:11px; font-weight:700; color:#4f6d8c; text-transform:uppercase; letter-spacing:0.03em; }
+            .kf-kpi .val { margin-top:4px; font-size:20px; font-weight:800; color:#0f3560; }
+            .kf-kpi .sub { font-size:11px; color:#7a90a8; margin-top:2px; }
+            .kf-table-wrap { overflow-x:auto; border:1px solid #dce8f8; border-radius:10px; max-height:60vh; overflow-y:auto; }
+            .kf-table { width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
+            .kf-table th { background:linear-gradient(180deg,#eef5ff 0%,#e4efff 100%); color:#0f3560; padding:8px 10px; text-align:left; border-bottom:1px solid #d8e6f8; white-space:nowrap; position:sticky; top:0; z-index:2; }
+            .kf-table th.r { text-align:right; }
+            .kf-table td { padding:7px 10px; border-bottom:1px solid #e7eff9; vertical-align:middle; }
+            .kf-table tr:hover td { background:#edf5ff; }
+            .kf-table td.r { text-align:right; font-variant-numeric:tabular-nums; }
+            .kf-table .total-row td { background:#eef5ff; font-weight:800; border-top:2px solid #c0d8f5; }
+            .kf-table td.ordno-link { color:#1565c0; text-decoration:underline; cursor:pointer; font-weight:700; }
+            .kf-margin-cell.ok   { color:#1b5e20; font-weight:700; }
+            .kf-margin-cell.warn { color:#e65100; font-weight:700; }
+            .kf-margin-cell.bad  { color:#b71c1c; font-weight:700; }
+            .kf-margin-cell.na   { color:#aaa; font-style:italic; }
+            .kf-status { font-size:12px; color:#4f6d8c; margin-bottom:8px; min-height:18px; }
+            .kf-margin-progress { display:flex; align-items:center; gap:8px; font-size:12px; color:#355675; margin-bottom:10px; }
+            .kf-margin-track { width:140px; height:7px; border-radius:999px; background:#d9e9fb; overflow:hidden; }
+            .kf-margin-track > div { height:100%; border-radius:999px; background:linear-gradient(90deg,#1565c0 0%,#2e7d32 100%); transition:width .25s; }
             /* Settings modal */
             .settings-modal-overlay { position:fixed; inset:0; z-index:15500; background:rgba(5,15,30,0.60); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; padding:16px; }
             .settings-modal-overlay.open { display:flex; }
@@ -1803,6 +1846,7 @@ app.get('/', (req, res) => {
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
                 <button id="clearCacheBtn" class="list-toggle-btn" onclick="clearAppCache()" style="background:#b71c1c !important;" title="DET TAGER LANG TID!!! Slet disk-cache og genindlaes data">Ryd cache</button>
+                <button class="list-toggle-btn" onclick="openKundefakturaModal()" title="Vis fakturaoversigt for en specifik kunde i en periode">📋 Fakturaoversigt</button>
                 <select id="brugerFilterSelect" class="filter-select" onchange="setBrugerFilter()">
                     <option value="">Alle brugere</option>
                 </select>
@@ -1971,6 +2015,66 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 <div id="oversigtModalBody" class="oversigt-modal-body"></div>
+            </div>
+        </div>
+
+        <!-- ── Kundefaktura-oversigt modal ────────────────────────────── -->
+        <div id="kfModalOverlay" class="kf-modal-overlay" onclick="if(event.target===this)closeKundefakturaModal()">
+            <div class="kf-modal" onclick="event.stopPropagation()">
+                <div class="kf-modal-head">
+                    <strong>📋 Fakturaoversigt — Kunde</strong>
+                    <button onclick="closeKundefakturaModal()">Luk</button>
+                </div>
+                <div class="kf-modal-body">
+                    <div class="kf-filters">
+                        <div class="kf-field kf-search-col">
+                            <label>Kunde (søg navn eller nummer)</label>
+                            <div class="kf-customer-wrap">
+                                <input id="kfCustomerInput" type="text" placeholder="Skriv kundenavn eller -nummer..." autocomplete="off"
+                                    oninput="scheduleKfCustomerSearch()" onfocus="scheduleKfCustomerSearch()" onblur="hideKfDropdown()" />
+                                <div id="kfCustomerDropdown" class="kf-customer-dropdown" style="display:none;"></div>
+                            </div>
+                        </div>
+                        <div class="kf-field">
+                            <label>Fra dato</label>
+                            <input id="kfFromDate" type="date" />
+                        </div>
+                        <div class="kf-field">
+                            <label>Til dato</label>
+                            <input id="kfToDate" type="date" />
+                        </div>
+                        <div class="kf-field">
+                            <button class="kf-load-btn" id="kfLoadBtn" onclick="loadKundefakturaInvoices()" disabled>Hent fakturaer</button>
+                        </div>
+                    </div>
+                    <div id="kfStatus" class="kf-status"></div>
+                    <div id="kfKpis" class="kf-kpis" style="display:none;">
+                        <div class="kf-kpi"><div class="lbl">Ordrer</div><div class="val" id="kfKpiOrders">—</div></div>
+                        <div class="kf-kpi"><div class="lbl">Samlet faktureret</div><div class="val" id="kfKpiTotal">—</div><div class="sub">DKK</div></div>
+                        <div class="kf-kpi"><div class="lbl">Samlet kost</div><div class="val" id="kfKpiCost">—</div><div class="sub" id="kfKpiCostSub">beregner…</div></div>
+                        <div class="kf-kpi"><div class="lbl">Gns. margin</div><div class="val" id="kfKpiMargin">—</div><div class="sub" id="kfKpiMarginSub">beregner…</div></div>
+                    </div>
+                    <div id="kfMarginProgress" class="kf-margin-progress" style="display:none;">
+                        <span id="kfMarginProgressText">Henter marginer…</span>
+                        <div class="kf-margin-track"><div id="kfMarginProgressFill" style="width:0%"></div></div>
+                        <span id="kfMarginProgressPct">0%</span>
+                    </div>
+                    <div id="kfTableWrap" class="kf-table-wrap" style="display:none;">
+                        <table class="kf-table">
+                            <thead><tr>
+                                <th>OrdNo</th>
+                                <th>Dato</th>
+                                <th>InvoNo</th>
+                                <th>Sælger</th>
+                                <th class="r">Fakturabeløb</th>
+                                <th class="r">Kost</th>
+                                <th class="r">Margin DKK</th>
+                                <th class="r">Margin %</th>
+                            </tr></thead>
+                            <tbody id="kfTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -3000,12 +3104,306 @@ app.get('/', (req, res) => {
                 if (overlay) overlay.classList.remove('open');
             }
 
-            function toggleSideMenu() {
-                if (sideMenuOpen) {
-                    closeSideMenu();
-                } else {
-                    openSideMenu();
+            function closeSettingsModal() {
+                const overlay = document.getElementById('settingsModalOverlay');
+                if (overlay) overlay.classList.remove('open');
+            }
+
+            // ── Kundefaktura-oversigt ─────────────────────────────────────
+            let _kfSelectedCustNo  = null;
+            let _kfSelectedCustNm  = '';
+            let _kfInvoiceRows     = [];
+            let _kfMarginMap       = {};    // OrdNo → { totalRevenue, totalCost }
+            let _kfCustomerTimer   = null;
+            let _kfMarginAbort     = false;
+
+            function openKundefakturaModal() {
+                const overlay = document.getElementById('kfModalOverlay');
+                if (overlay) overlay.classList.add('open');
+                // Default: last 365 days → today
+                const toDate = new Date();
+                const frDate = new Date(toDate);
+                frDate.setFullYear(frDate.getFullYear() - 1);
+                const fmt = d => d.toISOString().slice(0,10);
+                const kfFrom = document.getElementById('kfFromDate');
+                const kfTo   = document.getElementById('kfToDate');
+                if (kfFrom && !kfFrom.value) kfFrom.value = fmt(frDate);
+                if (kfTo   && !kfTo.value)   kfTo.value   = fmt(toDate);
+            }
+
+            function closeKundefakturaModal() {
+                const overlay = document.getElementById('kfModalOverlay');
+                if (overlay) overlay.classList.remove('open');
+                _kfMarginAbort = true;
+            }
+
+            function scheduleKfCustomerSearch() {
+                if (_kfCustomerTimer) clearTimeout(_kfCustomerTimer);
+                _kfCustomerTimer = setTimeout(_doKfCustomerSearch, 220);
+            }
+
+            async function _doKfCustomerSearch() {
+                const inp = document.getElementById('kfCustomerInput');
+                const q   = inp ? inp.value.trim() : '';
+                const dd  = document.getElementById('kfCustomerDropdown');
+                if (!dd) return;
+                if (q.length < 1) { dd.style.display = 'none'; return; }
+                try {
+                    const r = await fetch('/efterkalk/customers?q=' + encodeURIComponent(q));
+                    const d = await r.json();
+                    const rows = d.rows || [];
+                    if (!rows.length) { dd.style.display = 'none'; return; }
+                    dd.innerHTML = rows.map((c, i) =>
+                        '<div class="kf-customer-option" onmousedown="_kfPickCustomer(' + i + ',event)">' +
+                        escapeHtml(c.Nm) + '<span class="kf-cno">' + escapeHtml(String(c.CustNo)) + '</span></div>'
+                    ).join('');
+                    dd._rows = rows;
+                    dd.style.display = 'block';
+                } catch { dd.style.display = 'none'; }
+            }
+
+            function _kfPickCustomer(idx, e) {
+                if (e) e.preventDefault();
+                const dd = document.getElementById('kfCustomerDropdown');
+                const rows = dd && dd._rows ? dd._rows : [];
+                const c = rows[idx];
+                if (!c) return;
+                _kfSelectedCustNo = c.CustNo;
+                _kfSelectedCustNm = c.Nm;
+                const inp = document.getElementById('kfCustomerInput');
+                if (inp) inp.value = c.Nm + ' (' + c.CustNo + ')';
+                dd.style.display = 'none';
+                const btn = document.getElementById('kfLoadBtn');
+                if (btn) btn.disabled = false;
+            }
+
+            function hideKfDropdown() {
+                setTimeout(() => {
+                    const dd = document.getElementById('kfCustomerDropdown');
+                    if (dd) dd.style.display = 'none';
+                }, 200);
+            }
+
+            async function loadKundefakturaInvoices() {
+                if (!_kfSelectedCustNo) { kfSetStatus('Vælg en kunde først.'); return; }
+                const from = (document.getElementById('kfFromDate') || {}).value || '';
+                const to   = (document.getElementById('kfToDate')   || {}).value || '';
+                if (!from) { kfSetStatus('Vælg en fra-dato.'); return; }
+                const btn = document.getElementById('kfLoadBtn');
+                if (btn) { btn.disabled = true; btn.textContent = '⏳ Henter…'; }
+                kfSetStatus('Henter fakturaer for ' + escapeHtml(_kfSelectedCustNm) + '…');
+                _kfMarginAbort = false;
+                _kfInvoiceRows = [];
+                _kfMarginMap   = {};
+                _resetKfKpis();
+
+                try {
+                    const url = '/efterkalk/customer-invoices?custno=' + _kfSelectedCustNo +
+                        '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to || new Date().toISOString().slice(0,10));
+                    const r = await fetch(url);
+                    const d = await r.json();
+                    if (!d.ok) throw new Error(d.error || 'Fejl');
+                    _kfInvoiceRows = d.rows || [];
+                    kfSetStatus(_kfInvoiceRows.length + ' fakturaordrer fundet for ' + escapeHtml(_kfSelectedCustNm) +
+                        ' (' + _fmtKfDate(d.fromInt) + ' – ' + _fmtKfDate(d.toInt) + ')');
+                    _renderKfTable();
+                    _updateKfKpis();
+                    if (_kfInvoiceRows.length > 0) _startKfMarginFetch();
+                } catch (err) {
+                    kfSetStatus('Fejl: ' + err.message);
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = 'Hent fakturaer'; }
                 }
+            }
+
+            function kfSetStatus(txt) {
+                const el = document.getElementById('kfStatus');
+                if (el) el.textContent = txt;
+            }
+
+            function _fmtKfDate(intDate) {
+                const s = String(intDate || '');
+                if (s.length !== 8) return s;
+                return s.slice(6,8) + '/' + s.slice(4,6) + '-' + s.slice(0,4);
+            }
+
+            function _fmtKfDateFromInt(intDate) {
+                const s = String(intDate || '');
+                if (s.length !== 8) return s;
+                return s.slice(6,8) + '.' + s.slice(4,6) + '.' + s.slice(0,4);
+            }
+
+            function _kfMarginClass(pct) {
+                if (!Number.isFinite(pct)) return 'na';
+                if (pct > 20) return 'ok';
+                if (pct >= 5)  return 'warn';
+                return 'bad';
+            }
+
+            function _resetKfKpis() {
+                const ids = ['kfKpis','kfTableWrap','kfMarginProgress'];
+                ids.forEach(id => { const el = document.getElementById(id); if(el) el.style.display='none'; });
+            }
+
+            function _renderKfTable() {
+                const wrap = document.getElementById('kfTableWrap');
+                const tbody = document.getElementById('kfTableBody');
+                if (!wrap || !tbody) return;
+                if (!_kfInvoiceRows.length) { wrap.style.display = 'none'; return; }
+
+                tbody.innerHTML = _kfInvoiceRows.map(row => {
+                    const m = _kfMarginMap[String(row.OrdNo)];
+                    const cost     = m ? m.totalCost    : null;
+                    const rev      = m ? m.totalRevenue : null;
+                    const margDkk  = (cost !== null && rev !== null) ? (rev - cost) : null;
+                    const margPct  = (cost > 0 && rev !== null) ? ((rev - cost) / cost * 100) : null;
+                    const cls      = _kfMarginClass(margPct);
+                    return '<tr>' +
+                        '<td class="ordno-link" onclick="closeKundefakturaModal();searchOrderByNo(' + row.OrdNo + ')">' + row.OrdNo + '</td>' +
+                        '<td>' + _fmtKfDateFromInt(row.LstInvDt) + '</td>' +
+                        '<td>' + escapeHtml(String(row.InvoNo || '')) + '</td>' +
+                        '<td>' + escapeHtml(String(row.SellerUsr || '—')) + '</td>' +
+                        '<td class="r">' + formatNumber(row.InvoAm) + '</td>' +
+                        '<td class="r kf-margin-cell ' + (cost !== null ? cls : 'na') + '" id="kf-cost-' + row.OrdNo + '">' + (cost !== null ? formatNumber(cost) : '<span style="color:#aaa">…</span>') + '</td>' +
+                        '<td class="r kf-margin-cell ' + (margDkk !== null ? cls : 'na') + '" id="kf-mdkk-' + row.OrdNo + '">' + (margDkk !== null ? formatNumber(margDkk) : '<span style="color:#aaa">…</span>') + '</td>' +
+                        '<td class="r kf-margin-cell ' + cls + '" id="kf-mpct-' + row.OrdNo + '">' + (margPct !== null ? margPct.toFixed(1) + '%' : '<span style="color:#aaa">…</span>') + '</td>' +
+                        '</tr>';
+                }).join('');
+                wrap.style.display = 'block';
+            }
+
+            function _updateKfKpis() {
+                const kpis = document.getElementById('kfKpis');
+                if (!kpis) return;
+                kpis.style.display = 'grid';
+
+                const totalInvo = _kfInvoiceRows.reduce((s, r) => s + (r.InvoAm || 0), 0);
+                let totalCost = 0; let totalRev = 0; let countWithMargin = 0;
+                for (const row of _kfInvoiceRows) {
+                    const m = _kfMarginMap[String(row.OrdNo)];
+                    if (m) { totalCost += m.totalCost || 0; totalRev += m.totalRevenue || 0; countWithMargin++; }
+                }
+                const hasCost  = countWithMargin > 0;
+                const margDkk  = hasCost ? (totalRev - totalCost) : null;
+                const margPct  = (hasCost && totalCost > 0) ? ((totalRev - totalCost) / totalCost * 100) : null;
+
+                const setText = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+                setText('kfKpiOrders',  _kfInvoiceRows.length);
+                setText('kfKpiTotal',   formatNumber(totalInvo));
+                setText('kfKpiCost',    hasCost ? formatNumber(totalCost) : '—');
+                setText('kfKpiCostSub', hasCost ? countWithMargin + '/' + _kfInvoiceRows.length + ' ordrer' : 'beregner…');
+                setText('kfKpiMargin',  margPct !== null ? margPct.toFixed(1) + '%' : '—');
+                setText('kfKpiMarginSub', margDkk !== null ? formatNumber(margDkk) + ' DKK' : 'beregner…');
+            }
+
+            async function _startKfMarginFetch() {
+                const progress  = document.getElementById('kfMarginProgress');
+                const fill      = document.getElementById('kfMarginProgressFill');
+                const pctTxt    = document.getElementById('kfMarginProgressPct');
+                const progTxt   = document.getElementById('kfMarginProgressText');
+                if (progress) progress.style.display = 'flex';
+                const total = _kfInvoiceRows.length;
+                let done = 0;
+
+                const updateProgress = () => {
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 100;
+                    if (fill)   fill.style.width = pct + '%';
+                    if (pctTxt) pctTxt.textContent = pct + '%';
+                    if (progTxt) progTxt.textContent = done + '/' + total + ' marginer hentet';
+                    if (done >= total && progress) progress.style.display = 'none';
+                };
+
+                // Process in batches of 3 (same as existing margin queue)
+                const BATCH = 3;
+                for (let i = 0; i < _kfInvoiceRows.length; i += BATCH) {
+                    if (_kfMarginAbort) break;
+                    const batch = _kfInvoiceRows.slice(i, i + BATCH);
+                    await Promise.all(batch.map(async row => {
+                        if (_kfMarginAbort) return;
+                        try {
+                            // Check existing aftercalc client cache first
+                            const cached = aftercalcClientCache.get(String(row.OrdNo));
+                            let marginData = null;
+                            if (cached && cached.data && !cached.data.error) {
+                                const s = cached.data.summary || {};
+                                marginData = { totalRevenue: Number(s.totalRevenue||0), totalCost: Number(s.totalCost||0) };
+                            } else {
+                                const r = await fetch('/order-margin/' + row.OrdNo);
+                                if (r.ok) {
+                                    const d = await r.json();
+                                    if (d && d.totalCost !== null && d.totalCost !== undefined) {
+                                        marginData = { totalRevenue: Number(d.totalRevenue||0), totalCost: Number(d.totalCost||0) };
+                                    }
+                                }
+                            }
+                            if (marginData) {
+                                _kfMarginMap[String(row.OrdNo)] = marginData;
+                                _updateKfRowMargin(row.OrdNo, marginData);
+                            }
+                        } catch { /* silent */ }
+                        done++;
+                        updateProgress();
+                        _updateKfKpis();
+                    }));
+                }
+                updateProgress();
+                _updateKfKpis();
+                _addKfTotalRow();
+            }
+
+            function _updateKfRowMargin(ordNo, m) {
+                const cost    = m.totalCost;
+                const rev     = m.totalRevenue;
+                const margDkk = rev - cost;
+                const margPct = cost > 0 ? ((rev - cost) / cost * 100) : null;
+                const cls     = _kfMarginClass(margPct);
+                const setCellClass = (id, txt, c) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.textContent = txt;
+                    el.className = 'r kf-margin-cell ' + c;
+                };
+                setCellClass('kf-cost-' + ordNo, formatNumber(cost), cls);
+                setCellClass('kf-mdkk-' + ordNo, formatNumber(margDkk), cls);
+                setCellClass('kf-mpct-' + ordNo, margPct !== null ? margPct.toFixed(1) + '%' : '—', cls);
+            }
+
+            function _addKfTotalRow() {
+                const tbody = document.getElementById('kfTableBody');
+                if (!tbody || !_kfInvoiceRows.length) return;
+                // Remove existing total row
+                const existing = tbody.querySelector('.total-row');
+                if (existing) existing.remove();
+
+                const totalInvo = _kfInvoiceRows.reduce((s, r) => s + (r.InvoAm || 0), 0);
+                let totalCost = 0; let totalRev = 0; let n = 0;
+                for (const row of _kfInvoiceRows) {
+                    const m = _kfMarginMap[String(row.OrdNo)];
+                    if (m) { totalCost += m.totalCost || 0; totalRev += m.totalRevenue || 0; n++; }
+                }
+                const margDkk = n > 0 ? (totalRev - totalCost) : null;
+                const margPct = (n > 0 && totalCost > 0) ? ((totalRev - totalCost) / totalCost * 100) : null;
+                const cls     = _kfMarginClass(margPct);
+
+                const tr = document.createElement('tr');
+                tr.className = 'total-row';
+                tr.innerHTML =
+                    '<td colspan="4"><strong>TOTAL (' + _kfInvoiceRows.length + ' ordrer)</strong></td>' +
+                    '<td class="r"><strong>' + formatNumber(totalInvo) + '</strong></td>' +
+                    '<td class="r kf-margin-cell ' + (n > 0 ? cls : 'na') + '"><strong>' + (n > 0 ? formatNumber(totalCost) : '—') + '</strong></td>' +
+                    '<td class="r kf-margin-cell ' + (margDkk !== null ? cls : 'na') + '"><strong>' + (margDkk !== null ? formatNumber(margDkk) : '—') + '</strong></td>' +
+                    '<td class="r kf-margin-cell ' + (margPct !== null ? cls : 'na') + '"><strong>' + (margPct !== null ? margPct.toFixed(1) + '%' : '—') + '</strong></td>';
+                tbody.appendChild(tr);
+            }
+
+            function searchOrderByNo(ordNo) {
+                const input = document.getElementById('orderInput');
+                if (input) {
+                    input.value = ordNo;
+                    input.style.display = '';
+                }
+                openModule('efterkalk');
+                setTimeout(() => { searchOrder(); }, 100);
             }
 
             function openSideMenu() {

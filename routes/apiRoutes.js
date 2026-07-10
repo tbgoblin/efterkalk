@@ -2027,6 +2027,99 @@ function createApiRouter({
         }
     });
 
+    // ── Efterkalk: kundefaktura-oversigt ─────────────────────────────────────
+    router.get('/efterkalk/customers', async (req, res) => {
+        try {
+            const q = String(req.query.q || '').trim();
+            const pool = await getConnection();
+            const request = pool.request();
+            let where = 'A.CustNo <> 0';
+            if (q) {
+                request.input('q', sql.VarChar, '%' + q + '%');
+                where += " AND (A.Nm LIKE @q OR CAST(A.CustNo AS VARCHAR(20)) LIKE @q OR A.Shrt LIKE @q)";
+            }
+            const result = await request.query(`
+                SELECT DISTINCT TOP 60
+                    A.CustNo, A.Nm, A.Shrt
+                FROM Actor A
+                WHERE ${where}
+                  AND EXISTS (
+                      SELECT 1 FROM Ord O
+                      WHERE O.CustNo = A.CustNo
+                        AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
+                        AND O.InvoAm > 0
+                  )
+                ORDER BY A.Nm
+            `);
+            res.json({ ok: true, rows: result.recordset || [] });
+        } catch (err) {
+            logEvent('ERROR efterkalk/customers: ' + err.message);
+            res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/efterkalk/customer-invoices', async (req, res) => {
+        try {
+            const custNo = parseInt(req.query.custno);
+            if (Number.isNaN(custNo) || custNo <= 0) {
+                return res.status(400).json({ ok: false, error: 'custno ugyldigt' });
+            }
+            // from/to as YYYY-MM-DD, stored in Visma as INT YYYYMMDD
+            const fromStr = String(req.query.from || '').trim();
+            const toStr   = String(req.query.to   || '').trim();
+            if (!fromStr) return res.status(400).json({ ok: false, error: 'from dato mangler' });
+            const fromInt = parseInt(fromStr.replace(/-/g, ''));
+            const toInt   = toStr ? parseInt(toStr.replace(/-/g, '')) : parseInt(new Date().toISOString().slice(0,10).replace(/-/g,''));
+            if (Number.isNaN(fromInt) || Number.isNaN(toInt)) {
+                return res.status(400).json({ ok: false, error: 'Ugyldig dato' });
+            }
+
+            const pool = await getConnection();
+            const result = await pool.request()
+                .input('custNo',   sql.Int, custNo)
+                .input('fromDate', sql.Int, fromInt)
+                .input('toDate',   sql.Int, toInt)
+                .query(`
+                    SELECT
+                        O.OrdNo,
+                        O.LstInvDt,
+                        O.InvoAm,
+                        O.Gr4,
+                        O.InvoNo,
+                        A_cust.Nm   AS CustomerName,
+                        A_cust.Shrt AS CustomerShrt,
+                        SU.Usr      AS SellerUsr
+                    FROM Ord O
+                    LEFT JOIN Actor A_cust ON A_cust.CustNo = O.CustNo
+                    OUTER APPLY (
+                        SELECT TOP 1 A.Usr FROM Actor A
+                        WHERE LTRIM(RTRIM(CONVERT(VARCHAR(50), A.EmpNo))) = LTRIM(RTRIM(CONVERT(VARCHAR(50), O.SelBuy)))
+                    ) SU
+                    WHERE O.CustNo  = @custNo
+                      AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
+                      AND O.InvoAm  > 0
+                      AND O.LstInvDt >= @fromDate
+                      AND O.LstInvDt <= @toDate
+                    ORDER BY O.LstInvDt DESC, O.OrdNo DESC
+                `);
+            const rows = (result.recordset || []).map(r => ({
+                OrdNo:        r.OrdNo,
+                LstInvDt:     r.LstInvDt,
+                InvoAm:       Number(r.InvoAm || 0),
+                Gr4:          r.Gr4,
+                InvoNo:       r.InvoNo,
+                CustomerName: r.CustomerName,
+                CustomerShrt: r.CustomerShrt,
+                SellerUsr:    r.SellerUsr
+            }));
+            const totalInvoAm = rows.reduce((s, r) => s + r.InvoAm, 0);
+            res.json({ ok: true, rows, count: rows.length, totalInvoAm, custNo, fromInt, toInt });
+        } catch (err) {
+            logEvent('ERROR efterkalk/customer-invoices: ' + err.message);
+            res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
     router.get('/order-list-check-time', async (req, res) => {
         try {
             const pool = await getConnection();
