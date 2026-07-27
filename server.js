@@ -7552,6 +7552,12 @@ app.get('/', (req, res) => {
                 if (marginState.hasInvoiceWarning) {
                     return '<span title="En eller flere linjer mangler faktura (NoInvo=0); kostberegning bruger NoFin som fallback." style="display:inline-flex;align-items:center;gap:4px;background:#fff3e0;color:#e65100;font-size:12px;font-weight:600;padding:2px 7px;border-radius:10px;border:1px solid #ffcc80;">🧾 Mangler</span>';
                 }
+                const orderRow = (Array.isArray(orderListData) ? orderListData : []).find(o => Number(o.OrdNo || 0) === Number(ordNo || 0));
+                const invoicedAmount = Number((orderRow && orderRow.InvoAm) || 0);
+                const remainingInvoiceAmount = Number((orderRow && orderRow.DInvoIF) || 0);
+                if (invoicedAmount > 0 && remainingInvoiceAmount > 0) {
+                    return '<span title="Ordren er delvist faktureret." style="display:inline-flex;align-items:center;gap:4px;background:#fff3e0;color:#e65100;font-size:12px;font-weight:600;padding:2px 7px;border-radius:10px;border:1px solid #ffcc80;">⏳ Delvis faktura</span>';
+                }
                 return '<span style="color:#388e3c;font-size:13px;" title="Alle fakturaer registreret.">✓</span>';
             }
 

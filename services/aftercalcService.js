@@ -1005,7 +1005,8 @@ function createAftercalcService({
                     C.Nm AS CustomerName,
                     SU.Usr AS SellerUsr,
                     O.LstInvDt,
-                    O.InvoAm
+                    O.InvoAm,
+                    O.DInvoIF
                 FROM Ord O
                 LEFT JOIN Actor C ON C.CustNo = O.CustNo
                 OUTER APPLY (
@@ -1025,7 +1026,8 @@ function createAftercalcService({
                 B.CustomerName,
                 B.SellerUsr,
                 B.LstInvDt,
-                B.InvoAm
+                B.InvoAm,
+                B.DInvoIF
             FROM BaseOrders B
             ORDER BY B.LstInvDt DESC, B.OrdNo DESC
         `);

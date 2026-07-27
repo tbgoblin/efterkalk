@@ -1,5 +1,23 @@
 # BOM Flow Map v1 (Read-Only Reverse Engineering)
 
+## Memory Map Start (2026-07-27)
+- Status
+  - started
+  - scope: BOM legacy flow understanding and migration traceability
+- Primary artifacts
+  - docs/BOM-flow-map-v1.md (macro-level flow inventory)
+  - docs/BOM-to-Portal-mapping-v1.md (endpoint/service/cache mapping)
+  - docs/BOM-implementation-plan-v1.md (phased execution plan)
+  - docs/BOM-modernization-blueprint.md (target architecture)
+- Entry checkpoints
+  - preserve read-only parity first
+  - isolate write paths behind explicit command boundaries
+  - track external dependencies (network path, external workbook, python scripts)
+- Next extraction pass
+  - add per-flow owners (service/module)
+  - add cache invalidation tags per flow
+  - add test coverage targets for each critical flow
+
 ## Method
 - Source inspected: BOM.xlsm package structure + extracted VBA dump.
 - Analysis mode: static read-only only.
