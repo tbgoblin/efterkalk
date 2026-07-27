@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 23;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 24;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -617,6 +617,15 @@ function createAftercalcService({
                 nextVisited.add(numericProdOrdNo);
 
                 const detailsPromise = (async () => {
+                    const orderTypeResult = await pool.request()
+                        .input('purcNo', sql.Numeric, numericProdOrdNo)
+                        .query(`
+                            SELECT TrTp
+                            FROM Ord
+                            WHERE OrdNo = @purcNo
+                        `);
+                    const isPurchaseLinkedOrder = Number((orderTypeResult.recordset && orderTypeResult.recordset[0] && orderTypeResult.recordset[0].TrTp) || 0) === 6;
+
                     const prodLinesResult = await pool.request()
                         .input('purcNo', sql.Numeric, numericProdOrdNo)
                         .query(`
@@ -725,6 +734,12 @@ function createAftercalcService({
 
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
+                        } else if (isPurchaseLinkedOrder) {
+                            const purchaseQty = noFinValue > 0 ? noFinValue : noOrgValue;
+                            const purchaseUnitCost = Number(line.DPrice || line.CCstPr || 0);
+                            if (purchaseQty > 0 && purchaseUnitCost > 0) {
+                                effectiveLineCost = Number((purchaseQty * purchaseUnitCost).toFixed(2));
+                            }
                         } else if (isInvoiceTracked) {
                             const costQty = isPurchasedPartLine(line) ? (noFinValue || noOrgValue) : ydelseCostInfo.effectiveQuantity;
                             effectiveLineCost = Number(costQty * ydelseSourceUnitCost);
