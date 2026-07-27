@@ -468,6 +468,7 @@ function createAftercalcService({
                             NoFin,
                             NoInvo,
                             NoInvoAb,
+                            CstPr,
                             ProdTp4,
                             CCstPr,
                             PurcNo,
@@ -639,6 +640,7 @@ function createAftercalcService({
                                 OrdLn.NoFin,
                                 OrdLn.NoInvo,
                                 OrdLn.NoInvoAb,
+                                OrdLn.CstPr,
                                 OrdLn.CCstPr,
                                 OrdLn.PurcNo,
                                 OrdLn.TrInf2,
@@ -736,7 +738,7 @@ function createAftercalcService({
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
                         } else if (isPurchaseLinkedOrder) {
                             const purchaseQty = noFinValue > 0 ? noFinValue : noOrgValue;
-                            const purchaseUnitCost = Number(line.DPrice || line.CCstPr || 0);
+                            const purchaseUnitCost = Number(line.CstPr || line.DPrice || line.CCstPr || 0);
                             if (purchaseQty > 0 && purchaseUnitCost > 0) {
                                 effectiveLineCost = Number((purchaseQty * purchaseUnitCost).toFixed(2));
                             }
