@@ -1005,9 +1005,13 @@ function createAftercalcService({
             const salesNoPOLines = salesOrderLinesWithProductionTotal.filter(line => !line.PurcNo || line.PurcNo === 0);
             const salesNoPOTotalCost = salesNoPOLines.reduce((sum, line) => sum + (line.EffectiveLineCost || 0), 0);
 
+            const salesPurchaseLinkedTotalCost = salesOrderLinesWithProductionTotal
+                .filter(line => line.PurcNo && line.PurcNo !== 0 && Number(line.LinkedOrderType || 0) === 6)
+                .reduce((sum, line) => sum + Number(line.EffectiveLineCost || 0), 0);
+
             const includedProductionOrdNos = new Set(
                 salesOrderLinesWithProductionTotal
-                    .filter(line => line.PurcNo && line.PurcNo !== 0 && !line.IsDiscountLine)
+                    .filter(line => line.PurcNo && line.PurcNo !== 0 && !line.IsDiscountLine && Number(line.LinkedOrderType || 0) !== 6)
                     .map(line => Number(line.PurcNo))
             );
 
@@ -1015,7 +1019,7 @@ function createAftercalcService({
                 if (!includedProductionOrdNos.has(Number(ord.ordNo))) return sum;
                 return sum + (ord.totalCost || 0);
             }, 0);
-            const totalCost = salesNoPOTotalCost + productionTotalCost;
+            const totalCost = salesNoPOTotalCost + salesPurchaseLinkedTotalCost + productionTotalCost;
             const totalRevenue = Number(orderHeader.InvoAm || 0) + Number(orderHeader.DInvoIF || 0);
             const margin = totalRevenue - totalCost;
             const marginPercentage = totalCost > 0 ? ((totalRevenue / totalCost) * 100).toFixed(2) : 0;

@@ -8623,7 +8623,7 @@ app.get('/', (req, res) => {
                             if (hasProductionOrder) {
                                 html += '<td><span class="prod-link" onclick="openProduction(' + line.PurcNo + ')">' + (line.ProdNo || '-') + '</span>' + salesWarningFlag + '</td>';
                             } else if (hasLinkedOrder) {
-                                html += '<td>' + (line.ProdNo || '-') + '<span style="margin-left:6px; font-size:11px; padding:2px 5px; border-radius:4px; background:#e8f3ff; color:#1d4f91; border:1px solid #bcd7f5;">purchase</span>' + salesWarningFlag + '</td>';
+                                html += '<td>' + (line.ProdNo || '-') + '<span style="margin-left:6px; font-size:11px; padding:2px 5px; border-radius:4px; background:#e8f3ff; color:#1d4f91; border:1px solid #bcd7f5;">Indkøb</span>' + salesWarningFlag + '</td>';
                             } else {
                                 html += '<td>' + (line.ProdNo || '-') + salesWarningFlag + '</td>';
                             }
@@ -8646,7 +8646,7 @@ app.get('/', (req, res) => {
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + formatNumber(lineSalesPrice) + '</td>';
                             html += '<td>' + lineMarginBadge + '</td>';
-                            html += '<td>' + ((line.PurcNo && line.PurcNo !== 0) ? (line.PurcNo + (isPurchaseLinkedOrder ? ' (PO)' : '')) : '-') + '</td>';
+                            html += '<td>' + ((line.PurcNo && line.PurcNo !== 0) ? (line.PurcNo + (isPurchaseLinkedOrder ? ' (Indkøb)' : '')) : '-') + '</td>';
                             if (hasSalesOrderDrawing) {
                                 if (line.DrawingWebPg) {
                                     html += '<td><button class="list-toggle-btn drawing-open-btn" data-drawing-path="' + escapeHtml(String(line.DrawingWebPg || '')) + '" data-prod-no="' + escapeHtml(String(line.ProdNo || '')) + '" data-ord-no="' + escapeHtml(String(line.PurcNo || data.orderHeader.OrdNo || '')) + '" style="padding:4px 8px; margin-left:0;">Vis tegning</button></td>';
