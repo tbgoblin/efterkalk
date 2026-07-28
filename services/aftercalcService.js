@@ -738,7 +738,7 @@ function createAftercalcService({
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
                         } else if (isPurchaseLinkedOrder) {
                             const purchaseQty = noFinValue > 0 ? noFinValue : noOrgValue;
-                            const purchaseUnitCost = Number(line.CstPr || line.DPrice || line.CCstPr || 0);
+                            const purchaseUnitCost = Number(line.NestingCost || line.CstPr || line.DPrice || line.CCstPr || 0);
                             if (purchaseQty > 0 && purchaseUnitCost > 0) {
                                 effectiveLineCost = Number((purchaseQty * purchaseUnitCost).toFixed(2));
                             }
