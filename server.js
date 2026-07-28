@@ -8591,9 +8591,9 @@ app.get('/', (req, res) => {
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
                         const hasSalesOrderDrawing = data.salesOrderLines.some(line => !!line.DrawingWebPg);
-                        const salesOrderColspan = hasSalesOrderDrawing ? 12 : 11;
+                        const salesOrderColspan = hasSalesOrderDrawing ? 11 : 10;
                         html += '<div class="section"><h3>Salgsordrelinjer</h3>';
-                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Price</th><th>Salgspris/enhed</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
+                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Price</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
 
                         for (const line of data.salesOrderLines) {
                             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
@@ -8603,7 +8603,9 @@ app.get('/', (req, res) => {
                             const lineMarginValue = calculateLineMarginPercent(lineSalesPrice, lineCost);
                             const isExactlyHundred = Math.abs(lineMarginValue - 100) < 0.0001;
                             const lineMarginPercent = lineMarginValue.toFixed(2);
-                            const hasProductionOrder = Boolean(line.PurcNo && line.PurcNo !== 0);
+                            const hasLinkedOrder = Boolean(line.PurcNo && line.PurcNo !== 0);
+                            const isPurchaseLinkedOrder = Number(line.LinkedOrderType || 0) === 6;
+                            const hasProductionOrder = hasLinkedOrder && !isPurchaseLinkedOrder;
                             const breakdownRowId = 'sales-line-breakdown-' + String(data.orderHeader.OrdNo || '0') + '-' + String(line.LnNo || 0);
                             const breakdownInfo = hasProductionOrder
                                 ? getSalesLineCostBreakdown(line.PurcNo)
@@ -8618,8 +8620,10 @@ app.get('/', (req, res) => {
                                 : '') + (line.LnNo || 0) + '</td>';
 
                             const salesWarningFlag = getWarningFlagHtml(line, 'Tilknyttet produktionsordre har en advarsel.');
-                            if (line.PurcNo && line.PurcNo !== 0) {
+                            if (hasProductionOrder) {
                                 html += '<td><span class="prod-link" onclick="openProduction(' + line.PurcNo + ')">' + (line.ProdNo || '-') + '</span>' + salesWarningFlag + '</td>';
+                            } else if (hasLinkedOrder) {
+                                html += '<td>' + (line.ProdNo || '-') + '<span style="margin-left:6px; font-size:11px; padding:2px 5px; border-radius:4px; background:#e8f3ff; color:#1d4f91; border:1px solid #bcd7f5;">purchase</span>' + salesWarningFlag + '</td>';
                             } else {
                                 html += '<td>' + (line.ProdNo || '-') + salesWarningFlag + '</td>';
                             }
@@ -8631,15 +8635,18 @@ app.get('/', (req, res) => {
                             html += '<td>' + formatNumber(displaySalesQty) + '</td>';
                             const productionTotalCost = Number(line.ProductionOrderTotalCost || 0);
                             const lineQty = Number(line.NoFin || 0);
-                            const displayKostpris = (line.PurcNo && line.PurcNo !== 0)
+                            const purchaseUnitCost = Number(line.PurchaseOrderUnitCost || 0);
+                            const displayKostpris = (isPurchaseLinkedOrder && purchaseUnitCost > 0)
+                                ? purchaseUnitCost
+                                : ((line.PurcNo && line.PurcNo !== 0)
                                 ? (lineQty > 0 ? (productionTotalCost / lineQty) : productionTotalCost)
-                                : (line.CCstPr || 0);
+                                : (line.CCstPr || 0));
                             html += '<td>' + formatNumber(displayKostpris) + '</td>';
                             html += '<td><strong>' + formatNumber(lineCost) + '</strong></td>';
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + formatNumber(lineSalesPrice) + '</td>';
                             html += '<td>' + lineMarginBadge + '</td>';
-                            html += '<td>' + ((line.PurcNo && line.PurcNo !== 0) ? line.PurcNo : '-') + '</td>';
+                            html += '<td>' + ((line.PurcNo && line.PurcNo !== 0) ? (line.PurcNo + (isPurchaseLinkedOrder ? ' (PO)' : '')) : '-') + '</td>';
                             if (hasSalesOrderDrawing) {
                                 if (line.DrawingWebPg) {
                                     html += '<td><button class="list-toggle-btn drawing-open-btn" data-drawing-path="' + escapeHtml(String(line.DrawingWebPg || '')) + '" data-prod-no="' + escapeHtml(String(line.ProdNo || '')) + '" data-ord-no="' + escapeHtml(String(line.PurcNo || data.orderHeader.OrdNo || '')) + '" style="padding:4px 8px; margin-left:0;">Vis tegning</button></td>';
@@ -8670,7 +8677,7 @@ app.get('/', (req, res) => {
                     if (data.salesLines.length > 0) {
                         const hasSalesLinesDrawing = data.salesLines.some(line => !!line.DrawingWebPg);
                         html += '<div class="section"><h3>Salgslinjer (Ekstra produkter)</h3>';
-                        html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Price</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th>' + (hasSalesLinesDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
+                        html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Price</th><th>Kostpris/enhed</th><th>Samlet kost</th>' + (hasSalesLinesDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
                         
                         for (const line of data.salesLines) {
                             const salesExtraWarningFlag = getWarningFlagHtml(line, 'Inkonsekvens på salgslinje.');
@@ -8694,7 +8701,7 @@ app.get('/', (req, res) => {
                             html += '</tr>';
                         }
                         
-                        html += '<tr class="summary-row"><td colspan="6">Total salgslinjer:</td><td>' + formatNumber(data.salesLinesTotalCost) + ' DKK</td>' + (hasSalesLinesDrawing ? '<td></td>' : '') + '</tr>';
+                        html += '<tr class="summary-row"><td colspan="5">Total salgslinjer:</td><td>' + formatNumber(data.salesLinesTotalCost) + ' DKK</td>' + (hasSalesLinesDrawing ? '<td></td>' : '') + '</tr>';
                         html += '</table></div>';
                     }
                     
@@ -9769,8 +9776,8 @@ app.get('/', (req, res) => {
                         html += '</tr>';
                     }
                     html += isYdelseFilteredView
-                        ? '<tr class="summary-row"><td colspan="7">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>'
-                        : '<tr class="summary-row"><td colspan="9">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>';
+                        ? '<tr class="summary-row"><td colspan="6">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>'
+                        : '<tr class="summary-row"><td colspan="8">Total beregnet kost:</td><td><strong>' + formatNumber(modalTotalCost || 0) + ' DKK</strong></td></tr>';
                     html += '</table>';
                     body.innerHTML = html;
                     applyMicroTablePolish(body);

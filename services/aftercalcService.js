@@ -924,6 +924,12 @@ function createAftercalcService({
             const productionTotalByOrdNo = new Map(
                 productionOrders.map(po => [Number(po.ordNo), Number(po.totalCost || 0)])
             );
+            const linkedOrderTypeByOrdNo = new Map(
+                productionOrders.map(po => [Number(po.ordNo), Number(po.trTp || 0)])
+            );
+            const linkedOrderLinesByOrdNo = new Map(
+                productionOrders.map(po => [Number(po.ordNo), Array.isArray(po.lines) ? po.lines : []])
+            );
             const productionWarningByOrdNo = new Map(
                 productionOrders.map(po => [Number(po.ordNo), Boolean(po.hasWarnings)])
             );
@@ -934,10 +940,42 @@ function createAftercalcService({
             const salesOrderLinesWithProductionTotal = salesOrderLines.map(line => {
                 const purcNo = line.PurcNo ? Number(line.PurcNo) : 0;
                 const productionTotal = purcNo ? productionTotalByOrdNo.get(purcNo) : undefined;
+                const linkedOrderType = purcNo ? Number(linkedOrderTypeByOrdNo.get(purcNo) || 0) : 0;
+                const linkedOrderLines = purcNo ? (linkedOrderLinesByOrdNo.get(purcNo) || []) : [];
                 const productionHasWarning = purcNo ? Boolean(productionWarningByOrdNo.get(purcNo)) : false;
                 const productionWarningText = purcNo ? String(productionWarningTextByOrdNo.get(purcNo) || '') : '';
                 const warningText = joinWarningMessages([line.WarningText]);
                 const hasWarning = Boolean(line.HasWarning) && warningText.length > 0;
+
+                if (productionTotal !== undefined && !line.IsDiscountLine && linkedOrderType === 6) {
+                    const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
+                    const linkedMatch = linkedOrderLines.find(linkedLine => String(linkedLine.ProdNo || '').trim().toUpperCase() === prodNoKey) || null;
+                    const qty = Number(line.NoFin || line.NoOrg || 0);
+                    const purchaseUnitCost = linkedMatch
+                        ? Number(
+                            linkedMatch.DPrice
+                            || linkedMatch.DisplayUnitCost
+                            || linkedMatch.CCstPr
+                            || linkedMatch.CstPr
+                            || 0
+                        )
+                        : 0;
+
+                    if (purchaseUnitCost > 0 && qty > 0) {
+                        const effectiveCost = parseFloat(Number(purchaseUnitCost * qty).toFixed(2));
+                        return {
+                            ...line,
+                            ProductionOrderTotalCost: parseFloat(Number(productionTotal).toFixed(2)),
+                            EffectiveLineCost: effectiveCost,
+                            LinkedOrderType: linkedOrderType,
+                            PurchaseOrderUnitCost: parseFloat(Number(purchaseUnitCost).toFixed(4)),
+                            LinkedProductionHasWarning: productionHasWarning,
+                            LinkedProductionWarningText: productionWarningText,
+                            HasWarning: hasWarning,
+                            WarningText: warningText
+                        };
+                    }
+                }
 
                 if (productionTotal !== undefined && !line.IsDiscountLine) {
                     const roundedTotal = parseFloat(Number(productionTotal).toFixed(2));
@@ -945,6 +983,7 @@ function createAftercalcService({
                         ...line,
                         ProductionOrderTotalCost: roundedTotal,
                         EffectiveLineCost: roundedTotal,
+                        LinkedOrderType: linkedOrderType,
                         LinkedProductionHasWarning: productionHasWarning,
                         LinkedProductionWarningText: productionWarningText,
                         HasWarning: hasWarning,
@@ -955,6 +994,7 @@ function createAftercalcService({
                 return {
                     ...line,
                     ProductionOrderTotalCost: productionTotal !== undefined ? parseFloat(Number(productionTotal).toFixed(2)) : null,
+                    LinkedOrderType: linkedOrderType,
                     LinkedProductionHasWarning: productionHasWarning,
                     LinkedProductionWarningText: productionWarningText,
                     HasWarning: hasWarning,
