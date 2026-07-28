@@ -8591,9 +8591,9 @@ app.get('/', (req, res) => {
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
                         const hasSalesOrderDrawing = data.salesOrderLines.some(line => !!line.DrawingWebPg);
-                        const salesOrderColspan = hasSalesOrderDrawing ? 11 : 10;
+                        const salesOrderColspan = hasSalesOrderDrawing ? 12 : 11;
                         html += '<div class="section"><h3>Salgsordrelinjer</h3>';
-                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Salgspris/enhed</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
+                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Price</th><th>Salgspris/enhed</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
 
                         for (const line of data.salesOrderLines) {
                             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
@@ -8670,7 +8670,7 @@ app.get('/', (req, res) => {
                     if (data.salesLines.length > 0) {
                         const hasSalesLinesDrawing = data.salesLines.some(line => !!line.DrawingWebPg);
                         html += '<div class="section"><h3>Salgslinjer (Ekstra produkter)</h3>';
-                        html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th>' + (hasSalesLinesDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
+                        html += '<table><tr><th>Prod</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Price</th><th>Salgspris</th><th>Kostpris/enhed</th><th>Samlet kost</th>' + (hasSalesLinesDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
                         
                         for (const line of data.salesLines) {
                             const salesExtraWarningFlag = getWarningFlagHtml(line, 'Inkonsekvens på salgslinje.');
@@ -8694,7 +8694,7 @@ app.get('/', (req, res) => {
                             html += '</tr>';
                         }
                         
-                        html += '<tr class="summary-row"><td colspan="5">Total salgslinjer:</td><td>' + formatNumber(data.salesLinesTotalCost) + ' DKK</td>' + (hasSalesLinesDrawing ? '<td></td>' : '') + '</tr>';
+                        html += '<tr class="summary-row"><td colspan="6">Total salgslinjer:</td><td>' + formatNumber(data.salesLinesTotalCost) + ' DKK</td>' + (hasSalesLinesDrawing ? '<td></td>' : '') + '</tr>';
                         html += '</table></div>';
                     }
                     
