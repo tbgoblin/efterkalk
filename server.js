@@ -5571,6 +5571,24 @@ app.get('/', (req, res) => {
                 }
             }
 
+            function computeOrdreindgangMovingAvg(values, windowSize) {
+                const safeValues = Array.isArray(values) ? values : [];
+                const safeWindow = Math.max(1, Number(windowSize) || 1);
+                const out = [];
+                for (let i = 0; i < safeValues.length; i += 1) {
+                    const from = Math.max(0, i - safeWindow + 1);
+                    let sum = 0;
+                    let count = 0;
+                    for (let j = from; j <= i; j += 1) {
+                        const n = Number(safeValues[j] || 0);
+                        sum += n;
+                        count += 1;
+                    }
+                    out.push(count > 0 ? (sum / count) : 0);
+                }
+                return out;
+            }
+
             function renderOrdreindgangTrendChart(rows) {
                 const wrap = document.getElementById('ordreindgangChartsWrap');
                 const svg = document.getElementById('ordreindgangTrendChart');
@@ -5593,10 +5611,10 @@ app.get('/', (req, res) => {
                 });
                 const ordValues = safeRows.map(r => Number(r.totalOrd || 0));
                 const tilbudValues = safeRows.map(r => Number(r.totalTilbud || 0));
-                const avgValue = Number(safeRows[0] && safeRows[0].avgOrd || 0);
+                const movingAvgValues = computeOrdreindgangMovingAvg(ordValues, 3);
                 const allValues = showTilbudLine
-                    ? ordValues.concat(tilbudValues).concat([avgValue])
-                    : ordValues.concat([avgValue]);
+                    ? ordValues.concat(tilbudValues).concat(movingAvgValues)
+                    : ordValues.concat(movingAvgValues);
                 const rawMax = Math.max(...allValues, 0);
                 const chartMax = rawMax <= 0 ? 1000 : (Math.ceil(rawMax / 1000) * 1000);
 
@@ -5649,8 +5667,17 @@ app.get('/', (req, res) => {
                     }
                 });
 
-                const avgY = toY(avgValue);
-                html += '<line x1="' + leftPad + '" y1="' + avgY + '" x2="' + (leftPad + width) + '" y2="' + avgY + '" stroke="#3d6eb5" stroke-width="3" />';
+                const movingPoints = movingAvgValues.map((value, idx) => {
+                    return toXCenter(idx) + ',' + toY(value);
+                }).join(' ');
+                html += '<polyline points="' + movingPoints + '" fill="none" stroke="#3d6eb5" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />';
+                movingAvgValues.forEach((value, idx) => {
+                    const cx = toXCenter(idx);
+                    const cy = toY(value);
+                    html += '<circle cx="' + cx + '" cy="' + cy + '" r="3" fill="#3d6eb5">' +
+                        '<title>' + escapeHtmlFE(labels[idx] + ' Gns. ordre (3 uger): ' + formatDkkDa(value)) + '</title>' +
+                        '</circle>';
+                });
                 html += '</g>';
 
                 svg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + height);
@@ -5661,7 +5688,7 @@ app.get('/', (req, res) => {
                     if (showTilbudLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#8ec3f7"></span>Tilbud</span>';
                     }
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#3d6eb5"></span>Gennem.Ordre</span>';
+                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#3d6eb5"></span>Gns. ordre (3 uger)</span>';
                     legendEl.innerHTML = legendHtml;
                 }
                 wrap.style.display = 'grid';
@@ -5705,7 +5732,10 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                const body = safeRows.map(row => {
+                const ordValues = safeRows.map(row => Number(row.totalOrd || 0));
+                const movingAvgValues = computeOrdreindgangMovingAvg(ordValues, 3);
+
+                const body = safeRows.map((row, idx) => {
                     const cells = [
                         '<td>' + escapeHtmlFE(formatWeekLabel(row.weekKey)) + '</td>',
                         '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalOrd)) + '</td>'
@@ -5714,7 +5744,7 @@ app.get('/', (req, res) => {
                         cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalTilbud)) + '</td>');
                     }
                     cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalBudget)) + '</td>');
-                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.avgOrd)) + '</td>');
+                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(movingAvgValues[idx])) + '</td>');
                     return '<tr>' +
                         cells.join('') +
                         '</tr>';
@@ -5728,7 +5758,7 @@ app.get('/', (req, res) => {
                     headers.push('<th class="omsaetning-cell-right">Tilbud</th>');
                 }
                 headers.push('<th class="omsaetning-cell-right">Budget</th>');
-                headers.push('<th class="omsaetning-cell-right">Gns. ordre</th>');
+                headers.push('<th class="omsaetning-cell-right">Gns. ordre (3 uger)</th>');
 
                 const colgroup = showTilbudColumn
                     ? '<colgroup><col style="width:16%;" /><col style="width:21%;" /><col style="width:23%;" /><col style="width:20%;" /><col style="width:20%;" /></colgroup>'
