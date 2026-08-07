@@ -1710,7 +1710,7 @@ app.get('/', (req, res) => {
                         <button id="ordreindgangPrintBtn" onclick="printOrdreindgangReport()">Print rapport</button>
                     </div>
                 </div>
-                <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px minmax(180px,1fr);">
+                <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px 190px minmax(180px,1fr);">
                     <div class="omsaetning-field">
                         <label for="ordreindgangFraWeek">Fra uge (YYYYWW)</label>
                         <input id="ordreindgangFraWeek" type="text" maxlength="6" placeholder="202601" onchange="scheduleOrdreindgangAutoReload()" />
@@ -1724,6 +1724,13 @@ app.get('/', (req, res) => {
                         <label class="ordreindgang-toggle" for="ordreindgangShowTilbud">
                             <input id="ordreindgangShowTilbud" type="checkbox" onchange="renderOrdreindgangFromLastPayload()" />
                             <span>Vis tilbud i graf og tabel</span>
+                        </label>
+                    </div>
+                    <div class="omsaetning-field">
+                        <label for="ordreindgangShowTrend">Trendlinje</label>
+                        <label class="ordreindgang-toggle" for="ordreindgangShowTrend">
+                            <input id="ordreindgangShowTrend" type="checkbox" checked onchange="renderOrdreindgangFromLastPayload()" />
+                            <span>Vis trendlinje (3 uger)</span>
                         </label>
                     </div>
                     <div class="omsaetning-field">
@@ -5168,6 +5175,11 @@ app.get('/', (req, res) => {
                 return !!el && el.checked === true;
             }
 
+            function shouldShowOrdreindgangTrendLine() {
+                const el = document.getElementById('ordreindgangShowTrend');
+                return !!el && el.checked === true;
+            }
+
             function setOrdreindgangStatus(message) {
                 const el = document.getElementById('ordreindgangStatus');
                 if (el) el.textContent = String(message || '');
@@ -5443,6 +5455,7 @@ app.get('/', (req, res) => {
                 const customerTable = (document.getElementById('ordreindgangCustomersTable') || {}).innerHTML || '<div class="muted">Ingen kundetabel tilgængelig.</div>';
                 const statusText = String((document.getElementById('ordreindgangStatus') || {}).textContent || '').trim();
                 const tilbudEnabled = !!((document.getElementById('ordreindgangShowTilbud') || {}).checked);
+                const trendEnabled = !!((document.getElementById('ordreindgangShowTrend') || {}).checked);
                 const weekCount = Array.isArray(ordreindgangLastPayload && ordreindgangLastPayload.weeklyRows)
                     ? ordreindgangLastPayload.weeklyRows.length
                     : 0;
@@ -5457,6 +5470,7 @@ app.get('/', (req, res) => {
                 const metaHtml =
                     '<div><strong>Periode:</strong> ' + escapeHtmlFE(fraWeek + ' → ' + tilWeek) + '</div>' +
                     '<div><strong>Tilbud-linje:</strong> ' + (tilbudEnabled ? 'Aktiv' : 'Skjult') + '</div>' +
+                    '<div><strong>Trendlinje:</strong> ' + (trendEnabled ? 'Aktiv (3 uger)' : 'Skjult') + '</div>' +
                     '<div><strong>Layoutvalg:</strong> ' + escapeHtmlFE(getOrientationSourceLabelDa(orientationPreference)) + '</div>' +
                     '<div><strong>Layout:</strong> ' + escapeHtmlFE(getOrientationLabelDa(orientation)) + '</div>' +
                     '<div><strong>Udskrevet:</strong> ' + escapeHtmlFE(new Date().toLocaleString('da-DK')) + '</div>';
@@ -5589,12 +5603,35 @@ app.get('/', (req, res) => {
                 return out;
             }
 
+            function buildSmoothPath(points) {
+                const safePoints = Array.isArray(points) ? points : [];
+                if (safePoints.length === 0) return '';
+                if (safePoints.length === 1) return 'M ' + safePoints[0].x + ' ' + safePoints[0].y;
+
+                let path = 'M ' + safePoints[0].x + ' ' + safePoints[0].y;
+                for (let i = 0; i < safePoints.length - 1; i += 1) {
+                    const p0 = i > 0 ? safePoints[i - 1] : safePoints[i];
+                    const p1 = safePoints[i];
+                    const p2 = safePoints[i + 1];
+                    const p3 = (i + 2 < safePoints.length) ? safePoints[i + 2] : p2;
+
+                    const cp1x = p1.x + (p2.x - p0.x) / 6;
+                    const cp1y = p1.y + (p2.y - p0.y) / 6;
+                    const cp2x = p2.x - (p3.x - p1.x) / 6;
+                    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+                    path += ' C ' + cp1x + ' ' + cp1y + ', ' + cp2x + ' ' + cp2y + ', ' + p2.x + ' ' + p2.y;
+                }
+                return path;
+            }
+
             function renderOrdreindgangTrendChart(rows) {
                 const wrap = document.getElementById('ordreindgangChartsWrap');
                 const svg = document.getElementById('ordreindgangTrendChart');
                 const legendEl = document.getElementById('ordreindgangLegend');
                 const safeRows = Array.isArray(rows) ? rows : [];
                 const showTilbudLine = shouldShowOrdreindgangTilbudLine();
+                const showTrendLine = shouldShowOrdreindgangTrendLine();
                 if (!wrap || !svg) return;
 
                 if (safeRows.length === 0) {
@@ -5613,8 +5650,8 @@ app.get('/', (req, res) => {
                 const tilbudValues = safeRows.map(r => Number(r.totalTilbud || 0));
                 const movingAvgValues = computeOrdreindgangMovingAvg(ordValues, 3);
                 const allValues = showTilbudLine
-                    ? ordValues.concat(tilbudValues).concat(movingAvgValues)
-                    : ordValues.concat(movingAvgValues);
+                    ? ordValues.concat(tilbudValues).concat(showTrendLine ? movingAvgValues : [])
+                    : ordValues.concat(showTrendLine ? movingAvgValues : []);
                 const rawMax = Math.max(...allValues, 0);
                 const chartMax = rawMax <= 0 ? 1000 : (Math.ceil(rawMax / 1000) * 1000);
 
@@ -5667,17 +5704,21 @@ app.get('/', (req, res) => {
                     }
                 });
 
-                const movingPoints = movingAvgValues.map((value, idx) => {
-                    return toXCenter(idx) + ',' + toY(value);
-                }).join(' ');
-                html += '<polyline points="' + movingPoints + '" fill="none" stroke="#3d6eb5" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />';
-                movingAvgValues.forEach((value, idx) => {
-                    const cx = toXCenter(idx);
-                    const cy = toY(value);
-                    html += '<circle cx="' + cx + '" cy="' + cy + '" r="3" fill="#3d6eb5">' +
-                        '<title>' + escapeHtmlFE(labels[idx] + ' Gns. ordre (3 uger): ' + formatDkkDa(value)) + '</title>' +
-                        '</circle>';
-                });
+                if (showTrendLine) {
+                    const movingPoints = movingAvgValues.map((value, idx) => ({
+                        x: toXCenter(idx),
+                        y: toY(value)
+                    }));
+                    const smoothPath = buildSmoothPath(movingPoints);
+                    html += '<path d="' + smoothPath + '" fill="none" stroke="#ff6f00" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round" />';
+                    movingAvgValues.forEach((value, idx) => {
+                        const cx = toXCenter(idx);
+                        const cy = toY(value);
+                        html += '<circle cx="' + cx + '" cy="' + cy + '" r="3.4" fill="#ff6f00">' +
+                            '<title>' + escapeHtmlFE(labels[idx] + ' Gns. ordre (3 uger): ' + formatDkkDa(value)) + '</title>' +
+                            '</circle>';
+                    });
+                }
                 html += '</g>';
 
                 svg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + height);
@@ -5688,7 +5729,9 @@ app.get('/', (req, res) => {
                     if (showTilbudLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#8ec3f7"></span>Tilbud</span>';
                     }
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#3d6eb5"></span>Gns. ordre (3 uger)</span>';
+                    if (showTrendLine) {
+                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#ff6f00"></span>Gns. ordre (3 uger)</span>';
+                    }
                     legendEl.innerHTML = legendHtml;
                 }
                 wrap.style.display = 'grid';
