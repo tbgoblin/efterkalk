@@ -1358,8 +1358,11 @@ app.get('/', (req, res) => {
             .ordreindgang-trend-chip.high { background:#ffe0b2; color:#bf360c; border:1px solid #ffb74d; }
             .ordreindgang-trend-chip.low { background:#d7ecff; color:#0d47a1; border:1px solid #90caf9; }
             .ordreindgang-trend-chip.ok { background:#edf5ff; color:#355675; border:1px solid #c9dbf2; }
+            .ordreindgang-trend-chip.holiday { background:#eceff1; color:#455a64; border:1px solid #cfd8dc; }
             .ordreindgang-toggle { display:flex; align-items:center; gap:8px; min-height:34px; padding:6px 0; color:#244a6d; font-weight:600; }
             .ordreindgang-toggle input[type="checkbox"] { width:16px; height:16px; accent-color:#1565c0; }
+            .ordreindgang-holiday-box { margin-top:8px; border:1px solid #dbe8f9; border-radius:10px; background:#f7fbff; padding:8px 10px; display:grid; grid-template-columns:minmax(280px,1fr) minmax(260px,1fr); gap:10px; align-items:end; }
+            .ordreindgang-holiday-help { font-size:11px; color:#5f7892; margin-top:4px; }
             .omsaetning-cell-right { text-align:right; }
             .omsaetning-status { display:inline-flex; align-items:center; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
             .omsaetning-status.good { color:#1b5e20; background:#e8f5e9; border:1px solid #a5d6a7; }
@@ -1379,13 +1382,23 @@ app.get('/', (req, res) => {
             .omsaetning-empty { margin-top:10px; padding:10px; border:1px dashed #c7daef; border-radius:8px; color:#4f6d8c; background:#f8fbff; }
             .ordreindgang-budget-panel { margin-top:10px; border:1px solid #dbe8f9; border-radius:10px; background:linear-gradient(180deg,#f7fbff 0%,#eef6ff 100%); padding:10px; }
             .ordreindgang-budget-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+            .ordreindgang-budget-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+            .ordreindgang-budget-collapse-btn { border:1px solid #bcd2eb; border-radius:999px; background:#ffffff; color:#1e4768; font-size:11px; font-weight:700; padding:5px 10px; cursor:pointer; }
+            .ordreindgang-budget-collapse-btn:hover { background:#ebf4ff; }
             .ordreindgang-budget-title { font-size:12px; font-weight:800; color:#214867; text-transform:uppercase; letter-spacing:0.04em; }
             .ordreindgang-budget-toggle { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#234a6c; font-weight:700; }
             .ordreindgang-budget-toggle input { width:15px; height:15px; }
+            .ordreindgang-budget-body.hidden { display:none; }
             .ordreindgang-budget-grid { display:grid; grid-template-columns:160px 220px minmax(260px,1fr); gap:10px; margin-top:8px; align-items:end; }
             .ordreindgang-budget-metrics { border:1px solid #d5e5f8; border-radius:8px; background:#ffffff; padding:8px 10px; }
             .ordreindgang-budget-metrics .line { display:flex; justify-content:space-between; gap:12px; font-size:12px; color:#355675; }
             .ordreindgang-budget-metrics .line strong { color:#0f3560; }
+            .ordreindgang-budget-metrics .line.delta-up strong { color:#1b8f3b; }
+            .ordreindgang-budget-metrics .line.delta-down strong { color:#c62828; }
+            .ordreindgang-budget-summary { margin-top:7px; font-size:12px; color:#355675; font-weight:700; }
+            .ordreindgang-budget-summary.delta-up { color:#1b8f3b; }
+            .ordreindgang-budget-summary.delta-down { color:#c62828; }
+            .ordreindgang-budget-summary.delta-flat { color:#355675; }
             .ordreindgang-budget-note { margin-top:6px; font-size:11px; color:#4f6d8c; }
             #mainWorkspace { display:none; }
             .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
@@ -1758,26 +1771,45 @@ app.get('/', (req, res) => {
                         <div id="ordreindgangStatus" class="omsaetning-customer-mode">Vælg ugeperiode og tryk Opdater.</div>
                     </div>
                 </div>
+                <div class="ordreindgang-holiday-box">
+                    <div class="omsaetning-field">
+                        <label for="ordreindgangHolidayWeeks">Ferieuger (YYYYWW)</label>
+                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630,202631" onchange="onOrdreindgangHolidaySettingsChanged()" />
+                        <div class="ordreindgang-holiday-help">0,00 i disse uger behandles som ferie (ikke anomali).</div>
+                    </div>
+                    <div class="omsaetning-field">
+                        <label for="ordreindgangIgnoreHolidayWeeks">Håndtering</label>
+                        <label class="ordreindgang-toggle" for="ordreindgangIgnoreHolidayWeeks">
+                            <input id="ordreindgangIgnoreHolidayWeeks" type="checkbox" checked onchange="onOrdreindgangHolidaySettingsChanged()" />
+                            <span>Ignorer ferieuger i trend/MA3 og periodemål</span>
+                        </label>
+                    </div>
+                </div>
                 <div class="ordreindgang-budget-panel">
                     <div class="ordreindgang-budget-head">
                         <span class="ordreindgang-budget-title">Budget mål</span>
-                        <label class="ordreindgang-budget-toggle" for="ordreindgangUseManualBudget">
-                            <input id="ordreindgangUseManualBudget" type="checkbox" checked onchange="onOrdreindgangBudgetConfigChanged()" />
-                            <span>Brug manuelt budget i ugegraf og tabel</span>
-                        </label>
-                    </div>
-                    <div class="ordreindgang-budget-grid">
-                        <div class="omsaetning-field">
-                            <label for="ordreindgangWorkDays">Arbejdsdage / år</label>
-                            <input id="ordreindgangWorkDays" type="number" min="1" max="366" step="1" value="235" onchange="onOrdreindgangBudgetConfigChanged()" />
+                        <div class="ordreindgang-budget-actions">
+                            <label class="ordreindgang-budget-toggle" for="ordreindgangUseManualBudget">
+                                <input id="ordreindgangUseManualBudget" type="checkbox" checked onchange="onOrdreindgangBudgetConfigChanged()" />
+                                <span>Brug manuelt budget i ugegraf og tabel</span>
+                            </label>
+                            <button id="ordreindgangBudgetToggleBtn" class="ordreindgang-budget-collapse-btn" type="button" onclick="toggleOrdreindgangBudgetPanel()">Skjul budget</button>
                         </div>
-                        <div class="omsaetning-field">
-                            <label for="ordreindgangDailyBudget">Budget / dag (DKK)</label>
-                            <input id="ordreindgangDailyBudget" type="number" min="0" step="1" value="280851" onchange="onOrdreindgangBudgetConfigChanged()" />
-                        </div>
-                        <div id="ordreindgangBudgetMetrics" class="ordreindgang-budget-metrics"></div>
                     </div>
-                    <div class="ordreindgang-budget-note">Standard er 235 arbejdsdage og 280.851 DKK pr. dag. Tallene kan ændres når som helst.</div>
+                    <div id="ordreindgangBudgetBody" class="ordreindgang-budget-body">
+                        <div class="ordreindgang-budget-grid">
+                            <div class="omsaetning-field">
+                                <label for="ordreindgangWorkDays">Arbejdsdage / år</label>
+                                <input id="ordreindgangWorkDays" type="number" min="1" max="366" step="1" value="235" onchange="onOrdreindgangBudgetConfigChanged()" />
+                            </div>
+                            <div class="omsaetning-field">
+                                <label for="ordreindgangDailyBudget">Budget / dag (DKK)</label>
+                                <input id="ordreindgangDailyBudget" type="number" min="0" step="1" value="280851" onchange="onOrdreindgangBudgetConfigChanged()" />
+                            </div>
+                            <div id="ordreindgangBudgetMetrics" class="ordreindgang-budget-metrics"></div>
+                        </div>
+                        <div class="ordreindgang-budget-note">Standard er 235 arbejdsdage og 280.851 DKK pr. dag. Tallene kan ændres når som helst.</div>
+                    </div>
                 </div>
                 <div class="omsaetning-kpis">
                     <div class="omsaetning-kpi"><div class="lbl">Total Ordre</div><div class="val" id="ordreindgangTotalOrd">-</div></div>
@@ -2909,6 +2941,9 @@ app.get('/', (req, res) => {
             const ORDREINDGANG_DEFAULT_WORK_DAYS = 235;
             const ORDREINDGANG_DEFAULT_DAILY_BUDGET = 280851;
             const ORDREINDGANG_BUDGET_STORAGE_KEY = 'afterkalk_ordreindgang_budget_v1';
+            const ORDREINDGANG_BUDGET_PANEL_STORAGE_KEY = 'afterkalk_ordreindgang_budget_panel_v1';
+            const ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY = 'afterkalk_ordreindgang_holiday_settings_v1';
+            let ordreindgangBudgetPanelCollapsed = false;
             let belastningInitialized = false;
             let belastningAutoReloadTimer = null;
             let belastningPeriodicTimer = null;
@@ -5352,6 +5387,96 @@ app.get('/', (req, res) => {
                 return raw;
             }
 
+            function normalizeOrdreindgangHolidayWeeksText(value) {
+                return String(value || '')
+                    .split(',')
+                    .map(part => String(part || '').trim().replace(/[^0-9]/g, '').slice(0, 6))
+                    .filter(part => /^[0-9]{6}$/.test(part))
+                    .join(',');
+            }
+
+            function parseOrdreindgangHolidayWeeksSet(value) {
+                const normalized = normalizeOrdreindgangHolidayWeeksText(value);
+                if (!normalized) return new Set();
+                return new Set(normalized.split(','));
+            }
+
+            function getOrdreindgangHolidaySettingsFromInputs() {
+                const weeksEl = document.getElementById('ordreindgangHolidayWeeks');
+                const ignoreEl = document.getElementById('ordreindgangIgnoreHolidayWeeks');
+                return {
+                    holidayWeeksText: normalizeOrdreindgangHolidayWeeksText(weeksEl ? weeksEl.value : ''),
+                    ignoreHolidayWeeks: !(ignoreEl && ignoreEl.checked === false)
+                };
+            }
+
+            function applyOrdreindgangHolidaySettingsToInputs(settings) {
+                const safe = settings && typeof settings === 'object' ? settings : {};
+                const weeksEl = document.getElementById('ordreindgangHolidayWeeks');
+                const ignoreEl = document.getElementById('ordreindgangIgnoreHolidayWeeks');
+                const normalized = normalizeOrdreindgangHolidayWeeksText(safe.holidayWeeksText || '');
+                if (weeksEl) weeksEl.value = normalized;
+                if (ignoreEl) ignoreEl.checked = safe.ignoreHolidayWeeks !== false;
+            }
+
+            function loadOrdreindgangHolidaySettings() {
+                try {
+                    const raw = localStorage.getItem(ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY);
+                    if (!raw) return { holidayWeeksText: '', ignoreHolidayWeeks: true };
+                    const parsed = JSON.parse(raw);
+                    return {
+                        holidayWeeksText: normalizeOrdreindgangHolidayWeeksText(parsed && parsed.holidayWeeksText),
+                        ignoreHolidayWeeks: !(parsed && parsed.ignoreHolidayWeeks === false)
+                    };
+                } catch {
+                    return { holidayWeeksText: '', ignoreHolidayWeeks: true };
+                }
+            }
+
+            function saveOrdreindgangHolidaySettings(settings) {
+                const safe = {
+                    holidayWeeksText: normalizeOrdreindgangHolidayWeeksText(settings && settings.holidayWeeksText),
+                    ignoreHolidayWeeks: !(settings && settings.ignoreHolidayWeeks === false)
+                };
+                try {
+                    localStorage.setItem(ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY, JSON.stringify(safe));
+                } catch {}
+                return safe;
+            }
+
+            function getOrdreindgangHolidayWeeksSet() {
+                const settings = getOrdreindgangHolidaySettingsFromInputs();
+                return parseOrdreindgangHolidayWeeksSet(settings.holidayWeeksText);
+            }
+
+            function shouldIgnoreOrdreindgangHolidayWeeks() {
+                const settings = getOrdreindgangHolidaySettingsFromInputs();
+                return settings.ignoreHolidayWeeks !== false;
+            }
+
+            function onOrdreindgangHolidaySettingsChanged() {
+                const safe = saveOrdreindgangHolidaySettings(getOrdreindgangHolidaySettingsFromInputs());
+                applyOrdreindgangHolidaySettingsToInputs(safe);
+                renderOrdreindgangFromLastPayload();
+                if (ordreindgangLastPayload && Array.isArray(ordreindgangLastPayload.weeklyRows)) {
+                    const range = buildOrdreindgangRange();
+                    const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
+                    const budgetTargets = computeOrdreindgangBudgetTargets(budgetCfg);
+                    const holidayCount = getOrdreindgangRowsForView(ordreindgangLastPayload.weeklyRows).filter(row => Number(row.totalBudget || 0) === 0 && Number(row.totalOrd || 0) === 0).length;
+                    const budgetText = budgetCfg.useManualBudget
+                        ? ('Budget manuel: ' + formatDkkDa(budgetTargets.daily) + ' /1000 pr. dag')
+                        : 'Budget fra SSRS';
+                    if (range) {
+                        setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(ordreindgangLastPayload.weeklyRows.length) + ' · ferieuger: ' + String(holidayCount) + ' · ' + budgetText);
+                    }
+                }
+            }
+
+            function initializeOrdreindgangHolidaySettings() {
+                const saved = loadOrdreindgangHolidaySettings();
+                applyOrdreindgangHolidaySettingsToInputs(saved);
+            }
+
             function sanitizeOrdreindgangBudgetConfig(rawConfig) {
                 const cfg = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
                 const workDaysRaw = Math.round(Number(cfg.workDaysPerYear));
@@ -5370,13 +5495,46 @@ app.get('/', (req, res) => {
                 };
             }
 
+            function loadOrdreindgangBudgetPanelCollapsed() {
+                try {
+                    return localStorage.getItem(ORDREINDGANG_BUDGET_PANEL_STORAGE_KEY) === '1';
+                } catch {
+                    return false;
+                }
+            }
+
+            function saveOrdreindgangBudgetPanelCollapsed(collapsed) {
+                try {
+                    localStorage.setItem(ORDREINDGANG_BUDGET_PANEL_STORAGE_KEY, collapsed ? '1' : '0');
+                } catch {}
+            }
+
+            function applyOrdreindgangBudgetPanelState() {
+                const bodyEl = document.getElementById('ordreindgangBudgetBody');
+                const btnEl = document.getElementById('ordreindgangBudgetToggleBtn');
+                if (bodyEl) {
+                    bodyEl.classList.toggle('hidden', ordreindgangBudgetPanelCollapsed);
+                }
+                if (btnEl) {
+                    btnEl.textContent = ordreindgangBudgetPanelCollapsed ? 'Vis budget' : 'Skjul budget';
+                }
+            }
+
+            function toggleOrdreindgangBudgetPanel() {
+                ordreindgangBudgetPanelCollapsed = !ordreindgangBudgetPanelCollapsed;
+                saveOrdreindgangBudgetPanelCollapsed(ordreindgangBudgetPanelCollapsed);
+                applyOrdreindgangBudgetPanelState();
+            }
+
             function computeOrdreindgangBudgetTargets(config) {
                 const safe = sanitizeOrdreindgangBudgetConfig(config);
-                const annual = safe.dailyBudget * safe.workDaysPerYear;
+                // Ordreindgang values are shown in thousands; align budget to same scale.
+                const daily = safe.dailyBudget / 1000;
+                const annual = daily * safe.workDaysPerYear;
                 const weekly = annual / 52;
                 const monthly = annual / 12;
                 return {
-                    daily: safe.dailyBudget,
+                    daily,
                     weekly,
                     monthly,
                     annual,
@@ -5431,11 +5589,27 @@ app.get('/', (req, res) => {
                 const metricsEl = document.getElementById('ordreindgangBudgetMetrics');
                 if (!metricsEl) return;
                 const targets = computeOrdreindgangBudgetTargets(getOrdreindgangBudgetConfigFromInputs());
+                const weeklyRows = Array.isArray(ordreindgangLastPayload && ordreindgangLastPayload.weeklyRows)
+                    ? getOrdreindgangRowsForView(ordreindgangLastPayload.weeklyRows)
+                    : [];
+                const actualPeriod = weeklyRows.reduce((sum, row) => sum + Number(row.totalOrd || 0), 0);
+                const expectedPeriod = weeklyRows.reduce((sum, row) => sum + Number(row.totalBudget || 0), 0);
+                const deltaPeriod = actualPeriod - expectedPeriod;
+                const deltaClass = deltaPeriod > 0.00001
+                    ? 'delta-up'
+                    : (deltaPeriod < -0.00001 ? 'delta-down' : 'delta-flat');
+                const deltaLabel = deltaPeriod > 0.00001
+                    ? 'Over budget i periode'
+                    : (deltaPeriod < -0.00001 ? 'Under budget i periode' : 'På budget i periode');
                 metricsEl.innerHTML = '' +
-                    '<div class="line"><span>Budget / dag</span><strong>' + escapeHtmlFE(formatDkkDa(targets.daily)) + ' DKK</strong></div>' +
-                    '<div class="line"><span>Budget / uge</span><strong>' + escapeHtmlFE(formatDkkDa(targets.weekly)) + ' DKK</strong></div>' +
-                    '<div class="line"><span>Budget / måned</span><strong>' + escapeHtmlFE(formatDkkDa(targets.monthly)) + ' DKK</strong></div>' +
-                    '<div class="line"><span>Budget / år</span><strong>' + escapeHtmlFE(formatDkkDa(targets.annual)) + ' DKK</strong></div>';
+                    '<div class="line"><span>Budget / dag (÷1000)</span><strong>' + escapeHtmlFE(formatDkkDa(targets.daily)) + '</strong></div>' +
+                    '<div class="line"><span>Budget / uge (÷1000)</span><strong>' + escapeHtmlFE(formatDkkDa(targets.weekly)) + '</strong></div>' +
+                    '<div class="line"><span>Budget / måned (÷1000)</span><strong>' + escapeHtmlFE(formatDkkDa(targets.monthly)) + '</strong></div>' +
+                    '<div class="line"><span>Budget / år (÷1000)</span><strong>' + escapeHtmlFE(formatDkkDa(targets.annual)) + '</strong></div>' +
+                    '<div class="line"><span>Forventet i periode</span><strong>' + escapeHtmlFE(formatDkkDa(expectedPeriod)) + '</strong></div>' +
+                    '<div class="line"><span>Aktuelt i periode</span><strong>' + escapeHtmlFE(formatDkkDa(actualPeriod)) + '</strong></div>' +
+                    '<div class="line ' + deltaClass + '"><span>Afvigelse</span><strong>' + escapeHtmlFE(formatDkkDa(deltaPeriod)) + '</strong></div>' +
+                    '<div class="ordreindgang-budget-summary ' + deltaClass + '">' + escapeHtmlFE(deltaLabel) + '</div>';
             }
 
             function getOrdreindgangRowsForView(rows) {
@@ -5443,9 +5617,13 @@ app.get('/', (req, res) => {
                 const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
                 if (!budgetCfg.useManualBudget) return safeRows;
                 const targets = computeOrdreindgangBudgetTargets(budgetCfg);
+                const holidaySet = getOrdreindgangHolidayWeeksSet();
+                const ignoreHolidays = shouldIgnoreOrdreindgangHolidayWeeks();
                 return safeRows.map(row => ({
                     ...row,
-                    totalBudget: targets.weekly
+                    totalBudget: (ignoreHolidays && holidaySet.has(String(row && row.weekKey || '')) && Number(row && row.totalOrd || 0) === 0)
+                        ? 0
+                        : targets.weekly
                 }));
             }
 
@@ -5457,11 +5635,12 @@ app.get('/', (req, res) => {
                 if (ordreindgangLastPayload && Array.isArray(ordreindgangLastPayload.weeklyRows)) {
                     const range = buildOrdreindgangRange();
                     const targets = computeOrdreindgangBudgetTargets(safe);
+                    const holidayCount = getOrdreindgangRowsForView(ordreindgangLastPayload.weeklyRows).filter(row => Number(row.totalBudget || 0) === 0 && Number(row.totalOrd || 0) === 0).length;
                     const budgetText = safe.useManualBudget
-                        ? ('Budget manuel: ' + formatDkkDa(targets.daily) + ' DKK/dag')
+                        ? ('Budget manuel: ' + formatDkkDa(targets.daily) + ' /1000 pr. dag')
                         : 'Budget fra SSRS';
                     if (range) {
-                        setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(ordreindgangLastPayload.weeklyRows.length) + ' · ' + budgetText);
+                        setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(ordreindgangLastPayload.weeklyRows.length) + ' · ferieuger: ' + String(holidayCount) + ' · ' + budgetText);
                     } else {
                         setOrdreindgangStatus(budgetText);
                     }
@@ -5471,6 +5650,9 @@ app.get('/', (req, res) => {
             function initializeOrdreindgangBudgetConfig() {
                 const saved = loadOrdreindgangBudgetConfig();
                 applyOrdreindgangBudgetConfigToInputs(saved);
+                initializeOrdreindgangHolidaySettings();
+                ordreindgangBudgetPanelCollapsed = loadOrdreindgangBudgetPanelCollapsed();
+                applyOrdreindgangBudgetPanelState();
                 renderOrdreindgangBudgetMetrics();
             }
 
@@ -6011,20 +6193,21 @@ app.get('/', (req, res) => {
                 }
             }
 
-            function computeOrdreindgangMovingAvg(values, windowSize) {
+            function computeOrdreindgangMovingAvg(values, windowSize, skipMask) {
                 const safeValues = Array.isArray(values) ? values : [];
                 const safeWindow = Math.max(1, Number(windowSize) || 1);
+                const safeSkip = Array.isArray(skipMask) ? skipMask : [];
                 const out = [];
                 for (let i = 0; i < safeValues.length; i += 1) {
-                    const from = Math.max(0, i - safeWindow + 1);
                     let sum = 0;
                     let count = 0;
-                    for (let j = from; j <= i; j += 1) {
+                    for (let j = i; j >= 0 && count < safeWindow; j -= 1) {
+                        if (safeSkip[j]) continue;
                         const n = Number(safeValues[j] || 0);
                         sum += n;
                         count += 1;
                     }
-                    out.push(count > 0 ? (sum / count) : 0);
+                    out.push(count > 0 ? (sum / count) : null);
                 }
                 return out;
             }
@@ -6032,29 +6215,49 @@ app.get('/', (req, res) => {
             function enrichOrdreindgangTrendRows(rows) {
                 const safeRows = Array.isArray(rows) ? rows : [];
                 const ordValues = safeRows.map(row => Number(row.totalOrd || 0));
-                const ma3Values = computeOrdreindgangMovingAvg(ordValues, 3);
+                const holidaySet = getOrdreindgangHolidayWeeksSet();
+                const ignoreHolidays = shouldIgnoreOrdreindgangHolidayWeeks();
+                const holidayMask = safeRows.map(row => {
+                    const weekKey = String(row && row.weekKey || '');
+                    const isHolidayTagged = holidaySet.has(weekKey);
+                    const isZeroWeek = Number(row && row.totalOrd || 0) === 0;
+                    return isHolidayTagged && isZeroWeek;
+                });
+                const ma3Values = computeOrdreindgangMovingAvg(ordValues, 3, ignoreHolidays ? holidayMask : null);
                 const thresholdPct = getOrdreindgangAnomalyThresholdPct();
 
                 return safeRows.map((row, idx) => {
+                    const isHoliday = Boolean(holidayMask[idx]);
                     const ord = Number(row.totalOrd || 0);
-                    const prevOrd = idx > 0 ? Number(safeRows[idx - 1].totalOrd || 0) : null;
-                    const ma3 = Number(ma3Values[idx] || 0);
+                    let prevOrd = null;
+                    if (idx > 0) {
+                        let prevIdx = idx - 1;
+                        while (prevIdx >= 0 && ignoreHolidays && holidayMask[prevIdx]) {
+                            prevIdx -= 1;
+                        }
+                        if (prevIdx >= 0) {
+                            prevOrd = Number(safeRows[prevIdx].totalOrd || 0);
+                        }
+                    }
+                    const ma3Raw = ma3Values[idx];
+                    const ma3 = Number.isFinite(Number(ma3Raw)) ? Number(ma3Raw) : null;
                     const wowPct = (prevOrd !== null && prevOrd > 0)
                         ? ((ord - prevOrd) / prevOrd) * 100
                         : null;
-                    const devFromMa3Pct = ma3 > 0
+                    const devFromMa3Pct = ma3 !== null && ma3 > 0
                         ? ((ord - ma3) / ma3) * 100
                         : null;
                     const absDev = Number.isFinite(devFromMa3Pct) ? Math.abs(devFromMa3Pct) : 0;
-                    const isAnomaly = Number.isFinite(devFromMa3Pct) && absDev >= thresholdPct;
+                    const isAnomaly = !isHoliday && Number.isFinite(devFromMa3Pct) && absDev >= thresholdPct;
                     const anomalyDir = isAnomaly
                         ? (devFromMa3Pct >= 0 ? 'high' : 'low')
                         : 'ok';
                     return {
                         ...row,
+                        isHoliday,
                         ma3,
-                        wowPct,
-                        devFromMa3Pct,
+                        wowPct: isHoliday ? null : wowPct,
+                        devFromMa3Pct: isHoliday ? null : devFromMa3Pct,
                         isAnomaly,
                         anomalyDir
                     };
@@ -6108,10 +6311,11 @@ app.get('/', (req, res) => {
                 const ordValues = trendRows.map(r => Number(r.totalOrd || 0));
                 const tilbudValues = trendRows.map(r => Number(r.totalTilbud || 0));
                 const budgetValues = trendRows.map(r => Number(r.totalBudget || 0));
-                const movingAvgValues = trendRows.map(r => Number(r.ma3 || 0));
+                const movingAvgValues = trendRows.map(r => (Number.isFinite(Number(r.ma3)) ? Number(r.ma3) : null));
+                const ignoreHolidayWeeks = shouldIgnoreOrdreindgangHolidayWeeks();
                 const allValues = showTilbudLine
-                    ? ordValues.concat(tilbudValues).concat(budgetValues).concat(showTrendLine ? movingAvgValues : [])
-                    : ordValues.concat(budgetValues).concat(showTrendLine ? movingAvgValues : []);
+                    ? ordValues.concat(tilbudValues).concat(budgetValues).concat(showTrendLine ? movingAvgValues.filter(v => Number.isFinite(v)) : [])
+                    : ordValues.concat(budgetValues).concat(showTrendLine ? movingAvgValues.filter(v => Number.isFinite(v)) : []);
                 const rawMax = Math.max(...allValues, 0);
                 const chartMax = rawMax <= 0 ? 1000 : (Math.ceil(rawMax / 1000) * 1000);
 
@@ -6128,6 +6332,23 @@ app.get('/', (req, res) => {
                 const toY = val => topPad + ((chartMax - Math.max(0, Number(val || 0))) / chartMax) * innerHeight;
                 const toXCenter = idx => leftPad + (idx * slot) + (slot / 2);
                 const yZero = toY(0);
+                const buildPathWithGaps = (points) => {
+                    let path = '';
+                    let open = false;
+                    for (const point of points) {
+                        if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+                            open = false;
+                            continue;
+                        }
+                        if (!open) {
+                            path += (path ? ' ' : '') + 'M' + point.x + ' ' + point.y;
+                            open = true;
+                        } else {
+                            path += ' L' + point.x + ' ' + point.y;
+                        }
+                    }
+                    return path;
+                };
 
                 let html = '<g>';
                 for (let i = 0; i <= 6; i++) {
@@ -6146,6 +6367,11 @@ app.get('/', (req, res) => {
                     const centerX = toXCenter(idx);
                     const ordY = toY(ordValues[idx]);
                     const ordH = Math.max(1, yZero - ordY);
+
+                    if (row.isHoliday) {
+                        html += '<rect x="' + (centerX - (slot / 2)) + '" y="' + topPad + '" width="' + slot + '" height="' + innerHeight + '" fill="rgba(207,216,220,0.20)"><title>' +
+                            escapeHtmlFE(labels[idx] + ' markeret som ferieuge') + '</title></rect>';
+                    }
 
                     if (showTilbudLine) {
                         const tilbudY = toY(tilbudValues[idx]);
@@ -6174,11 +6400,12 @@ app.get('/', (req, res) => {
                 if (showTrendLine) {
                     const movingPoints = movingAvgValues.map((value, idx) => ({
                         x: toXCenter(idx),
-                        y: toY(value)
+                        y: Number.isFinite(value) ? toY(value) : null
                     }));
-                    const smoothPath = buildSmoothPath(movingPoints);
+                    const smoothPath = buildPathWithGaps(movingPoints);
                     html += '<path d="' + smoothPath + '" fill="none" stroke="#ff6f00" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round" />';
                     movingAvgValues.forEach((value, idx) => {
+                        if (!Number.isFinite(value)) return;
                         const cx = toXCenter(idx);
                         const cy = toY(value);
                         html += '<circle cx="' + cx + '" cy="' + cy + '" r="3.4" fill="#ff6f00">' +
@@ -6186,6 +6413,19 @@ app.get('/', (req, res) => {
                             '</circle>';
                     });
                 }
+
+                    const ordPoints = ordValues.map((value, idx) => ({
+                        x: toXCenter(idx),
+                    y: (ignoreHolidayWeeks && trendRows[idx] && trendRows[idx].isHoliday) ? null : toY(value)
+                    }));
+                const ordPath = buildPathWithGaps(ordPoints);
+                    html += '<path d="' + ordPath + '" fill="none" stroke="#0b3f88" stroke-width="2.8" stroke-linecap="round" />';
+                    ordPoints.forEach((point, idx) => {
+                    if (!Number.isFinite(point.y)) return;
+                        html += '<circle cx="' + point.x + '" cy="' + point.y + '" r="2.6" fill="#0b3f88">' +
+                            '<title>' + escapeHtmlFE(labels[idx] + ' Ordre (linje): ' + formatDkkDa(ordValues[idx])) + '</title>' +
+                            '</circle>';
+                    });
 
                 const budgetPoints = budgetValues.map((value, idx) => ({
                     x: toXCenter(idx),
@@ -6204,7 +6444,8 @@ app.get('/', (req, res) => {
                 svg.innerHTML = html;
                 if (legendEl) {
                     let legendHtml = '';
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#2f5ea5"></span>Ordre</span>';
+                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#2f5ea5"></span>Ordre (søjle)</span>';
+                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#0b3f88"></span>Ordre (linje)</span>';
                     if (showTilbudLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#8ec3f7"></span>Tilbud</span>';
                     }
@@ -6212,6 +6453,9 @@ app.get('/', (req, res) => {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#ff6f00"></span>Gns. ordre (3 uger)</span>';
                     }
                     legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#1b8f3b"></span>Budget</span>';
+                    if (trendRows.some(row => row.isHoliday)) {
+                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#cfd8dc"></span>Ferieuge (0,00)</span>';
+                    }
                     if (trendRows.some(row => row.isAnomaly)) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#fff;border:2px solid #e65100"></span>Anomali (dev fra MA3)</span>';
                     }
@@ -6273,9 +6517,11 @@ app.get('/', (req, res) => {
                     cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.ma3)) + '</td>');
                     cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatPctDa(row.wowPct)) + '</td>');
                     cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatPctDa(row.devFromMa3Pct)) + '</td>');
-                    const anomalyLabel = row.isAnomaly
+                    const anomalyLabel = row.isHoliday
+                        ? '<span class="ordreindgang-trend-chip holiday">Ferie</span>'
+                        : (row.isAnomaly
                         ? ('<span class="ordreindgang-trend-chip ' + row.anomalyDir + '">' + (row.anomalyDir === 'high' ? 'Over' : 'Under') + '</span>')
-                        : '<span class="ordreindgang-trend-chip ok">OK</span>';
+                        : '<span class="ordreindgang-trend-chip ok">OK</span>');
                     cells.push('<td style="text-align:center;">' + anomalyLabel + '</td>');
                     return '<tr class="' + rowClass.trim() + '">' +
                         cells.join('') +
@@ -6420,10 +6666,11 @@ app.get('/', (req, res) => {
 
                     const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
                     const budgetTargets = computeOrdreindgangBudgetTargets(budgetCfg);
+                    const holidayCount = getOrdreindgangRowsForView(weeklyRows).filter(row => Number(row.totalBudget || 0) === 0 && Number(row.totalOrd || 0) === 0).length;
                     const budgetText = budgetCfg.useManualBudget
-                        ? ('Budget manuel: ' + formatDkkDa(budgetTargets.daily) + ' DKK/dag')
+                        ? ('Budget manuel: ' + formatDkkDa(budgetTargets.daily) + ' /1000 pr. dag')
                         : 'Budget fra SSRS';
-                    setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(weeklyRows.length) + ' · ' + budgetText);
+                    setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(weeklyRows.length) + ' · ferieuger: ' + String(holidayCount) + ' · ' + budgetText);
                 } catch (err) {
                     setOrdreindgangStatus('Fejl ved hentning af ordreindgang.');
                     if (emptyEl) {

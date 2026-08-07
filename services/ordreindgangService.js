@@ -185,7 +185,7 @@ function createOrdreindgangService({ getConnection, sql }) {
                 weekKey,
                 totalOrd: Number(row.TotalOrd || 0),
                 totalTilbud: Number(row.TotalTilbud || 0),
-                totalBudget: Number(row.Budget || 0),
+                totalBudget: Number(row.Budget || 0) / 1000,
                 avgOrd: Number(row.AvgSumOrd || 0),
                 countOrd: 0,
                 countTilbud: 0,
