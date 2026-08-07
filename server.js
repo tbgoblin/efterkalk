@@ -2449,6 +2449,7 @@ app.get('/', (req, res) => {
                 if (!modal) return;
                 buildOversigtModalView(currentOversigtModalType);
                 modal.style.display = 'flex';
+                pushModalStack('oversigtModal');
             }
 
             function closeOversigtModal(event) {
@@ -2458,6 +2459,7 @@ app.get('/', (req, res) => {
                 if (modal) modal.style.display = 'none';
                 if (body) body.innerHTML = '';
                 currentOversigtModalType = null;
+                removeModalStack('oversigtModal');
             }
 
             function refreshActiveOversigtModal() {
@@ -3114,16 +3116,13 @@ app.get('/', (req, res) => {
                 const overlay = document.getElementById('settingsModalOverlay');
                 if (overlay) overlay.classList.add('open');
                 loadSettingsProfiles();
+                pushModalStack('settingsModalOverlay');
             }
 
             function closeSettingsModal() {
                 const overlay = document.getElementById('settingsModalOverlay');
                 if (overlay) overlay.classList.remove('open');
-            }
-
-            function closeSettingsModal() {
-                const overlay = document.getElementById('settingsModalOverlay');
-                if (overlay) overlay.classList.remove('open');
+                removeModalStack('settingsModalOverlay');
             }
 
             // ── Kundefaktura-oversigt ─────────────────────────────────────
@@ -3146,12 +3145,14 @@ app.get('/', (req, res) => {
                 const kfTo   = document.getElementById('kfToDate');
                 if (kfFrom && !kfFrom.value) kfFrom.value = fmt(frDate);
                 if (kfTo   && !kfTo.value)   kfTo.value   = fmt(toDate);
+                pushModalStack('kfModalOverlay');
             }
 
             function closeKundefakturaModal() {
                 const overlay = document.getElementById('kfModalOverlay');
                 if (overlay) overlay.classList.remove('open');
                 _kfMarginAbort = true;
+                removeModalStack('kfModalOverlay');
             }
 
             function scheduleKfCustomerSearch() {
@@ -3440,6 +3441,7 @@ app.get('/', (req, res) => {
                 overlay.classList.add('open');
                 sideMenuOpen = true;
                 refreshSideMenuAuthState();
+                pushModalStack('sideMenuOverlay');
                 const input = document.getElementById('sideMenuLoginInput');
                 if (!accessGranted && input) {
                     setTimeout(() => input.focus(), 30);
@@ -3452,6 +3454,7 @@ app.get('/', (req, res) => {
                 if (!overlay) return;
                 overlay.classList.remove('open');
                 sideMenuOpen = false;
+                removeModalStack('sideMenuOverlay');
             }
 
             function refreshSideMenuAuthState() {
@@ -3559,12 +3562,14 @@ app.get('/', (req, res) => {
                     + '</section>'
                     + '<div class="manual-meta">Tip: Brug side-menuen (☰) til hurtig navigation mellem moduler og manual.</div>';
                 modal.style.display = 'flex';
+                pushModalStack('brugermanualModal');
             }
 
             function closeBrugermanual(event) {
                 if (event && event.target && event.target.id !== 'brugermanualModal') return;
                 const modal = document.getElementById('brugermanualModal');
                 if (modal) modal.style.display = 'none';
+                removeModalStack('brugermanualModal');
             }
 
             const PH_BASE_URL = 'http://apv/GHB/';
@@ -3578,8 +3583,8 @@ app.get('/', (req, res) => {
                     iframe.src = PH_BASE_URL;
                 }
                 modal.classList.add('open');
-                document.body.style.overflow = 'hidden';
                 phCheckStatus();
+                pushModalStack('personalehåndbogsModal');
                 if (input) setTimeout(() => input.focus(), 150);
             }
 
@@ -3588,13 +3593,129 @@ app.get('/', (req, res) => {
                 const iframe = document.getElementById('personalehåndbogsIframe');
                 if (modal) modal.classList.remove('open');
                 if (iframe) iframe.src = '';
-                document.body.style.overflow = '';
+                removeModalStack('personalehåndbogsModal');
             }
 
             let qmsDataset = null;
             let qmsFlatDocs = [];
             let qmsSelectedDocId = null;
             let qmsEditMode = false;
+            const modalStack = [];
+            const modalOpenTriggers = Object.create(null);
+            const bodyLockModalIds = new Set([
+                'summaryModal',
+                'oversigtModal',
+                'orderDetailModal',
+                'printPreviewOverlay',
+                'personalehåndbogsModal',
+                'qmsModal',
+                'settingsModalOverlay',
+                'kfModalOverlay',
+                'compactImageModal',
+                'imageLightbox'
+            ]);
+
+            function rememberModalTrigger(modalId) {
+                const active = document.activeElement;
+                if (active && typeof active.focus === 'function') {
+                    modalOpenTriggers[modalId] = active;
+                }
+            }
+
+            function restoreModalTrigger(modalId) {
+                const trigger = modalOpenTriggers[modalId];
+                if (!trigger || !trigger.isConnected || typeof trigger.focus !== 'function') return;
+                setTimeout(() => {
+                    try { trigger.focus({ preventScroll: true }); } catch { trigger.focus(); }
+                }, 0);
+            }
+
+            function focusFirstInModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (!modal) return false;
+                const focusable = modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                if (!focusable || typeof focusable.focus !== 'function') return false;
+                setTimeout(() => {
+                    try { focusable.focus({ preventScroll: true }); } catch { focusable.focus(); }
+                }, 0);
+                return true;
+            }
+
+            function syncModalBodyLock() {
+                let locked = false;
+                for (const id of bodyLockModalIds) {
+                    if (isModalVisibleById(id)) {
+                        locked = true;
+                        break;
+                    }
+                }
+                document.body.style.overflow = locked ? 'hidden' : '';
+            }
+
+            function pushModalStack(modalId) {
+                const id = String(modalId || '').trim();
+                if (!id) return;
+                const pos = modalStack.indexOf(id);
+                if (pos < 0) rememberModalTrigger(id);
+                if (pos >= 0) modalStack.splice(pos, 1);
+                modalStack.push(id);
+                syncModalBodyLock();
+            }
+
+            function removeModalStack(modalId) {
+                const id = String(modalId || '').trim();
+                if (!id) return;
+                const pos = modalStack.indexOf(id);
+                if (pos >= 0) modalStack.splice(pos, 1);
+                syncModalBodyLock();
+                const top = getTopModalId();
+                if (top) {
+                    focusFirstInModal(top);
+                } else {
+                    restoreModalTrigger(id);
+                }
+            }
+
+            function isModalVisibleById(modalId) {
+                const el = document.getElementById(modalId);
+                if (!el) return false;
+                if (el.classList.contains('open') || el.classList.contains('show')) return true;
+                return getComputedStyle(el).display !== 'none';
+            }
+
+            function getTopModalId() {
+                while (modalStack.length > 0) {
+                    const top = modalStack[modalStack.length - 1];
+                    if (isModalVisibleById(top)) return top;
+                    modalStack.pop();
+                }
+                return null;
+            }
+
+            function closeTopModalFromStack() {
+                const top = getTopModalId();
+                if (!top) return false;
+                if (top === 'imageLightbox') { closeImageLightbox(); return true; }
+                if (top === 'compactImageModal') { closeCompactImageModal(); return true; }
+                if (top === 'oversigtModal') { closeOversigtModal(); return true; }
+                if (top === 'summaryModal') {
+                    if (summaryModalHistory.length > 0) {
+                        goSummaryModalBack();
+                        return true;
+                    }
+                    closeSummaryModal();
+                    return true;
+                }
+                if (top === 'printPreviewOverlay') { closePrintPreview(); return true; }
+                if (top === 'orderDetailModal') { closeOrderDetailModal(); return true; }
+                if (top === 'brugermanualModal') { closeBrugermanual(); return true; }
+                if (top === 'personalehåndbogsModal') { closePersonalehåndbog(); return true; }
+                if (top === 'qmsModal') { closeQmsModal(); return true; }
+                if (top === 'settingsModalOverlay') { closeSettingsModal(); return true; }
+                if (top === 'kfModalOverlay') { closeKundefakturaModal(); return true; }
+                if (top === 'sideMenuOverlay') { closeSideMenu(); return true; }
+                return false;
+            }
 
             function escapeHtml(str) {
                 return String(str || '')
@@ -3719,7 +3840,7 @@ app.get('/', (req, res) => {
                 const input = document.getElementById('qmsSearchInput');
                 if (!modal) return;
                 modal.classList.add('open');
-                document.body.style.overflow = 'hidden';
+                pushModalStack('qmsModal');
                 try {
                     await loadQmsDataset(false);
                     renderQmsList('');
@@ -3737,7 +3858,7 @@ app.get('/', (req, res) => {
             function closeQmsModal() {
                 const modal = document.getElementById('qmsModal');
                 if (modal) modal.classList.remove('open');
-                document.body.style.overflow = '';
+                removeModalStack('qmsModal');
             }
 
             function searchQmsPages() {
@@ -7502,6 +7623,7 @@ app.get('/', (req, res) => {
                 html += '</div>';
                 bodyEl.innerHTML = html;
                 modal.classList.add('show');
+                pushModalStack('compactImageModal');
             }
 
             function closeCompactImageModal(event) {
@@ -7511,6 +7633,7 @@ app.get('/', (req, res) => {
                 if (!modal) return;
                 modal.classList.remove('show');
                 if (bodyEl) bodyEl.innerHTML = '';
+                removeModalStack('compactImageModal');
             }
 
             function closeSummaryImagePanel() {
@@ -7566,6 +7689,7 @@ app.get('/', (req, res) => {
                 }
                 if (panel.id === 'summaryImagePanel' && modal && modal.style.display !== 'flex') {
                     modal.style.display = 'flex';
+                    pushModalStack('summaryModal');
                 }
 
                 let html = '<div class="summary-image-panel-header">';
@@ -7601,6 +7725,7 @@ app.get('/', (req, res) => {
                 if (titleEl) titleEl.textContent = title || 'Billede';
                 if (pathEl) pathEl.textContent = pathText || '';
                 lightbox.classList.remove('hidden');
+                pushModalStack('imageLightbox');
             }
 
             function closeImageLightbox(event) {
@@ -7616,6 +7741,7 @@ app.get('/', (req, res) => {
                     img.alt = '';
                 }
                 if (pathEl) pathEl.textContent = '';
+                removeModalStack('imageLightbox');
             }
 
             function updateSummaryModalBackBtn() {
@@ -8482,6 +8608,7 @@ app.get('/', (req, res) => {
                 bodyEl.innerHTML = html || '';
                 applyMicroTablePolish(bodyEl);
                 overlay.style.display = 'flex';
+                pushModalStack('orderDetailModal');
                 document.body.classList.add('report-modal-open');
                 updateOrderDetailModalBackButton();
             }
@@ -8499,6 +8626,7 @@ app.get('/', (req, res) => {
                 document.body.classList.remove('report-modal-open');
                 reportOriginState = null;
                 updateOrderDetailModalBackButton();
+                removeModalStack('orderDetailModal');
                 goBackToList();
             }
 
@@ -8584,6 +8712,7 @@ app.get('/', (req, res) => {
                 titleEl.textContent = title;
                 bodyEl.innerHTML = html;
                 overlay.style.display = 'flex';
+                pushModalStack('printPreviewOverlay');
                 document.body.classList.add('print-preview-lock');
                 document.body.classList.add('print-preview-mode');
                 const dialog = overlay.querySelector('.print-preview-dialog');
@@ -8600,6 +8729,7 @@ app.get('/', (req, res) => {
                 document.body.classList.remove('print-preview-mode');
                 currentPrintPreviewMode = null;
                 modulePrintPreviewState = null;
+                removeModalStack('printPreviewOverlay');
             }
 
             function confirmPrintFromPreview() {
@@ -8621,12 +8751,6 @@ app.get('/', (req, res) => {
                     : buildStandaloneReportPrintCss();
                 printStandaloneHtml(title, bodyEl.innerHTML, cssText);
             }
-
-            document.addEventListener('keydown', function(event) {
-                if (event.key === 'Escape' && document.body.classList.contains('print-preview-mode')) {
-                    closePrintPreview();
-                }
-            });
 
             function openOrderListPrintPreview() {
                 if (!orderListVisible) {
@@ -9625,6 +9749,7 @@ app.get('/', (req, res) => {
 
                 title.textContent = 'Produkt: ' + prodNo;
                 modal.style.display = 'flex';
+                pushModalStack('summaryModal');
 
                 if (String(prodTp4) === '1') {
                     body.innerHTML = '<div class="modal-loading">Indlæser transaktioner...</div>';
@@ -9869,10 +9994,9 @@ app.get('/', (req, res) => {
             document.addEventListener('click', handlePreviewImageZoom);
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Escape') {
-                    closeSideMenu();
-                    closeImageLightbox();
-                    closeCompactImageModal();
-                    closeOversigtModal();
+                    if (closeTopModalFromStack()) {
+                        event.preventDefault();
+                    }
                 }
             });
             // Inside modal content (document listener is blocked by modal stopPropagation).
@@ -9945,6 +10069,7 @@ app.get('/', (req, res) => {
                     : ('Produktoversigt for ordre ' + childOrdNo);
                 body.innerHTML = '<div class="modal-loading">Indlaeser...</div>';
                 modal.style.display = 'flex';
+                pushModalStack('summaryModal');
 
                 try {
                     const response = await fetch('/production-summary/' + childOrdNo + (currentSalesOrderGr4 === 3 ? '?gr4=3' : ''));
@@ -10073,6 +10198,7 @@ app.get('/', (req, res) => {
                 summaryModalHistory = [];
                 closeSummaryImagePanel();
                 updateSummaryModalBackBtn();
+                removeModalStack('summaryModal');
             }
 
             function scrollToElementWithStickyOffset(el) {
