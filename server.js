@@ -1377,6 +1377,16 @@ app.get('/', (req, res) => {
             .omsaetning-gauge-delta { margin-top:4px; font-size:11px; color:#355675; }
             .omsaetning-gauge-delta strong { color:#0f3560; }
             .omsaetning-empty { margin-top:10px; padding:10px; border:1px dashed #c7daef; border-radius:8px; color:#4f6d8c; background:#f8fbff; }
+            .ordreindgang-budget-panel { margin-top:10px; border:1px solid #dbe8f9; border-radius:10px; background:linear-gradient(180deg,#f7fbff 0%,#eef6ff 100%); padding:10px; }
+            .ordreindgang-budget-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+            .ordreindgang-budget-title { font-size:12px; font-weight:800; color:#214867; text-transform:uppercase; letter-spacing:0.04em; }
+            .ordreindgang-budget-toggle { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#234a6c; font-weight:700; }
+            .ordreindgang-budget-toggle input { width:15px; height:15px; }
+            .ordreindgang-budget-grid { display:grid; grid-template-columns:160px 220px minmax(260px,1fr); gap:10px; margin-top:8px; align-items:end; }
+            .ordreindgang-budget-metrics { border:1px solid #d5e5f8; border-radius:8px; background:#ffffff; padding:8px 10px; }
+            .ordreindgang-budget-metrics .line { display:flex; justify-content:space-between; gap:12px; font-size:12px; color:#355675; }
+            .ordreindgang-budget-metrics .line strong { color:#0f3560; }
+            .ordreindgang-budget-note { margin-top:6px; font-size:11px; color:#4f6d8c; }
             #mainWorkspace { display:none; }
             .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
             .allocation-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#b26a00; font-size:16px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; }
@@ -1747,6 +1757,27 @@ app.get('/', (req, res) => {
                         <label>Status</label>
                         <div id="ordreindgangStatus" class="omsaetning-customer-mode">Vælg ugeperiode og tryk Opdater.</div>
                     </div>
+                </div>
+                <div class="ordreindgang-budget-panel">
+                    <div class="ordreindgang-budget-head">
+                        <span class="ordreindgang-budget-title">Budget mål</span>
+                        <label class="ordreindgang-budget-toggle" for="ordreindgangUseManualBudget">
+                            <input id="ordreindgangUseManualBudget" type="checkbox" checked onchange="onOrdreindgangBudgetConfigChanged()" />
+                            <span>Brug manuelt budget i ugegraf og tabel</span>
+                        </label>
+                    </div>
+                    <div class="ordreindgang-budget-grid">
+                        <div class="omsaetning-field">
+                            <label for="ordreindgangWorkDays">Arbejdsdage / år</label>
+                            <input id="ordreindgangWorkDays" type="number" min="1" max="366" step="1" value="235" onchange="onOrdreindgangBudgetConfigChanged()" />
+                        </div>
+                        <div class="omsaetning-field">
+                            <label for="ordreindgangDailyBudget">Budget / dag (DKK)</label>
+                            <input id="ordreindgangDailyBudget" type="number" min="0" step="1" value="280851" onchange="onOrdreindgangBudgetConfigChanged()" />
+                        </div>
+                        <div id="ordreindgangBudgetMetrics" class="ordreindgang-budget-metrics"></div>
+                    </div>
+                    <div class="ordreindgang-budget-note">Standard er 235 arbejdsdage og 280.851 DKK pr. dag. Tallene kan ændres når som helst.</div>
                 </div>
                 <div class="omsaetning-kpis">
                     <div class="omsaetning-kpi"><div class="lbl">Total Ordre</div><div class="val" id="ordreindgangTotalOrd">-</div></div>
@@ -2875,6 +2906,9 @@ app.get('/', (req, res) => {
             let ordreindgangResizeTimer = null;
             const ORDREINDGANG_AUTO_RELOAD_DELAY_MS = 280;
             const ORDREINDGANG_SUMMARY_CACHE_TTL_MS = 15 * 60 * 1000;
+            const ORDREINDGANG_DEFAULT_WORK_DAYS = 235;
+            const ORDREINDGANG_DEFAULT_DAILY_BUDGET = 280851;
+            const ORDREINDGANG_BUDGET_STORAGE_KEY = 'afterkalk_ordreindgang_budget_v1';
             let belastningInitialized = false;
             let belastningAutoReloadTimer = null;
             let belastningPeriodicTimer = null;
@@ -5318,6 +5352,128 @@ app.get('/', (req, res) => {
                 return raw;
             }
 
+            function sanitizeOrdreindgangBudgetConfig(rawConfig) {
+                const cfg = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+                const workDaysRaw = Math.round(Number(cfg.workDaysPerYear));
+                const dailyRaw = Number(cfg.dailyBudget);
+                const useManual = cfg.useManualBudget !== false;
+                const workDaysPerYear = Number.isFinite(workDaysRaw)
+                    ? Math.max(1, Math.min(366, workDaysRaw))
+                    : ORDREINDGANG_DEFAULT_WORK_DAYS;
+                const dailyBudget = Number.isFinite(dailyRaw)
+                    ? Math.max(0, dailyRaw)
+                    : ORDREINDGANG_DEFAULT_DAILY_BUDGET;
+                return {
+                    workDaysPerYear,
+                    dailyBudget,
+                    useManualBudget: useManual
+                };
+            }
+
+            function computeOrdreindgangBudgetTargets(config) {
+                const safe = sanitizeOrdreindgangBudgetConfig(config);
+                const annual = safe.dailyBudget * safe.workDaysPerYear;
+                const weekly = annual / 52;
+                const monthly = annual / 12;
+                return {
+                    daily: safe.dailyBudget,
+                    weekly,
+                    monthly,
+                    annual,
+                    workDaysPerYear: safe.workDaysPerYear,
+                    useManualBudget: safe.useManualBudget
+                };
+            }
+
+            function getOrdreindgangBudgetConfigFromInputs() {
+                const workDaysEl = document.getElementById('ordreindgangWorkDays');
+                const dailyEl = document.getElementById('ordreindgangDailyBudget');
+                const useManualEl = document.getElementById('ordreindgangUseManualBudget');
+                return sanitizeOrdreindgangBudgetConfig({
+                    workDaysPerYear: workDaysEl ? workDaysEl.value : ORDREINDGANG_DEFAULT_WORK_DAYS,
+                    dailyBudget: dailyEl ? dailyEl.value : ORDREINDGANG_DEFAULT_DAILY_BUDGET,
+                    useManualBudget: useManualEl ? useManualEl.checked : true
+                });
+            }
+
+            function applyOrdreindgangBudgetConfigToInputs(config) {
+                const safe = sanitizeOrdreindgangBudgetConfig(config);
+                const workDaysEl = document.getElementById('ordreindgangWorkDays');
+                const dailyEl = document.getElementById('ordreindgangDailyBudget');
+                const useManualEl = document.getElementById('ordreindgangUseManualBudget');
+                if (workDaysEl) workDaysEl.value = String(safe.workDaysPerYear);
+                if (dailyEl) dailyEl.value = String(Math.round(safe.dailyBudget));
+                if (useManualEl) useManualEl.checked = safe.useManualBudget;
+                const disabled = !safe.useManualBudget;
+                if (workDaysEl) workDaysEl.disabled = disabled;
+                if (dailyEl) dailyEl.disabled = disabled;
+            }
+
+            function loadOrdreindgangBudgetConfig() {
+                try {
+                    const raw = localStorage.getItem(ORDREINDGANG_BUDGET_STORAGE_KEY);
+                    if (!raw) return sanitizeOrdreindgangBudgetConfig(null);
+                    return sanitizeOrdreindgangBudgetConfig(JSON.parse(raw));
+                } catch {
+                    return sanitizeOrdreindgangBudgetConfig(null);
+                }
+            }
+
+            function saveOrdreindgangBudgetConfig(config) {
+                const safe = sanitizeOrdreindgangBudgetConfig(config);
+                try {
+                    localStorage.setItem(ORDREINDGANG_BUDGET_STORAGE_KEY, JSON.stringify(safe));
+                } catch {}
+                return safe;
+            }
+
+            function renderOrdreindgangBudgetMetrics() {
+                const metricsEl = document.getElementById('ordreindgangBudgetMetrics');
+                if (!metricsEl) return;
+                const targets = computeOrdreindgangBudgetTargets(getOrdreindgangBudgetConfigFromInputs());
+                metricsEl.innerHTML = '' +
+                    '<div class="line"><span>Budget / dag</span><strong>' + escapeHtmlFE(formatDkkDa(targets.daily)) + ' DKK</strong></div>' +
+                    '<div class="line"><span>Budget / uge</span><strong>' + escapeHtmlFE(formatDkkDa(targets.weekly)) + ' DKK</strong></div>' +
+                    '<div class="line"><span>Budget / måned</span><strong>' + escapeHtmlFE(formatDkkDa(targets.monthly)) + ' DKK</strong></div>' +
+                    '<div class="line"><span>Budget / år</span><strong>' + escapeHtmlFE(formatDkkDa(targets.annual)) + ' DKK</strong></div>';
+            }
+
+            function getOrdreindgangRowsForView(rows) {
+                const safeRows = Array.isArray(rows) ? rows : [];
+                const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
+                if (!budgetCfg.useManualBudget) return safeRows;
+                const targets = computeOrdreindgangBudgetTargets(budgetCfg);
+                return safeRows.map(row => ({
+                    ...row,
+                    totalBudget: targets.weekly
+                }));
+            }
+
+            function onOrdreindgangBudgetConfigChanged() {
+                const safe = saveOrdreindgangBudgetConfig(getOrdreindgangBudgetConfigFromInputs());
+                applyOrdreindgangBudgetConfigToInputs(safe);
+                renderOrdreindgangBudgetMetrics();
+                renderOrdreindgangFromLastPayload();
+                if (ordreindgangLastPayload && Array.isArray(ordreindgangLastPayload.weeklyRows)) {
+                    const range = buildOrdreindgangRange();
+                    const targets = computeOrdreindgangBudgetTargets(safe);
+                    const budgetText = safe.useManualBudget
+                        ? ('Budget manuel: ' + formatDkkDa(targets.daily) + ' DKK/dag')
+                        : 'Budget fra SSRS';
+                    if (range) {
+                        setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(ordreindgangLastPayload.weeklyRows.length) + ' · ' + budgetText);
+                    } else {
+                        setOrdreindgangStatus(budgetText);
+                    }
+                }
+            }
+
+            function initializeOrdreindgangBudgetConfig() {
+                const saved = loadOrdreindgangBudgetConfig();
+                applyOrdreindgangBudgetConfigToInputs(saved);
+                renderOrdreindgangBudgetMetrics();
+            }
+
             function setOrdreindgangStatus(message) {
                 const el = document.getElementById('ordreindgangStatus');
                 if (el) el.textContent = String(message || '');
@@ -5691,6 +5847,8 @@ app.get('/', (req, res) => {
                 const tilbudEnabled = !!((document.getElementById('ordreindgangShowTilbud') || {}).checked);
                 const trendEnabled = !!((document.getElementById('ordreindgangShowTrend') || {}).checked);
                 const thresholdPct = getOrdreindgangAnomalyThresholdPct();
+                const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
+                const budgetTargets = computeOrdreindgangBudgetTargets(budgetCfg);
                 const weekCount = Array.isArray(ordreindgangLastPayload && ordreindgangLastPayload.weeklyRows)
                     ? ordreindgangLastPayload.weeklyRows.length
                     : 0;
@@ -5710,6 +5868,9 @@ app.get('/', (req, res) => {
                     '<div><strong>Tilbud-linje:</strong> ' + (tilbudEnabled ? 'Aktiv' : 'Skjult') + '</div>' +
                     '<div><strong>Trendlinje:</strong> ' + (trendEnabled ? 'Aktiv (3 uger)' : 'Skjult') + '</div>' +
                     '<div><strong>Anomali-soglia:</strong> ±' + escapeHtmlFE(formatPctDa(thresholdPct)) + '</div>' +
+                    '<div><strong>Budgetkilde:</strong> ' + (budgetCfg.useManualBudget ? 'Manuel' : 'SSRS') + '</div>' +
+                    '<div><strong>Budget / dag:</strong> ' + escapeHtmlFE(formatDkkDa(budgetTargets.daily)) + ' DKK</div>' +
+                    '<div><strong>Budget / uge:</strong> ' + escapeHtmlFE(formatDkkDa(budgetTargets.weekly)) + ' DKK</div>' +
                     '<div><strong>Layoutvalg:</strong> ' + escapeHtmlFE(getOrientationSourceLabelDa(orientationPreference)) + '</div>' +
                     '<div><strong>Layout:</strong> ' + escapeHtmlFE(getOrientationLabelDa(orientation)) + '</div>' +
                     '<div><strong>Udskrevet:</strong> ' + escapeHtmlFE(new Date().toLocaleString('da-DK')) + '</div>';
@@ -5731,6 +5892,7 @@ app.get('/', (req, res) => {
                                 '<h4>Trend/anomali</h4>' +
                                 '<p>' + (tilbudEnabled ? 'Aktiv (vises i graf)' : 'Skjult (kun ordre)') + '</p>' +
                                 '<div class="context-line"><strong>Soglia:</strong> ±' + escapeHtmlFE(formatPctDa(thresholdPct)) + '</div>' +
+                                '<div class="context-line"><strong>Budget:</strong> ' + (budgetCfg.useManualBudget ? 'Manuel' : 'SSRS') + ' (' + escapeHtmlFE(formatDkkDa(budgetTargets.weekly)) + ' DKK/uge)</div>' +
                                 '<div class="context-line"><strong>Status:</strong> ' + escapeHtmlFE(statusText || 'Ingen status') + '</div>' +
                             '</div>' +
                         '</div>' +
@@ -5925,7 +6087,7 @@ app.get('/', (req, res) => {
                 const wrap = document.getElementById('ordreindgangChartsWrap');
                 const svg = document.getElementById('ordreindgangTrendChart');
                 const legendEl = document.getElementById('ordreindgangLegend');
-                const safeRows = Array.isArray(rows) ? rows : [];
+                const safeRows = getOrdreindgangRowsForView(rows);
                 const showTilbudLine = shouldShowOrdreindgangTilbudLine();
                 const showTrendLine = shouldShowOrdreindgangTrendLine();
                 if (!wrap || !svg) return;
@@ -5945,10 +6107,11 @@ app.get('/', (req, res) => {
                 });
                 const ordValues = trendRows.map(r => Number(r.totalOrd || 0));
                 const tilbudValues = trendRows.map(r => Number(r.totalTilbud || 0));
+                const budgetValues = trendRows.map(r => Number(r.totalBudget || 0));
                 const movingAvgValues = trendRows.map(r => Number(r.ma3 || 0));
                 const allValues = showTilbudLine
-                    ? ordValues.concat(tilbudValues).concat(showTrendLine ? movingAvgValues : [])
-                    : ordValues.concat(showTrendLine ? movingAvgValues : []);
+                    ? ordValues.concat(tilbudValues).concat(budgetValues).concat(showTrendLine ? movingAvgValues : [])
+                    : ordValues.concat(budgetValues).concat(showTrendLine ? movingAvgValues : []);
                 const rawMax = Math.max(...allValues, 0);
                 const chartMax = rawMax <= 0 ? 1000 : (Math.ceil(rawMax / 1000) * 1000);
 
@@ -6023,6 +6186,18 @@ app.get('/', (req, res) => {
                             '</circle>';
                     });
                 }
+
+                const budgetPoints = budgetValues.map((value, idx) => ({
+                    x: toXCenter(idx),
+                    y: toY(value)
+                }));
+                const budgetPath = budgetPoints.map((p, idx) => (idx === 0 ? 'M' : 'L') + p.x + ' ' + p.y).join(' ');
+                html += '<path d="' + budgetPath + '" fill="none" stroke="#1b8f3b" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="8 5" />';
+                budgetPoints.forEach((point, idx) => {
+                    html += '<circle cx="' + point.x + '" cy="' + point.y + '" r="2.8" fill="#1b8f3b">' +
+                        '<title>' + escapeHtmlFE(labels[idx] + ' Budget: ' + formatDkkDa(budgetValues[idx])) + '</title>' +
+                        '</circle>';
+                });
                 html += '</g>';
 
                 svg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + height);
@@ -6036,6 +6211,7 @@ app.get('/', (req, res) => {
                     if (showTrendLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#ff6f00"></span>Gns. ordre (3 uger)</span>';
                     }
+                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#1b8f3b"></span>Budget</span>';
                     if (trendRows.some(row => row.isAnomaly)) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#fff;border:2px solid #e65100"></span>Anomali (dev fra MA3)</span>';
                     }
@@ -6073,7 +6249,7 @@ app.get('/', (req, res) => {
             function renderOrdreindgangWeeklyTable(rows) {
                 const wrapCard = document.getElementById('ordreindgangWeeklyWrap');
                 const wrap = document.getElementById('ordreindgangWeeklyTable');
-                const safeRows = Array.isArray(rows) ? rows : [];
+                const safeRows = getOrdreindgangRowsForView(rows);
                 const showTilbudColumn = shouldShowOrdreindgangTilbudLine();
                 if (!wrapCard || !wrap) return;
                 if (safeRows.length === 0) {
@@ -6180,13 +6356,16 @@ app.get('/', (req, res) => {
                     }, 120);
                 });
                 applyOrdreindgangDefaultWeeks();
+                initializeOrdreindgangBudgetConfig();
                 await loadOrdreindgangSummary({ forceRefresh: true });
             }
 
             function renderOrdreindgangFromLastPayload() {
                 if (!ordreindgangLastPayload || !Array.isArray(ordreindgangLastPayload.weeklyRows)) return;
-                renderOrdreindgangTrendChart(ordreindgangLastPayload.weeklyRows);
-                renderOrdreindgangWeeklyTable(ordreindgangLastPayload.weeklyRows);
+                const rowsForView = getOrdreindgangRowsForView(ordreindgangLastPayload.weeklyRows);
+                renderOrdreindgangBudgetMetrics();
+                renderOrdreindgangTrendChart(rowsForView);
+                renderOrdreindgangWeeklyTable(rowsForView);
             }
 
             async function loadOrdreindgangSummary(options) {
@@ -6227,8 +6406,7 @@ app.get('/', (req, res) => {
                     if (avgEl) avgEl.textContent = formatDkkDa(kpis.avgSumOrd || 0);
                     if (convEl) convEl.textContent = formatPctDa(kpis.conversionPct);
 
-                    renderOrdreindgangTrendChart(weeklyRows);
-                    renderOrdreindgangWeeklyTable(weeklyRows);
+                    renderOrdreindgangFromLastPayload();
                     renderOrdreindgangCustomersTable(customerRows);
 
                     if (emptyEl) {
@@ -6240,7 +6418,12 @@ app.get('/', (req, res) => {
                         }
                     }
 
-                    setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(weeklyRows.length));
+                    const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
+                    const budgetTargets = computeOrdreindgangBudgetTargets(budgetCfg);
+                    const budgetText = budgetCfg.useManualBudget
+                        ? ('Budget manuel: ' + formatDkkDa(budgetTargets.daily) + ' DKK/dag')
+                        : 'Budget fra SSRS';
+                    setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(weeklyRows.length) + ' · ' + budgetText);
                 } catch (err) {
                     setOrdreindgangStatus('Fejl ved hentning af ordreindgang.');
                     if (emptyEl) {
