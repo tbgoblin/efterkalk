@@ -2,7 +2,7 @@
 
 App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso interno in ambiente produzione/fabbrica.
 
-**Versione attuale:** `1.0.59`
+**Versione attuale:** `1.1.0`
 
 ---
 

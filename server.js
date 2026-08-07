@@ -1352,6 +1352,12 @@ app.get('/', (req, res) => {
             .ordreindgang-weekly-table { min-width:980px; table-layout:fixed; }
             .ordreindgang-weekly-table th:nth-child(n+2), .ordreindgang-weekly-table td:nth-child(n+2) { text-align:right; font-variant-numeric:tabular-nums; }
             .ordreindgang-weekly-table tbody tr:nth-child(even) { background:#f8fbff; }
+            .ordreindgang-weekly-table tbody tr.is-anomaly-high td { background:#fff3e0 !important; }
+            .ordreindgang-weekly-table tbody tr.is-anomaly-low td { background:#e3f2fd !important; }
+            .ordreindgang-trend-chip { display:inline-flex; align-items:center; justify-content:center; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:800; }
+            .ordreindgang-trend-chip.high { background:#ffe0b2; color:#bf360c; border:1px solid #ffb74d; }
+            .ordreindgang-trend-chip.low { background:#d7ecff; color:#0d47a1; border:1px solid #90caf9; }
+            .ordreindgang-trend-chip.ok { background:#edf5ff; color:#355675; border:1px solid #c9dbf2; }
             .ordreindgang-toggle { display:flex; align-items:center; gap:8px; min-height:34px; padding:6px 0; color:#244a6d; font-weight:600; }
             .ordreindgang-toggle input[type="checkbox"] { width:16px; height:16px; accent-color:#1565c0; }
             .omsaetning-cell-right { text-align:right; }
@@ -1710,7 +1716,7 @@ app.get('/', (req, res) => {
                         <button id="ordreindgangPrintBtn" onclick="printOrdreindgangReport()">Print rapport</button>
                     </div>
                 </div>
-                <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px 190px minmax(180px,1fr);">
+                <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px 190px 130px minmax(180px,1fr);">
                     <div class="omsaetning-field">
                         <label for="ordreindgangFraWeek">Fra uge (YYYYWW)</label>
                         <input id="ordreindgangFraWeek" type="text" maxlength="6" placeholder="202601" onchange="scheduleOrdreindgangAutoReload()" />
@@ -1732,6 +1738,10 @@ app.get('/', (req, res) => {
                             <input id="ordreindgangShowTrend" type="checkbox" checked onchange="renderOrdreindgangFromLastPayload()" />
                             <span>Vis trendlinje (3 uger)</span>
                         </label>
+                    </div>
+                    <div class="omsaetning-field">
+                        <label for="ordreindgangAnomalyThreshold">Anomali %</label>
+                        <input id="ordreindgangAnomalyThreshold" type="number" min="0" step="1" value="20" onchange="renderOrdreindgangFromLastPayload()" />
                     </div>
                     <div class="omsaetning-field">
                         <label>Status</label>
@@ -5180,16 +5190,23 @@ app.get('/', (req, res) => {
                 return !!el && el.checked === true;
             }
 
+            function getOrdreindgangAnomalyThresholdPct() {
+                const el = document.getElementById('ordreindgangAnomalyThreshold');
+                const raw = Number(el && el.value);
+                if (!Number.isFinite(raw) || raw < 0) return 20;
+                return raw;
+            }
+
             function setOrdreindgangStatus(message) {
                 const el = document.getElementById('ordreindgangStatus');
                 if (el) el.textContent = String(message || '');
             }
 
-            function buildModulePrintStyles(options) {
+            function buildModulePrintCssText(options) {
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const orientation = safeOptions.orientation === 'landscape' ? 'landscape' : 'portrait';
                 const reportMaxWidth = orientation === 'landscape' ? '277mm' : '190mm';
-                return '<style>' +
+                return '' +
                     '@page { size: A4 ' + orientation + '; margin: 12mm; }' +
                     'body { font-family: Segoe UI, Arial, sans-serif; margin:0; color:#172b3c; background:#fff; }' +
                     '.report { max-width: ' + reportMaxWidth + '; margin:0 auto; }' +
@@ -5223,8 +5240,11 @@ app.get('/', (req, res) => {
                     'th { background:#1565c0; color:#fff; text-align:left; padding:7px 8px; }' +
                     'td { border-bottom:1px solid #e7eef8; padding:6px 8px; }' +
                     'td[style*="text-align:right"], th[style*="text-align:right"] { text-align:right !important; }' +
-                    '.muted { color:#6a829b; font-size:11px; }' +
-                    '</style>';
+                    '.muted { color:#6a829b; font-size:11px; }';
+            }
+
+            function buildModulePrintStyles(options) {
+                return '<style>' + buildModulePrintCssText(options) + '</style>';
             }
 
             function openModulePrintWindow(title, subtitle, metaHtml, kpiHtml, sectionsHtml, options) {
@@ -5323,6 +5343,89 @@ app.get('/', (req, res) => {
                 return 'portrait';
             }
 
+            function buildModulePreviewReportHtml(state, selectedKeys) {
+                const safeState = state && typeof state === 'object' ? state : {};
+                const safeSections = Array.isArray(safeState.sections) ? safeState.sections : [];
+                const selected = selectedKeys instanceof Set ? selectedKeys : new Set();
+                const sectionsHtml = safeSections
+                    .filter(section => section && section.key && selected.has(section.key))
+                    .map(section => String(section.html || ''))
+                    .join('');
+
+                return '<div class="report report-' + (safeState.orientation || 'portrait') + '">' +
+                    '<header class="report-head">' +
+                    '<h1 class="report-title">' + escapeHtmlFE(safeState.title || 'Rapport') + '</h1>' +
+                    '<p class="report-sub">' + escapeHtmlFE(safeState.subtitle || '') + '</p>' +
+                    '<div class="report-meta">' + String(safeState.metaHtml || '') + '</div>' +
+                    '</header>' +
+                    '<section class="kpis">' + String(safeState.kpiHtml || '') + '</section>' +
+                    sectionsHtml +
+                    '</div>';
+            }
+
+            function updateModulePrintPreviewContent() {
+                if (!modulePrintPreviewState) return;
+                const previewEl = document.getElementById('modulePrintPreviewContent');
+                if (!previewEl) return;
+                const checkboxes = Array.from(document.querySelectorAll('.module-print-section'));
+                const selected = new Set(
+                    checkboxes
+                        .filter(cb => cb && cb.checked)
+                        .map(cb => String(cb.getAttribute('data-key') || '').trim())
+                        .filter(Boolean)
+                );
+                modulePrintPreviewState.selected = selected;
+                previewEl.innerHTML = buildModulePreviewReportHtml(modulePrintPreviewState, selected);
+            }
+
+            function toggleModulePrintPreviewSection() {
+                updateModulePrintPreviewContent();
+            }
+
+            function openConfigurableModulePrintPreview(config) {
+                const safeConfig = config && typeof config === 'object' ? config : {};
+                const sections = Array.isArray(safeConfig.sections)
+                    ? safeConfig.sections.filter(section => section && section.key && section.label && section.html)
+                    : [];
+                if (sections.length === 0) {
+                    alert('Ingen sektioner at forhåndsvise for denne rapport.');
+                    return;
+                }
+
+                const selected = new Set(
+                    sections
+                        .filter(section => section.defaultChecked !== false)
+                        .map(section => section.key)
+                );
+
+                modulePrintPreviewState = {
+                    title: String(safeConfig.title || 'Rapport'),
+                    subtitle: String(safeConfig.subtitle || ''),
+                    metaHtml: String(safeConfig.metaHtml || ''),
+                    kpiHtml: String(safeConfig.kpiHtml || ''),
+                    orientation: safeConfig.orientation === 'landscape' ? 'landscape' : 'portrait',
+                    sections,
+                    selected
+                };
+
+                const controlsHtml = '<div class="context-card" style="margin-bottom:10px;">' +
+                    '<h4 style="margin:0 0 6px 0;">Vælg indhold til print</h4>' +
+                    '<div style="display:flex; flex-wrap:wrap; gap:10px 14px;">' +
+                    sections.map(section => {
+                        const checked = selected.has(section.key) ? ' checked' : '';
+                        return '<label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#244766;">' +
+                            '<input class="module-print-section" type="checkbox" data-key="' + escapeHtmlFE(section.key) + '" onchange="toggleModulePrintPreviewSection()"' + checked + ' />' +
+                            '<span>' + escapeHtmlFE(section.label) + '</span>' +
+                            '</label>';
+                    }).join('') +
+                    '</div>' +
+                    '</div>' +
+                    '<div id="modulePrintPreviewContent"></div>';
+
+                renderPrintPreview(String(safeConfig.previewTitle || 'Forhåndsvisning - rapport'), controlsHtml, 'module');
+                updateModulePrintPreviewContent();
+            }
+
             function printOmsaetningReport() {
                 const chartsWrap = document.getElementById('omsaetningChartsWrap');
                 if (!chartsWrap || chartsWrap.style.display === 'none') {
@@ -5413,22 +5516,32 @@ app.get('/', (req, res) => {
                     ? '<section class="section"><h3>Tærskel-tabel</h3><div class="table-wrap">' + thresholdTable + '</div></section>'
                     : '';
 
-                const sectionsHtml =
-                    contextSection +
-                    customerCompareSection +
-                    '<section class="section"><h3>Stacked graf</h3><div class="chart-box"><div class="legend-line">' + legend + '</div>' + stackedSvg + '</div></section>' +
-                    '<section class="section"><h3>Trend graf</h3><div class="chart-box">' + trendSvg + '</div></section>' +
-                    (thresholdOpen ? thresholdSection : '') +
-                    (detailsOpen ? '<section class="section"><h3>Detaljer</h3><div class="table-wrap">' + detailsTable + '</div></section>' : '');
+                const customerOverviewSection = '<section class="section"><h3>Kundeoversigt</h3>' +
+                    '<div class="context-card"><p>' + (selectedCustomerEntries.length > 0
+                        ? ('Valgte kunder: ' + escapeHtmlFE(String(selectedCustomerEntries.length)))
+                        : 'Ingen kunder valgt i filteret.') + '</p></div>' +
+                    '<div class="table-wrap" style="margin-top:8px;">' + (customerThresholdsHtml || '<div class="muted" style="padding:8px;">Ingen kundedata at vise.</div>') + '</div>' +
+                    '</section>';
 
-                openModulePrintWindow(
-                    'Gantech Operations Hub - Omsætning',
-                    'Rapportudskrift (' + getOrientationLabelDa(orientation).toLowerCase() + ')',
+                const sections = [
+                    { key: 'context', label: 'Aktive filtre', html: contextSection, defaultChecked: true },
+                    { key: 'customer-overview', label: 'Kundeoversigt', html: customerOverviewSection, defaultChecked: true },
+                    { key: 'customer-compare', label: 'Kunde-sammenligning', html: customerCompareSection, defaultChecked: selectedCustomerEntries.length > 1 },
+                    { key: 'stacked-chart', label: 'Stacked graf', html: '<section class="section"><h3>Stacked graf</h3><div class="chart-box"><div class="legend-line">' + legend + '</div>' + stackedSvg + '</div></section>', defaultChecked: true },
+                    { key: 'trend-chart', label: 'Trend graf', html: '<section class="section"><h3>Trend graf</h3><div class="chart-box">' + trendSvg + '</div></section>', defaultChecked: true },
+                    { key: 'thresholds', label: 'Tærskel-tabel', html: thresholdSection, defaultChecked: thresholdOpen },
+                    { key: 'details', label: 'Detaljer', html: '<section class="section"><h3>Detaljer</h3><div class="table-wrap">' + detailsTable + '</div></section>', defaultChecked: detailsOpen }
+                ];
+
+                openConfigurableModulePrintPreview({
+                    previewTitle: 'Forhåndsvisning - Omsætning',
+                    title: 'Gantech Operations Hub - Omsætning',
+                    subtitle: 'Rapportudskrift (' + getOrientationLabelDa(orientation).toLowerCase() + ')',
                     metaHtml,
                     kpiHtml,
-                    sectionsHtml,
-                    { orientation }
-                );
+                    orientation,
+                    sections
+                });
             }
 
             function printOrdreindgangReport() {
@@ -5456,9 +5569,13 @@ app.get('/', (req, res) => {
                 const statusText = String((document.getElementById('ordreindgangStatus') || {}).textContent || '').trim();
                 const tilbudEnabled = !!((document.getElementById('ordreindgangShowTilbud') || {}).checked);
                 const trendEnabled = !!((document.getElementById('ordreindgangShowTrend') || {}).checked);
+                const thresholdPct = getOrdreindgangAnomalyThresholdPct();
                 const weekCount = Array.isArray(ordreindgangLastPayload && ordreindgangLastPayload.weeklyRows)
                     ? ordreindgangLastPayload.weeklyRows.length
                     : 0;
+                const customerRowsRaw = Array.isArray(ordreindgangLastPayload && ordreindgangLastPayload.customerRows)
+                    ? ordreindgangLastPayload.customerRows
+                    : [];
                 const orientationPreference = getPrintOrientationPreference('ordreindgang');
                 const autoOrientation = chooseOrdreindgangPrintOrientation({
                     weeklyOpen,
@@ -5471,6 +5588,7 @@ app.get('/', (req, res) => {
                     '<div><strong>Periode:</strong> ' + escapeHtmlFE(fraWeek + ' → ' + tilWeek) + '</div>' +
                     '<div><strong>Tilbud-linje:</strong> ' + (tilbudEnabled ? 'Aktiv' : 'Skjult') + '</div>' +
                     '<div><strong>Trendlinje:</strong> ' + (trendEnabled ? 'Aktiv (3 uger)' : 'Skjult') + '</div>' +
+                    '<div><strong>Anomali-soglia:</strong> ±' + escapeHtmlFE(formatPctDa(thresholdPct)) + '</div>' +
                     '<div><strong>Layoutvalg:</strong> ' + escapeHtmlFE(getOrientationSourceLabelDa(orientationPreference)) + '</div>' +
                     '<div><strong>Layout:</strong> ' + escapeHtmlFE(getOrientationLabelDa(orientation)) + '</div>' +
                     '<div><strong>Udskrevet:</strong> ' + escapeHtmlFE(new Date().toLocaleString('da-DK')) + '</div>';
@@ -5489,27 +5607,52 @@ app.get('/', (req, res) => {
                                 '<p>' + escapeHtmlFE(fraWeek + ' → ' + tilWeek) + '</p>' +
                             '</div>' +
                             '<div class="context-card">' +
-                                '<h4>Tilbud-linje</h4>' +
+                                '<h4>Trend/anomali</h4>' +
                                 '<p>' + (tilbudEnabled ? 'Aktiv (vises i graf)' : 'Skjult (kun ordre)') + '</p>' +
+                                '<div class="context-line"><strong>Soglia:</strong> ±' + escapeHtmlFE(formatPctDa(thresholdPct)) + '</div>' +
                                 '<div class="context-line"><strong>Status:</strong> ' + escapeHtmlFE(statusText || 'Ingen status') + '</div>' +
                             '</div>' +
                         '</div>' +
                     '</section>';
 
-                const sectionsHtml =
-                    contextSection +
-                    '<section class="section"><h3>Ugeudvikling</h3><div class="chart-box"><div class="legend-line">' + legend + '</div>' + trendSvg + '</div></section>' +
-                    (weeklyOpen ? '<section class="section"><h3>Ugetabel</h3><div class="table-wrap">' + weeklyTable + '</div></section>' : '') +
-                    (customersOpen ? '<section class="section"><h3>Topkunder</h3><div class="table-wrap">' + customerTable + '</div></section>' : '');
+                const topCustomersRows = customerRowsRaw
+                    .slice()
+                    .sort((a, b) => Number(b.ordSum || 0) - Number(a.ordSum || 0))
+                    .slice(0, 10)
+                    .map(row => {
+                        const name = String(row.customerName || '').trim() || String(row.custNo || '-');
+                        return '<tr>' +
+                            '<td>' + escapeHtmlFE(name) + '</td>' +
+                            '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.ordSum || 0)) + '</td>' +
+                            '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.tilbudSum || 0)) + '</td>' +
+                            '<td style="text-align:right;">' + escapeHtmlFE(formatPctDa(row.conversionPct)) + '</td>' +
+                            '</tr>';
+                    }).join('');
 
-                openModulePrintWindow(
-                    'Gantech Operations Hub - Ordreindgang',
-                    'Rapportudskrift (' + getOrientationLabelDa(orientation).toLowerCase() + ')',
+                const customerGeneralSection = '<section class="section"><h3>Kunderapport (generel)</h3>' +
+                    '<div class="context-card"><p>Top 10 kunder i perioden baseret på ordrebeløb.</p></div>' +
+                    '<div class="table-wrap" style="margin-top:8px;">' +
+                    '<table><thead><tr><th>Kunde</th><th style="text-align:right;">Ordre</th><th style="text-align:right;">Tilbud</th><th style="text-align:right;">Tilbud → Ordre</th></tr></thead>' +
+                    '<tbody>' + (topCustomersRows || '<tr><td colspan="4" class="muted">Ingen kundedata.</td></tr>') + '</tbody></table>' +
+                    '</div></section>';
+
+                const sections = [
+                    { key: 'context', label: 'Aktive filtre', html: contextSection, defaultChecked: true },
+                    { key: 'trend-chart', label: 'Ugeudvikling graf', html: '<section class="section"><h3>Ugeudvikling</h3><div class="chart-box"><div class="legend-line">' + legend + '</div>' + trendSvg + '</div></section>', defaultChecked: true },
+                    { key: 'weekly-table', label: 'Ugetabel', html: '<section class="section"><h3>Ugetabel</h3><div class="table-wrap">' + weeklyTable + '</div></section>', defaultChecked: weeklyOpen },
+                    { key: 'top-customers', label: 'Topkunder', html: '<section class="section"><h3>Topkunder</h3><div class="table-wrap">' + customerTable + '</div></section>', defaultChecked: customersOpen },
+                    { key: 'customer-general', label: 'Kunderapport (generel)', html: customerGeneralSection, defaultChecked: true }
+                ];
+
+                openConfigurableModulePrintPreview({
+                    previewTitle: 'Forhåndsvisning - Ordreindgang',
+                    title: 'Gantech Operations Hub - Ordreindgang',
+                    subtitle: 'Rapportudskrift (' + getOrientationLabelDa(orientation).toLowerCase() + ')',
                     metaHtml,
                     kpiHtml,
-                    sectionsHtml,
-                    { orientation }
-                );
+                    orientation,
+                    sections
+                });
             }
 
             function applyOrdreindgangDefaultWeeks() {
@@ -5603,6 +5746,38 @@ app.get('/', (req, res) => {
                 return out;
             }
 
+            function enrichOrdreindgangTrendRows(rows) {
+                const safeRows = Array.isArray(rows) ? rows : [];
+                const ordValues = safeRows.map(row => Number(row.totalOrd || 0));
+                const ma3Values = computeOrdreindgangMovingAvg(ordValues, 3);
+                const thresholdPct = getOrdreindgangAnomalyThresholdPct();
+
+                return safeRows.map((row, idx) => {
+                    const ord = Number(row.totalOrd || 0);
+                    const prevOrd = idx > 0 ? Number(safeRows[idx - 1].totalOrd || 0) : null;
+                    const ma3 = Number(ma3Values[idx] || 0);
+                    const wowPct = (prevOrd !== null && prevOrd > 0)
+                        ? ((ord - prevOrd) / prevOrd) * 100
+                        : null;
+                    const devFromMa3Pct = ma3 > 0
+                        ? ((ord - ma3) / ma3) * 100
+                        : null;
+                    const absDev = Number.isFinite(devFromMa3Pct) ? Math.abs(devFromMa3Pct) : 0;
+                    const isAnomaly = Number.isFinite(devFromMa3Pct) && absDev >= thresholdPct;
+                    const anomalyDir = isAnomaly
+                        ? (devFromMa3Pct >= 0 ? 'high' : 'low')
+                        : 'ok';
+                    return {
+                        ...row,
+                        ma3,
+                        wowPct,
+                        devFromMa3Pct,
+                        isAnomaly,
+                        anomalyDir
+                    };
+                });
+            }
+
             function buildSmoothPath(points) {
                 const safePoints = Array.isArray(points) ? points : [];
                 if (safePoints.length === 0) return '';
@@ -5641,14 +5816,15 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                const labels = safeRows.map(r => {
+                const trendRows = enrichOrdreindgangTrendRows(safeRows);
+                const labels = trendRows.map(r => {
                     const key = String(r.weekKey || '');
                     if (/^\\d{6}$/.test(key)) return key.slice(0, 4) + '-' + key.slice(4, 6);
                     return formatWeekLabel(key);
                 });
-                const ordValues = safeRows.map(r => Number(r.totalOrd || 0));
-                const tilbudValues = safeRows.map(r => Number(r.totalTilbud || 0));
-                const movingAvgValues = computeOrdreindgangMovingAvg(ordValues, 3);
+                const ordValues = trendRows.map(r => Number(r.totalOrd || 0));
+                const tilbudValues = trendRows.map(r => Number(r.totalTilbud || 0));
+                const movingAvgValues = trendRows.map(r => Number(r.ma3 || 0));
                 const allValues = showTilbudLine
                     ? ordValues.concat(tilbudValues).concat(showTrendLine ? movingAvgValues : [])
                     : ordValues.concat(showTrendLine ? movingAvgValues : []);
@@ -5682,7 +5858,7 @@ app.get('/', (req, res) => {
                 const tilbudBarWidth = 7;
 
                 const labelStep = safeRows.length > 70 ? 4 : (safeRows.length > 52 ? 3 : (safeRows.length > 36 ? 2 : 1));
-                safeRows.forEach((row, idx) => {
+                trendRows.forEach((row, idx) => {
                     const centerX = toXCenter(idx);
                     const ordY = toY(ordValues[idx]);
                     const ordH = Math.max(1, yZero - ordY);
@@ -5699,7 +5875,14 @@ app.get('/', (req, res) => {
                     html += '<rect x="' + ordX + '" y="' + ordY + '" width="' + ordBarWidth + '" height="' + ordH + '" fill="#2f5ea5" rx="1"><title>' +
                         escapeHtmlFE(labels[idx] + ' Ordre: ' + formatDkkDa(ordValues[idx])) + '</title></rect>';
 
-                    if ((idx % labelStep) === 0 || idx === safeRows.length - 1) {
+                    if (row.isAnomaly) {
+                        const markerColor = row.anomalyDir === 'high' ? '#e65100' : '#1565c0';
+                        html += '<circle cx="' + centerX + '" cy="' + (ordY - 7) + '" r="3.8" fill="#fff" stroke="' + markerColor + '" stroke-width="2">' +
+                            '<title>' + escapeHtmlFE(labels[idx] + ' Anomali: dev fra MA3 ' + formatPctDa(row.devFromMa3Pct) + ' (soglia ' + formatPctDa(getOrdreindgangAnomalyThresholdPct()) + ')') + '</title>' +
+                            '</circle>';
+                    }
+
+                    if ((idx % labelStep) === 0 || idx === trendRows.length - 1) {
                         html += '<text x="' + centerX + '" y="' + (topPad + innerHeight + 50) + '" text-anchor="middle" transform="rotate(-90 ' + centerX + ' ' + (topPad + innerHeight + 50) + ')" font-size="12" fill="#5f7892">' + escapeHtmlFE(labels[idx]) + '</text>';
                     }
                 });
@@ -5731,6 +5914,9 @@ app.get('/', (req, res) => {
                     }
                     if (showTrendLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#ff6f00"></span>Gns. ordre (3 uger)</span>';
+                    }
+                    if (trendRows.some(row => row.isAnomaly)) {
+                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#fff;border:2px solid #e65100"></span>Anomali (dev fra MA3)</span>';
                     }
                     legendEl.innerHTML = legendHtml;
                 }
@@ -5775,10 +5961,10 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                const ordValues = safeRows.map(row => Number(row.totalOrd || 0));
-                const movingAvgValues = computeOrdreindgangMovingAvg(ordValues, 3);
+                const trendRows = enrichOrdreindgangTrendRows(safeRows);
 
-                const body = safeRows.map((row, idx) => {
+                const body = trendRows.map((row) => {
+                    const rowClass = row.isAnomaly ? (' is-anomaly-' + row.anomalyDir) : '';
                     const cells = [
                         '<td>' + escapeHtmlFE(formatWeekLabel(row.weekKey)) + '</td>',
                         '<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalOrd)) + '</td>'
@@ -5787,8 +5973,14 @@ app.get('/', (req, res) => {
                         cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalTilbud)) + '</td>');
                     }
                     cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.totalBudget)) + '</td>');
-                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(movingAvgValues[idx])) + '</td>');
-                    return '<tr>' +
+                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatDkkDa(row.ma3)) + '</td>');
+                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatPctDa(row.wowPct)) + '</td>');
+                    cells.push('<td style="text-align:right;">' + escapeHtmlFE(formatPctDa(row.devFromMa3Pct)) + '</td>');
+                    const anomalyLabel = row.isAnomaly
+                        ? ('<span class="ordreindgang-trend-chip ' + row.anomalyDir + '">' + (row.anomalyDir === 'high' ? 'Over' : 'Under') + '</span>')
+                        : '<span class="ordreindgang-trend-chip ok">OK</span>';
+                    cells.push('<td style="text-align:center;">' + anomalyLabel + '</td>');
+                    return '<tr class="' + rowClass.trim() + '">' +
                         cells.join('') +
                         '</tr>';
                 }).join('');
@@ -5802,10 +5994,13 @@ app.get('/', (req, res) => {
                 }
                 headers.push('<th class="omsaetning-cell-right">Budget</th>');
                 headers.push('<th class="omsaetning-cell-right">Gns. ordre (3 uger)</th>');
+                headers.push('<th class="omsaetning-cell-right">WoW</th>');
+                headers.push('<th class="omsaetning-cell-right">Dev fra MA3</th>');
+                headers.push('<th class="omsaetning-cell-right">Anomali</th>');
 
                 const colgroup = showTilbudColumn
-                    ? '<colgroup><col style="width:16%;" /><col style="width:21%;" /><col style="width:23%;" /><col style="width:20%;" /><col style="width:20%;" /></colgroup>'
-                    : '<colgroup><col style="width:18%;" /><col style="width:28%;" /><col style="width:27%;" /><col style="width:27%;" /></colgroup>';
+                    ? '<colgroup><col style="width:12%;" /><col style="width:14%;" /><col style="width:14%;" /><col style="width:14%;" /><col style="width:14%;" /><col style="width:11%;" /><col style="width:11%;" /><col style="width:10%;" /></colgroup>'
+                    : '<colgroup><col style="width:14%;" /><col style="width:16%;" /><col style="width:16%;" /><col style="width:16%;" /><col style="width:13%;" /><col style="width:13%;" /><col style="width:12%;" /></colgroup>';
 
                 wrap.innerHTML = '<table class="omsaetning-table ordreindgang-weekly-table">' +
                     colgroup +
@@ -8249,6 +8444,7 @@ app.get('/', (req, res) => {
             }
 
             let currentPrintPreviewMode = null;
+            let modulePrintPreviewState = null;
             let reportPrintRestoreState = null;
 
             function isOrderDetailReportViewActive() {
@@ -8403,6 +8599,7 @@ app.get('/', (req, res) => {
                 document.body.classList.remove('print-preview-lock');
                 document.body.classList.remove('print-preview-mode');
                 currentPrintPreviewMode = null;
+                modulePrintPreviewState = null;
             }
 
             function confirmPrintFromPreview() {
@@ -8410,6 +8607,15 @@ app.get('/', (req, res) => {
                 if (!bodyEl) return;
                 const titleEl = document.getElementById('printPreviewTitle');
                 const title = titleEl ? titleEl.textContent : 'Forhåndsvisning';
+                if (currentPrintPreviewMode === 'module' && modulePrintPreviewState) {
+                    const selected = modulePrintPreviewState.selected instanceof Set
+                        ? modulePrintPreviewState.selected
+                        : new Set();
+                    const html = buildModulePreviewReportHtml(modulePrintPreviewState, selected);
+                    const cssText = buildModulePrintCssText({ orientation: modulePrintPreviewState.orientation });
+                    printStandaloneHtml(title, html, cssText);
+                    return;
+                }
                 const cssText = currentPrintPreviewMode === 'list'
                     ? buildStandaloneListPrintCss()
                     : buildStandaloneReportPrintCss();
@@ -8496,6 +8702,7 @@ app.get('/', (req, res) => {
                 const bodyEl = document.getElementById('printPreviewBody');
                 if (bodyEl) bodyEl.innerHTML = '';
                 currentPrintPreviewMode = null;
+                modulePrintPreviewState = null;
             });
 
             function updateOrderListSummaryPanel() {
