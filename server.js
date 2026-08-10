@@ -8915,7 +8915,9 @@ app.get('/', (req, res) => {
                         }
                         if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
 
-                        const totalCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                        const totalCost = key === '1'
+                            ? (Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0) * Number((line && line.CCstPr) || 0))
+                            : Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
                         if (key === '1') {
                             plannedMinutes += Number((line && line.NoOrg) || 0);
                             usedMinutes += Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
@@ -9819,6 +9821,10 @@ app.get('/', (req, res) => {
                                             : (line.LineCost || 0));
                                     }, 0)
                                     : lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
+                                        if (String(key) === '1') {
+                                            const effectiveNoFin = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
+                                            return sum + (effectiveNoFin * Number(line.CCstPr || 0));
+                                        }
                                         const pn = String(line.ProdNo || '').toUpperCase();
                                         if (pn === 'R6200' && String(key) === '1') {
                                             return sum + ((line.NoOrg || 0) * (line.CCstPr || 0));
@@ -10002,7 +10008,9 @@ app.get('/', (req, res) => {
 
                             const prodNo = String((line && line.ProdNo) || '').trim();
                             if (!prodNo) continue;
-                            const totalCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                            const totalCost = key === '1'
+                                ? (Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0) * Number((line && line.CCstPr) || 0))
+                                : Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
                             const qty = Number((line && (line.DisplayQuantity ?? line.NoFin)) || 0);
                             const styklisteMinutes = Number((line && line.NoOrg) || 0);
                             const effectiveMinutes = Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
@@ -10134,12 +10142,13 @@ app.get('/', (req, res) => {
                     function getOperationCostFromLines(lines) {
                         let total = 0;
                         for (const line of (Array.isArray(lines) ? lines : [])) {
-                            const rawKey = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
-                            const key = getDisplayProdTp4Key(rawKey, line && line.ProdNo, line && line.PurcNo);
+                            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
                             const lnNo = Number((line && line.LnNo) || 0);
-                            if (lnNo === 1 || key === '0' || key === '5') continue;
+                            if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
                             if (key !== '1') continue;
-                            total += Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
+                            const effectiveMinutes = Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
+                            const unitCost = Number((line && line.CCstPr) || 0);
+                            total += (effectiveMinutes * unitCost);
                         }
                         return total;
                     }
