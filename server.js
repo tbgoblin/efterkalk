@@ -8908,12 +8908,13 @@ app.get('/', (req, res) => {
                     let productLabel = '-';
 
                     for (const line of lines) {
-                        const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                        const rawKey = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                        const key = getDisplayProdTp4Key(rawKey, line && line.ProdNo, line && line.PurcNo);
                         const lnNo = Number((line && line.LnNo) || 0);
                         if (lnNo === 1 && line && line.ProdNo) {
                             productLabel = String(line.ProdNo || '-') + ' - ' + String(line.Descr || '');
                         }
-                        if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+                        if (lnNo === 1 || key === '0' || key === '5') continue;
 
                         const totalCost = Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
                         if (key === '1') {
@@ -9727,7 +9728,7 @@ app.get('/', (req, res) => {
                                 if (normalizedKey === '1') {
                                     if (prodNoKey) {
                                         const mergeKey = normalizedKey + '|' + prodNoKey;
-                                        if (rawKey === '3') {
+                                        if (rawKey === '3' && Number(line.NoFin || 0) === 0) {
                                             const extraNoOrg = Number(line.NoOrg || 0);
                                             if (operationMergeMap.has(mergeKey)) {
                                                 const mergedLine = operationMergeMap.get(mergeKey);
@@ -9978,7 +9979,8 @@ app.get('/', (req, res) => {
                         const lines = Array.isArray(prodOrder && prodOrder.lines) ? prodOrder.lines : [];
 
                         for (const line of lines) {
-                            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const rawKey = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const key = getDisplayProdTp4Key(rawKey, line && line.ProdNo, line && line.PurcNo);
                             const lnNo = Number((line && line.LnNo) || 0);
                             if (lnNo === 1 || key !== '1') continue;
 
@@ -10094,9 +10096,10 @@ app.get('/', (req, res) => {
                     function getOperationCostFromLines(lines) {
                         let total = 0;
                         for (const line of (Array.isArray(lines) ? lines : [])) {
-                            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const rawKey = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                            const key = getDisplayProdTp4Key(rawKey, line && line.ProdNo, line && line.PurcNo);
                             const lnNo = Number((line && line.LnNo) || 0);
-                            if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+                            if (lnNo === 1 || key === '0' || key === '5') continue;
                             if (key !== '1') continue;
                             total += Number((line && (line.EffectiveLineCost ?? line.LineCost)) || 0);
                         }
