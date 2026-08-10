@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 24;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 25;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -77,8 +77,12 @@ function createAftercalcService({
     }
 
     function getOperationTimeInfo(line) {
-        const effectiveMinutes = Number(getEffectiveOperationMinutes(line) || 0);
-        const usesEstimatedMinutes = Boolean(isEstimatedOperationMinutesFallback(line));
+        const prodTrMinutesRaw = Number(line && line.ProdTrMinutes);
+        const hasProdTrMinutes = Number.isFinite(prodTrMinutesRaw);
+        const effectiveMinutes = hasProdTrMinutes
+            ? prodTrMinutesRaw
+            : Number(getEffectiveOperationMinutes(line) || 0);
+        const usesEstimatedMinutes = !hasProdTrMinutes && Boolean(isEstimatedOperationMinutesFallback(line));
         return {
             effectiveMinutes,
             usesEstimatedMinutes,
@@ -654,6 +658,12 @@ function createAftercalcService({
                                       AND P.OrdLnNo = OrdLn.LnNo
                                     ORDER BY P.FinDt DESC, P.FinTm DESC
                                 ) AS HvemNm,
+                                                                (
+                                                                        SELECT SUM(CAST(P2.NoInvoAb AS DECIMAL(18,6)))
+                                                                        FROM ProdTr P2
+                                                                        WHERE P2.OrdNo = @purcNo
+                                                                            AND P2.OrdLnNo = OrdLn.LnNo
+                                                                ) AS ProdTrMinutes,
                                 CAST(OrdLn.NoFin * OrdLn.CCstPr AS DECIMAL(10,2)) AS LineCost,
                                 (
                                     SELECT SUM(CAST(n.CstPr AS DECIMAL(18,6)) * CAST(n.NoFin AS DECIMAL(18,6)))
@@ -1147,6 +1157,12 @@ function createAftercalcService({
                           AND P.OrdLnNo = OrdLn.LnNo
                         ORDER BY P.FinDt DESC, P.FinTm DESC
                     ) AS HvemNm,
+                                        (
+                                                SELECT SUM(CAST(P2.NoInvoAb AS DECIMAL(18,6)))
+                                                FROM ProdTr P2
+                                                WHERE P2.OrdNo = @ordNo
+                                                    AND P2.OrdLnNo = OrdLn.LnNo
+                                        ) AS ProdTrMinutes,
                     CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost,
                     (
                         SELECT SUM(CAST(n.CstPr AS DECIMAL(18,6)) * CAST(n.NoFin AS DECIMAL(18,6)))
