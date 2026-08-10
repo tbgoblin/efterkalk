@@ -9999,11 +9999,21 @@ app.get('/', (req, res) => {
                                     styklisteQty: 0,
                                     qty: 0,
                                     totalCost: 0,
-                                    occurrences: 0
+                                    occurrences: 0,
+                                    vismaUnitCost: null,
+                                    hasMixedUnitCost: false
                                 });
                             }
 
                             const group = groupedRows.get(prodNo);
+                            const lineUnitCost = Number((line && line.CCstPr) || 0);
+                            if (Number.isFinite(lineUnitCost) && lineUnitCost > 0) {
+                                if (group.vismaUnitCost === null) {
+                                    group.vismaUnitCost = lineUnitCost;
+                                } else if (Math.abs(Number(group.vismaUnitCost) - lineUnitCost) > 0.0001) {
+                                    group.hasMixedUnitCost = true;
+                                }
+                            }
                             group.styklisteQty += Number((line && line.NoOrg) || 0);
                             group.qty += qty;
                             group.totalCost += totalCost;
@@ -10027,7 +10037,9 @@ app.get('/', (req, res) => {
                     let html = '<table class="oversigt-table-operation">';
                     html += '<tr><th>Operation</th><th>Beskrivelse</th><th>Linjer</th><th>Stykliste</th><th>Færdig</th><th>Kost/enh.</th><th>Samlet</th></tr>';
                     for (const row of rows) {
-                        const unitCost = row.qty > 0 ? (row.totalCost / row.qty) : 0;
+                        const unitCost = (!row.hasMixedUnitCost && Number.isFinite(Number(row.vismaUnitCost)) && Number(row.vismaUnitCost) > 0)
+                            ? Number(row.vismaUnitCost)
+                            : (row.qty > 0 ? (row.totalCost / row.qty) : 0);
                         html += '<tr>';
                         html += '<td>' + (row.prodNo || '-') + '</td>';
                         html += '<td>' + (row.descr || '-') + '</td>';
