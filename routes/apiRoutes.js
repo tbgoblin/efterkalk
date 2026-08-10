@@ -911,7 +911,7 @@ function createApiRouter({
     pkgVersion
 }) {
     const router = express.Router();
-    const legacyAftercalcPrefixes = ['aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
+    const legacyAftercalcPrefixes = ['aftercalc_v22_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
     const ordreindgangService = createOrdreindgangService({ getConnection, sql });
     const bomService = createBomService({ getConnection, sql, diskCache, logEvent });
