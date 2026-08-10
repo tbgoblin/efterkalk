@@ -1004,10 +1004,10 @@ function createAftercalcService({
                 const warningText = joinWarningMessages([line.WarningText]);
                 const hasWarning = Boolean(line.HasWarning) && warningText.length > 0;
 
-                if (productionTotal !== undefined && !line.IsDiscountLine && linkedOrderType === 6) {
+                if (productionTotal !== undefined && !line.IsDiscountLine) {
+                    const roundedTotal = parseFloat(Number(productionTotal).toFixed(2));
                     const prodNoKey = String(line.ProdNo || '').trim().toUpperCase();
                     const linkedMatch = linkedOrderLines.find(linkedLine => String(linkedLine.ProdNo || '').trim().toUpperCase() === prodNoKey) || null;
-                    const qty = Number(line.NoFin || line.NoOrg || 0);
                     const purchaseUnitCost = linkedMatch
                         ? Number(
                             linkedMatch.DPrice
@@ -1017,30 +1017,12 @@ function createAftercalcService({
                             || 0
                         )
                         : 0;
-
-                    if (purchaseUnitCost > 0 && qty > 0) {
-                        const effectiveCost = parseFloat(Number(purchaseUnitCost * qty).toFixed(2));
-                        return {
-                            ...line,
-                            ProductionOrderTotalCost: parseFloat(Number(productionTotal).toFixed(2)),
-                            EffectiveLineCost: effectiveCost,
-                            LinkedOrderType: linkedOrderType,
-                            PurchaseOrderUnitCost: parseFloat(Number(purchaseUnitCost).toFixed(4)),
-                            LinkedProductionHasWarning: productionHasWarning,
-                            LinkedProductionWarningText: productionWarningText,
-                            HasWarning: hasWarning,
-                            WarningText: warningText
-                        };
-                    }
-                }
-
-                if (productionTotal !== undefined && !line.IsDiscountLine) {
-                    const roundedTotal = parseFloat(Number(productionTotal).toFixed(2));
                     return {
                         ...line,
                         ProductionOrderTotalCost: roundedTotal,
                         EffectiveLineCost: roundedTotal,
                         LinkedOrderType: linkedOrderType,
+                        PurchaseOrderUnitCost: purchaseUnitCost > 0 ? parseFloat(Number(purchaseUnitCost).toFixed(4)) : null,
                         LinkedProductionHasWarning: productionHasWarning,
                         LinkedProductionWarningText: productionWarningText,
                         HasWarning: hasWarning,
