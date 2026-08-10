@@ -2006,11 +2006,32 @@ function createApiRouter({
             if (Number.isNaN(ordNo) || Number.isNaN(lnNo)) {
                 return res.status(400).json({ error: 'Ugyldige parametre' });
             }
+
+            const lnNosFromQuery = String(req.query.lnNos || '')
+                .split(',')
+                .map(v => parseInt(String(v || '').trim(), 10))
+                .filter(v => Number.isFinite(v) && v > 0);
+            const lnNoSet = new Set([lnNo, ...lnNosFromQuery]);
+            const lnNos = Array.from(lnNoSet);
+
             const pool = await getConnection();
-            const result = await pool.request()
-                .input('ordNo', sql.Numeric, ordNo)
-                .input('lnNo', sql.Numeric, lnNo)
-                .query(`
+            const request = pool.request()
+                .input('ordNo', sql.Numeric, ordNo);
+
+            let whereLineFilter = 'P.OrdLnNo = @lnNo';
+            if (lnNos.length <= 1) {
+                request.input('lnNo', sql.Numeric, lnNo);
+            } else {
+                const placeholders = [];
+                lnNos.forEach((lineNo, idx) => {
+                    const key = 'lnNo' + idx;
+                    request.input(key, sql.Numeric, lineNo);
+                    placeholders.push('@' + key);
+                });
+                whereLineFilter = 'P.OrdLnNo IN (' + placeholders.join(', ') + ')';
+            }
+
+            const result = await request.query(`
                     SELECT
                         P.FinDt,
                         P.FinTm,
@@ -2018,7 +2039,7 @@ function createApiRouter({
                         A.Nm AS HvemNm
                     FROM ProdTr P
                     LEFT JOIN Actor A ON A.EmpNo = P.EmpNo
-                    WHERE P.OrdNo = @ordNo AND P.OrdLnNo = @lnNo
+                    WHERE P.OrdNo = @ordNo AND ${whereLineFilter}
                     ORDER BY P.FinDt DESC, P.FinTm DESC
                 `);
             res.json(result.recordset);

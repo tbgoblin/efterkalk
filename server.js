@@ -1774,13 +1774,17 @@ app.get('/', (req, res) => {
                 <div class="ordreindgang-holiday-box">
                     <div class="omsaetning-field">
                         <label for="ordreindgangHolidayWeeks">Ferieuger (YYYYWW)</label>
-                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630,202631" oninput="onOrdreindgangHolidaySettingsChanged()" onchange="onOrdreindgangHolidaySettingsChanged()" />
+                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630,202631" onchange="onOrdreindgangHolidaySettingsChanged()" />
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                            <button type="button" class="omsaetning-collapse-btn" onclick="saveOrdreindgangHolidaySettingsManual()">Gem ferieuger</button>
+                            <span id="ordreindgangHolidaySaveInfo" class="ordreindgang-holiday-help" style="margin-top:0;"></span>
+                        </div>
                         <div class="ordreindgang-holiday-help">0,00 i disse uger behandles som ferie (ikke anomali).</div>
                     </div>
                     <div class="omsaetning-field">
                         <label for="ordreindgangIgnoreHolidayWeeks">Håndtering</label>
                         <label class="ordreindgang-toggle" for="ordreindgangIgnoreHolidayWeeks">
-                            <input id="ordreindgangIgnoreHolidayWeeks" type="checkbox" checked oninput="onOrdreindgangHolidaySettingsChanged()" onchange="onOrdreindgangHolidaySettingsChanged()" />
+                            <input id="ordreindgangIgnoreHolidayWeeks" type="checkbox" checked onchange="onOrdreindgangHolidaySettingsChanged()" />
                             <span>Ignorer ferieuger i trend/MA3 og periodemål</span>
                         </label>
                     </div>
@@ -5565,6 +5569,17 @@ app.get('/', (req, res) => {
                         setOrdreindgangStatus('Periode: ' + formatWeekLabel(range.fraWeek) + ' til ' + formatWeekLabel(range.tilWeek) + ' · rækker: ' + String(ordreindgangLastPayload.weeklyRows.length) + ' · ferieuger: ' + String(holidayCount) + ' · ' + budgetText);
                     }
                 }
+            }
+
+            function saveOrdreindgangHolidaySettingsManual() {
+                onOrdreindgangHolidaySettingsChanged();
+                const infoEl = document.getElementById('ordreindgangHolidaySaveInfo');
+                if (!infoEl) return;
+                infoEl.textContent = 'Gemt';
+                infoEl.style.color = '#1b5e20';
+                setTimeout(() => {
+                    if (infoEl.textContent === 'Gemt') infoEl.textContent = '';
+                }, 1500);
             }
 
             function initializeOrdreindgangHolidaySettings() {
@@ -9731,7 +9746,8 @@ app.get('/', (req, res) => {
                                                 NoOrg: Number(line.NoOrg || 0) + extraNoOrg,
                                                 NoFin: Number(line.NoFin || 0),
                                                 LineCost: Number(line.LineCost || 0),
-                                                EffectiveLineCost: Number(line.EffectiveLineCost || 0)
+                                                EffectiveLineCost: Number(line.EffectiveLineCost || 0),
+                                                SourceLnNos: [Number(line.LnNo || 0)].filter(v => Number.isFinite(v) && v > 0)
                                             };
                                             operationMergeMap.set(mergeKey, mergedLine);
                                             if (!groupedLines[normalizedKey]) groupedLines[normalizedKey] = [];
@@ -9742,6 +9758,12 @@ app.get('/', (req, res) => {
                                             mergedLine.NoFin = Number(mergedLine.NoFin || 0) + Number(line.NoFin || 0);
                                             mergedLine.LineCost = Number(mergedLine.LineCost || 0) + Number(line.LineCost || 0);
                                             mergedLine.EffectiveLineCost = Number(mergedLine.EffectiveLineCost || 0) + Number(line.EffectiveLineCost || 0);
+                                            const mergedLnNos = Array.isArray(mergedLine.SourceLnNos) ? mergedLine.SourceLnNos : [];
+                                            const sourceLnNo = Number(line.LnNo || 0);
+                                            if (Number.isFinite(sourceLnNo) && sourceLnNo > 0 && !mergedLnNos.includes(sourceLnNo)) {
+                                                mergedLnNos.push(sourceLnNo);
+                                            }
+                                            mergedLine.SourceLnNos = mergedLnNos;
                                             if ((!mergedLine.Descr || mergedLine.Descr === '-') && line.Descr) {
                                                 mergedLine.Descr = line.Descr;
                                             }
@@ -9820,7 +9842,10 @@ app.get('/', (req, res) => {
                                         const trInf2Value = String((line.TrInf2 !== null && line.TrInf2 !== undefined && String(line.TrInf2).trim() !== '') ? line.TrInf2 : prodOrder.ordNo);
                                         const safeTrInf2 = trInf2Value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeTrInf4 = String(line.TrInf4 || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdLabel + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
+                                        const sourceLnNosText = Array.isArray(line.SourceLnNos)
+                                            ? line.SourceLnNos.filter(v => Number.isFinite(Number(v)) && Number(v) > 0).join(',')
+                                            : '';
+                                        html += '<td><span class="prod-no-link" data-prodno="' + safeProdNo + '" data-ordno="' + prodOrder.ordNo + '" data-lnno="' + (line.LnNo || 0) + '" data-lnnos="' + sourceLnNosText + '" data-prodtp4="' + key + '" data-trinf2="' + safeTrInf2 + '" data-trinf4="' + safeTrInf4 + '">' + safeProdLabel + '</span>' + invoiceStatusFlagHtml + laserAllocationFlagHtml + timeAdjustFlagHtml + warningFlagHtml + '</td>';
                                     } else if (String(key) === '2' && line.ProdNo && isLaserLProdNo(line.ProdNo)) {
                                         const safeProdNo = String(line.ProdNo || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
                                         const safeProdLabel = escapeHtml(getResourceDisplayLabel(line.ProdNo, line.Descr));
@@ -10278,7 +10303,7 @@ app.get('/', (req, res) => {
                 }
             }
 
-            async function onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, clickedNoFin, clickedNestingCost) {
+            async function onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, clickedNoFin, clickedNestingCost, sourceLnNos) {
                 const modal = document.getElementById('summaryModal');
                 const title = document.getElementById('summaryModalTitle');
                 const body = document.getElementById('summaryModalBody');
@@ -10300,7 +10325,11 @@ app.get('/', (req, res) => {
                 if (String(prodTp4) === '1') {
                     body.innerHTML = '<div class="modal-loading">Indlæser transaktioner...</div>';
                     try {
-                        const response = await fetch('/prodtr/' + ordNo + '/' + lnNo);
+                        const lnNosText = String(sourceLnNos || '').trim();
+                        const endpoint = lnNosText
+                            ? ('/prodtr/' + ordNo + '/' + lnNo + '?lnNos=' + encodeURIComponent(lnNosText))
+                            : ('/prodtr/' + ordNo + '/' + lnNo);
+                        const response = await fetch(endpoint);
                         const rows = await response.json();
                         if (!response.ok || rows.error) {
                             body.innerHTML = '<div class="error">Fejl: ' + (rows.error || 'Uventet fejl') + '</div>';
@@ -10472,13 +10501,14 @@ app.get('/', (req, res) => {
                 const prodNo = span.dataset.prodno;
                 const ordNo = span.dataset.ordno;
                 const lnNo = span.dataset.lnno;
+                const lnNos = span.dataset.lnnos;
                 const prodTp4 = span.dataset.prodtp4;
                 const trInf2 = span.dataset.trinf2;
                 const trInf4 = span.dataset.trinf4;
                 const showAllRoutes = span.dataset.showallroutes === '1';
                 const noFin = span.dataset.nofin;
                 const nestingCost = span.dataset.nestingcost;
-                if (prodNo) onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, noFin, nestingCost);
+                if (prodNo) onProductClick(prodNo, ordNo, lnNo, prodTp4, trInf2, trInf4, showAllRoutes, noFin, nestingCost, lnNos);
             }
 
             function handleProdNoHover(e) {
