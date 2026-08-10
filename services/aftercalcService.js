@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 25;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 26;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -90,6 +90,47 @@ function createAftercalcService({
                 ? 'Færdigmeldt minutter var 0; beregnet ud fra Stykliste Minutter.'
                 : ''
         };
+    }
+
+    function applyOperationMinuteCorrections(lines) {
+        const safeLines = Array.isArray(lines) ? lines : [];
+        const correctionByProd = new Map();
+
+        for (const line of safeLines) {
+            if (!line) continue;
+            const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+            if (key !== '3') continue;
+            const prodKey = String(line.ProdNo || '').trim().toUpperCase();
+            if (!prodKey) continue;
+            const correctionMinutes = Number.isFinite(Number(line.ProdTrMinutes))
+                ? Number(line.ProdTrMinutes)
+                : Number(line.NoFin || 0);
+            if (!Number.isFinite(correctionMinutes) || correctionMinutes === 0) continue;
+            correctionByProd.set(prodKey, Number(correctionByProd.get(prodKey) || 0) + correctionMinutes);
+        }
+
+        if (correctionByProd.size === 0) return;
+
+        const applied = new Set();
+        for (const line of safeLines) {
+            if (!line) continue;
+            const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+            if (key !== '1') continue;
+            const prodKey = String(line.ProdNo || '').trim().toUpperCase();
+            if (!prodKey || applied.has(prodKey)) continue;
+            const correction = Number(correctionByProd.get(prodKey) || 0);
+            if (!Number.isFinite(correction) || correction === 0) continue;
+
+            const baseMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
+            const newMinutes = baseMinutes + correction;
+            const unitCost = Number(line.CCstPr || 0);
+
+            line.EffectiveOperationMinutes = parseFloat(Number(newMinutes).toFixed(2));
+            line.DisplayQuantity = parseFloat(Number(newMinutes).toFixed(2));
+            line.EffectiveLineCost = parseFloat(Number(newMinutes * unitCost).toFixed(2));
+            line.DisplayUnitCost = parseFloat(Number(unitCost).toFixed(2));
+            applied.add(prodKey);
+        }
     }
 
     function getYdelseCostInfo(line, invoiceSourceLine = null) {
@@ -819,10 +860,16 @@ function createAftercalcService({
                         if (line.HasWarning) hasWarnings = true;
                         if (line.UsesEstimatedOperationTime) hasEstimatedOperationTime = true;
                         lines.push(line);
-
-                        if (line.LnNo === 1 || key === '0' || key === '3' || key === '5') continue;
-                        total += (line.EffectiveLineCost || 0);
                     }
+
+                    applyOperationMinuteCorrections(lines);
+
+                    total = lines.reduce((sum, line) => {
+                        const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                        const lnNo = Number((line && line.LnNo) || 0);
+                        if (lnNo === 1 || key === '0' || key === '3' || key === '5') return sum;
+                        return sum + Number((line && line.EffectiveLineCost) || 0);
+                    }, 0);
 
                     return {
                         lines,
@@ -1315,8 +1362,13 @@ function createAftercalcService({
             }
         }
 
+        applyOperationMinuteCorrections(lines);
+
         const totalCost = lines
-            .filter(line => Number(line.LnNo || 0) !== 1)
+            .filter(line => {
+                const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+                return Number(line.LnNo || 0) !== 1 && key !== '0' && key !== '3' && key !== '5';
+            })
             .reduce((sum, line) => sum + (line.EffectiveLineCost || 0), 0);
         const roundedTotalCost = parseFloat(Number(totalCost).toFixed(2));
 
