@@ -1742,7 +1742,7 @@ app.get('/', (req, res) => {
                 <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px 190px 130px minmax(180px,1fr);">
                     <div class="omsaetning-field">
                         <label for="ordreindgangFraWeek">Fra uge (YYYYWW)</label>
-                        <input id="ordreindgangFraWeek" type="text" maxlength="6" placeholder="202601" onchange="scheduleOrdreindgangAutoReload()" />
+                        <input id="ordreindgangFraWeek" type="text" maxlength="6" placeholder="202627" onchange="scheduleOrdreindgangAutoReload()" />
                     </div>
                     <div class="omsaetning-field">
                         <label for="ordreindgangTilWeek">Til uge (YYYYWW)</label>
@@ -1751,14 +1751,14 @@ app.get('/', (req, res) => {
                     <div class="omsaetning-field">
                         <label for="ordreindgangShowTilbud">Tilbud</label>
                         <label class="ordreindgang-toggle" for="ordreindgangShowTilbud">
-                            <input id="ordreindgangShowTilbud" type="checkbox" onchange="renderOrdreindgangFromLastPayload()" />
+                            <input id="ordreindgangShowTilbud" type="checkbox" onchange="onOrdreindgangSeriesChanged('top')" />
                             <span>Vis tilbud i graf og tabel</span>
                         </label>
                     </div>
                     <div class="omsaetning-field">
                         <label for="ordreindgangShowTrend">Trendlinje</label>
                         <label class="ordreindgang-toggle" for="ordreindgangShowTrend">
-                            <input id="ordreindgangShowTrend" type="checkbox" checked onchange="renderOrdreindgangFromLastPayload()" />
+                            <input id="ordreindgangShowTrend" type="checkbox" checked onchange="onOrdreindgangSeriesChanged('top')" />
                             <span>Vis trendlinje (3 uger)</span>
                         </label>
                     </div>
@@ -1774,13 +1774,13 @@ app.get('/', (req, res) => {
                 <div class="ordreindgang-holiday-box">
                     <div class="omsaetning-field">
                         <label for="ordreindgangHolidayWeeks">Ferieuger (YYYYWW)</label>
-                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630,202631" onchange="onOrdreindgangHolidaySettingsChanged()" />
+                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630,202631" oninput="onOrdreindgangHolidaySettingsChanged()" onchange="onOrdreindgangHolidaySettingsChanged()" />
                         <div class="ordreindgang-holiday-help">0,00 i disse uger behandles som ferie (ikke anomali).</div>
                     </div>
                     <div class="omsaetning-field">
                         <label for="ordreindgangIgnoreHolidayWeeks">Håndtering</label>
                         <label class="ordreindgang-toggle" for="ordreindgangIgnoreHolidayWeeks">
-                            <input id="ordreindgangIgnoreHolidayWeeks" type="checkbox" checked onchange="onOrdreindgangHolidaySettingsChanged()" />
+                            <input id="ordreindgangIgnoreHolidayWeeks" type="checkbox" checked oninput="onOrdreindgangHolidaySettingsChanged()" onchange="onOrdreindgangHolidaySettingsChanged()" />
                             <span>Ignorer ferieuger i trend/MA3 og periodemål</span>
                         </label>
                     </div>
@@ -2943,6 +2943,7 @@ app.get('/', (req, res) => {
             const ORDREINDGANG_BUDGET_STORAGE_KEY = 'afterkalk_ordreindgang_budget_v1';
             const ORDREINDGANG_BUDGET_PANEL_STORAGE_KEY = 'afterkalk_ordreindgang_budget_panel_v1';
             const ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY = 'afterkalk_ordreindgang_holiday_settings_v1';
+            const ORDREINDGANG_SERIES_STORAGE_KEY = 'afterkalk_ordreindgang_series_v1';
             let ordreindgangBudgetPanelCollapsed = false;
             let belastningInitialized = false;
             let belastningAutoReloadTimer = null;
@@ -5371,13 +5372,107 @@ app.get('/', (req, res) => {
             }
 
             function shouldShowOrdreindgangTilbudLine() {
+                const seriesEl = document.getElementById('ordreindgangSeriesTilbud');
+                if (seriesEl) return seriesEl.checked === true;
                 const el = document.getElementById('ordreindgangShowTilbud');
                 return !!el && el.checked === true;
             }
 
             function shouldShowOrdreindgangTrendLine() {
+                const seriesEl = document.getElementById('ordreindgangSeriesTrend');
+                if (seriesEl) return seriesEl.checked === true;
                 const el = document.getElementById('ordreindgangShowTrend');
                 return !!el && el.checked === true;
+            }
+
+            function shouldShowOrdreindgangOrdreLine() {
+                const el = document.getElementById('ordreindgangSeriesOrdreLine');
+                return !(el && el.checked === false);
+            }
+
+            function shouldShowOrdreindgangBudgetLine() {
+                const el = document.getElementById('ordreindgangSeriesBudget');
+                return !(el && el.checked === false);
+            }
+
+            function sanitizeOrdreindgangSeriesConfig(rawConfig) {
+                const cfg = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+                return {
+                    showTilbud: !(cfg.showTilbud === false),
+                    showTrend: !(cfg.showTrend === false),
+                    showOrdreLine: !(cfg.showOrdreLine === false),
+                    showBudgetLine: !(cfg.showBudgetLine === false)
+                };
+            }
+
+            function loadOrdreindgangSeriesConfig() {
+                try {
+                    const raw = localStorage.getItem(ORDREINDGANG_SERIES_STORAGE_KEY);
+                    if (!raw) return sanitizeOrdreindgangSeriesConfig(null);
+                    return sanitizeOrdreindgangSeriesConfig(JSON.parse(raw));
+                } catch {
+                    return sanitizeOrdreindgangSeriesConfig(null);
+                }
+            }
+
+            function saveOrdreindgangSeriesConfig(config) {
+                const safe = sanitizeOrdreindgangSeriesConfig(config);
+                try {
+                    localStorage.setItem(ORDREINDGANG_SERIES_STORAGE_KEY, JSON.stringify(safe));
+                } catch {}
+                return safe;
+            }
+
+            function applyOrdreindgangSeriesConfigToInputs(config) {
+                const safe = sanitizeOrdreindgangSeriesConfig(config);
+                const tilbudTopEl = document.getElementById('ordreindgangShowTilbud');
+                const trendTopEl = document.getElementById('ordreindgangShowTrend');
+                const tilbudLegendEl = document.getElementById('ordreindgangSeriesTilbud');
+                const trendLegendEl = document.getElementById('ordreindgangSeriesTrend');
+                const ordreLegendEl = document.getElementById('ordreindgangSeriesOrdreLine');
+                const budgetLegendEl = document.getElementById('ordreindgangSeriesBudget');
+                if (tilbudTopEl) tilbudTopEl.checked = safe.showTilbud;
+                if (trendTopEl) trendTopEl.checked = safe.showTrend;
+                if (tilbudLegendEl) tilbudLegendEl.checked = safe.showTilbud;
+                if (trendLegendEl) trendLegendEl.checked = safe.showTrend;
+                if (ordreLegendEl) ordreLegendEl.checked = safe.showOrdreLine;
+                if (budgetLegendEl) budgetLegendEl.checked = safe.showBudgetLine;
+            }
+
+            function getOrdreindgangSeriesConfigFromInputs() {
+                const tilbudLegendEl = document.getElementById('ordreindgangSeriesTilbud');
+                const trendLegendEl = document.getElementById('ordreindgangSeriesTrend');
+                const tilbudTopEl = document.getElementById('ordreindgangShowTilbud');
+                const trendTopEl = document.getElementById('ordreindgangShowTrend');
+                const ordreLegendEl = document.getElementById('ordreindgangSeriesOrdreLine');
+                const budgetLegendEl = document.getElementById('ordreindgangSeriesBudget');
+                return sanitizeOrdreindgangSeriesConfig({
+                    showTilbud: tilbudLegendEl ? tilbudLegendEl.checked : (tilbudTopEl ? tilbudTopEl.checked : true),
+                    showTrend: trendLegendEl ? trendLegendEl.checked : (trendTopEl ? trendTopEl.checked : true),
+                    showOrdreLine: !(ordreLegendEl && ordreLegendEl.checked === false),
+                    showBudgetLine: !(budgetLegendEl && budgetLegendEl.checked === false)
+                });
+            }
+
+            function onOrdreindgangSeriesChanged(source) {
+                const safe = saveOrdreindgangSeriesConfig(getOrdreindgangSeriesConfigFromInputs());
+                if (source === 'top') {
+                    const tilbudLegendEl = document.getElementById('ordreindgangSeriesTilbud');
+                    const trendLegendEl = document.getElementById('ordreindgangSeriesTrend');
+                    const tilbudTopEl = document.getElementById('ordreindgangShowTilbud');
+                    const trendTopEl = document.getElementById('ordreindgangShowTrend');
+                    if (tilbudLegendEl && tilbudTopEl) tilbudLegendEl.checked = tilbudTopEl.checked;
+                    if (trendLegendEl && trendTopEl) trendLegendEl.checked = trendTopEl.checked;
+                } else {
+                    const tilbudLegendEl = document.getElementById('ordreindgangSeriesTilbud');
+                    const trendLegendEl = document.getElementById('ordreindgangSeriesTrend');
+                    const tilbudTopEl = document.getElementById('ordreindgangShowTilbud');
+                    const trendTopEl = document.getElementById('ordreindgangShowTrend');
+                    if (tilbudLegendEl && tilbudTopEl) tilbudTopEl.checked = tilbudLegendEl.checked;
+                    if (trendLegendEl && trendTopEl) trendTopEl.checked = trendLegendEl.checked;
+                }
+                applyOrdreindgangSeriesConfigToInputs(safe);
+                renderOrdreindgangFromLastPayload();
             }
 
             function getOrdreindgangAnomalyThresholdPct() {
@@ -5497,9 +5592,11 @@ app.get('/', (req, res) => {
 
             function loadOrdreindgangBudgetPanelCollapsed() {
                 try {
-                    return localStorage.getItem(ORDREINDGANG_BUDGET_PANEL_STORAGE_KEY) === '1';
+                    const stored = localStorage.getItem(ORDREINDGANG_BUDGET_PANEL_STORAGE_KEY);
+                    if (stored === null || stored === undefined) return true;
+                    return stored === '1';
                 } catch {
-                    return false;
+                    return true;
                 }
             }
 
@@ -5651,6 +5748,8 @@ app.get('/', (req, res) => {
                 const saved = loadOrdreindgangBudgetConfig();
                 applyOrdreindgangBudgetConfigToInputs(saved);
                 initializeOrdreindgangHolidaySettings();
+                const seriesSaved = loadOrdreindgangSeriesConfig();
+                applyOrdreindgangSeriesConfigToInputs(seriesSaved);
                 ordreindgangBudgetPanelCollapsed = loadOrdreindgangBudgetPanelCollapsed();
                 applyOrdreindgangBudgetPanelState();
                 renderOrdreindgangBudgetMetrics();
@@ -6127,8 +6226,7 @@ app.get('/', (req, res) => {
 
                 const today = new Date();
                 const toWeek = getIsoWeekMeta(today);
-                const fromYear = toWeek.isoYear - 1;
-                fraEl.value = String(fromYear) + '04';
+                fraEl.value = '202627';
                 tilEl.value = toWeek.weekKey;
             }
 
@@ -6293,6 +6391,8 @@ app.get('/', (req, res) => {
                 const safeRows = getOrdreindgangRowsForView(rows);
                 const showTilbudLine = shouldShowOrdreindgangTilbudLine();
                 const showTrendLine = shouldShowOrdreindgangTrendLine();
+                const showOrdreLine = shouldShowOrdreindgangOrdreLine();
+                const showBudgetLine = shouldShowOrdreindgangBudgetLine();
                 if (!wrap || !svg) return;
 
                 if (safeRows.length === 0) {
@@ -6414,45 +6514,57 @@ app.get('/', (req, res) => {
                     });
                 }
 
+                if (showOrdreLine) {
                     const ordPoints = ordValues.map((value, idx) => ({
                         x: toXCenter(idx),
-                    y: (ignoreHolidayWeeks && trendRows[idx] && trendRows[idx].isHoliday) ? null : toY(value)
+                        y: (ignoreHolidayWeeks && trendRows[idx] && trendRows[idx].isHoliday) ? null : toY(value)
                     }));
-                const ordPath = buildPathWithGaps(ordPoints);
+                    const ordPath = buildPathWithGaps(ordPoints);
                     html += '<path d="' + ordPath + '" fill="none" stroke="#0b3f88" stroke-width="2.8" stroke-linecap="round" />';
                     ordPoints.forEach((point, idx) => {
-                    if (!Number.isFinite(point.y)) return;
+                        if (!Number.isFinite(point.y)) return;
                         html += '<circle cx="' + point.x + '" cy="' + point.y + '" r="2.6" fill="#0b3f88">' +
                             '<title>' + escapeHtmlFE(labels[idx] + ' Ordre (linje): ' + formatDkkDa(ordValues[idx])) + '</title>' +
                             '</circle>';
                     });
+                }
 
-                const budgetPoints = budgetValues.map((value, idx) => ({
-                    x: toXCenter(idx),
-                    y: toY(value)
-                }));
-                const budgetPath = budgetPoints.map((p, idx) => (idx === 0 ? 'M' : 'L') + p.x + ' ' + p.y).join(' ');
-                html += '<path d="' + budgetPath + '" fill="none" stroke="#1b8f3b" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="8 5" />';
-                budgetPoints.forEach((point, idx) => {
-                    html += '<circle cx="' + point.x + '" cy="' + point.y + '" r="2.8" fill="#1b8f3b">' +
-                        '<title>' + escapeHtmlFE(labels[idx] + ' Budget: ' + formatDkkDa(budgetValues[idx])) + '</title>' +
-                        '</circle>';
-                });
+                if (showBudgetLine) {
+                    const budgetPoints = budgetValues.map((value, idx) => ({
+                        x: toXCenter(idx),
+                        y: toY(value)
+                    }));
+                    const budgetPath = budgetPoints.map((p, idx) => (idx === 0 ? 'M' : 'L') + p.x + ' ' + p.y).join(' ');
+                    html += '<path d="' + budgetPath + '" fill="none" stroke="#1b8f3b" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="8 5" />';
+                    budgetPoints.forEach((point, idx) => {
+                        html += '<circle cx="' + point.x + '" cy="' + point.y + '" r="2.8" fill="#1b8f3b">' +
+                            '<title>' + escapeHtmlFE(labels[idx] + ' Budget: ' + formatDkkDa(budgetValues[idx])) + '</title>' +
+                            '</circle>';
+                    });
+                }
                 html += '</g>';
 
                 svg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + height);
                 svg.innerHTML = html;
                 if (legendEl) {
                     let legendHtml = '';
+                    legendHtml += '<span class="omsaetning-legend-item" style="margin-right:14px"><label class="ordreindgang-toggle" style="display:inline-flex;align-items:center;gap:6px;"><input id="ordreindgangSeriesOrdreLine" type="checkbox" ' + (showOrdreLine ? 'checked' : '') + ' onchange="onOrdreindgangSeriesChanged()" /><span>Ordre-linje</span></label></span>';
+                    legendHtml += '<span class="omsaetning-legend-item" style="margin-right:14px"><label class="ordreindgang-toggle" style="display:inline-flex;align-items:center;gap:6px;"><input id="ordreindgangSeriesTrend" type="checkbox" ' + (showTrendLine ? 'checked' : '') + ' onchange="onOrdreindgangSeriesChanged()" /><span>Trendlinje</span></label></span>';
+                    legendHtml += '<span class="omsaetning-legend-item" style="margin-right:14px"><label class="ordreindgang-toggle" style="display:inline-flex;align-items:center;gap:6px;"><input id="ordreindgangSeriesBudget" type="checkbox" ' + (showBudgetLine ? 'checked' : '') + ' onchange="onOrdreindgangSeriesChanged()" /><span>Budgetlinje</span></label></span>';
+                    legendHtml += '<span class="omsaetning-legend-item" style="margin-right:14px"><label class="ordreindgang-toggle" style="display:inline-flex;align-items:center;gap:6px;"><input id="ordreindgangSeriesTilbud" type="checkbox" ' + (showTilbudLine ? 'checked' : '') + ' onchange="onOrdreindgangSeriesChanged()" /><span>Tilbud</span></label></span>';
                     legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#2f5ea5"></span>Ordre (søjle)</span>';
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#0b3f88"></span>Ordre (linje)</span>';
+                    if (showOrdreLine) {
+                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#0b3f88"></span>Ordre (linje)</span>';
+                    }
                     if (showTilbudLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#8ec3f7"></span>Tilbud</span>';
                     }
                     if (showTrendLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#ff6f00"></span>Gns. ordre (3 uger)</span>';
                     }
-                    legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#1b8f3b"></span>Budget</span>';
+                    if (showBudgetLine) {
+                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#1b8f3b"></span>Budget</span>';
+                    }
                     if (trendRows.some(row => row.isHoliday)) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#cfd8dc"></span>Ferieuge (0,00)</span>';
                     }
@@ -6460,6 +6572,7 @@ app.get('/', (req, res) => {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#fff;border:2px solid #e65100"></span>Anomali (dev fra MA3)</span>';
                     }
                     legendEl.innerHTML = legendHtml;
+                    applyOrdreindgangSeriesConfigToInputs(loadOrdreindgangSeriesConfig());
                 }
                 wrap.style.display = 'grid';
             }
@@ -6627,6 +6740,9 @@ app.get('/', (req, res) => {
                     }
                     return;
                 }
+
+                const persistedHolidaySettings = saveOrdreindgangHolidaySettings(getOrdreindgangHolidaySettingsFromInputs());
+                applyOrdreindgangHolidaySettingsToInputs(persistedHolidaySettings);
 
                 if (loadBtn) loadBtn.disabled = true;
                 if (emptyEl) {
