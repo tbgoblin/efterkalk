@@ -102,8 +102,9 @@ function createAftercalcService({
             if (key !== '3') continue;
             const prodKey = String(line.ProdNo || '').trim().toUpperCase();
             if (!prodKey) continue;
-            const correctionMinutes = Number.isFinite(Number(line.ProdTrMinutes))
-                ? Number(line.ProdTrMinutes)
+            const prodTrMinutes = Number(line.ProdTrMinutes);
+            const correctionMinutes = (Number.isFinite(prodTrMinutes) && prodTrMinutes !== 0)
+                ? prodTrMinutes
                 : Number(line.NoFin || 0);
             if (!Number.isFinite(correctionMinutes) || correctionMinutes === 0) continue;
             correctionByProd.set(prodKey, Number(correctionByProd.get(prodKey) || 0) + correctionMinutes);
