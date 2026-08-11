@@ -134,6 +134,41 @@ function createAftercalcService({
         }
     }
 
+    function computeVisibleProductionTotal(lines) {
+        const safeLines = Array.isArray(lines) ? lines : [];
+        const operationTotalsByProd = new Map();
+        let total = 0;
+
+        for (const line of safeLines) {
+            const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
+            const lnNo = Number((line && line.LnNo) || 0);
+            if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+
+            if (key === '1') {
+                const prodKey = String((line && line.ProdNo) || '').trim().toUpperCase() || ('LN_' + String(lnNo || 0));
+                const effectiveMinutes = Number((line && (line.EffectiveOperationMinutes ?? line.NoFin)) || 0);
+                const unitCost = Number((line && line.CCstPr) || 0);
+                const current = operationTotalsByProd.get(prodKey) || { minutes: 0, unitCost: unitCost };
+
+                current.minutes += effectiveMinutes;
+                if (Math.abs(unitCost) > Math.abs(Number(current.unitCost || 0))) {
+                    current.unitCost = unitCost;
+                }
+
+                operationTotalsByProd.set(prodKey, current);
+                continue;
+            }
+
+            total += Number((line && line.EffectiveLineCost) || 0);
+        }
+
+        for (const stats of operationTotalsByProd.values()) {
+            total += Number(stats.minutes || 0) * Number(stats.unitCost || 0);
+        }
+
+        return parseFloat(Number(total).toFixed(2));
+    }
+
     function getYdelseCostInfo(line, invoiceSourceLine = null) {
         const sourceLine = invoiceSourceLine || line || {};
         const noInvoValue = Number(sourceLine.NoInvo || 0);
@@ -865,12 +900,7 @@ function createAftercalcService({
 
                     applyOperationMinuteCorrections(lines);
 
-                    total = lines.reduce((sum, line) => {
-                        const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
-                        const lnNo = Number((line && line.LnNo) || 0);
-                        if (lnNo === 1 || key === '0' || key === '3' || key === '5') return sum;
-                        return sum + Number((line && line.EffectiveLineCost) || 0);
-                    }, 0);
+                    total = computeVisibleProductionTotal(lines);
 
                     return {
                         lines,
@@ -957,11 +987,9 @@ function createAftercalcService({
                                     ).toFixed(2));
                                 }
                             }
-                            if (!(Number(line.LnNo || 0) === 1 || key === '0' || key === '3' || key === '5')) {
-                                adjustedTotalCost += Number(line.EffectiveLineCost || 0);
-                            }
                             return line;
                         });
+                        adjustedTotalCost = computeVisibleProductionTotal(prodDetails.lines);
                         prodDetails.totalCost = parseFloat(Number(adjustedTotalCost).toFixed(2));
                     }
                 }
