@@ -78,11 +78,10 @@ function createAftercalcService({
 
     function getOperationTimeInfo(line) {
         const prodTrMinutesRaw = Number(line && line.ProdTrMinutes);
-        const hasProdTrMinutes = Number.isFinite(prodTrMinutesRaw);
-        const rawEffectiveMinutes = hasProdTrMinutes
+        const hasProdTrMinutes = Number.isFinite(prodTrMinutesRaw) && prodTrMinutesRaw !== 0;
+        const effectiveMinutes = hasProdTrMinutes
             ? prodTrMinutesRaw
             : Number(getEffectiveOperationMinutes(line) || 0);
-        const effectiveMinutes = Math.max(0, rawEffectiveMinutes);
         const usesEstimatedMinutes = !hasProdTrMinutes && Boolean(isEstimatedOperationMinutesFallback(line));
         return {
             effectiveMinutes,
@@ -123,7 +122,7 @@ function createAftercalcService({
             if (!Number.isFinite(correction) || correction === 0) continue;
 
             const baseMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
-            const newMinutes = Math.max(0, baseMinutes + correction);
+            const newMinutes = baseMinutes + correction;
             const unitCost = Number(line.CCstPr || 0);
 
             line.EffectiveOperationMinutes = parseFloat(Number(newMinutes).toFixed(2));

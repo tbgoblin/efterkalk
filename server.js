@@ -9713,7 +9713,6 @@ app.get('/', (req, res) => {
 
                             const groupedLines = {};
                             const operationMergeMap = new Map();
-                            const pendingNoOrgFromTp3 = new Map();
                             const pendingEffectiveMinutesFromTp3 = new Map();
                             for (const line of prodOrder.lines) {
                                 const rawKey = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
@@ -9738,28 +9737,24 @@ app.get('/', (req, res) => {
                                     if (prodNoKey) {
                                         const mergeKey = normalizedKey + '|' + prodNoKey;
                                         if (rawKey === '3') {
-                                            const extraNoOrg = Number(line.NoOrg || 0);
                                             const extraEffectiveMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
                                             if (operationMergeMap.has(mergeKey)) {
                                                 const mergedLine = operationMergeMap.get(mergeKey);
-                                                mergedLine.NoOrg = Number(mergedLine.NoOrg || 0) + extraNoOrg;
                                                 mergedLine.EffectiveOperationMinutes = Number(mergedLine.EffectiveOperationMinutes || 0) + extraEffectiveMinutes;
                                                 mergedLine.DisplayQuantity = Number((mergedLine.DisplayQuantity ?? mergedLine.NoFin) || 0) + extraEffectiveMinutes;
                                             } else {
-                                                pendingNoOrgFromTp3.set(mergeKey, Number(pendingNoOrgFromTp3.get(mergeKey) || 0) + extraNoOrg);
                                                 pendingEffectiveMinutesFromTp3.set(mergeKey, Number(pendingEffectiveMinutesFromTp3.get(mergeKey) || 0) + extraEffectiveMinutes);
                                             }
                                             continue;
                                         }
 
                                         if (!operationMergeMap.has(mergeKey)) {
-                                            const extraNoOrg = Number(pendingNoOrgFromTp3.get(mergeKey) || 0);
                                             const extraEffectiveMinutes = Number(pendingEffectiveMinutesFromTp3.get(mergeKey) || 0);
                                             const baseEffectiveMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
                                             const mergedLine = {
                                                 ...line,
                                                 ProdTp4: 1,
-                                                NoOrg: Number(line.NoOrg || 0) + extraNoOrg,
+                                                NoOrg: Number(line.NoOrg || 0),
                                                 NoFin: Number(line.NoFin || 0),
                                                 EffectiveOperationMinutes: baseEffectiveMinutes + extraEffectiveMinutes,
                                                 DisplayQuantity: Number((line.DisplayQuantity ?? line.NoFin) || 0) + extraEffectiveMinutes,
