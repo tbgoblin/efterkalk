@@ -79,9 +79,10 @@ function createAftercalcService({
     function getOperationTimeInfo(line) {
         const prodTrMinutesRaw = Number(line && line.ProdTrMinutes);
         const hasProdTrMinutes = Number.isFinite(prodTrMinutesRaw);
-        const effectiveMinutes = hasProdTrMinutes
+        const rawEffectiveMinutes = hasProdTrMinutes
             ? prodTrMinutesRaw
             : Number(getEffectiveOperationMinutes(line) || 0);
+        const effectiveMinutes = Math.max(0, rawEffectiveMinutes);
         const usesEstimatedMinutes = !hasProdTrMinutes && Boolean(isEstimatedOperationMinutesFallback(line));
         return {
             effectiveMinutes,
@@ -122,7 +123,7 @@ function createAftercalcService({
             if (!Number.isFinite(correction) || correction === 0) continue;
 
             const baseMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
-            const newMinutes = baseMinutes + correction;
+            const newMinutes = Math.max(0, baseMinutes + correction);
             const unitCost = Number(line.CCstPr || 0);
 
             line.EffectiveOperationMinutes = parseFloat(Number(newMinutes).toFixed(2));
@@ -787,7 +788,7 @@ function createAftercalcService({
 
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
-                        } else if (isPurchaseLinkedOrder) {
+                        } else if (isPurchaseLinkedOrder && key === '2') {
                             const purchaseQty = noFinValue > 0 ? noFinValue : noOrgValue;
                             const purchaseUnitCost = Number(line.NestingCost || line.CstPr || line.DPrice || line.CCstPr || 0);
                             if (purchaseQty > 0 && purchaseUnitCost > 0) {
