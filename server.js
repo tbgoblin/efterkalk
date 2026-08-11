@@ -2115,7 +2115,7 @@ app.get('/', (req, res) => {
                             <label>Kunde (søg navn eller nummer)</label>
                             <div class="kf-customer-wrap">
                                 <input id="kfCustomerInput" type="text" placeholder="Skriv kundenavn eller -nummer..." autocomplete="off"
-                                    oninput="scheduleKfCustomerSearch()" onfocus="scheduleKfCustomerSearch()" onblur="hideKfDropdown()" />
+                                    oninput="onKfCustomerInputChanged()" onfocus="scheduleKfCustomerSearch()" onblur="hideKfDropdown()" />
                                 <div id="kfCustomerDropdown" class="kf-customer-dropdown" style="display:none;"></div>
                             </div>
                         </div>
@@ -3219,6 +3219,22 @@ app.get('/', (req, res) => {
                 const kfTo   = document.getElementById('kfToDate');
                 if (kfFrom && !kfFrom.value) kfFrom.value = fmt(frDate);
                 if (kfTo   && !kfTo.value)   kfTo.value   = fmt(toDate);
+
+                // Always start in editable customer-search mode.
+                _kfSelectedCustNo = null;
+                _kfSelectedCustNm = '';
+                const inp = document.getElementById('kfCustomerInput');
+                if (inp) {
+                    inp.disabled = false;
+                    inp.readOnly = false;
+                    inp.value = '';
+                    setTimeout(() => {
+                        try { inp.focus({ preventScroll: true }); } catch { inp.focus(); }
+                    }, 0);
+                }
+                const btn = document.getElementById('kfLoadBtn');
+                if (btn) btn.disabled = true;
+
                 pushModalStack('kfModalOverlay');
             }
 
@@ -3232,6 +3248,23 @@ app.get('/', (req, res) => {
             function scheduleKfCustomerSearch() {
                 if (_kfCustomerTimer) clearTimeout(_kfCustomerTimer);
                 _kfCustomerTimer = setTimeout(_doKfCustomerSearch, 220);
+            }
+
+            function onKfCustomerInputChanged() {
+                const inp = document.getElementById('kfCustomerInput');
+                const currentText = String((inp && inp.value) || '').trim();
+                const selectedText = (_kfSelectedCustNm && _kfSelectedCustNo)
+                    ? (_kfSelectedCustNm + ' (' + _kfSelectedCustNo + ')')
+                    : '';
+
+                if (!currentText || currentText !== selectedText) {
+                    _kfSelectedCustNo = null;
+                    _kfSelectedCustNm = '';
+                    const btn = document.getElementById('kfLoadBtn');
+                    if (btn) btn.disabled = true;
+                }
+
+                scheduleKfCustomerSearch();
             }
 
             async function _doKfCustomerSearch() {
