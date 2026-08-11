@@ -9735,6 +9735,7 @@ app.get('/', (req, res) => {
 
                                 if (normalizedKey === '1') {
                                     if (prodNoKey) {
+                                        const safeNoOrg = Math.max(0, Number(line.NoOrg || 0));
                                         const mergeKey = normalizedKey + '|' + prodNoKey;
                                         if (rawKey === '3') {
                                             const extraEffectiveMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
@@ -9742,6 +9743,7 @@ app.get('/', (req, res) => {
                                                 const mergedLine = operationMergeMap.get(mergeKey);
                                                 mergedLine.EffectiveOperationMinutes = Number(mergedLine.EffectiveOperationMinutes || 0) + extraEffectiveMinutes;
                                                 mergedLine.DisplayQuantity = Number((mergedLine.DisplayQuantity ?? mergedLine.NoFin) || 0) + extraEffectiveMinutes;
+                                                mergedLine.EffectiveLineCost = Number(mergedLine.EffectiveOperationMinutes || 0) * Number(mergedLine.CCstPr || 0);
                                             } else {
                                                 pendingEffectiveMinutesFromTp3.set(mergeKey, Number(pendingEffectiveMinutesFromTp3.get(mergeKey) || 0) + extraEffectiveMinutes);
                                             }
@@ -9754,12 +9756,12 @@ app.get('/', (req, res) => {
                                             const mergedLine = {
                                                 ...line,
                                                 ProdTp4: 1,
-                                                NoOrg: Number(line.NoOrg || 0),
+                                                NoOrg: safeNoOrg,
                                                 NoFin: Number(line.NoFin || 0),
                                                 EffectiveOperationMinutes: baseEffectiveMinutes + extraEffectiveMinutes,
                                                 DisplayQuantity: Number((line.DisplayQuantity ?? line.NoFin) || 0) + extraEffectiveMinutes,
                                                 LineCost: Number(line.LineCost || 0),
-                                                EffectiveLineCost: Number(line.EffectiveLineCost || 0),
+                                                EffectiveLineCost: (baseEffectiveMinutes + extraEffectiveMinutes) * Number(line.CCstPr || 0),
                                                 SourceLnNos: [Number(line.LnNo || 0)].filter(v => Number.isFinite(v) && v > 0)
                                             };
                                             operationMergeMap.set(mergeKey, mergedLine);
@@ -9767,12 +9769,12 @@ app.get('/', (req, res) => {
                                             groupedLines[normalizedKey].push(mergedLine);
                                         } else {
                                             const mergedLine = operationMergeMap.get(mergeKey);
-                                            mergedLine.NoOrg = Number(mergedLine.NoOrg || 0) + Number(line.NoOrg || 0);
+                                            mergedLine.NoOrg = Number(mergedLine.NoOrg || 0) + safeNoOrg;
                                             mergedLine.NoFin = Number(mergedLine.NoFin || 0) + Number(line.NoFin || 0);
                                             mergedLine.EffectiveOperationMinutes = Number(mergedLine.EffectiveOperationMinutes || 0) + Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
                                             mergedLine.DisplayQuantity = Number((mergedLine.DisplayQuantity ?? mergedLine.NoFin) || 0) + Number((line.DisplayQuantity ?? line.NoFin) || 0);
                                             mergedLine.LineCost = Number(mergedLine.LineCost || 0) + Number(line.LineCost || 0);
-                                            mergedLine.EffectiveLineCost = Number(mergedLine.EffectiveLineCost || 0) + Number(line.EffectiveLineCost || 0);
+                                            mergedLine.EffectiveLineCost = Number(mergedLine.EffectiveOperationMinutes || 0) * Number(mergedLine.CCstPr || 0);
                                             const mergedLnNos = Array.isArray(mergedLine.SourceLnNos) ? mergedLine.SourceLnNos : [];
                                             const sourceLnNo = Number(line.LnNo || 0);
                                             if (Number.isFinite(sourceLnNo) && sourceLnNo > 0 && !mergedLnNos.includes(sourceLnNo)) {
@@ -9896,12 +9898,10 @@ app.get('/', (req, res) => {
                                         const effectiveNoFin = (line.EffectiveOperationMinutes !== undefined && line.EffectiveOperationMinutes !== null)
                                             ? (line.EffectiveOperationMinutes || 0)
                                             : (line.UsesEstimatedOperationTime ? (line.NoOrg || 0) : (line.NoFin || 0));
-                                        html += '<td>' + formatNumber(line.NoOrg || 0) + '</td>';
+                                        html += '<td>' + formatNumber(Math.max(0, Number(line.NoOrg || 0))) + '</td>';
                                         html += '<td>' + formatNumber(effectiveNoFin) + '</td>';
                                         const displayUnitCost1 = (line.CCstPr || 0);
-                                        const displayTotalCost1 = (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null)
-                                            ? (line.EffectiveLineCost || 0)
-                                            : (effectiveNoFin * (line.CCstPr || 0));
+                                        const displayTotalCost1 = effectiveNoFin * Number(line.CCstPr || 0);
                                         html += '<td>' + formatNumber(displayUnitCost1) + '</td>';
                                         html += '<td><strong>' + formatNumber(displayTotalCost1) + '</strong></td>';
                                     } else {
