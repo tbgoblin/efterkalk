@@ -8131,9 +8131,15 @@ app.get('/', (req, res) => {
             let salgordreViaSortField = 'deliveryDate';
             let salgordreViaSortDirection = 'asc';
 
+            function viaDateDigits(value) {
+                return Array.from(String(value == null ? '' : value))
+                    .filter(character => character >= '0' && character <= '9')
+                    .join('');
+            }
+
             function formatViaDate(value) {
-                const digits = String(value == null ? '' : value).replace(/\D/g, '');
-                if (/^\d{8}$/.test(digits)) return digits.slice(6, 8) + '-' + digits.slice(4, 6) + '-' + digits.slice(0, 4);
+                const digits = viaDateDigits(value);
+                if (digits.length === 8) return digits.slice(6, 8) + '-' + digits.slice(4, 6) + '-' + digits.slice(0, 4);
                 const iso = String(value || '').slice(0, 10);
                 const parts = iso.split('-');
                 return parts.length === 3 ? (parts[2] + '-' + parts[1] + '-' + parts[0]) : '-';
@@ -8158,6 +8164,10 @@ app.get('/', (req, res) => {
                 renderSalgordreVia();
             }
 
+            function setSalgordreViaSortFromElement(element) {
+                setSalgordreViaSort(String(element && element.dataset && element.dataset.sortField || 'deliveryDate'));
+            }
+
             function renderSalgordreVia() {
                 const target = document.getElementById('viaResults');
                 const query = String((document.getElementById('viaSearchInput') || {}).value || '').trim().toLowerCase();
@@ -8179,8 +8189,8 @@ app.get('/', (req, res) => {
                         rightValue = Number(right.OrdNo || 0);
                     } else if (salgordreViaSortField === 'deliveryDate' || salgordreViaSortField === 'plannedDate') {
                         const key = salgordreViaSortField === 'deliveryDate' ? 'DeliveryDate' : 'PlannedDate';
-                        leftValue = Number(String(left[key] || '').replace(/\D/g, '')) || 99991231;
-                        rightValue = Number(String(right[key] || '').replace(/\D/g, '')) || 99991231;
+                        leftValue = Number(viaDateDigits(left[key])) || 99991231;
+                        rightValue = Number(viaDateDigits(right[key])) || 99991231;
                     } else if (salgordreViaSortField === 'progress') {
                         leftValue = leftProgress.percentage;
                         rightValue = rightProgress.percentage;
@@ -8196,7 +8206,7 @@ app.get('/', (req, res) => {
                     const comparison = leftValue < rightValue ? -1 : (leftValue > rightValue ? 1 : 0);
                     return salgordreViaSortDirection === 'asc' ? comparison : -comparison;
                 });
-                const sortHeader = (field, label) => '<th onclick="event.stopPropagation();setSalgordreViaSort(\'' + field + '\')" style="cursor:pointer;user-select:none;">'
+                const sortHeader = (field, label) => '<th data-sort-field="' + field + '" onclick="event.stopPropagation();setSalgordreViaSortFromElement(this)" style="cursor:pointer;user-select:none;">'
                     + label + (salgordreViaSortField === field ? (salgordreViaSortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕') + '</th>';
                 let html = '<div class="order-list-section"><table class="order-list-table"><thead><tr>'
                     + sortHeader('order', 'Salgsordre')

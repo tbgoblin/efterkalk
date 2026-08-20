@@ -943,7 +943,7 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
 
-            const cacheKey = 'salgordre_via_v8';
+            const cacheKey = 'salgordre_via_v9';
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
