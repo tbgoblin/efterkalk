@@ -938,15 +938,24 @@ function createApiRouter({
 
     router.get('/salgordre-via', async (req, res) => {
         try {
-            const cacheKey = 'salgordre_via_v7';
-            if (req.query.force !== '1') {
+            const requestedOrdNo = req.query.ordNo === undefined ? null : Number(req.query.ordNo);
+            if (requestedOrdNo !== null && (!Number.isInteger(requestedOrdNo) || requestedOrdNo <= 0)) {
+                return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
+            }
+
+            const cacheKey = 'salgordre_via_v8';
+            if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
+            }
+            if (requestedOrdNo !== null && req.query.force === '1') {
+                diskCache.del(cacheKey);
             }
 
             const pool = await getConnection();
             const request = pool.request();
             request.timeout = 60000;
+            request.input('requestedOrdNo', sql.Numeric, requestedOrdNo);
             const result = await request.query(`
                 WITH OpenSalesOrders AS (
                     SELECT OrdNo, DelDt, CreUsr, CustNo
@@ -961,6 +970,7 @@ function createApiRouter({
                                                     OR OrdPrSt = 134217728
                                                     OR OrdPrSt & 4194304 = 4194304
                                             )
+                                                AND (@requestedOrdNo IS NULL OR OrdNo = @requestedOrdNo)
                 ),
                 OpenProductionOrders AS (
                     SELECT DISTINCT
@@ -1025,9 +1035,9 @@ function createApiRouter({
                     CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,
                     S.OrdNo
             `);
-                        const payload = { rows: result.recordset || [] };
-                        diskCache.set(cacheKey, payload, 5 * 60 * 1000);
-                        res.json(payload);
+            const payload = { rows: result.recordset || [] };
+            if (requestedOrdNo === null) diskCache.set(cacheKey, payload, 5 * 60 * 1000);
+            res.json(payload);
         } catch (err) {
             logEvent('ERROR salgordre-via: ' + err.message);
             res.status(500).json({ error: err.message || 'SalgOrdre VIA fejl' });

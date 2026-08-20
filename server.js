@@ -8127,6 +8127,8 @@ app.get('/', (req, res) => {
 
             let salgordreViaRows = [];
             let orderDetailReturnModule = null;
+            let salgordreViaSortField = 'deliveryDate';
+            let salgordreViaSortDirection = 'asc';
 
             function formatViaDate(value) {
                 const digits = String(value == null ? '' : value).replace(/\D/g, '');
@@ -8136,33 +8138,112 @@ app.get('/', (req, res) => {
                 return parts.length === 3 ? (parts[2] + '-' + parts[1] + '-' + parts[0]) : '-';
             }
 
+            function getSalgordreViaProgress(row) {
+                const completedMinutes = Number(row.CompletedResourceMinutes || 0);
+                const effectiveMinutes = Number(row.EffectiveResourceMinutes || 0);
+                const percentage = effectiveMinutes > 0
+                    ? Math.max(0, Math.min(100, Math.round((completedMinutes / effectiveMinutes) * 100)))
+                    : 0;
+                return { completedMinutes, effectiveMinutes, percentage };
+            }
+
+            function setSalgordreViaSort(field) {
+                if (salgordreViaSortField === field) {
+                    salgordreViaSortDirection = salgordreViaSortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    salgordreViaSortField = field;
+                    salgordreViaSortDirection = field === 'progress' || field === 'openProductionOrders' ? 'desc' : 'asc';
+                }
+                renderSalgordreVia();
+            }
+
             function renderSalgordreVia() {
                 const target = document.getElementById('viaResults');
                 const query = String((document.getElementById('viaSearchInput') || {}).value || '').trim().toLowerCase();
                 if (!target) return;
                 const rows = salgordreViaRows.filter(row => !query
                     || String(row.OrdNo || '').includes(query)
-                    || String(row.CustomerName || '').toLowerCase().includes(query));
+                    || String(row.CustomerName || '').toLowerCase().includes(query)).slice();
                 if (!rows.length) {
                     target.innerHTML = '<div class="omsaetning-empty">Ingen aktive salgsordrer matcher søgningen.</div>';
                     return;
                 }
-                let html = '<div class="order-list-section"><table class="order-list-table"><thead><tr><th>Salgsordre</th><th>Kunde</th><th>Levdato</th><th>Ansvarlig</th><th>Procesfremskridt</th><th>U-lev åbne</th><th>Næste ressource</th></tr></thead><tbody>';
+                rows.sort((left, right) => {
+                    const leftProgress = getSalgordreViaProgress(left);
+                    const rightProgress = getSalgordreViaProgress(right);
+                    let leftValue;
+                    let rightValue;
+                    if (salgordreViaSortField === 'order') {
+                        leftValue = Number(left.OrdNo || 0);
+                        rightValue = Number(right.OrdNo || 0);
+                    } else if (salgordreViaSortField === 'deliveryDate' || salgordreViaSortField === 'plannedDate') {
+                        const key = salgordreViaSortField === 'deliveryDate' ? 'DeliveryDate' : 'PlannedDate';
+                        leftValue = Number(String(left[key] || '').replace(/\D/g, '')) || 99991231;
+                        rightValue = Number(String(right[key] || '').replace(/\D/g, '')) || 99991231;
+                    } else if (salgordreViaSortField === 'progress') {
+                        leftValue = leftProgress.percentage;
+                        rightValue = rightProgress.percentage;
+                    } else if (salgordreViaSortField === 'openProductionOrders') {
+                        leftValue = Number(left.OpenProductionOrders || 0);
+                        rightValue = Number(right.OpenProductionOrders || 0);
+                    } else {
+                        const key = salgordreViaSortField === 'customer' ? 'CustomerName'
+                            : (salgordreViaSortField === 'seller' ? 'SellerUsr' : 'ResourceName');
+                        leftValue = String(left[key] || '').toLocaleLowerCase('da-DK');
+                        rightValue = String(right[key] || '').toLocaleLowerCase('da-DK');
+                    }
+                    const comparison = leftValue < rightValue ? -1 : (leftValue > rightValue ? 1 : 0);
+                    return salgordreViaSortDirection === 'asc' ? comparison : -comparison;
+                });
+                const sortHeader = (field, label) => '<th onclick="event.stopPropagation();setSalgordreViaSort(\'' + field + '\')" style="cursor:pointer;user-select:none;">'
+                    + label + (salgordreViaSortField === field ? (salgordreViaSortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕') + '</th>';
+                let html = '<div class="order-list-section"><table class="order-list-table"><thead><tr>'
+                    + sortHeader('order', 'Salgsordre')
+                    + sortHeader('customer', 'Kunde')
+                    + sortHeader('deliveryDate', 'Levdato')
+                    + sortHeader('seller', 'Ansvarlig')
+                    + sortHeader('progress', 'Procesfremskridt')
+                    + sortHeader('openProductionOrders', 'U-lev åbne')
+                    + sortHeader('resource', 'Næste ressource')
+                    + '<th>Opdater</th></tr></thead><tbody>';
                 for (const row of rows) {
-                    const effectiveMinutes = Number(row.EffectiveResourceMinutes || 0);
-                    const completedMinutes = Number(row.CompletedResourceMinutes || 0);
-                    const percentage = effectiveMinutes > 0 ? Math.max(0, Math.min(100, Math.round((completedMinutes / effectiveMinutes) * 100))) : 0;
+                    const progress = getSalgordreViaProgress(row);
                     html += '<tr onclick="openSalgordreViaOrder(' + Number(row.OrdNo) + ')">'
                         + '<td><strong>' + escapeHtml(String(row.OrdNo || '-')) + '</strong></td>'
                         + '<td>' + escapeHtml(String(row.CustomerName || '-')) + '</td>'
                         + '<td>' + escapeHtml(formatViaDate(row.DeliveryDate)) + '</td>'
                         + '<td>' + escapeHtml(String(row.SellerUsr || '-')) + '</td>'
-                        + '<td><div class="via-progress">' + formatNumber(completedMinutes) + ' / ' + formatNumber(effectiveMinutes) + ' min (' + percentage + '%)<div class="via-progress-bar"><span style="width:' + percentage + '%"></span></div></div></td>'
+                        + '<td><div class="via-progress">' + formatNumber(progress.completedMinutes) + ' / ' + formatNumber(progress.effectiveMinutes) + ' min (' + progress.percentage + '%)<div class="via-progress-bar"><span style="width:' + progress.percentage + '%"></span></div></div></td>'
                         + '<td>' + escapeHtml(String(row.OpenProductionOrders || 0)) + '</td>'
                         + '<td>' + escapeHtml(String(row.ResourceName || '-')) + '<br><small>' + escapeHtml(formatViaDate(row.PlannedDate)) + '</small></td>'
+                        + '<td><button class="list-toggle-btn" type="button" onclick="event.stopPropagation();refreshSalgordreViaOrder(' + Number(row.OrdNo) + ', this)" style="padding:4px 8px;margin:0;">Opdater</button></td>'
                         + '</tr>';
                 }
                 target.innerHTML = html + '</tbody></table></div>';
+            }
+
+            async function refreshSalgordreViaOrder(ordNo, button) {
+                if (button) {
+                    button.disabled = true;
+                    button.textContent = '...';
+                }
+                try {
+                    const response = await fetch('/salgordre-via?ordNo=' + encodeURIComponent(String(ordNo)) + '&force=1');
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
+                    const refreshed = Array.isArray(data.rows) ? data.rows[0] : null;
+                    salgordreViaRows = salgordreViaRows.filter(row => Number(row.OrdNo) !== Number(ordNo));
+                    if (refreshed) salgordreViaRows.push(refreshed);
+                    const status = document.getElementById('viaStatus');
+                    if (status) status.textContent = salgordreViaRows.length + ' aktive salgsordrer';
+                    renderSalgordreVia();
+                } catch (err) {
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = 'Fejl';
+                    }
+                    alert('Kunne ikke opdatere ordre ' + ordNo + ': ' + String(err.message || err));
+                }
             }
 
             async function loadSalgordreVia(forceRefresh = false) {
