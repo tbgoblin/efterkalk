@@ -1402,6 +1402,14 @@ app.get('/', (req, res) => {
             .ordreindgang-budget-note { margin-top:6px; font-size:11px; color:#4f6d8c; }
             #mainWorkspace { display:none; }
             #mainOrdreoversigt { display:none; }
+            #mainSalgordreVia { display:none; }
+            .via-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+            .via-toolbar input { width:260px; padding:8px 10px; border:1px solid #c7d7ea; border-radius:8px; font-size:14px; }
+            .via-toolbar button { padding:8px 14px; border:0; border-radius:8px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
+            .via-status { font-size:13px; color:#4f6d8c; margin-left:auto; }
+            .via-progress { min-width:110px; }
+            .via-progress-bar { height:7px; background:#dce8f8; border-radius:8px; overflow:hidden; margin-top:4px; }
+            .via-progress-bar > span { display:block; height:100%; background:#2e7d32; }
             .ordreoversigt-sheet { background:#fff; border:2px solid #111827; color:#111827; font-family:Calibri, Arial, sans-serif; padding:0; box-shadow:0 2px 8px rgba(0,0,0,0.12); }
             .ordreoversigt-barcode-row { padding:10px 12px; border-bottom:1px solid #111827; }
             .ordreoversigt-barcode { display:inline-block; min-width:196px; height:42px; padding:11px 12px 0; border:1px solid #111827; background:repeating-linear-gradient(90deg,#111 0,#111 2px,#fff 2px,#fff 4px,#111 4px,#111 5px,#fff 5px,#fff 8px); color:#fff; font-weight:700; text-align:center; text-shadow:0 0 2px #000; font-size:12px; letter-spacing:0.05em; }
@@ -1616,6 +1624,12 @@ app.get('/', (req, res) => {
                                 <h4>Efterkalkulation</h4>
                                 <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
                                 <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
+                            </article>
+                            <article class="dash-card">
+                                <span class="dash-chip">Aktiv</span>
+                                <h4>SalgOrdre VIA</h4>
+                                <p>Aktive salgsordrer med åben produktion, fremdrift og næste ressource.</p>
+                                <button onclick="openModule('salgordre-via')">Åbn SalgOrdre VIA</button>
                             </article>
                             <article class="dash-card">
                                 <span class="dash-chip">Aktiv</span>
@@ -2037,6 +2051,23 @@ app.get('/', (req, res) => {
             </div>
             <div id="orderList"></div>
             <div id="result"></div>
+        </div>
+
+        <div class="container main-omsaetning" id="mainSalgordreVia">
+            <section class="omsaetning-shell">
+                <div class="omsaetning-head">
+                    <div>
+                        <h3>SalgOrdre VIA</h3>
+                        <p>Ikke-fakturerede salgsordrer med produktion, der endnu ikke er færdig.</p>
+                    </div>
+                </div>
+                <div class="via-toolbar">
+                    <input id="viaSearchInput" type="search" placeholder="Søg ordre eller kunde..." oninput="renderSalgordreVia()" />
+                    <button type="button" onclick="loadSalgordreVia()">Opdater</button>
+                    <span id="viaStatus" class="via-status"></span>
+                </div>
+                <div id="viaResults" class="omsaetning-empty">Indlæser aktive salgsordrer...</div>
+            </section>
         </div>
 
         <div id="summaryModal" class="modal-overlay" onclick="closeSummaryModal(event)">
@@ -7987,13 +8018,28 @@ app.get('/', (req, res) => {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
                 const ordreoversigt = document.getElementById('mainOrdreoversigt');
+                const salgordreVia = document.getElementById('mainSalgordreVia');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
 
+                if (moduleKey === 'salgordre-via') {
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (workspace) workspace.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (omsaetning) omsaetning.style.display = 'none';
+                    if (ordreindgang) ordreindgang.style.display = 'none';
+                    if (belastning) belastning.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'block';
+                    closeSideMenu();
+                    loadSalgordreVia();
+                    return;
+                }
+
                 if (moduleKey === 'ordreoversigt') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
@@ -8016,6 +8062,7 @@ app.get('/', (req, res) => {
                     }
                     if (dashboard) dashboard.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
@@ -8030,6 +8077,7 @@ app.get('/', (req, res) => {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'block';
@@ -8043,6 +8091,7 @@ app.get('/', (req, res) => {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'block';
@@ -8056,6 +8105,7 @@ app.get('/', (req, res) => {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'block';
@@ -8069,6 +8119,66 @@ app.get('/', (req, res) => {
                     alert('Dette modul er klar til næste fase. Når du sender logikken, bygger vi det visuelt og funktionelt.');
                     return;
                 }
+            }
+
+            let salgordreViaRows = [];
+
+            function formatViaDate(value) {
+                const digits = String(value == null ? '' : value).replace(/\D/g, '');
+                if (/^\d{8}$/.test(digits)) return digits.slice(6, 8) + '-' + digits.slice(4, 6) + '-' + digits.slice(0, 4);
+                const iso = String(value || '').slice(0, 10);
+                const parts = iso.split('-');
+                return parts.length === 3 ? (parts[2] + '-' + parts[1] + '-' + parts[0]) : '-';
+            }
+
+            function renderSalgordreVia() {
+                const target = document.getElementById('viaResults');
+                const query = String((document.getElementById('viaSearchInput') || {}).value || '').trim().toLowerCase();
+                if (!target) return;
+                const rows = salgordreViaRows.filter(row => !query
+                    || String(row.OrdNo || '').includes(query)
+                    || String(row.CustomerName || '').toLowerCase().includes(query));
+                if (!rows.length) {
+                    target.innerHTML = '<div class="omsaetning-empty">Ingen aktive salgsordrer matcher søgningen.</div>';
+                    return;
+                }
+                let html = '<div class="order-list-section"><table class="order-list-table"><thead><tr><th>Salgsordre</th><th>Kunde</th><th>Levdato</th><th>Ansvarlig</th><th>Produktion</th><th>U-lev åbne</th><th>Næste ressource</th></tr></thead><tbody>';
+                for (const row of rows) {
+                    const planned = Number(row.PlannedQuantity || 0);
+                    const completed = Number(row.CompletedQuantity || 0);
+                    const percentage = planned > 0 ? Math.max(0, Math.min(100, Math.round((completed / planned) * 100))) : 0;
+                    html += '<tr onclick="openSalgordreViaOrder(' + Number(row.OrdNo) + ')">'
+                        + '<td><strong>' + escapeHtml(String(row.OrdNo || '-')) + '</strong></td>'
+                        + '<td>' + escapeHtml(String(row.CustomerName || '-')) + '</td>'
+                        + '<td>' + escapeHtml(formatViaDate(row.DeliveryDate)) + '</td>'
+                        + '<td>' + escapeHtml(String(row.SellerUsr || '-')) + '</td>'
+                        + '<td><div class="via-progress">' + completed + ' / ' + planned + ' (' + percentage + '%)<div class="via-progress-bar"><span style="width:' + percentage + '%"></span></div></div></td>'
+                        + '<td>' + escapeHtml(String(row.OpenProductionOrders || 0)) + '</td>'
+                        + '<td>' + escapeHtml(String(row.ResourceName || '-')) + '<br><small>' + escapeHtml(formatViaDate(row.PlannedDate)) + '</small></td>'
+                        + '</tr>';
+                }
+                target.innerHTML = html + '</tbody></table></div>';
+            }
+
+            async function loadSalgordreVia() {
+                const target = document.getElementById('viaResults');
+                const status = document.getElementById('viaStatus');
+                if (target) target.innerHTML = '<div class="loading">Henter aktive salgsordrer...</div>';
+                try {
+                    const response = await fetch('/salgordre-via');
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
+                    salgordreViaRows = Array.isArray(data.rows) ? data.rows : [];
+                    if (status) status.textContent = salgordreViaRows.length + ' aktive salgsordrer';
+                    renderSalgordreVia();
+                } catch (err) {
+                    if (target) target.innerHTML = '<div class="error">Kunne ikke hente SalgOrdre VIA: ' + escapeHtml(String(err.message || err)) + '</div>';
+                }
+            }
+
+            function openSalgordreViaOrder(ordNo) {
+                openModule('efterkalk');
+                selectOrder(ordNo);
             }
 
             async function searchOrdreoversigt() {

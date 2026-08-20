@@ -936,6 +936,64 @@ function createApiRouter({
         }
     });
 
+    router.get('/salgordre-via', async (_req, res) => {
+        try {
+            const pool = await getConnection();
+            const result = await pool.request().query(`
+                SELECT
+                    S.OrdNo,
+                    S.DelDt AS DeliveryDate,
+                    S.CreUsr AS SellerUsr,
+                    C.Nm AS CustomerName,
+                    Active.OpenProductionOrders,
+                    Active.PlannedQuantity,
+                    Active.CompletedQuantity,
+                    Active.RemainingQuantity,
+                    NextPlan.PlannedDate,
+                    NextPlan.ResourceName
+                FROM Ord S WITH(NOLOCK)
+                LEFT JOIN Actor C WITH(NOLOCK) ON C.CustNo = S.CustNo
+                CROSS APPLY (
+                    SELECT
+                        COUNT(DISTINCT P.OrdNo) AS OpenProductionOrders,
+                        SUM(ISNULL(L.NoOrg, 0)) AS PlannedQuantity,
+                        SUM(ISNULL(L.NoFin, 0)) AS CompletedQuantity,
+                        SUM(CASE WHEN ISNULL(L.NoOrg, 0) > ISNULL(L.NoFin, 0)
+                            THEN ISNULL(L.NoOrg, 0) - ISNULL(L.NoFin, 0) ELSE 0 END) AS RemainingQuantity
+                    FROM Ord P WITH(NOLOCK)
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = P.OrdNo
+                    WHERE P.OrdBasNo = S.OrdNo
+                      AND P.TrTp <> 6
+                      AND L.NoOrg > L.NoFin
+                ) Active
+                OUTER APPLY (
+                    SELECT TOP (1)
+                        dbo.EGD_Int2Date(F.Dt1) AS PlannedDate,
+                        R.Nm AS ResourceName
+                    FROM FreeInf1 F WITH(NOLOCK)
+                    INNER JOIN Ord P WITH(NOLOCK) ON P.OrdNo = F.OrdNo
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = F.OrdNo AND L.LnNo = F.OrdLnNo
+                    LEFT JOIN R7 R WITH(NOLOCK) ON R.RNo = F.R7
+                    WHERE P.OrdBasNo = S.OrdNo
+                      AND P.TrTp <> 6
+                      AND F.FrInfTp = 2
+                      AND F.Val1 < 0
+                      AND L.NoOrg > L.NoFin
+                    ORDER BY F.Dt1, R.Nm
+                ) NextPlan
+                WHERE (S.InvoNo IS NULL OR S.InvoNo = '')
+                  AND Active.OpenProductionOrders > 0
+                ORDER BY
+                    CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,
+                    S.OrdNo
+            `);
+            res.json({ rows: result.recordset || [] });
+        } catch (err) {
+            logEvent('ERROR salgordre-via: ' + err.message);
+            res.status(500).json({ error: err.message || 'SalgOrdre VIA fejl' });
+        }
+    });
+
     router.get('/ordreoversigt/:ordno', async (req, res) => {
         try {
             const ordNo = parseInt(req.params.ordno);
