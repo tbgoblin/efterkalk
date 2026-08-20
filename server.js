@@ -2017,8 +2017,8 @@ app.get('/', (req, res) => {
         <div class="container" id="mainWorkspace">
             <div class="search-box" id="searchBox">
                 <button id="collapseToggleBtn" onclick="toggleSearchBox()" style="display:none;" title="Åbn søgefelt og filtre">▼ Søg</button>
-                <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." style="display:none;" />
-                <button onclick="searchOrder()" title="Aabn detaljer for ordrenummeret" style="display:none;">Søg</button>
+                <input type="number" id="orderInput" placeholder="Indtast ordrenummer..." onkeydown="if(event.key === 'Enter') searchOrder()" />
+                <button onclick="searchOrder()" title="Åbn Efterkalkulation for ordrenummeret">Søg ordre</button>
                 <button id="refreshListBtn" class="list-toggle-btn" onclick="refreshOrderList()" title="Hent seneste ordreliste">Opdater liste</button>
                 <button class="mode-btn" onclick="toggleMarginMode()" title="Skift hvordan margin beregnes i visningen">Skift marginberegning</button>
                 <button id="listToggleBtn" class="list-toggle-btn" onclick="toggleOrderList()" title="Vis eller skjul kundelisten">Skjul kundeliste</button>
