@@ -936,10 +936,46 @@ function createApiRouter({
         }
     });
 
-    router.get('/salgordre-via', async (_req, res) => {
+    router.get('/salgordre-via', async (req, res) => {
         try {
+            const cacheKey = 'salgordre_via_v2';
+            if (req.query.force !== '1') {
+                const cached = diskCache.get(cacheKey);
+                if (cached) return res.json({ ...cached, cached: true });
+            }
+
             const pool = await getConnection();
             const result = await pool.request().query(`
+                WITH ActiveProduction AS (
+                    SELECT
+                        P.OrdBasNo AS SalesOrderNo,
+                        COUNT(DISTINCT P.OrdNo) AS OpenProductionOrders,
+                        SUM(ISNULL(L.NoOrg, 0)) AS PlannedQuantity,
+                        SUM(ISNULL(L.NoFin, 0)) AS CompletedQuantity,
+                        SUM(ISNULL(L.NoOrg, 0) - ISNULL(L.NoFin, 0)) AS RemainingQuantity
+                    FROM Ord P WITH(NOLOCK)
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = P.OrdNo
+                    WHERE P.OrdBasNo > 0
+                      AND P.TrTp <> 6
+                      AND L.NoOrg > L.NoFin
+                    GROUP BY P.OrdBasNo
+                ),
+                NextPlan AS (
+                    SELECT
+                        P.OrdBasNo AS SalesOrderNo,
+                        dbo.EGD_Int2Date(F.Dt1) AS PlannedDate,
+                        R.Nm AS ResourceName,
+                        ROW_NUMBER() OVER (PARTITION BY P.OrdBasNo ORDER BY F.Dt1, R.Nm) AS RowNo
+                    FROM ActiveProduction AP
+                    INNER JOIN Ord P WITH(NOLOCK) ON P.OrdBasNo = AP.SalesOrderNo
+                    INNER JOIN FreeInf1 F WITH(NOLOCK) ON F.OrdNo = P.OrdNo
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = F.OrdNo AND L.LnNo = F.OrdLnNo
+                    LEFT JOIN R7 R WITH(NOLOCK) ON R.RNo = F.R7
+                    WHERE P.TrTp <> 6
+                      AND F.FrInfTp = 2
+                      AND F.Val1 < 0
+                      AND L.NoOrg > L.NoFin
+                )
                 SELECT
                     S.OrdNo,
                     S.DelDt AS DeliveryDate,
@@ -953,41 +989,16 @@ function createApiRouter({
                     NextPlan.ResourceName
                 FROM Ord S WITH(NOLOCK)
                 LEFT JOIN Actor C WITH(NOLOCK) ON C.CustNo = S.CustNo
-                CROSS APPLY (
-                    SELECT
-                        COUNT(DISTINCT P.OrdNo) AS OpenProductionOrders,
-                        SUM(ISNULL(L.NoOrg, 0)) AS PlannedQuantity,
-                        SUM(ISNULL(L.NoFin, 0)) AS CompletedQuantity,
-                        SUM(CASE WHEN ISNULL(L.NoOrg, 0) > ISNULL(L.NoFin, 0)
-                            THEN ISNULL(L.NoOrg, 0) - ISNULL(L.NoFin, 0) ELSE 0 END) AS RemainingQuantity
-                    FROM Ord P WITH(NOLOCK)
-                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = P.OrdNo
-                    WHERE P.OrdBasNo = S.OrdNo
-                      AND P.TrTp <> 6
-                      AND L.NoOrg > L.NoFin
-                ) Active
-                OUTER APPLY (
-                    SELECT TOP (1)
-                        dbo.EGD_Int2Date(F.Dt1) AS PlannedDate,
-                        R.Nm AS ResourceName
-                    FROM FreeInf1 F WITH(NOLOCK)
-                    INNER JOIN Ord P WITH(NOLOCK) ON P.OrdNo = F.OrdNo
-                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = F.OrdNo AND L.LnNo = F.OrdLnNo
-                    LEFT JOIN R7 R WITH(NOLOCK) ON R.RNo = F.R7
-                    WHERE P.OrdBasNo = S.OrdNo
-                      AND P.TrTp <> 6
-                      AND F.FrInfTp = 2
-                      AND F.Val1 < 0
-                      AND L.NoOrg > L.NoFin
-                    ORDER BY F.Dt1, R.Nm
-                ) NextPlan
+                                INNER JOIN ActiveProduction Active ON Active.SalesOrderNo = S.OrdNo
+                                LEFT JOIN NextPlan ON NextPlan.SalesOrderNo = S.OrdNo AND NextPlan.RowNo = 1
                 WHERE (S.InvoNo IS NULL OR S.InvoNo = '')
-                  AND Active.OpenProductionOrders > 0
                 ORDER BY
                     CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,
                     S.OrdNo
             `);
-            res.json({ rows: result.recordset || [] });
+                        const payload = { rows: result.recordset || [] };
+                        diskCache.set(cacheKey, payload, 5 * 60 * 1000);
+                        res.json(payload);
         } catch (err) {
             logEvent('ERROR salgordre-via: ' + err.message);
             res.status(500).json({ error: err.message || 'SalgOrdre VIA fejl' });

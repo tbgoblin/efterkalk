@@ -2063,7 +2063,7 @@ app.get('/', (req, res) => {
                 </div>
                 <div class="via-toolbar">
                     <input id="viaSearchInput" type="search" placeholder="Søg ordre eller kunde..." oninput="renderSalgordreVia()" />
-                    <button type="button" onclick="loadSalgordreVia()">Opdater</button>
+                    <button type="button" onclick="loadSalgordreVia(true)">Opdater</button>
                     <span id="viaStatus" class="via-status"></span>
                 </div>
                 <div id="viaResults" class="omsaetning-empty">Indlæser aktive salgsordrer...</div>
@@ -8003,6 +8003,9 @@ app.get('/', (req, res) => {
                 }, 2500);
                 startOrderListAutoRefresh();
                 startDashboardUpdatePolling();
+                setTimeout(() => {
+                    fetch('/salgordre-via').catch(() => {});
+                }, 7000);
 
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('ord')) {
@@ -8160,12 +8163,12 @@ app.get('/', (req, res) => {
                 target.innerHTML = html + '</tbody></table></div>';
             }
 
-            async function loadSalgordreVia() {
+            async function loadSalgordreVia(forceRefresh = false) {
                 const target = document.getElementById('viaResults');
                 const status = document.getElementById('viaStatus');
                 if (target) target.innerHTML = '<div class="loading">Henter aktive salgsordrer...</div>';
                 try {
-                    const response = await fetch('/salgordre-via');
+                    const response = await fetch('/salgordre-via' + (forceRefresh ? '?force=1' : ''));
                     const data = await response.json();
                     if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
                     salgordreViaRows = Array.isArray(data.rows) ? data.rows : [];
