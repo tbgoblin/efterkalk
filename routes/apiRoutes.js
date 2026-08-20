@@ -938,7 +938,7 @@ function createApiRouter({
 
     router.get('/salgordre-via', async (req, res) => {
         try {
-            const cacheKey = 'salgordre_via_v3';
+            const cacheKey = 'salgordre_via_v7';
             if (req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
@@ -962,19 +962,48 @@ function createApiRouter({
                                                     OR OrdPrSt & 4194304 = 4194304
                                             )
                 ),
-                ActiveProduction AS (
-                    SELECT
+                OpenProductionOrders AS (
+                    SELECT DISTINCT
                         P.OrdBasNo AS SalesOrderNo,
-                        COUNT(DISTINCT P.OrdNo) AS OpenProductionOrders,
-                        SUM(ISNULL(L.NoOrg, 0)) AS PlannedQuantity,
-                        SUM(ISNULL(L.NoFin, 0)) AS CompletedQuantity,
-                        SUM(ISNULL(L.NoOrg, 0) - ISNULL(L.NoFin, 0)) AS RemainingQuantity
+                        P.OrdNo
                     FROM Ord P WITH(NOLOCK)
                     INNER JOIN OpenSalesOrders S ON S.OrdNo = P.OrdBasNo
                     INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = P.OrdNo
                     WHERE P.TrTp <> 6
-                      AND L.NoOrg > L.NoFin
-                    GROUP BY P.OrdBasNo
+                                            AND L.ProdTp4 IN (1, 3)
+                                            AND L.R7 <> ''
+                                            AND ISNULL(L.TransGr3, 0) < 80
+                ),
+                ResourceMinutes AS (
+                    SELECT
+                        OpenProductionOrders.SalesOrderNo,
+                        L.OrdNo,
+                        L.LnNo,
+                        ISNULL(L.TransGr3, 0) AS ResourceStatus,
+                        ISNULL(L.NoOrg, 0) AS OriginalMinutes,
+                        COALESCE(NULLIF(ProdTr.FinishedMinutes, 0), ISNULL(L.NoFin, 0)) AS FinishedMinutes
+                    FROM OpenProductionOrders
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = OpenProductionOrders.OrdNo
+                    OUTER APPLY (
+                        SELECT SUM(CAST(P.NoInvoAb AS decimal(18, 6))) AS FinishedMinutes
+                        FROM ProdTr P WITH(NOLOCK)
+                        WHERE P.OrdNo = L.OrdNo
+                          AND P.OrdLnNo = L.LnNo
+                    ) ProdTr
+                    WHERE L.ProdTp4 IN (1, 3)
+                      AND L.R7 <> ''
+                ),
+                ActiveProduction AS (
+                    SELECT
+                        SalesOrderNo,
+                        COUNT(DISTINCT OrdNo) AS OpenProductionOrders,
+                        COUNT(*) AS TotalResources,
+                        SUM(CASE WHEN ResourceStatus = 80 THEN 1 ELSE 0 END) AS CompletedResources,
+                        SUM(CASE WHEN ResourceStatus < 80 THEN 1 ELSE 0 END) AS RemainingResources,
+                        SUM(FinishedMinutes) AS CompletedResourceMinutes,
+                        SUM(CASE WHEN ResourceStatus = 80 THEN FinishedMinutes ELSE OriginalMinutes END) AS EffectiveResourceMinutes
+                    FROM ResourceMinutes
+                    GROUP BY SalesOrderNo
                 )
                 SELECT
                     S.OrdNo,
@@ -982,9 +1011,11 @@ function createApiRouter({
                     S.CreUsr AS SellerUsr,
                     C.Nm AS CustomerName,
                     Active.OpenProductionOrders,
-                    Active.PlannedQuantity,
-                    Active.CompletedQuantity,
-                    Active.RemainingQuantity,
+                    Active.TotalResources,
+                    Active.CompletedResources,
+                    Active.RemainingResources,
+                    Active.CompletedResourceMinutes,
+                    Active.EffectiveResourceMinutes,
                     CAST(NULL AS datetime) AS PlannedDate,
                     CAST(NULL AS varchar(100)) AS ResourceName
                 FROM OpenSalesOrders S

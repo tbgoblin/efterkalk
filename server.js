@@ -8035,7 +8035,8 @@ app.get('/', (req, res) => {
                     if (belastning) belastning.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'block';
                     closeSideMenu();
-                    loadSalgordreVia();
+                    if (salgordreViaRows.length > 0) renderSalgordreVia();
+                    else loadSalgordreVia();
                     return;
                 }
 
@@ -8125,6 +8126,7 @@ app.get('/', (req, res) => {
             }
 
             let salgordreViaRows = [];
+            let orderDetailReturnModule = null;
 
             function formatViaDate(value) {
                 const digits = String(value == null ? '' : value).replace(/\D/g, '');
@@ -8145,17 +8147,17 @@ app.get('/', (req, res) => {
                     target.innerHTML = '<div class="omsaetning-empty">Ingen aktive salgsordrer matcher søgningen.</div>';
                     return;
                 }
-                let html = '<div class="order-list-section"><table class="order-list-table"><thead><tr><th>Salgsordre</th><th>Kunde</th><th>Levdato</th><th>Ansvarlig</th><th>Produktion</th><th>U-lev åbne</th><th>Næste ressource</th></tr></thead><tbody>';
+                let html = '<div class="order-list-section"><table class="order-list-table"><thead><tr><th>Salgsordre</th><th>Kunde</th><th>Levdato</th><th>Ansvarlig</th><th>Procesfremskridt</th><th>U-lev åbne</th><th>Næste ressource</th></tr></thead><tbody>';
                 for (const row of rows) {
-                    const planned = Number(row.PlannedQuantity || 0);
-                    const completed = Number(row.CompletedQuantity || 0);
-                    const percentage = planned > 0 ? Math.max(0, Math.min(100, Math.round((completed / planned) * 100))) : 0;
+                    const effectiveMinutes = Number(row.EffectiveResourceMinutes || 0);
+                    const completedMinutes = Number(row.CompletedResourceMinutes || 0);
+                    const percentage = effectiveMinutes > 0 ? Math.max(0, Math.min(100, Math.round((completedMinutes / effectiveMinutes) * 100))) : 0;
                     html += '<tr onclick="openSalgordreViaOrder(' + Number(row.OrdNo) + ')">'
                         + '<td><strong>' + escapeHtml(String(row.OrdNo || '-')) + '</strong></td>'
                         + '<td>' + escapeHtml(String(row.CustomerName || '-')) + '</td>'
                         + '<td>' + escapeHtml(formatViaDate(row.DeliveryDate)) + '</td>'
                         + '<td>' + escapeHtml(String(row.SellerUsr || '-')) + '</td>'
-                        + '<td><div class="via-progress">' + completed + ' / ' + planned + ' (' + percentage + '%)<div class="via-progress-bar"><span style="width:' + percentage + '%"></span></div></div></td>'
+                        + '<td><div class="via-progress">' + formatNumber(completedMinutes) + ' / ' + formatNumber(effectiveMinutes) + ' min (' + percentage + '%)<div class="via-progress-bar"><span style="width:' + percentage + '%"></span></div></div></td>'
                         + '<td>' + escapeHtml(String(row.OpenProductionOrders || 0)) + '</td>'
                         + '<td>' + escapeHtml(String(row.ResourceName || '-')) + '<br><small>' + escapeHtml(formatViaDate(row.PlannedDate)) + '</small></td>'
                         + '</tr>';
@@ -8180,6 +8182,7 @@ app.get('/', (req, res) => {
             }
 
             function openSalgordreViaOrder(ordNo) {
+                orderDetailReturnModule = 'salgordre-via';
                 openModule('efterkalk');
                 selectOrder(ordNo);
             }
@@ -9803,6 +9806,11 @@ app.get('/', (req, res) => {
                 reportOriginState = null;
                 updateOrderDetailModalBackButton();
                 removeModalStack('orderDetailModal');
+                if (orderDetailReturnModule === 'salgordre-via') {
+                    orderDetailReturnModule = null;
+                    openModule('salgordre-via');
+                    return;
+                }
                 goBackToList();
             }
 
