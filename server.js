@@ -1401,6 +1401,82 @@ app.get('/', (req, res) => {
             .ordreindgang-budget-summary.delta-flat { color:#355675; }
             .ordreindgang-budget-note { margin-top:6px; font-size:11px; color:#4f6d8c; }
             #mainWorkspace { display:none; }
+            #mainOrdreoversigt { display:none; }
+            .ordreoversigt-sheet { background:#fff; border:2px solid #111827; color:#111827; font-family:Calibri, Arial, sans-serif; padding:0; box-shadow:0 2px 8px rgba(0,0,0,0.12); }
+            .ordreoversigt-barcode-row { padding:10px 12px; border-bottom:1px solid #111827; }
+            .ordreoversigt-barcode { display:inline-block; min-width:196px; height:42px; padding:11px 12px 0; border:1px solid #111827; background:repeating-linear-gradient(90deg,#111 0,#111 2px,#fff 2px,#fff 4px,#111 4px,#111 5px,#fff 5px,#fff 8px); color:#fff; font-weight:700; text-align:center; text-shadow:0 0 2px #000; font-size:12px; letter-spacing:0.05em; }
+            .ordreoversigt-barcode.small { min-width:114px; height:28px; padding:7px 6px 0; font-size:10px; }
+            .ordreoversigt-topline { display:grid; grid-template-columns:140px 1fr 48px; align-items:center; border-bottom:1px solid #111827; background:#fff; }
+            .ordreoversigt-topline > div { min-height:46px; padding:6px 8px; border-right:1px solid #111827; }
+            .ordreoversigt-topline > div:last-child { border-right:none; text-align:center; }
+            .ordreoversigt-headgrid { display:grid; grid-template-columns:1.25fr 1.25fr 0.9fr; border-bottom:1px solid #111827; }
+            .ordreoversigt-headcell { min-height:92px; border-right:1px solid #111827; }
+            .ordreoversigt-headcell:last-child { border-right:none; }
+            .ordreoversigt-headtitle { padding:4px 8px; font-size:10px; font-weight:700; background:#c7d9ef; border-bottom:1px solid #111827; }
+            .ordreoversigt-headbody { padding:7px 8px; font-size:12px; line-height:1.35; }
+            .ordreoversigt-headbody strong { font-size:15px; }
+            .ordreoversigt-subgrid { display:grid; grid-template-columns:0.9fr 1.5fr 1.2fr 1fr; border-bottom:1px solid #111827; }
+            .ordreoversigt-subcell { min-height:88px; border-right:1px solid #111827; }
+            .ordreoversigt-subcell:last-child { border-right:none; }
+            .ordreoversigt-mini-table { width:100%; border-collapse:collapse; font-size:11px; }
+            .ordreoversigt-mini-table th, .ordreoversigt-mini-table td { border:1px solid #111827; padding:3px 5px; text-align:left; }
+            .ordreoversigt-mini-table th { background:#c7d9ef; font-weight:700; }
+            .ordreoversigt-label { display:block; font-size:10px; font-weight:700; margin-bottom:4px; }
+            .ordreoversigt-value { font-size:15px; font-weight:700; line-height:1.22; }
+            .ordreoversigt-notes { display:grid; grid-template-columns:1fr 1fr 1fr; border-bottom:1px solid #111827; }
+            .ordreoversigt-notes > div { padding:7px 8px; min-height:56px; border-right:1px solid #111827; font-size:12px; line-height:1.35; }
+            .ordreoversigt-notes > div:last-child { border-right:none; }
+            .ordreoversigt-tabbar { display:flex; align-items:center; gap:2px; flex-wrap:wrap; padding:7px 8px; border-bottom:1px solid #111827; background:#0f1720; }
+            .ordreoversigt-tabbar a { color:#ecf2f8; text-decoration:none; font-size:11px; font-weight:700; padding:4px 8px; border:1px solid #2d3d4d; border-radius:3px; background:#132332; }
+            .ordreoversigt-tabbar a:hover { background:#1a3248; }
+            .ordreoversigt-section { margin:0; border-bottom:1px solid #111827; }
+            .ordreoversigt-print-disabled { opacity:0.65; }
+            .ordreoversigt-sheet h3 { margin:0; padding:7px 9px; border-bottom:1px solid #111827; background:#c7d9ef; color:#111827; font-size:14px; }
+            .ordreoversigt-table-wrap { overflow-x:auto; border-top:none; }
+            .ordreoversigt-table { width:100%; min-width:980px; border-collapse:collapse; font-size:12px; }
+            .ordreoversigt-table th { background:#4f83bd; color:#fff; padding:5px 6px; text-align:left; border-right:1px solid #d9e6f5; white-space:nowrap; font-weight:700; }
+            .ordreoversigt-table td { padding:5px 6px; border-right:1px solid #c7c7c7; border-top:1px solid #c7c7c7; vertical-align:top; }
+            .ordreoversigt-table tr:nth-child(even) td { background:#f6f8fb; }
+            .ordreoversigt-status { font-weight:700; }
+            .ordreoversigt-status.done { color:#126b35; }
+            .ordreoversigt-status.progress { color:#a85b00; }
+            .ordreoversigt-status.waiting { color:#9d1a1a; }
+            @media (max-width: 1200px) {
+                .ordreoversigt-topline, .ordreoversigt-headgrid, .ordreoversigt-subgrid, .ordreoversigt-top { grid-template-columns:1fr; }
+                .ordreoversigt-value { font-size:14px; }
+                .ordreoversigt-notes { grid-template-columns:1fr; }
+            }
+            @media print {
+                @page { size: A4 landscape; margin: 8mm; }
+                body { background:#fff !important; padding:0 !important; }
+                .header-banner-wrapper, #mainDashboard, #mainWorkspace, #mainOmsaetning, #mainOrdreindgang, #mainBelastning, .side-menu-overlay, .access-gate-overlay { display:none !important; }
+                #mainOrdreoversigt { display:block !important; max-width:none !important; margin:0 !important; }
+                #mainOrdreoversigt .omsaetning-head { display:none !important; }
+                #mainOrdreoversigt .omsaetning-shell { box-shadow:none !important; border:none !important; padding:0 !important; }
+                .ordreoversigt-tabbar { display:none !important; }
+                .ordreoversigt-print-disabled { display:none !important; }
+                .ordreoversigt-sheet { width:100% !important; max-width:none !important; border:1px solid #111827 !important; box-shadow:none !important; font-size:8px !important; }
+                .ordreoversigt-barcode-row { padding:3px 5px !important; }
+                .ordreoversigt-barcode { min-width:90px !important; width:90px !important; height:22px !important; padding:5px 4px 0 !important; color:#111827 !important; background:#fff !important; text-shadow:none !important; font-size:8px !important; }
+                .ordreoversigt-topline > div { min-height:28px !important; padding:3px 5px !important; }
+                .ordreoversigt-topline strong { font-size:12px !important; }
+                .ordreoversigt-headcell, .ordreoversigt-subcell { min-height:48px !important; }
+                .ordreoversigt-headtitle { padding:2px 4px !important; font-size:7px !important; }
+                .ordreoversigt-headbody { padding:3px 4px !important; font-size:8px !important; line-height:1.15 !important; }
+                .ordreoversigt-headbody strong { font-size:10px !important; }
+                .ordreoversigt-subgrid { grid-template-columns:0.9fr 1.5fr 1.2fr 1fr !important; }
+                .ordreoversigt-mini-table { font-size:7px !important; }
+                .ordreoversigt-mini-table th, .ordreoversigt-mini-table td { padding:1px 2px !important; }
+                .ordreoversigt-section { break-inside:auto; page-break-inside:auto; }
+                .ordreoversigt-section h3 { break-after:avoid; page-break-after:avoid; padding:3px 5px !important; font-size:9px !important; }
+                .ordreoversigt-table-wrap { overflow:visible !important; }
+                .ordreoversigt-table { width:100% !important; min-width:0 !important; table-layout:fixed !important; font-size:7px !important; }
+                .ordreoversigt-table thead { display:table-header-group; }
+                .ordreoversigt-table tr { break-inside:avoid; page-break-inside:avoid; }
+                .ordreoversigt-table th, .ordreoversigt-table td { padding:2px 3px !important; white-space:normal !important; overflow-wrap:anywhere; line-height:1.1 !important; }
+                .ordreoversigt-table th { font-size:7px !important; }
+                .ordreoversigt-table td .ordreoversigt-barcode.small { display:none !important; }
+            }
             .warning-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; font-size:14px; line-height:1; cursor:help; vertical-align:middle; }
             .allocation-flag { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#b26a00; font-size:16px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; }
             .invoice-status-banner { margin: 0 0 10px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; }
@@ -1465,7 +1541,7 @@ app.get('/', (req, res) => {
                             <button type="button" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
                             <button type="button" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
                             <button type="button" disabled>Faktura - Kommer snart</button>
-                            <button type="button" disabled>Ordreoversigt - Kommer snart</button>
+                            <button type="button" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
                             <button type="button" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
                             <button type="button" disabled>APV - Kommer snart</button>
                             <button type="button" onclick="openModule('belastning')">Belastning</button>
@@ -1569,10 +1645,10 @@ app.get('/', (req, res) => {
                         </div>
                         <div class="dashboard-category-grid">
                             <article class="dash-card">
-                                <span class="dash-chip">Planlagt</span>
+                                <span class="dash-chip">Aktiv</span>
                                 <h4>Ordreoversigt</h4>
                                 <p>Samlet status for produktionsordrer, levering og kapacitet.</p>
-                                <button type="button" disabled>Kommer snart</button>
+                                <button type="button" onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button>
                             </article>
                             <article class="dash-card">
                                 <span class="dash-chip">Planlagt</span>
@@ -1616,6 +1692,23 @@ app.get('/', (req, res) => {
                         </div>
                     </section>
                 </div>
+            </section>
+        </div>
+
+        <div class="container main-omsaetning" id="mainOrdreoversigt">
+            <section class="omsaetning-shell">
+                <div class="omsaetning-head">
+                    <div>
+                        <h3>Ordreoversigt</h3>
+                        <p>Produktionsoversigt til udskrivning, når ordren frigives til produktion.</p>
+                    </div>
+                    <div class="omsaetning-head-actions">
+                        <input id="ordreoversigtInput" type="number" min="1" placeholder="Ordrenummer" onkeydown="if(event.key === 'Enter') searchOrdreoversigt()" />
+                        <button onclick="searchOrdreoversigt()">Hent ordre</button>
+                        <button onclick="window.print()">Print</button>
+                    </div>
+                </div>
+                <div id="ordreoversigtResult" class="omsaetning-empty">Indtast et ordrenummer for at se produktionsoversigten.</div>
             </section>
         </div>
 
@@ -2517,6 +2610,77 @@ app.get('/', (req, res) => {
                 buildOversigtModalView(currentOversigtModalType);
                 modal.style.display = 'flex';
                 pushModalStack('oversigtModal');
+            }
+
+            function openOrdreoversigt() {
+                const data = currentSearchOrderData;
+                if (!data || !data.orderHeader) return;
+
+                const orderHeader = data.orderHeader;
+                const salesLines = Array.isArray(data.salesOrderLines) ? data.salesOrderLines : [];
+                const productionOrders = Array.isArray(data.productionOrders) ? data.productionOrders : [];
+                const purchaseLines = salesLines.filter(line => Number(line.LinkedOrderType || 0) === 6);
+                const operationRows = [];
+
+                for (const productionOrder of productionOrders) {
+                    for (const line of Array.isArray(productionOrder.lines) ? productionOrder.lines : []) {
+                        const type = String(line.ProdTp4 == null ? '' : line.ProdTp4);
+                        if (Number(line.LnNo || 0) === 1 || !['1', '2'].includes(type)) continue;
+                        operationRows.push({
+                            productionOrderNo: productionOrder.ordNo,
+                            type: type === '1' ? 'Operation' : 'Materiale / laser',
+                            productNo: line.ProdNo,
+                            description: line.Descr,
+                            planned: line.NoOrg,
+                            completed: line.DisplayQuantity == null ? line.NoFin : line.DisplayQuantity
+                        });
+                    }
+                }
+
+                let html = '<div class="section ordreoversigt-print">';
+                html += '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px;">';
+                html += '<div><h3 style="margin-bottom:6px;">Ordreoversigt</h3><div style="color:#5c7590;">Samlet produktions- og indkøbsoverblik</div></div>';
+                html += '<button class="list-toggle-btn" onclick="window.print()">Print</button></div>';
+                html += '<div class="order-header-row" style="color:#1f2937;margin-bottom:20px;">';
+                html += '<div class="order-header-item"><div class="order-header-label" style="color:#5c7590;">Salgsordre</div><div style="font-size:20px;font-weight:700;">' + escapeHtml(String(orderHeader.OrdNo || '-')) + '</div></div>';
+                html += '<div class="order-header-item"><div class="order-header-label" style="color:#5c7590;">Kunde</div><div style="font-size:20px;font-weight:700;">' + escapeHtml(String(orderHeader.CustomerName || '-')) + '</div></div>';
+                html += '<div class="order-header-item"><div class="order-header-label" style="color:#5c7590;">Produktionsordrer</div><div style="font-size:20px;font-weight:700;">' + formatCount(productionOrders.length) + '</div></div>';
+                html += '<div class="order-header-item"><div class="order-header-label" style="color:#5c7590;">Indkøbslinjer</div><div style="font-size:20px;font-weight:700;">' + formatCount(purchaseLines.length) + '</div></div>';
+                html += '</div>';
+
+                html += '<h3>Varelinjer</h3><table><tr><th>Produkt</th><th>Beskrivelse</th><th>Antal</th><th>Prod.ordre</th><th>Status</th></tr>';
+                for (const line of salesLines) {
+                    const isPurchase = Number(line.LinkedOrderType || 0) === 6;
+                    const linkedOrder = line.PurcNo ? String(line.PurcNo) : '-';
+                    const status = isPurchase ? 'Indkøb' : (line.PurcNo ? 'Produktion' : 'Direkte salg');
+                    html += '<tr><td>' + escapeHtml(String(line.ProdNo || '-')) + '</td><td>' + escapeHtml(String(line.Descr || '-')) + '</td><td>' + formatNumber(line.DisplayQuantity == null ? line.NoFin : line.DisplayQuantity) + '</td><td>' + escapeHtml(linkedOrder) + '</td><td>' + status + '</td></tr>';
+                }
+                html += '</table>';
+
+                html += '<h3 style="margin-top:24px;">Indkøb</h3>';
+                if (purchaseLines.length === 0) {
+                    html += '<div>Ingen tilknyttede indkøbslinjer.</div>';
+                } else {
+                    html += '<table><tr><th>Produkt</th><th>Beskrivelse</th><th>Antal</th><th>Indkøbsordre</th></tr>';
+                    for (const line of purchaseLines) {
+                        html += '<tr><td>' + escapeHtml(String(line.ProdNo || '-')) + '</td><td>' + escapeHtml(String(line.Descr || '-')) + '</td><td>' + formatNumber(line.NoFin || 0) + '</td><td>' + escapeHtml(String(line.PurcNo || '-')) + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                html += '<h3 style="margin-top:24px;">Produktionsforløb</h3>';
+                if (operationRows.length === 0) {
+                    html += '<div>Ingen operationer fundet for ordren.</div>';
+                } else {
+                    html += '<table><tr><th>Prod.ordre</th><th>Type</th><th>Produkt</th><th>Beskrivelse</th><th>Planlagt</th><th>Færdig</th></tr>';
+                    for (const row of operationRows) {
+                        html += '<tr><td>' + escapeHtml(String(row.productionOrderNo || '-')) + '</td><td>' + row.type + '</td><td>' + escapeHtml(String(row.productNo || '-')) + '</td><td>' + escapeHtml(String(row.description || '-')) + '</td><td>' + formatNumber(row.planned || 0) + '</td><td>' + formatNumber(row.completed || 0) + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                html += '</div>';
+                openOrderDetailModal(html, 'Ordreoversigt - ordre ' + String(orderHeader.OrdNo || '-'), 'Produktion, indkøb og varelinjer');
             }
 
             function closeOversigtModal(event) {
@@ -7822,9 +7986,25 @@ app.get('/', (req, res) => {
             function openModule(moduleKey) {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
+                const ordreoversigt = document.getElementById('mainOrdreoversigt');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
+
+                if (moduleKey === 'ordreoversigt') {
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (workspace) workspace.style.display = 'none';
+                    if (omsaetning) omsaetning.style.display = 'none';
+                    if (ordreindgang) ordreindgang.style.display = 'none';
+                    if (belastning) belastning.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'block';
+                    closeSideMenu();
+                    setTimeout(() => {
+                        const input = document.getElementById('ordreoversigtInput');
+                        if (input) input.focus();
+                    }, 0);
+                    return;
+                }
 
                 if (moduleKey === 'efterkalk') {
                     if (!warmupCombinedReady) {
@@ -7835,6 +8015,7 @@ app.get('/', (req, res) => {
                         return;
                     }
                     if (dashboard) dashboard.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
@@ -7848,6 +8029,7 @@ app.get('/', (req, res) => {
                 if (moduleKey === 'omsaetning') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'block';
@@ -7860,6 +8042,7 @@ app.get('/', (req, res) => {
                 if (moduleKey === 'ordreindgang') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'block';
@@ -7872,6 +8055,7 @@ app.get('/', (req, res) => {
                 if (moduleKey === 'belastning') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'block';
@@ -7887,14 +8071,290 @@ app.get('/', (req, res) => {
                 }
             }
 
+            async function searchOrdreoversigt() {
+                const input = document.getElementById('ordreoversigtInput');
+                const result = document.getElementById('ordreoversigtResult');
+                const ordNo = Number(input && input.value);
+                if (!Number.isFinite(ordNo) || ordNo <= 0) {
+                    if (result) result.innerHTML = '<div class="error">Indtast et gyldigt ordrenummer.</div>';
+                    return;
+                }
+                if (!result) return;
+
+                result.innerHTML = '<div class="loading">Henter produktionsdata...</div>';
+                try {
+                    const response = await fetch('/ordreoversigt/' + encodeURIComponent(String(ordNo)));
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke hente ordren');
+
+                    const lines = Array.isArray(data.lines) ? data.lines : [];
+                    const linkedOrders = Array.isArray(data.linkedOrders) ? data.linkedOrders : [];
+                    const purchaseOrders = linkedOrders.filter(order => order.type === 'purchase');
+                    const productionOrders = linkedOrders.filter(order => order.type === 'production');
+                    const laserNesting = Array.isArray(data.laserNesting) ? data.laserNesting : [];
+                    const sourcePurchaseItems = Array.isArray(data.purchaseItems) ? data.purchaseItems : [];
+                    const purchaseStockRows = Array.isArray(data.purchaseStockRows) ? data.purchaseStockRows : [];
+                    const plateInventory = Array.isArray(data.plateInventory) ? data.plateInventory : [];
+                    const lDescriptionRows = Array.isArray(data.lDescriptionRows) ? data.lDescriptionRows : [];
+                    const customerLaserRows = Array.isArray(data.customerLaserRows) ? data.customerLaserRows : [];
+                    const laserInfoFromRouteRows = Array.isArray(data.laserInfoFromRouteRows) ? data.laserInfoFromRouteRows : [];
+                    const excelVareLinierRows = Array.isArray(data.excelVareLinierRows) ? data.excelVareLinierRows : [];
+                    const excelSaveListeRows = Array.isArray(data.excelSaveListeRows) ? data.excelSaveListeRows : [];
+                    const printFlags = data.printFlags || {};
+                    const planning = Array.isArray(data.planning) ? data.planning : [];
+                    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+                    const getStatus = line => {
+                        const planned = Number(line.NoOrg || 0);
+                        const completed = Number(line.NoFin || 0);
+                        if (planned > 0 && completed >= planned) return 'Færdig';
+                        return completed > 0 ? 'I gang' : 'Ikke startet';
+                    };
+                    const formatDate = value => {
+                        const compact = String(value == null ? '' : value).replace(/\D/g, '');
+                        if (/^\d{8}$/.test(compact)) return compact.slice(6, 8) + '-' + compact.slice(4, 6) + '-' + compact.slice(0, 4);
+                        const text = String(value || '').split('T')[0];
+                        const parts = text.split('-');
+                        return parts.length === 3 ? (parts[2] + '-' + parts[1] + '-' + parts[0]) : '-';
+                    };
+                    const formatQty = value => {
+                        const n = Number(value || 0);
+                        if (!Number.isFinite(n)) return '-';
+                        if (Math.abs(n - Math.round(n)) < 0.0001) return String(Math.round(n));
+                        return formatNumber(n);
+                    };
+                    const textOrDash = value => {
+                        const txt = String(value == null ? '' : value).trim();
+                        return txt || '-';
+                    };
+                    const customerAddress = [
+                        data.order && data.order.CustomerAddress1,
+                        data.order && data.order.CustomerAddress2,
+                        [data.order && data.order.CustomerPostCode, data.order && data.order.CustomerCity].filter(Boolean).join(' ')
+                    ].filter(Boolean);
+                    const orderAddress = [
+                        data.order && data.order.OrderAddress1,
+                        data.order && data.order.OrderAddress2,
+                        [data.order && data.order.OrderPostCode, data.order && data.order.OrderCity].filter(Boolean).join(' ')
+                    ].filter(Boolean);
+                    const deliveryAddress = [
+                        data.order && data.order.DelNm,
+                        data.order && data.order.DelAd1,
+                        data.order && data.order.DelAd2,
+                        [data.order && data.order.DelPNo, data.order && data.order.DelPArea].filter(Boolean).join(' ')
+                    ].filter(Boolean);
+                    const customerNotes = Array.isArray(data.customerNotes) ? data.customerNotes.map(row => String(row.Txt1 || '').trim()).filter(Boolean) : [];
+
+                    const statusHtml = line => {
+                        const status = getStatus(line);
+                        const css = status === 'Færdig' ? 'done' : (status === 'I gang' ? 'progress' : 'waiting');
+                        return '<span class="ordreoversigt-status ' + css + '">' + status + '</span>';
+                    };
+                    const productionByNo = new Map(productionOrders.map(order => [Number(order.ordNo), order]));
+                    const vareLinierRows = excelVareLinierRows;
+                    const saveRows = excelSaveListeRows.filter(line => /^(Save|Pladesaks)/i.test(String(line.Descr || '').trim()));
+                    const laserRows = laserNesting.map(row => {
+                        const sourceProductionOrderNo = Number(row.ProdOrd || row.SourceProductionOrderNo || 0);
+                        const productionOrder = productionByNo.get(sourceProductionOrderNo) || {};
+                        return {
+                            ...row,
+                            ProductionOrderNo: sourceProductionOrderNo || null,
+                            HovOr: Number(productionOrder.parentOrderNo || 0) || sourceProductionOrderNo || ordNo,
+                            UlevDate: productionOrder.ulevDate || null
+                        };
+                    });
+                    const routeRows = Array.isArray(data.routeRows) ? data.routeRows : [];
+                    const purchaseInfoByProdNo = new Map();
+                    for (const stockRow of purchaseStockRows) {
+                        const productNo = String(stockRow.ProdNo || '').trim();
+                        if (!productNo) continue;
+                        if (!purchaseInfoByProdNo.has(productNo)) {
+                            purchaseInfoByProdNo.set(productNo, {
+                                stockBalance: Number(stockRow.StockBalance || 0),
+                                reserved: Number(stockRow.Reserved || 0),
+                                suppliers: []
+                            });
+                        }
+                        const info = purchaseInfoByProdNo.get(productNo);
+                        const supplier = String(stockRow.SupplierName || '').trim();
+                        if (supplier && !info.suppliers.includes(supplier)) info.suppliers.push(supplier);
+                    }
+                    const purchaseRows = sourcePurchaseItems.map(line => {
+                        const info = purchaseInfoByProdNo.get(String(line.ProdNo || '').trim()) || { stockBalance: 0, reserved: 0, suppliers: [] };
+                        return {
+                            ...line,
+                            StockBalance: info.stockBalance,
+                            Suppliers: info.suppliers
+                        };
+                    });
+
+                    const ulevDates = productionOrders
+                        .map(order => Number(order.ulevDate || 0))
+                        .filter(value => value > 19800101)
+                        .sort((a, b) => a - b);
+                    const firstUlevDate = ulevDates.length ? ulevDates[0] : null;
+                    const planningText = planning.length
+                        ? planning.map(row => formatDate(row.PlannedDate) + ' · ' + textOrDash(row.ResourceName || row.ResourceNo) + ' · ' + formatQty(row.PlannedHours) + ' t').join(' | ')
+                        : '-';
+
+                    const pladeRows = plateInventory;
+
+                    const firstOperationText = line => {
+                        const firstOpNo = String(line.FirstOperationNo || '').trim();
+                        const firstOpDescr = String(line.FirstOperation || '').trim();
+                        if (firstOpNo && firstOpDescr) return firstOpNo + ' - ' + firstOpDescr;
+                        return firstOpNo || firstOpDescr || '-';
+                    };
+                    const statusIcon = line => {
+                        const status = getStatus(line);
+                        if (status === 'Færdig') return '✓';
+                        if (status === 'I gang') return '◔';
+                        return '○';
+                    };
+
+                    let html = '<div class="ordreoversigt-sheet">';
+                    html += '<div class="ordreoversigt-barcode-row"><span class="ordreoversigt-barcode">*' + escapeHtml(String(data.order && data.order.OrdNo || ordNo)) + '*</span></div>';
+                    html += '<div class="ordreoversigt-topline"><div><strong>' + escapeHtml(String(data.order && data.order.OrdNo || ordNo)) + '</strong></div><div style="text-align:center;"><strong style="font-size:19px;">' + escapeHtml(textOrDash(data.order && data.order.CustomerName)) + '</strong></div><div>1x</div></div>';
+                    html += '<div class="ordreoversigt-headgrid">';
+                    html += '<div class="ordreoversigt-headcell"><div class="ordreoversigt-headtitle">Kundenavn</div><div class="ordreoversigt-headbody"><strong>' + escapeHtml(textOrDash(data.order && data.order.CustomerName)) + '</strong><br>' + (orderAddress.length ? orderAddress.map(escapeHtml).join('<br>') : '-') + '</div></div>';
+                    html += '<div class="ordreoversigt-headcell"><div class="ordreoversigt-headtitle">Leveres</div><div class="ordreoversigt-headbody"><strong>' + escapeHtml(textOrDash(data.order && data.order.DelNm || data.order && data.order.CustomerName)) + '</strong><br>' + (deliveryAddress.slice(1).length ? deliveryAddress.slice(1).map(escapeHtml).join('<br>') : '-') + '</div></div>';
+                    html += '<div class="ordreoversigt-headcell"><div class="ordreoversigt-headtitle">LevMåde</div><div class="ordreoversigt-headbody">' + escapeHtml(textOrDash(data.order && data.order.DeliveryMode)) + '</div></div>';
+                    html += '</div>';
+                    html += '<div class="ordreoversigt-subgrid">';
+                    html += '<div class="ordreoversigt-subcell"><div class="ordreoversigt-headtitle">Oplysninger</div><div class="ordreoversigt-headbody">' + escapeHtml(textOrDash(data.order && data.order.ReqNo)) + '<br>' + escapeHtml(textOrDash(data.order && data.order.Rsp)) + '<br>' + escapeHtml(textOrDash(data.order && data.order.Inf2)) + '</div></div>';
+                    html += '<div class="ordreoversigt-subcell"><div class="ordreoversigt-headtitle">Kunde informationer</div><div class="ordreoversigt-headbody">' + (customerNotes.length ? customerNotes.map(escapeHtml).join('<br>') : '-') + '</div></div>';
+                    html += '<div class="ordreoversigt-subcell"><div class="ordreoversigt-headtitle">Ressourcer</div><div class="ordreoversigt-headbody">';
+                    if (planning.length) {
+                        html += '<table class="ordreoversigt-mini-table"><thead><tr><th>Res</th><th>Slutdato</th><th>Tid</th></tr></thead><tbody>';
+                        for (const row of planning.slice(0, 6)) {
+                            html += '<tr><td>' + escapeHtml(textOrDash(row.ResourceName || row.ResourceNo)) + '</td><td>' + escapeHtml(formatDate(row.PlannedDate)) + '</td><td>' + escapeHtml(formatQty(row.PlannedHours)) + '</td></tr>';
+                        }
+                        html += '</tbody></table>';
+                    } else {
+                        html += '-';
+                    }
+                    html += '</div></div>';
+                    html += '<div class="ordreoversigt-subcell"><div class="ordreoversigt-headtitle">Info</div><div class="ordreoversigt-headbody">' + (warnings.length ? warnings.map(escapeHtml).join('<br>') : 'Ordre klar til produktion') + '<br><br>Levdato: ' + escapeHtml(formatDate(data.order && data.order.DeliveryDate)) + '<br>U-lev: ' + escapeHtml(formatDate(firstUlevDate)) + '<br>Sagsbeh: ' + escapeHtml(textOrDash(data.order && data.order.SellerUsr)) + '</div></div>';
+                    html += '</div>';
+
+                    const sectionTabs = [
+                        { id: 'ov-varelinier', title: 'VareLinier' },
+                        { id: 'ov-saveliste', title: 'SaveListe' },
+                        { id: 'ov-laserliste', title: 'LaserListe' },
+                        { id: 'ov-rute', title: 'Rute' },
+                        { id: 'ov-laserinfrarute', title: 'Laser inf fra rute' },
+                        { id: 'ov-lbeskriv', title: 'L- beskriv' },
+                        { id: 'ov-laslist-kuvanr', title: 'LasList KuVaNr' },
+                        { id: 'ov-pladelager', title: 'PladeLager' },
+                        { id: 'ov-indklst', title: 'IndkLst' },
+                        { id: 'ov-indkdet', title: 'IndkLst detaljeret' }
+                    ];
+                    html += '<div class="ordreoversigt-tabbar">' + sectionTabs.map(tab => '<a href="#' + tab.id + '">' + escapeHtml(tab.title) + '</a>').join('') + '</div>';
+
+                    html += '<section id="ov-varelinier" class="ordreoversigt-section">';
+                    html += '<h3>VareLinier</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>SalgsOrdre</th><th>HovOrd</th><th>ProdOrd</th><th>Ant.</th><th>ProdNr.</th><th>OrdGrNo</th><th>Beskrivelse</th><th>main</th><th>TegnNr</th><th>Un</th><th>TrInf1</th></tr></thead><tbody>';
+                    if (!vareLinierRows.length) {
+                        html += '<tr><td colspan="11">Ingen varelinjer fundet.</td></tr>';
+                    }
+                    for (const line of vareLinierRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.SalgsOrdre)) + '</td><td>' + escapeHtml(textOrDash(line.HovOrd)) + '</td><td>' + escapeHtml(textOrDash(line.ProdOrd)) + '</td><td>' + escapeHtml(formatQty(line.Ant)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(textOrDash(line.OrdGrNo)) + '</td><td>' + escapeHtml(textOrDash(line.Descr)) + '</td><td>' + escapeHtml(textOrDash(line.main)) + '</td><td>' + escapeHtml(textOrDash(line.TegnNr)) + '</td><td>' + escapeHtml(textOrDash(line.Un)) + '</td><td>' + escapeHtml(textOrDash(line.TrInf1)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div></section>';
+
+                    html += '<section id="ov-saveliste" class="ordreoversigt-section' + (Number(printFlags.saveList || 0) > 0 ? '' : ' ordreoversigt-print-disabled') + '">';
+                    html += '<h3>SaveListe</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>SalgsOrdre</th><th>HovOrd</th><th>ProdOrd</th><th>Ant.</th><th>ProdNr.</th><th>OrdGrNo</th><th>Beskrivelse</th><th>main</th><th>TegnNr</th><th>Savelængde</th><th>Gr5</th></tr></thead><tbody>';
+                    for (const line of saveRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.SalgsOrdre)) + '</td><td>' + escapeHtml(textOrDash(line.HovOrd)) + '</td><td>' + escapeHtml(textOrDash(line.ProdOrd)) + '</td><td>' + escapeHtml(formatQty(line.Ant)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(textOrDash(line.OrdGrNo)) + '</td><td>' + escapeHtml(textOrDash(line.Descr)) + '</td><td>' + escapeHtml(textOrDash(line.main)) + '</td><td>' + escapeHtml(textOrDash(line.TegnNr)) + '</td><td>' + escapeHtml(textOrDash(line.Savelaengde)) + '</td><td>' + escapeHtml(textOrDash(line.Gr5)) + '</td></tr>';
+                    }
+                    if (!saveRows.length) html += '<tr><td colspan="11">Ingen SaveListe-linjer fundet.</td></tr>';
+                    html += '</tbody></table></div>';
+                    html += '</section>';
+
+                    html += '<section id="ov-laserliste" class="ordreoversigt-section' + (Number(printFlags.laserList || 0) > 0 ? '' : ' ordreoversigt-print-disabled') + '">';
+                    html += '<h3>LaserListe</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>ProdOrd</th><th>ProdNr.</th><th>Beskrivelse</th><th>TegnNr</th><th>SavLgd</th><th>Råvarenr</th><th>Råvarebetegn.</th><th>Ant</th><th>Pict</th><th>OplNest</th><th>K.Varenr.</th><th>Descr</th><th>Deling</th><th>retn</th></tr></thead><tbody>';
+                    if (laserRows.length === 0) html += '<tr><td colspan="14">Ingen laserlinjer fundet.</td></tr>';
+                    for (const line of laserRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.SourceProductionOrderNo || line.ProductionOrderNo)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNo)) + '</td><td>' + escapeHtml(textOrDash(line.Descr)) + '</td><td>' + escapeHtml(textOrDash(line.TegnNr || line.DrawingNo)) + '</td><td>' + escapeHtml(textOrDash(line.SavLgd || line.Savelængde)) + '</td><td>' + escapeHtml(textOrDash(line.MaterialNo)) + '</td><td>' + escapeHtml(textOrDash(line.MaterialDescription)) + '</td><td>' + escapeHtml(formatQty(line.Ant || line.NoInvoAb || line.NoOrg)) + '</td><td>' + escapeHtml(textOrDash(line.Pict || line.PictNo)) + '</td><td>' + escapeHtml(textOrDash(line.OplNest || line.TrInf1)) + '</td><td>' + escapeHtml(textOrDash(line.CustomerItemNo)) + '</td><td>' + escapeHtml(textOrDash(line.StructDescr || line.Descr)) + '</td><td>' + escapeHtml(textOrDash(line.Deling || line.RouteNo)) + '</td><td>' + escapeHtml(textOrDash(line.retn || '-')) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div>';
+                    html += '</section>';
+
+                    html += '<section id="ov-rute" class="ordreoversigt-section">';
+                    html += '<h3>Rute</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>OrdNr</th><th>ProdNr</th><th>Ant</th><th>HovedOrdre</th><th>OrdGrNo</th><th>Beskrivelse</th><th>Res</th><th>TrInf4</th><th>Operation</th><th>CfDelDt</th><th>RNo</th><th>Gr11</th><th>PrgNr</th><th>Gr3</th></tr></thead><tbody>';
+                    if (routeRows.length === 0) html += '<tr><td colspan="14">Ingen rutelinjer fundet.</td></tr>';
+                    for (const line of routeRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.OrdNr)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(formatQty(line.Ant || 0)) + '</td><td>' + escapeHtml(textOrDash(line.HovedOrdre)) + '</td><td>' + escapeHtml(textOrDash(line.OrdGrNo)) + '</td><td>' + escapeHtml(textOrDash(line.Descr)) + '</td><td>' + escapeHtml(textOrDash(line.ResourceShortName)) + '</td><td>' + escapeHtml(textOrDash(line.TrInf4)) + '</td><td>' + escapeHtml(textOrDash(line.OperationDescr)) + '</td><td>' + escapeHtml(formatDate(line.CfDelDt)) + '</td><td>' + escapeHtml(textOrDash(line.RNo)) + '</td><td>' + escapeHtml(textOrDash(line.Gr11)) + '</td><td>' + escapeHtml(textOrDash(line.PrgNr)) + '</td><td>' + escapeHtml(textOrDash(line.Gr3)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div>';
+                    html += '</section>';
+
+                    html += '<section id="ov-laserinfrarute" class="ordreoversigt-section">';
+                    html += '<h3>Laser inf fra rute</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>ProdOrd</th><th>ProdNr.</th><th>SubProd</th><th>Inf2</th><th>Gr3</th></tr></thead><tbody>';
+                    if (laserInfoFromRouteRows.length === 0) html += '<tr><td colspan="5">Ingen registrerede laseroplysninger fra rute.</td></tr>';
+                    for (const line of laserInfoFromRouteRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.ProdOrd)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(textOrDash(line.SubProd)) + '</td><td>' + escapeHtml(textOrDash(line.Inf2)) + '</td><td>' + escapeHtml(textOrDash(line.Gr3)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div>';
+                    html += '</section>';
+
+                    html += '<section id="ov-lbeskriv" class="ordreoversigt-section' + (Number(printFlags.lDescription || 0) > 0 ? '' : ' ordreoversigt-print-disabled') + '">';
+                    html += '<h3>L- beskriv</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>ProdO</th><th>ProdNr.</th><th>Beskrivelse</th><th>Ekstra inf.</th></tr></thead><tbody>';
+                    if (lDescriptionRows.length === 0) html += '<tr><td colspan="4">Ingen ekstra L-beskrivelse på ordren.</td></tr>';
+                    for (const line of lDescriptionRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.ProdOrd)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(textOrDash(line.Beskrivelse)) + '</td><td>' + escapeHtml(textOrDash(line.EkstraInf)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div></section>';
+
+                    html += '<section id="ov-laslist-kuvanr" class="ordreoversigt-section">';
+                    html += '<h3>LasList KuVaNr</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>ProdO</th><th>ProdNr.</th><th>Beskrivelse</th><th>TegnNr</th><th>SavLgd</th><th>Råvarenr</th><th>Råvarebetegn.</th><th>Ant</th><th>Pict</th><th>OplNest</th><th>K.Varenr.</th><th>Deling</th></tr></thead><tbody>';
+                    if (customerLaserRows.length === 0) html += '<tr><td colspan="12">Ingen kundevare-numre på laserlinjer.</td></tr>';
+                    for (const line of customerLaserRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.ProdOrd)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(textOrDash(line.Beskrivelse)) + '</td><td>' + escapeHtml(textOrDash(line.TegnNr)) + '</td><td>' + escapeHtml(textOrDash(line.SavLgd)) + '</td><td>' + escapeHtml(textOrDash(line.Raavarenr)) + '</td><td>' + escapeHtml(textOrDash(line.Raavarebetegn)) + '</td><td>' + escapeHtml(formatQty(line.Ant || 0)) + '</td><td>' + escapeHtml(textOrDash(line.Pict)) + '</td><td>' + escapeHtml(textOrDash(line.OplNest)) + '</td><td>' + escapeHtml(textOrDash(line.KVarenr)) + '</td><td>' + escapeHtml(textOrDash(line.Deling)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div></section>';
+
+                    html += '<section id="ov-pladelager" class="ordreoversigt-section">';
+                    html += '<h3>PladeLager</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>Bæ.</th><th>ProdNr</th><th>Betegnelse</th><th>Tykkels</th><th>Plader</th><th>Reservert</th><th>FIFO pris</th></tr></thead><tbody>';
+                    if (pladeRows.length === 0) html += '<tr><td colspan="7">Ingen pladelagerlinjer fundet.</td></tr>';
+                    for (const row of pladeRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(row.Carrier)) + '</td><td>' + escapeHtml(textOrDash(row.ProdNo)) + '</td><td>' + escapeHtml(textOrDash(row.Descr)) + '</td><td>' + escapeHtml(formatQty(row.Thickness)) + '</td><td>' + escapeHtml(formatQty(row.SheetCount)) + '</td><td>' + escapeHtml(formatQty(row.Reserved)) + '</td><td>' + escapeHtml(formatNumber(row.FifoPrice || 0)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div></section>';
+
+                    html += '<section id="ov-indklst" class="ordreoversigt-section' + (Number(printFlags.purchaseList || 0) > 0 ? '' : ' ordreoversigt-print-disabled') + '">';
+                    html += '<h3>IndkLst</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>ProdNr.</th><th>Beskrivelse</th><th>Enh.</th><th>Gr6</th><th>Beholdning</th><th>Reserveret</th><th>Gr5</th></tr></thead><tbody>';
+                    const excelIndkLstRows = Array.isArray(data.excelIndkLstRows) ? data.excelIndkLstRows : [];
+                    if (excelIndkLstRows.length === 0) html += '<tr><td colspan="7">Ingen tilknyttede indkøbslinjer.</td></tr>';
+                    for (const line of excelIndkLstRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.ProdNr)) + '</td><td>' + escapeHtml(textOrDash(line.Beskrivelse)) + '</td><td>' + escapeHtml(textOrDash(line.Enh)) + '</td><td>' + escapeHtml(textOrDash(line.Gr6)) + '</td><td>' + escapeHtml(formatQty(line.Beholdning || 0)) + '</td><td>' + escapeHtml(formatQty(line.Reserveret || 0)) + '</td><td>' + escapeHtml(textOrDash(line.Gr5)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div></section>';
+
+                    html += '<section id="ov-indkdet" class="ordreoversigt-section' + (Number(printFlags.purchaseList || 0) > 0 ? '' : ' ordreoversigt-print-disabled') + '">';
+                    html += '<h3>IndkLst detaljeret</h3><div class="ordreoversigt-table-wrap"><table class="ordreoversigt-table"><thead><tr><th>SalgsOrdre</th><th>HovOrd</th><th>ProdOrd</th><th>ProdNr.</th><th>OrdGrNo</th><th>Beskrivelse</th><th>main</th><th>TegnNr</th><th>Savelængde</th><th>type</th><th>Antal</th><th>Enh</th><th>Txt</th></tr></thead><tbody>';
+                    if (purchaseRows.length === 0) html += '<tr><td colspan="13">Ingen detaljerede indkøbslinjer.</td></tr>';
+                    for (const line of purchaseRows) {
+                        html += '<tr><td>' + escapeHtml(textOrDash(line.SalgsOrdre)) + '</td><td>' + escapeHtml(textOrDash(line.HovOrd)) + '</td><td>' + escapeHtml(textOrDash(line.ProdOrd || line.ProductionOrderNo)) + '</td><td>' + escapeHtml(textOrDash(line.ProdNo)) + '</td><td>' + escapeHtml(textOrDash(line.OrdGrNo)) + '</td><td>' + escapeHtml(textOrDash(line.Descr)) + '</td><td>' + escapeHtml(textOrDash(line.main)) + '</td><td>' + escapeHtml(textOrDash(line.TegnNr || line.DrawingNo)) + '</td><td>' + escapeHtml(textOrDash(line.Savelængde)) + '</td><td>' + escapeHtml(textOrDash(line.Gr5)) + '</td><td>' + escapeHtml(formatQty(line.SaveAnt || line.Ant)) + '</td><td>' + escapeHtml(textOrDash(line.Un)) + '</td><td>' + escapeHtml(textOrDash(line.Txt)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div></section>';
+
+                    html += '</div>';
+
+                    result.innerHTML = html;
+                } catch (err) {
+                    result.innerHTML = '<div class="error">Fejl i ordreoversigt: ' + escapeHtml(String(err.message || err)) + '</div>';
+                }
+            }
+
             function goToDashboard() {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
+                const ordreoversigt = document.getElementById('mainOrdreoversigt');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
                 closeSideMenu();
                 if (workspace) workspace.style.display = 'none';
+                if (ordreoversigt) ordreoversigt.style.display = 'none';
                 if (omsaetning) omsaetning.style.display = 'none';
                 if (ordreindgang) ordreindgang.style.display = 'none';
                 if (belastning) belastning.style.display = 'none';

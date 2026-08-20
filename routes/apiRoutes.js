@@ -936,6 +936,685 @@ function createApiRouter({
         }
     });
 
+    router.get('/ordreoversigt/:ordno', async (req, res) => {
+        try {
+            const ordNo = parseInt(req.params.ordno);
+            if (!Number.isFinite(ordNo)) {
+                return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
+            }
+
+            const cacheKey = 'ordreoversigt_v5_' + ordNo;
+            const cached = diskCache.get(cacheKey);
+            if (cached) return res.json({ ...cached, cached: true });
+
+            const pool = await getConnection();
+            const [headerResult, linesResult, planningResult, customerNotesResult] = await Promise.all([
+                pool.request()
+                    .input('ordNo', sql.Numeric, ordNo)
+                    .query(`
+                        SELECT
+                            O.OrdNo,
+                            O.CustNo,
+                            O.Nm,
+                            O.ReqNo,
+                            O.LiaActNo,
+                            O.SelBuy,
+                            O.TrTp,
+                            O.Rsp,
+                            O.CreUsr AS SellerUsr,
+                            O.Ad1 AS OrderAddress1,
+                            O.Ad2 AS OrderAddress2,
+                            O.PNo AS OrderPostCode,
+                            O.PArea AS OrderCity,
+                            O.DelMt,
+                            O.DelDt,
+                            O.DelNm,
+                            O.DelAd1,
+                            O.DelAd2,
+                            O.DelPNo,
+                            O.DelPArea,
+                            O.DelTrm,
+                            O.Inf2,
+                            O.Gr4,
+                            O.ShpActNo,
+                            ISNULL((SELECT TOP (1) Txt FROM Txt WITH(NOLOCK) WHERE Lang = 45 AND TxtTp = 5 AND TxtNo = O.DelMt), '') AS DeliveryMode,
+                            A.Nm AS CustomerName,
+                            A.Ad1 AS CustomerAddress1,
+                            A.Ad2 AS CustomerAddress2,
+                            A.PNo AS CustomerPostCode,
+                            A.PArea AS CustomerCity
+                        FROM Ord O
+                        LEFT JOIN Actor A ON A.CustNo = O.CustNo
+                        WHERE O.OrdNo = @ordNo
+                    `),
+                pool.request()
+                    .input('ordNo', sql.Numeric, ordNo)
+                    .query(`
+                                                SELECT
+                                                    Ord_1.OrdBasNo AS SalgsOrdre,
+                                                    O.MainOrd AS HovOrd,
+                                                    O.OrdNo AS ProdOrd,
+                                                        L.OrdNo,
+                                                        L.LnNo,
+                                                        L.ProdNo,
+                                                        L.Descr,
+                                                    L.NoInvoAb + L.NoFin - L.NoInvo AS Ant,
+                                                    L.NoInvoAb AS SaveAnt,
+                                                        L.NoInvo,
+                                                        L.NoOrg,
+                                                        L.NoFin,
+                                                    L.Un,
+                                                    L.TrInf1,
+                                                    L.TrInf3 AS Savelængde,
+                                                    O.OrdBasNo AS OrdGrNo,
+                                                    Ord_1.MainOrd AS main,
+                                                        L.PurcNo,
+                                                        L.ProdTp4,
+                                                        L.TrTp,
+                                                        L.TrInf2,
+                                                        L.TrInf4,
+                                                        L.WebPg,
+                                                        L.PictFNm,
+                                                        P.Inf2 AS DrawingNo,
+                                                        P.Inf7 AS TegnNr,
+                                                        P.Inf4 AS CustomerItemNo,
+                                                        P.Gr6,
+                                                        P.Gr5,
+                                                        Material.ProdNo AS MaterialNo,
+                                                        Material.Descr AS MaterialDescription,
+                                                        FirstOperation.Descr AS FirstOperation,
+                                                        FirstOperation.ProdNo AS FirstOperationNo
+                                                FROM OrdLn L WITH(NOLOCK)
+                                                INNER JOIN Ord O WITH(NOLOCK) ON O.OrdNo = L.OrdNo
+                                                LEFT JOIN Ord Ord_1 WITH(NOLOCK) ON O.MainOrd = Ord_1.OrdNo
+                                                LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
+                                                OUTER APPLY (
+                                                        SELECT TOP (1) M.ProdNo, M.Descr
+                                                        FROM Struct S WITH(NOLOCK)
+                                                        INNER JOIN Prod M WITH(NOLOCK) ON M.ProdNo = S.SubProd
+                                                        WHERE S.ProdNo = L.ProdNo
+                                                            AND S.SubProd LIKE '3%'
+                                                        ORDER BY S.SubProd
+                                                ) Material
+                                                OUTER APPLY (
+                                                        SELECT TOP (1) Child.Descr, Child.ProdNo
+                                                        FROM OrdLn Child WITH(NOLOCK)
+                                                        WHERE Child.OrdNo = L.PurcNo
+                                                            AND Child.ProdTp4 IN (1, 3)
+                                                        ORDER BY Child.LnNo
+                                                ) FirstOperation
+                                                WHERE L.OrdNo = @ordNo
+                                                ORDER BY L.LnNo
+                    `),
+                pool.request()
+                    .input('ordNo', sql.Numeric, ordNo)
+                    .query(`
+                        SELECT
+                            R7.MainR7 AS ResourceNo,
+                            R7.Nm AS ResourceName,
+                            dbo.EGD_Int2Date(F.Dt1) AS PlannedDate,
+                            SUM(ABS(CONVERT(float, F.Val1))) AS PlannedHours
+                        FROM FreeInf1 F WITH(NOLOCK)
+                        INNER JOIN OrdLn L WITH(NOLOCK)
+                            ON L.OrdNo = F.OrdNo AND L.LnNo = F.OrdLnNo
+                        INNER JOIN Ord PO WITH(NOLOCK)
+                            ON PO.OrdNo = F.OrdNo
+                        INNER JOIN R7 WITH(NOLOCK)
+                            ON R7.RNo = F.R7
+                        WHERE F.FrInfTp = 2
+                          AND F.Val1 < 0
+                          AND L.ProdTp4 IN (1, 3)
+                          AND (PO.OrdBasNo = @ordNo OR PO.OrdNo = @ordNo)
+                        GROUP BY R7.MainR7, R7.Nm, F.Dt1
+                        ORDER BY F.Dt1, R7.MainR7
+                    `),
+                pool.request()
+                    .input('ordNo', sql.Numeric, ordNo)
+                    .query(`
+                        SELECT ActInf.LnNo, ActInf.Txt1
+                        FROM Ord O WITH(NOLOCK)
+                        INNER JOIN Actor A WITH(NOLOCK) ON A.CustNo = O.CustNo
+                        INNER JOIN ActInf ActInf WITH(NOLOCK) ON ActInf.ActNo = A.ActNo
+                        WHERE O.OrdNo = @ordNo
+                          AND ActInf.InfTp = 10
+                        ORDER BY ActInf.LnNo
+                    `)
+            ]);
+
+            if (headerResult.recordset.length === 0) {
+                return res.status(404).json({ error: 'Ordre ikke fundet' });
+            }
+
+            const lines = linesResult.recordset;
+            const linkedOrders = [];
+            const queuedOrders = lines
+                .map(line => ({
+                    ordNo: Number(line.PurcNo || 0),
+                    parentOrderNo: ordNo
+                }))
+                .filter(order => Number.isFinite(order.ordNo) && order.ordNo > 0);
+            const seenOrderNos = new Set();
+
+            while (queuedOrders.length > 0 && linkedOrders.length < 250) {
+                const nextOrder = queuedOrders.shift();
+                const linkedOrderNo = nextOrder.ordNo;
+                if (seenOrderNos.has(linkedOrderNo)) continue;
+                seenOrderNos.add(linkedOrderNo);
+
+                const [linkedHeaderResult, linkedLinesResult] = await Promise.all([
+                    pool.request()
+                        .input('linkedOrderNo', sql.Numeric, linkedOrderNo)
+                        .query('SELECT OrdNo, TrTp, ArDt, OrdBasNo FROM Ord WHERE OrdNo = @linkedOrderNo'),
+                    pool.request()
+                        .input('linkedOrderNo', sql.Numeric, linkedOrderNo)
+                        .query(`
+                            SELECT
+                                Ord_1.OrdBasNo AS SalgsOrdre,
+                                O.MainOrd AS HovOrd,
+                                O.OrdNo AS ProdOrd,
+                                   L.OrdNo,
+                                   L.LnNo,
+                                   L.ProdNo,
+                                   L.Descr,
+                                   L.NoInvoAb + L.NoFin - L.NoInvo AS Ant,
+                                   L.NoInvoAb AS SaveAnt,
+                                   L.NoInvo,
+                                   L.NoOrg,
+                                   L.NoFin,
+                                   L.Un,
+                                   L.TrInf1,
+                                   L.TrInf3 AS Savelængde,
+                                   O.OrdBasNo AS OrdGrNo,
+                                   Ord_1.MainOrd AS main,
+                                   L.PurcNo,
+                                   L.ProdTp4,
+                                   L.TrTp,
+                                   L.TrInf2,
+                                   L.TrInf4,
+                                   L.WebPg,
+                                   L.PictFNm,
+                                   P.Inf2 AS DrawingNo,
+                                   P.Inf7 AS TegnNr,
+                                   P.Inf4 AS CustomerItemNo,
+                                   P.Gr6,
+                                   P.Gr5,
+                                   Material.ProdNo AS MaterialNo,
+                                   Material.Descr AS MaterialDescription,
+                                   FirstOperation.Descr AS FirstOperation,
+                                   FirstOperation.ProdNo AS FirstOperationNo
+                            FROM OrdLn L WITH(NOLOCK)
+                            INNER JOIN Ord O WITH(NOLOCK) ON O.OrdNo = L.OrdNo
+                            LEFT JOIN Ord Ord_1 WITH(NOLOCK) ON O.MainOrd = Ord_1.OrdNo
+                            LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
+                            OUTER APPLY (
+                                SELECT TOP (1) M.ProdNo, M.Descr
+                                FROM Struct S WITH(NOLOCK)
+                                INNER JOIN Prod M WITH(NOLOCK) ON M.ProdNo = S.SubProd
+                                WHERE S.ProdNo = L.ProdNo
+                                  AND S.SubProd LIKE '3%'
+                                ORDER BY S.SubProd
+                            ) Material
+                            OUTER APPLY (
+                                SELECT TOP (1) Child.Descr, Child.ProdNo
+                                FROM OrdLn Child WITH(NOLOCK)
+                                WHERE Child.OrdNo = L.PurcNo
+                                  AND Child.ProdTp4 IN (1, 3)
+                                ORDER BY Child.LnNo
+                            ) FirstOperation
+                            WHERE L.OrdNo = @linkedOrderNo
+                            ORDER BY L.LnNo
+                        `)
+                ]);
+                const linkedHeader = linkedHeaderResult.recordset[0] || {};
+                if (!linkedHeader.OrdNo) continue;
+
+                const linkedOrder = {
+                    ordNo: linkedOrderNo,
+                    parentOrderNo: nextOrder.parentOrderNo,
+                    type: Number(linkedHeader.TrTp || 0) === 6 ? 'purchase' : 'production',
+                    ordBaseNo: Number(linkedHeader.OrdBasNo || 0) > 0 ? Number(linkedHeader.OrdBasNo) : null,
+                    ulevDate: Number(linkedHeader.ArDt || 0) > 19800101 ? linkedHeader.ArDt : null,
+                    lines: linkedLinesResult.recordset
+                };
+                linkedOrders.push(linkedOrder);
+
+                for (const linkedLine of linkedOrder.lines) {
+                    const childOrderNo = Number(linkedLine.PurcNo || 0);
+                    if (Number.isFinite(childOrderNo) && childOrderNo > 0 && !seenOrderNos.has(childOrderNo)) {
+                        queuedOrders.push({ ordNo: childOrderNo, parentOrderNo: linkedOrderNo });
+                    }
+                }
+            }
+
+            const productionOrderNos = linkedOrders
+                .filter(order => order.type === 'production')
+                .map(order => Number(order.ordNo || 0))
+                .filter(value => Number.isFinite(value) && value > 0);
+            const purchaseItems = linkedOrders
+                .filter(order => order.type === 'production')
+                .flatMap(order => (order.lines || [])
+                    .filter(line => String(line.ProdTp4 || '') === '2' && !/L$/i.test(String(line.ProdNo || '').trim()))
+                    .map(line => ({
+                        ...line,
+                        ProductionOrderNo: order.ordNo,
+                        ParentOrderNo: order.parentOrderNo,
+                        UlevDate: order.ulevDate
+                    })));
+            const purchaseProdNos = Array.from(new Set(
+                purchaseItems.map(item => String(item.ProdNo || '').trim()).filter(Boolean)
+            ));
+
+            let laserNesting = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const laserResult = await request.query(`
+                    SELECT DISTINCT
+                        Ord.OrdNo AS ProdOrd,
+                        OrdLn.ProdNo AS ProdNo,
+                        Prod.Descr AS Descr,
+                        Prod.Inf7 AS TegnNr,
+                        OrdLn.TrInf3 AS SavLgd,
+                        SUBSTRING(Struct.SubProd, 1, 13) AS MaterialNo,
+                        SUBSTRING(Prod_1.Descr, 1, 50) AS MaterialDescription,
+                        OrdLn.NoInvoAb AS Ant,
+                        Prod_2.PictNo AS Pict,
+                        OrdLn_1.TrInf1 AS OplNest,
+                        Prod.Inf4 AS CustomerItemNo,
+                        Struct.Descr AS StructDescr,
+                        Struct_1.NoPerStr AS Deling,
+                        ISNULL(ProdCat.Descr, '-') AS retn
+                    FROM Ord Ord WITH(NOLOCK)
+                    LEFT JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    LEFT JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    LEFT JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    LEFT JOIN Struct Struct WITH(NOLOCK) ON Struct.ProdNo = OrdLn.ProdNo
+                    LEFT JOIN Prod Prod_1 WITH(NOLOCK) ON Prod_1.ProdNo = Struct.SubProd
+                    LEFT JOIN Struct Struct_1 WITH(NOLOCK) ON Struct_1.SubProd = OrdLn.ProdNo
+                    LEFT JOIN Prod Prod_2 WITH(NOLOCK) ON Struct_1.ProdNo = Prod_2.ProdNo
+                    LEFT JOIN OrdLn OrdLn_1 WITH(NOLOCK) ON OrdLn_1.PurcNo = Ord_1.MainOrd
+                    LEFT JOIN ProdCat ProdCat WITH(NOLOCK) ON Prod.PrCatNo = ProdCat.PrCatNo
+                    WHERE OrdLn.TrTp = 5
+                      AND OrdLn.ProdNo LIKE '%L%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND Struct.SubProd LIKE '3%'
+                      AND OrdLn.NoInvoAb <> 0
+                      AND Prod.Inf5 <> 'komb'
+                    ORDER BY Ord.OrdNo, OrdLn.ProdNo
+                `);
+                laserNesting = laserResult.recordset || [];
+            }
+
+            let purchaseStockRows = [];
+            if (purchaseProdNos.length > 0) {
+                const request = pool.request();
+                const productPlaceholders = purchaseProdNos.map((prodNo, index) => {
+                    const parameter = 'purchaseProdNo' + index;
+                    request.input(parameter, sql.VarChar, prodNo);
+                    return '@' + parameter;
+                }).join(', ');
+                const stockResult = await request.query(`
+                    SELECT
+                        P.ProdNo,
+                        P.Descr AS ProductDescription,
+                        ISNULL(B.Bal, 0) AS StockBalance,
+                        ISNULL(B.InProdO, 0) AS Reserved,
+                        F.Sup AS SupplierNo,
+                        A.Nm AS SupplierName
+                    FROM Prod P WITH(NOLOCK)
+                    LEFT JOIN StcBal B WITH(NOLOCK)
+                        ON B.ProdNo = P.ProdNo
+                       AND B.StcNo = 1
+                    LEFT JOIN FreeInf1 F WITH(NOLOCK)
+                        ON F.ProdNo = P.ProdNo
+                       AND F.Sup <> 0
+                    LEFT JOIN Actor A WITH(NOLOCK)
+                        ON A.SupNo = F.Sup
+                    WHERE CONVERT(varchar(100), P.ProdNo) IN (${productPlaceholders})
+                    ORDER BY P.ProdNo, A.Nm
+                `);
+                purchaseStockRows = stockResult.recordset || [];
+            }
+
+            let plateInventory = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const plateResult = await request.query(`
+                    SELECT DISTINCT
+                        Prod_1.R3 AS Carrier,
+                        Prod.ProdNo,
+                        Prod.Descr,
+                        ISNULL(StcBal.PoPhStB, 0) AS StockBalance,
+                        Prod.NWgtU AS SheetWeight,
+                        Prod.HgtU AS Thickness,
+                        CASE WHEN ISNULL(Prod.NWgtU, 0) <> 0 THEN ISNULL(StcBal.PoPhStB, 0) / Prod.NWgtU ELSE 0 END AS SheetCount,
+                        CASE WHEN ISNULL(Prod.NWgtU, 0) <> 0 THEN (ISNULL(StcBal.ShpRsv, 0) + ISNULL(StcBal.ShpRsvIn, 0)) / Prod.NWgtU ELSE 0 END AS Reserved,
+                        ISNULL(StcBal.PhCstPr, 0) AS FifoPrice
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN Struct Struct WITH(NOLOCK) ON Struct.ProdNo = OrdLn.ProdNo
+                    INNER JOIN Prod Prod_1 WITH(NOLOCK) ON Prod_1.ProdNo = Struct.SubProd
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod_1.R3 = Prod.R3
+                    INNER JOIN StcBal StcBal WITH(NOLOCK) ON StcBal.ProdNo = Prod.ProdNo
+                    WHERE OrdLn.TrTp = 5
+                      AND OrdLn.ProdNo LIKE '%L%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND Struct.SubProd LIKE '3%'
+                      AND StcBal.StcNo = 1
+                      AND Prod.ProdNo <> '301001'
+                      AND Prod.ProdNo LIKE '3%'
+                      AND OrdLn.NoInvoAb <> 0
+                    ORDER BY Prod.ProdNo
+                `);
+                plateInventory = plateResult.recordset || [];
+            }
+
+            let lDescriptionRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT
+                        Ord.OrdNo AS ProdOrd,
+                        OrdLn.ProdNo AS ProdNr,
+                        Prod.Descr AS Beskrivelse,
+                        ProdDesc.Descr AS EkstraInf,
+                        ProdDesc.LnNo
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN ProdDesc ProdDesc WITH(NOLOCK) ON ProdDesc.ProdNo = Prod.ProdNo
+                    WHERE OrdLn.TrTp = 5
+                      AND OrdLn.ProdNo LIKE '%L%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND OrdLn.NoInvoAb <> 0
+                    ORDER BY Ord.OrdNo, ProdDesc.LnNo
+                `);
+                lDescriptionRows = result.recordset || [];
+            }
+
+            let customerLaserRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT
+                        Ord.OrdNo AS ProdOrd,
+                        OrdLn.ProdNo AS ProdNr,
+                        Prod.Descr AS Beskrivelse,
+                        Prod.Inf7 AS TegnNr,
+                        OrdLn.TrInf3 AS SavLgd,
+                        SUBSTRING(Struct.SubProd, 1, 13) AS Raavarenr,
+                        SUBSTRING(Prod_1.Descr, 1, 50) AS Raavarebetegn,
+                        OrdLn.NoInvoAb AS Ant,
+                        Prod_2.PictNo AS Pict,
+                        OrdLn_1.TrInf1 AS OplNest,
+                        Prod.Inf4 AS KVarenr,
+                        Struct.Descr AS StructDescr,
+                        Struct_1.NoPerStr AS Deling
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN Struct Struct WITH(NOLOCK) ON Struct.ProdNo = OrdLn.ProdNo
+                    INNER JOIN Prod Prod_1 WITH(NOLOCK) ON Prod_1.ProdNo = Struct.SubProd
+                    INNER JOIN Struct Struct_1 WITH(NOLOCK) ON Struct_1.SubProd = OrdLn.ProdNo
+                    INNER JOIN Prod Prod_2 WITH(NOLOCK) ON Struct_1.ProdNo = Prod_2.ProdNo
+                    INNER JOIN OrdLn OrdLn_1 WITH(NOLOCK) ON OrdLn_1.PurcNo = Ord_1.MainOrd
+                    WHERE OrdLn.TrTp = 5
+                      AND OrdLn.ProdNo LIKE '%L%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND Struct.SubProd LIKE '3%'
+                      AND OrdLn.NoInvoAb <> 0
+                    ORDER BY Ord.OrdNo, OrdLn.ProdNo
+                `);
+                customerLaserRows = result.recordset || [];
+            }
+
+            let laserInfoFromRouteRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT DISTINCT
+                        Ord.OrdNo AS ProdOrd,
+                        OrdLn.ProdNo AS ProdNr,
+                        Struct_2.SubProd,
+                        Prod.Inf2,
+                        R7.Gr3
+                    FROM BgtLn BgtLn WITH(NOLOCK)
+                    INNER JOIN Ord Ord WITH(NOLOCK) ON Ord.OrdNo = BgtLn.OrdNo
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Struct Struct WITH(NOLOCK) ON OrdLn.ProdNo = Struct.SubProd
+                    INNER JOIN Struct Struct_1 WITH(NOLOCK) ON Struct_1.ProdNo = Struct.ProdNo
+                    INNER JOIN Struct Struct_2 WITH(NOLOCK) ON Struct_1.SubProd = Struct_2.ProdNo
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = Struct_2.SubProd
+                    INNER JOIN R7 R7 WITH(NOLOCK) ON R7.RNo = BgtLn.R7
+                    WHERE OrdLn.TrTp = 5
+                      AND OrdLn.ProdNo LIKE '%L%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND OrdLn.NoInvoAb <> 0
+                      AND Struct_1.SubProd LIKE 'V%'
+                      AND Prod.Inf2 <> ''
+                    ORDER BY Ord.OrdNo, OrdLn.ProdNo
+                `);
+                laserInfoFromRouteRows = result.recordset || [];
+            }
+
+            let excelVareLinierRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT
+                        Ord_1.OrdBasNo AS SalgsOrdre,
+                        Ord.MainOrd AS HovOrd,
+                        Ord.OrdNo AS ProdOrd,
+                        OrdLn.NoInvoAb + OrdLn.NoFin - OrdLn.NoInvo AS Ant,
+                        OrdLn.ProdNo AS ProdNr,
+                        Ord.OrdBasNo AS OrdGrNo,
+                        OrdLn.Descr,
+                        Ord_1.MainOrd AS main,
+                        Prod.Inf7 AS TegnNr,
+                        OrdLn.Un,
+                        OrdLn.TrInf1
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    WHERE OrdLn.TrTp = 7
+                      AND OrdLn.ProdNo NOT LIKE 'V%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND OrdLn.NoInvoAb + OrdLn.NoFin - OrdLn.NoInvo <> 0
+                    ORDER BY Ord.OrdNo, OrdLn.LnNo
+                `);
+                excelVareLinierRows = result.recordset || [];
+            }
+
+            let excelSaveListeRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT
+                        Ord_1.OrdBasNo AS SalgsOrdre,
+                        Ord.MainOrd AS HovOrd,
+                        Ord.OrdNo AS ProdOrd,
+                        OrdLn.NoInvoAb AS Ant,
+                        OrdLn.ProdNo AS ProdNr,
+                        Ord.OrdBasNo AS OrdGrNo,
+                        OrdLn.Descr,
+                        Ord_1.MainOrd AS main,
+                        Prod.Inf7 AS TegnNr,
+                        OrdLn.TrInf3 AS Savelaengde,
+                        Ord.Gr5
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    WHERE OrdLn.TrTp = 7
+                      AND OrdLn.ProdNo NOT LIKE 'V%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                    ORDER BY Ord.OrdNo, OrdLn.LnNo
+                `);
+                excelSaveListeRows = result.recordset || [];
+            }
+
+            let excelIndkLstRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT DISTINCT
+                        OrdLn.ProdNo AS ProdNr,
+                        OrdLn.Descr AS Beskrivelse,
+                        Txt.Txt AS Enh,
+                        Prod.Gr6,
+                        StcBal.PoPhStB AS Beholdning,
+                        StcBal.InProdO AS Reserveret,
+                        Prod.Gr5
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    INNER JOIN StcBal StcBal WITH(NOLOCK) ON StcBal.ProdNo = OrdLn.ProdNo
+                    INNER JOIN Txt Txt WITH(NOLOCK) ON Prod.StSaleUn = Txt.TxtNo
+                    WHERE OrdLn.TrTp = 5
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND Prod.Gr5 IN (2, 3, 11)
+                      AND OrdLn.ProdNo NOT LIKE '%L%'
+                      AND Txt.TxtTp = 16
+                      AND Txt.Lang = 45
+                      AND Prod.Gr6 <> 1
+
+                    UNION
+
+                    SELECT
+                        OrdLn.ProdNo,
+                        OrdLn.Descr,
+                        Txt.Txt,
+                        Prod.Gr6,
+                        StcBal.PoPhStB,
+                        StcBal.InProdO,
+                        Prod.Gr5
+                    FROM OrdLn OrdLn WITH(NOLOCK)
+                    INNER JOIN Prod Prod WITH(NOLOCK) ON Prod.ProdNo = OrdLn.ProdNo
+                    INNER JOIN StcBal StcBal WITH(NOLOCK) ON StcBal.ProdNo = Prod.ProdNo
+                    INNER JOIN Txt Txt WITH(NOLOCK) ON Prod.StSaleUn = Txt.TxtNo
+                    WHERE Txt.TxtTp = 16
+                      AND Txt.Lang = 45
+                      AND OrdLn.OrdNo = @ordNo
+                      AND Prod.Gr5 = 3
+                      AND Prod.Gr6 <> 1
+                `);
+                excelIndkLstRows = result.recordset || [];
+            }
+
+            let routeRows = [];
+            {
+                const request = pool.request();
+                request.input('ordNo', sql.Numeric, ordNo);
+                const result = await request.query(`
+                    SELECT
+                        Ord.OrdNo AS OrdNr,
+                        OrdLn.ProdNo AS ProdNr,
+                        OrdLn.NoInvoAb AS Ant,
+                        Ord.MainOrd AS HovedOrdre,
+                        Ord.OrdBasNo AS OrdGrNo,
+                        OrdLn.Descr,
+                        SUBSTRING(R7.Nm, 1, 3) AS ResourceShortName,
+                        Struct_1.TrInf4,
+                        Struct_1.Descr AS OperationDescr,
+                        OrdLn.CfDelDt,
+                        R7.RNo,
+                        R7.Gr11,
+                        Struct_1.TrInf3 AS PrgNr,
+                        R7.Gr3
+                    FROM Ord Ord WITH(NOLOCK)
+                    INNER JOIN Ord Ord_1 WITH(NOLOCK) ON Ord.MainOrd = Ord_1.OrdNo
+                    INNER JOIN OrdLn OrdLn WITH(NOLOCK) ON Ord.OrdNo = OrdLn.OrdNo
+                    INNER JOIN Struct Struct WITH(NOLOCK) ON OrdLn.ProdNo = Struct.ProdNo
+                    INNER JOIN Struct Struct_1 WITH(NOLOCK) ON Struct_1.ProdNo = Struct.SubProd
+                    INNER JOIN R7 R7 WITH(NOLOCK) ON Struct_1.R7 = R7.RNo
+                    WHERE OrdLn.TrTp = 7
+                      AND OrdLn.ProdNo NOT LIKE 'V%'
+                      AND Ord_1.OrdBasNo = @ordNo
+                      AND Struct_1.ProdTp4 IN (1, 7)
+                    ORDER BY OrdLn.ProdNo, Struct_1.TrInf4
+                `);
+                routeRows = result.recordset || [];
+            }
+
+            // Print flags: rowcounts from filtered result sets (Excel AB6, AB8, AB10)
+            // saveListCount = SaveListe rows matching the Save*/Pladesaks* autofilter (Knap1_Klik)
+            const saveListCount = excelSaveListeRows
+                .filter(line => /^(Save|Pladesaks)/i.test(String(line.Descr || '').trim()))
+                .length;
+            
+            // laserListCount = number of laser nesting lines from production orders
+            const laserListCount = laserNesting.length;
+            
+            // purchaseListCount = rows in the real IndkLst query (Excel AB12)
+            const purchaseListCount = excelIndkLstRows.length;
+            
+            // lDescriptionCount = rows in the real L-beskriv query (Excel AB10)
+            const lDescriptionCount = lDescriptionRows.length;
+
+            const deliveryDate = Number(headerResult.recordset[0].DelDt || 0) > 19800101
+                ? headerResult.recordset[0].DelDt
+                : null;
+            const subDeliveryOrders = linkedOrders
+                .filter(order => order.type === 'production')
+                .map(order => order.ordNo);
+            const warnings = [];
+            if (subDeliveryOrders.length > 0) {
+                warnings.push('U-lev ordrer: ' + subDeliveryOrders.join(', '));
+            }
+            if (lines.some(line => Number(line.NoOrg || 0) > 0 && Number(line.NoFin || 0) === 0)) {
+                warnings.push('Ordren indeholder linjer, der endnu ikke er færdigmeldt.');
+            }
+
+            const payload = {
+                order: {
+                    ...headerResult.recordset[0],
+                    DeliveryDate: deliveryDate
+                },
+                lines,
+                linkedOrders,
+                laserNesting,
+                purchaseItems,
+                purchaseStockRows,
+                plateInventory,
+                lDescriptionRows,
+                customerLaserRows,
+                laserInfoFromRouteRows,
+                routeRows,
+                excelVareLinierRows,
+                excelSaveListeRows,
+                excelIndkLstRows,
+                customerNotes: customerNotesResult.recordset || [],
+                printFlags: {
+                    saveList: saveListCount,
+                    purchaseList: purchaseListCount,
+                    laserList: laserListCount,
+                    lDescription: lDescriptionCount
+                },
+                planning: planningResult.recordset,
+                warnings,
+                cached: false
+            };
+            diskCache.set(cacheKey, payload, 5 * 60 * 1000);
+            res.json(payload);
+        } catch (err) {
+            logEvent('ERROR ordreoversigt: ' + err.message);
+            res.status(500).json({ error: err.message || 'Ordreoversigt fejl' });
+        }
+    });
+
     router.get('/order-margin/:ordno', async (req, res) => {
         try {
             const ordNo = parseInt(req.params.ordno);
