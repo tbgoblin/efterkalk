@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 const orderNotesService = require('../services/orderNotesService');
 
 // ── Personalehåndbog crawler ────────────────────────────────────────────────
@@ -911,6 +912,130 @@ function createApiRouter({
     pkgVersion
 }) {
     const router = express.Router();
+    const usersFile = path.join(__dirname, '..', 'users.json');
+    const authSessions = new Map();
+
+    function readUsers() {
+        const parsed = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+    }
+
+    function writeUsers(users) {
+        fs.writeFileSync(usersFile, JSON.stringify(users, null, 2) + '\n', 'utf8');
+    }
+
+    function safeUser(user) {
+        return {
+            username: user.username,
+            displayName: user.displayName || user.username,
+            role: user.role || (user.isSuperUser ? 'superadmin' : 'user'),
+            active: user.active !== false,
+            permissions: user.permissions || {}
+        };
+    }
+
+    function makePasswordHash(password, salt) {
+        return crypto.pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
+    }
+
+    function getSessionUser(req) {
+        const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const session = authSessions.get(token);
+        return session && session.expiresAt > Date.now() ? session.user : null;
+    }
+
+    function requireSuperadmin(req, res) {
+        const user = getSessionUser(req);
+        if (!user || user.role !== 'superadmin') {
+            res.status(403).json({ error: 'Superadmin adgang kræves' });
+            return null;
+        }
+        return user;
+    }
+
+    function requireModulePermission(permission) {
+        return (req, res, next) => {
+            const user = getSessionUser(req);
+            if (!user || (user.role !== 'superadmin' && !(user.permissions && user.permissions[permission]))) {
+                return res.status(403).json({ error: 'Adgang til modulet er ikke tilladt' });
+            }
+            return next();
+        };
+    }
+
+    router.post('/auth/login', express.json(), (req, res) => {
+        const username = String(req.body && req.body.username || '').trim().toLowerCase();
+        const password = String(req.body && req.body.password || '');
+        const users = readUsers();
+        const user = users.find(item => String(item.username || '').toLowerCase() === username);
+        const bootstrapAdmin = username === 'admin' && password === '12345';
+        const validHash = user && user.passwordSalt && user.passwordHash
+            && crypto.timingSafeEqual(Buffer.from(makePasswordHash(password, user.passwordSalt), 'hex'), Buffer.from(user.passwordHash, 'hex'));
+        if ((!bootstrapAdmin && !validHash) || !user || user.active === false) {
+            return res.status(401).json({ error: 'Forkert brugernavn eller kode' });
+        }
+        const normalized = safeUser(user);
+        if (bootstrapAdmin) normalized.role = 'superadmin';
+        const token = crypto.randomBytes(32).toString('hex');
+        authSessions.set(token, { user: normalized, expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+        return res.json({ token, user: normalized });
+    });
+
+    router.get('/admin/users', (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        return res.json({ users: readUsers().map(safeUser) });
+    });
+
+    router.post('/admin/users', express.json(), (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        const username = String(req.body && req.body.username || '').trim().toLowerCase();
+        const displayName = String(req.body && req.body.displayName || username).trim();
+        const password = String(req.body && req.body.password || '');
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Brugernavn og kode skal udfyldes' });
+        }
+        const users = readUsers();
+        if (users.some(item => String(item.username || '').toLowerCase() === username)) {
+            return res.status(409).json({ error: 'Brugernavn findes allerede' });
+        }
+        const salt = crypto.randomBytes(16).toString('hex');
+        const user = { username, displayName, passwordSalt: salt, passwordHash: makePasswordHash(password, salt), role: 'user', active: true, permissions: {}, createdAt: new Date().toISOString() };
+        users.push(user);
+        writeUsers(users);
+        return res.status(201).json({ user: safeUser(user) });
+    });
+
+    router.put('/admin/users/:username', express.json(), (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        const username = String(req.params.username || '').toLowerCase();
+        const users = readUsers();
+        const user = users.find(item => String(item.username || '').toLowerCase() === username);
+        if (!user) return res.status(404).json({ error: 'Bruger findes ikke' });
+        user.displayName = String(req.body && req.body.displayName || user.displayName || user.username).trim();
+        user.active = req.body && req.body.active !== false;
+        user.role = username === 'admin' ? 'superadmin' : (req.body && req.body.role === 'superadmin' ? 'superadmin' : 'user');
+        user.permissions = user.role === 'superadmin' ? {} : (req.body && req.body.permissions && typeof req.body.permissions === 'object' ? req.body.permissions : {});
+        if (req.body && req.body.password) {
+            user.passwordSalt = crypto.randomBytes(16).toString('hex');
+            user.passwordHash = makePasswordHash(String(req.body.password), user.passwordSalt);
+        }
+        writeUsers(users);
+        return res.json({ user: safeUser(user) });
+    });
+
+    router.delete('/admin/users/:username', (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        const username = String(req.params.username || '').toLowerCase();
+        if (username === 'admin') return res.status(400).json({ error: 'Bootstrap superadmin kan ikke slettes' });
+        const users = readUsers();
+        const remaining = users.filter(item => String(item.username || '').toLowerCase() !== username);
+        if (remaining.length === users.length) return res.status(404).json({ error: 'Bruger findes ikke' });
+        writeUsers(remaining);
+        for (const [token, session] of authSessions.entries()) {
+            if (String(session.user && session.user.username || '').toLowerCase() === username) authSessions.delete(token);
+        }
+        return res.json({ ok: true });
+    });
     const legacyAftercalcPrefixes = ['aftercalc_v22_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
     const ordreindgangService = createOrdreindgangService({ getConnection, sql });
@@ -936,14 +1061,14 @@ function createApiRouter({
         }
     });
 
-    router.get('/salgordre-via', async (req, res) => {
+    router.get('/salgordre-via', requireModulePermission('salgordreVia'), async (req, res) => {
         try {
             const requestedOrdNo = req.query.ordNo === undefined ? null : Number(req.query.ordNo);
             if (requestedOrdNo !== null && (!Number.isInteger(requestedOrdNo) || requestedOrdNo <= 0)) {
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
 
-            const cacheKey = 'salgordre_via_v12';
+            const cacheKey = 'salgordre_via_v14';
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
@@ -958,7 +1083,7 @@ function createApiRouter({
             request.input('requestedOrdNo', sql.Numeric, requestedOrdNo);
             const result = await request.query(`
                 WITH OpenSalesOrders AS (
-                    SELECT OrdNo, DelDt, CreUsr, CustNo
+                    SELECT OrdNo, DelDt, CreUsr, CustNo, OrdTp, TrTp, Gr12, OrdPrSt, InvoSF, InvoIF, ExRt
                     FROM Ord WITH(NOLOCK)
                                         WHERE OrdTp = 1
                                             AND TrTp = 1
@@ -993,7 +1118,8 @@ function createApiRouter({
                             ELSE ISNULL(L.TransGr3, 0)
                         END AS ResourceStatus,
                         ISNULL(L.NoOrg, 0) AS OriginalMinutes,
-                        COALESCE(NULLIF(ProdTr.FinishedMinutes, 0), ISNULL(L.NoFin, 0)) AS FinishedMinutes
+                        ISNULL(ProdTr.FinishedMinutes, 0) AS FinishedMinutes
+                        ,ISNULL(L.CCstPr, 0) AS ResourceUnitCost
                     FROM ProductionOrders
                     INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
                     LEFT JOIN R7 R WITH(NOLOCK) ON R.RNo = L.R7
@@ -1023,14 +1149,28 @@ function createApiRouter({
                         SUM(CASE WHEN ResourceStatus = 80 THEN 1 ELSE 0 END) AS CompletedResources,
                         SUM(CASE WHEN ResourceStatus < 80 THEN 1 ELSE 0 END) AS RemainingResources,
                         SUM(FinishedMinutes) AS CompletedResourceMinutes,
-                        SUM(CASE WHEN ResourceStatus = 80 THEN FinishedMinutes ELSE OriginalMinutes END) AS EffectiveResourceMinutes
+                        SUM(CASE WHEN ResourceStatus = 80 THEN FinishedMinutes ELSE OriginalMinutes END) AS EffectiveResourceMinutes,
+                        SUM(FinishedMinutes * ResourceUnitCost) AS TimeCost
                     FROM ResourceMinutes
                     GROUP BY SalesOrderNo
+                ),
+                MaterialCosts AS (
+                    SELECT
+                        ProductionOrders.SalesOrderNo,
+                        SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS MaterialCost
+                    FROM ProductionOrders
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
+                    WHERE L.ProdTp4 = 2
+                    GROUP BY ProductionOrders.SalesOrderNo
                 )
                 SELECT
                     S.OrdNo,
                     S.DelDt AS DeliveryDate,
                     S.CreUsr AS SellerUsr,
+                    S.OrdTp,
+                    S.TrTp,
+                    S.Gr12,
+                    S.OrdPrSt,
                     C.Nm AS CustomerName,
                     Active.OpenProductionOrders,
                     Active.TotalResources,
@@ -1038,11 +1178,15 @@ function createApiRouter({
                     Active.RemainingResources,
                     Active.CompletedResourceMinutes,
                     Active.EffectiveResourceMinutes,
+                    ISNULL(MaterialCosts.MaterialCost, 0) AS MaterialCost,
+                    ISNULL(Active.TimeCost, 0) AS TimeCost,
+                    (ISNULL(S.InvoSF, 0) + ISNULL(S.InvoIF, 0)) * (ISNULL(NULLIF(S.ExRt, 0), 100) / 100.0) AS SalesValue,
                     CAST(NULL AS datetime) AS PlannedDate,
                     CAST(NULL AS varchar(100)) AS ResourceName
                 FROM OpenSalesOrders S
                 LEFT JOIN Actor C WITH(NOLOCK) ON C.CustNo = S.CustNo
                 LEFT JOIN ActiveProduction Active ON Active.SalesOrderNo = S.OrdNo
+                LEFT JOIN MaterialCosts ON MaterialCosts.SalesOrderNo = S.OrdNo
                 ORDER BY
                     CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,
                     S.OrdNo

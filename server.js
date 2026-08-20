@@ -1403,10 +1403,30 @@ app.get('/', (req, res) => {
             #mainWorkspace { display:none; }
             #mainOrdreoversigt { display:none; }
             #mainSalgordreVia { display:none; }
+            #mainAdministration { display:none; }
+            .admin-layout { display:grid; grid-template-columns:minmax(280px,0.8fr) minmax(480px,1.6fr); gap:14px; }
+            .admin-panel { border:1px solid #d6e6f8; border-radius:10px; padding:14px; background:#fff; }
+            .admin-panel h4 { margin:0 0 12px; color:#0f3560; }
+            .admin-form { display:grid; gap:9px; }
+            .admin-form input { width:100%; padding:8px 10px; border:1px solid #c7d7ea; border-radius:6px; font-size:14px; }
+            .admin-form button { padding:8px 12px; border:0; border-radius:6px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
+            .admin-user { border-top:1px solid #e3edf8; padding:11px 0; }
+            .admin-user-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+            .admin-user-name { font-weight:800; color:#173b62; }
+            .admin-permissions { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:8px; font-size:12px; }
+            .admin-permissions label { display:flex; gap:4px; align-items:center; }
+            .admin-user-actions { display:flex; gap:8px; margin-top:9px; }
+            .admin-user-actions button { padding:5px 8px; border:0; border-radius:5px; background:#1565c0; color:#fff; font-weight:700; cursor:pointer; }
+            .admin-user-actions button.danger { background:#b71c1c; }
+            @media(max-width:800px) { .admin-layout { grid-template-columns:1fr; } }
             .via-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
             .via-toolbar input { width:260px; padding:8px 10px; border:1px solid #c7d7ea; border-radius:8px; font-size:14px; }
             .via-toolbar button { padding:8px 14px; border:0; border-radius:8px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
             .via-status { font-size:13px; color:#4f6d8c; margin-left:auto; }
+            .via-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:0 0 12px; }
+            .via-kpi { border:1px solid #d6e6f8; border-radius:8px; background:#f7fbff; padding:9px 11px; }
+            .via-kpi span { display:block; color:#4f6d8c; font-size:11px; font-weight:700; }
+            .via-kpi strong { display:block; margin-top:3px; color:#0f3560; font-size:18px; }
             .via-progress { min-width:110px; }
             .via-progress-bar { height:7px; background:#dce8f8; border-radius:8px; overflow:hidden; margin-top:4px; }
             .via-progress-bar > span { display:block; height:100%; background:#2e7d32; }
@@ -1514,6 +1534,10 @@ app.get('/', (req, res) => {
                         <label for="accessGateInput">Kode</label>
                         <input id="accessGateInput" type="password" placeholder="Indtast kode" autocomplete="off" />
                     </div>
+                    <label class="access-gate-field" style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+                        <input id="accessGateRememberUser" type="checkbox" style="width:auto;" />
+                        <span>Husk brugernavn på denne computer</span>
+                    </label>
                 </div>
                 <div class="access-gate-row">
                     <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn dashboard</button>
@@ -1545,16 +1569,17 @@ app.get('/', (req, res) => {
                         <h4>Moduler</h4>
                         <div class="side-menu-module-list">
                             <button type="button" onclick="navigateFromSideMenu('dashboard')">🏠 Dashboard</button>
-                            <button type="button" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
-                            <button type="button" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
-                            <button type="button" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
+                            <button type="button" data-module-key="efterkalk" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
+                            <button type="button" data-module-key="omsaetning" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
+                            <button type="button" data-module-key="ordreindgang" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
                             <button type="button" disabled>Faktura - Kommer snart</button>
-                            <button type="button" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
+                            <button type="button" data-module-key="ordreoversigt" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
                             <button type="button" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
                             <button type="button" disabled>APV - Kommer snart</button>
-                            <button type="button" onclick="openModule('belastning')">Belastning</button>
-                            <button type="button" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
+                            <button type="button" data-module-key="belastning" onclick="openModule('belastning')">Belastning</button>
+                            <button type="button" data-module-key="personalehåndbog" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
                             <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
+                            <button id="sideMenuAdministrationBtn" type="button" onclick="navigateFromSideMenu('administration')" style="display:none;">🔐 Administration</button>
                             <button type="button" onclick="closeSideMenu();openSettingsModal()">⚙️ Database settings</button>
                         </div>
                     </section>
@@ -1619,31 +1644,37 @@ app.get('/', (req, res) => {
                             <span>Ordre, kunde og faktura</span>
                         </div>
                         <div class="dashboard-category-grid">
-                            <article class="dash-card">
+                            <article class="dash-card" data-module-key="efterkalk">
                                 <span class="dash-chip">Aktiv</span>
                                 <h4>Efterkalkulation</h4>
                                 <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
                                 <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
                             </article>
-                            <article class="dash-card">
+                            <article class="dash-card" data-module-key="salgordre-via">
                                 <span class="dash-chip">Aktiv</span>
                                 <h4>SalgOrdre VIA</h4>
                                 <p>Aktive salgsordrer med åben produktion, fremdrift og næste ressource.</p>
                                 <button onclick="openModule('salgordre-via')">Åbn SalgOrdre VIA</button>
                             </article>
-                            <article class="dash-card">
+                            <article class="dash-card" id="administrationDashCard" style="display:none;">
+                                <span class="dash-chip">Superadmin</span>
+                                <h4>Administration</h4>
+                                <p>Brugere, adgang og modulrettigheder.</p>
+                                <button onclick="openModule('administration')">Åbn Administration</button>
+                            </article>
+                            <article class="dash-card" data-module-key="omsaetning">
                                 <span class="dash-chip">Aktiv</span>
                                 <h4>Omsætning</h4>
                                 <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
                                 <button onclick="openModule('omsaetning')">Åbn Omsætning</button>
                             </article>
-                            <article class="dash-card">
+                            <article class="dash-card" data-module-key="ordreindgang">
                                 <span class="dash-chip">Aktiv</span>
                                 <h4>Ordreindgang</h4>
                                 <p>Ordreindgang fra SSRS: budget, ordre, tilbud og udvikling pr. uge/periode.</p>
                                 <button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button>
                             </article>
-                            <article class="dash-card">
+                            <article class="dash-card" data-module-key="ordreoversigt">
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Faktura</h4>
                                 <p>Fakturastatus, kreditnota og opfølgning på åbne poster.</p>
@@ -1658,13 +1689,13 @@ app.get('/', (req, res) => {
                             <span>Planlægning, BOM og ordreflow</span>
                         </div>
                         <div class="dashboard-category-grid">
-                            <article class="dash-card">
+                            <article class="dash-card" data-module-key="belastning">
                                 <span class="dash-chip">Aktiv</span>
                                 <h4>Ordreoversigt</h4>
                                 <p>Samlet status for produktionsordrer, levering og kapacitet.</p>
                                 <button type="button" onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button>
                             </article>
-                            <article class="dash-card">
+                            <article class="dash-card" data-module-key="personalehåndbog">
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Bom</h4>
                                 <p>Styklister, komponenter og versionering med sporbarhed.</p>
@@ -2066,7 +2097,27 @@ app.get('/', (req, res) => {
                     <button type="button" onclick="loadSalgordreVia(true)">Opdater</button>
                     <span id="viaStatus" class="via-status"></span>
                 </div>
+                <div id="viaKpis" class="via-kpis"></div>
                 <div id="viaResults" class="omsaetning-empty">Indlæser aktive salgsordrer...</div>
+            </section>
+        </div>
+
+        <div class="container main-omsaetning" id="mainAdministration">
+            <section class="omsaetning-shell">
+                <div class="omsaetning-head"><div><h3>Administration</h3><p>Brugere og modulrettigheder.</p></div></div>
+                <div class="admin-layout">
+                    <section class="admin-panel">
+                        <h4>Opret bruger</h4>
+                        <div class="admin-form">
+                            <input id="adminNewUsername" placeholder="Brugernavn" autocomplete="off" />
+                            <input id="adminNewDisplayName" placeholder="Visningsnavn" autocomplete="off" />
+                            <input id="adminNewPassword" type="password" placeholder="Kode" />
+                            <button type="button" onclick="createAdminUser()">Opret bruger</button>
+                        </div>
+                        <div id="adminStatus" class="via-status" style="margin:12px 0 0;"></div>
+                    </section>
+                    <section class="admin-panel"><h4>Brugere</h4><div id="adminUsers">Indlæser brugere...</div></section>
+                </div>
             </section>
         </div>
 
@@ -3092,6 +3143,9 @@ app.get('/', (req, res) => {
             let summaryImageRegistryCounter = 0;
             const ACCESS_CODE = '12345';
             let accessGranted = false;
+            let authToken = null;
+            let loggedUserRole = 'user';
+            let loggedUserPermissions = {};
             let loggedUserDisplayName = 'Bruger';
             let sideMenuOpen = false;
             let dashboardUpdatePollTimer = null;
@@ -3224,6 +3278,28 @@ app.get('/', (req, res) => {
                     } catch {}
                 }
                 updateHeaderGreeting();
+            }
+
+            const MODULE_PERMISSION_KEYS = {
+                efterkalk: 'efterkalk',
+                'salgordre-via': 'salgordreVia',
+                omsaetning: 'omsaetning',
+                ordreindgang: 'ordreindgang',
+                ordreoversigt: 'ordreoversigt',
+                belastning: 'belastning',
+                personalehåndbog: 'personalehandbog'
+            };
+
+            function canAccessModule(moduleKey) {
+                if (loggedUserRole === 'superadmin') return true;
+                const permissionKey = MODULE_PERMISSION_KEYS[moduleKey];
+                return !permissionKey || loggedUserPermissions[permissionKey] === true;
+            }
+
+            function applyModulePermissions() {
+                document.querySelectorAll('[data-module-key]').forEach(element => {
+                    element.style.display = canAccessModule(String(element.dataset.moduleKey || '')) ? '' : 'none';
+                });
             }
 
             // ── Settings: database profiler ──────────────────────────────
@@ -3750,6 +3826,11 @@ app.get('/', (req, res) => {
                 }
             }
 
+            function toggleSideMenu() {
+                if (sideMenuOpen) closeSideMenu();
+                else openSideMenu();
+            }
+
             function closeSideMenu(event) {
                 if (event && event.target && event.target.id !== 'sideMenuOverlay') return;
                 const overlay = document.getElementById('sideMenuOverlay');
@@ -3765,6 +3846,7 @@ app.get('/', (req, res) => {
                 const loginBtn = document.getElementById('sideMenuLoginBtn');
                 const status = document.getElementById('sideMenuAuthStatus');
                 const logoutBtn = document.getElementById('sideMenuLogoutBtn');
+                const administrationBtn = document.getElementById('sideMenuAdministrationBtn');
                 if (!status) return;
 
                 if (accessGranted) {
@@ -3777,6 +3859,7 @@ app.get('/', (req, res) => {
                     }
                     if (loginBtn) loginBtn.disabled = true;
                     if (logoutBtn) logoutBtn.disabled = false;
+                    if (administrationBtn) administrationBtn.style.display = loggedUserRole === 'superadmin' ? '' : 'none';
                 } else {
                     status.textContent = 'Ikke logget ind.';
                     status.classList.remove('ok');
@@ -3784,6 +3867,7 @@ app.get('/', (req, res) => {
                     if (input) input.disabled = false;
                     if (loginBtn) loginBtn.disabled = false;
                     if (logoutBtn) logoutBtn.disabled = true;
+                    if (administrationBtn) administrationBtn.style.display = 'none';
                 }
             }
 
@@ -3823,7 +3907,11 @@ app.get('/', (req, res) => {
 
             function logoutFromSideMenu() {
                 accessGranted = false;
+                authToken = null;
+                loggedUserRole = 'user';
                 setLoggedUserDisplayName('Bruger');
+                const adminCard = document.getElementById('administrationDashCard');
+                if (adminCard) adminCard.style.display = 'none';
                 closeSideMenu();
                 goToDashboard();
                 showAccessGate();
@@ -7913,14 +8001,20 @@ app.get('/', (req, res) => {
                 const overlay = document.getElementById('accessGateOverlay');
                 const userInput = document.getElementById('accessGateUserInput');
                 const input = document.getElementById('accessGateInput');
+                const rememberUser = document.getElementById('accessGateRememberUser');
                 const err = document.getElementById('accessGateError');
                 if (!overlay) return;
                 if (err) err.textContent = '';
                 if (userInput) {
+                    let rememberedUsername = '';
+                    try { rememberedUsername = localStorage.getItem('afterkalk_remembered_username') || ''; } catch {}
                     const currentName = sanitizeDisplayName(loggedUserDisplayName);
-                    if (!String(userInput.value || '').trim() && currentName && currentName !== 'Bruger') {
+                    if (!String(userInput.value || '').trim() && rememberedUsername) {
+                        userInput.value = rememberedUsername;
+                    } else if (!String(userInput.value || '').trim() && currentName && currentName !== 'Bruger') {
                         userInput.value = currentName;
                     }
+                    if (rememberUser) rememberUser.checked = Boolean(rememberedUsername);
                 }
                 overlay.style.display = 'flex';
                 refreshSideMenuAuthState();
@@ -7942,22 +8036,16 @@ app.get('/', (req, res) => {
 
             let _accessLoginInProgress = false;
 
-            function submitAccessCode() {
+            async function submitAccessCode() {
                 if (_accessLoginInProgress) return;
                 const userInput = document.getElementById('accessGateUserInput');
                 const input = document.getElementById('accessGateInput');
                 const err = document.getElementById('accessGateError');
                 const btn = document.getElementById('accessGateBtn');
-                const userName = sanitizeDisplayName(userInput ? userInput.value : '');
+                const rememberUser = document.getElementById('accessGateRememberUser');
+                const userName = String(userInput ? userInput.value : '').trim() || 'admin';
+                const loginUserName = userName.toLowerCase() === 'superbruger' ? 'admin' : userName;
                 const value = input ? String(input.value || '').trim() : '';
-                if (value !== ACCESS_CODE) {
-                    if (err) err.textContent = 'Forkert kode.';
-                    if (input) {
-                        input.select();
-                        input.focus();
-                    }
-                    return;
-                }
 
                 if (err) err.textContent = 'Åbner...';
                 if (btn) {
@@ -7966,27 +8054,148 @@ app.get('/', (req, res) => {
                 }
                 _accessLoginInProgress = true;
 
-                setTimeout(() => {
+                try {
+                    const response = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: loginUserName, password: value })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || 'Forkert brugernavn eller kode');
+                    authToken = data.token;
+                    loggedUserRole = data.user && data.user.role || 'user';
+                    loggedUserPermissions = data.user && data.user.permissions || {};
+                    setLoggedUserDisplayName(data.user && data.user.displayName || userName);
                     try {
-                        if (userName && userName !== 'Bruger') {
-                            setLoggedUserDisplayName(userName);
-                        }
+                        if (rememberUser && rememberUser.checked) localStorage.setItem('afterkalk_remembered_username', String(data.user && data.user.username || loginUserName));
+                        else localStorage.removeItem('afterkalk_remembered_username');
+                    } catch {}
                         accessGranted = true;
                         hideAccessGate();
                         refreshSideMenuAuthState();
                         initializeAfterAccess();
-                    } catch (e) {
-                        accessGranted = false;
-                        showAccessGate();
-                        if (err) err.textContent = 'Fejl ved åbning: ' + (e && e.message ? e.message : 'ukendt fejl');
-                    } finally {
-                        if (btn) {
-                            btn.disabled = false;
-                            btn.textContent = 'Åbn';
-                        }
-                        _accessLoginInProgress = false;
+                } catch (e) {
+                    accessGranted = false;
+                    if (err) err.textContent = e && e.message ? e.message : 'Forkert brugernavn eller kode';
+                    if (input) input.focus();
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Åbn dashboard';
                     }
-                }, 0);
+                    const adminCard = document.getElementById('administrationDashCard');
+                    if (adminCard) adminCard.style.display = loggedUserRole === 'superadmin' ? '' : 'none';
+                    applyModulePermissions();
+                    _accessLoginInProgress = false;
+                }
+            }
+
+            const ADMIN_MODULES = [
+                ['efterkalk', 'Efterkalkulation'],
+                ['salgordreVia', 'SalgOrdre VIA'],
+                ['omsaetning', 'Omsætning'],
+                ['ordreindgang', 'Ordreindgang'],
+                ['ordreoversigt', 'Ordreoversigt'],
+                ['belastning', 'Belastning'],
+                ['personalehandbog', 'Personalehåndbog']
+            ];
+
+            function adminHeaders() {
+                return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + String(authToken || '') };
+            }
+
+            function setAdminStatus(text, isError) {
+                const status = document.getElementById('adminStatus');
+                if (!status) return;
+                status.textContent = text || '';
+                status.style.color = isError ? '#b71c1c' : '#1b5e20';
+            }
+
+            async function loadAdminUsers() {
+                const target = document.getElementById('adminUsers');
+                if (!target) return;
+                target.textContent = 'Indlæser brugere...';
+                try {
+                    const response = await fetch('/admin/users', { headers: adminHeaders() });
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke hente brugere');
+                    const users = Array.isArray(data.users) ? data.users : [];
+                    target.innerHTML = users.map(user => {
+                        const permissions = user.permissions || {};
+                        const checks = user.role === 'superadmin'
+                            ? '<span>Superadmin har adgang til alle moduler.</span>'
+                            : ADMIN_MODULES.map(([key, label]) => '<label><input type="checkbox" data-permission="' + key + '" ' + (permissions[key] ? 'checked' : '') + '> ' + label + '</label>').join('');
+                        return '<div class="admin-user" data-username="' + escapeHtml(String(user.username)) + '">'
+                            + '<div class="admin-user-head"><div><span class="admin-user-name">' + escapeHtml(String(user.displayName || user.username)) + '</span> <small>(' + escapeHtml(String(user.username)) + ')</small></div>'
+                            + '<label><input type="checkbox" data-active ' + (user.active ? 'checked' : '') + '> Aktiv</label></div>'
+                            + '<div class="admin-permissions">' + checks + '</div>'
+                            + '<div class="admin-user-actions">'
+                            + (user.username === 'admin' ? '<span>Bootstrap superadmin</span>' : '<input type="password" data-new-password placeholder="Ny kode (valgfri)" style="padding:5px 7px;border:1px solid #c7d7ea;border-radius:5px;">'
+                                + '<button type="button" data-admin-username="' + escapeHtml(String(user.username)) + '" onclick="saveAdminUserFromElement(this)">Gem</button>'
+                                + '<button type="button" class="danger" data-admin-username="' + escapeHtml(String(user.username)) + '" onclick="deleteAdminUserFromElement(this)">Slet bruger</button>')
+                            + '</div></div>';
+                    }).join('') || '<div>Ingen brugere.</div>';
+                } catch (error) {
+                    target.innerHTML = '<div class="error">' + escapeHtml(String(error.message || error)) + '</div>';
+                }
+            }
+
+            async function createAdminUser() {
+                const username = String((document.getElementById('adminNewUsername') || {}).value || '').trim();
+                const displayName = String((document.getElementById('adminNewDisplayName') || {}).value || '').trim();
+                const password = String((document.getElementById('adminNewPassword') || {}).value || '');
+                try {
+                    const response = await fetch('/admin/users', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ username, displayName, password }) });
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke oprette bruger');
+                    document.getElementById('adminNewUsername').value = '';
+                    document.getElementById('adminNewDisplayName').value = '';
+                    document.getElementById('adminNewPassword').value = '';
+                    setAdminStatus('Bruger oprettet. Vælg moduler og gem rettigheder.');
+                    loadAdminUsers();
+                } catch (error) {
+                    setAdminStatus(String(error.message || error), true);
+                }
+            }
+
+            function saveAdminUserFromElement(element) {
+                saveAdminUser(String(element && element.dataset && element.dataset.adminUsername || ''));
+            }
+
+            async function saveAdminUser(username) {
+                const row = Array.from(document.querySelectorAll('.admin-user')).find(item => item.dataset.username === username);
+                if (!row) return;
+                const permissions = {};
+                row.querySelectorAll('[data-permission]').forEach(input => { permissions[input.dataset.permission] = input.checked; });
+                const activeInput = row.querySelector('[data-active]');
+                const passwordInput = row.querySelector('[data-new-password]');
+                try {
+                    const response = await fetch('/admin/users/' + encodeURIComponent(username), {
+                        method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ active: !!(activeInput && activeInput.checked), role: 'user', permissions, password: String(passwordInput && passwordInput.value || '') })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke gemme bruger');
+                    setAdminStatus('Rettigheder gemt for ' + username + '.');
+                } catch (error) {
+                    setAdminStatus(String(error.message || error), true);
+                }
+            }
+
+            function deleteAdminUserFromElement(element) {
+                deleteAdminUser(String(element && element.dataset && element.dataset.adminUsername || ''));
+            }
+
+            async function deleteAdminUser(username) {
+                if (!username || !confirm('Slet bruger ' + username + '?')) return;
+                try {
+                    const response = await fetch('/admin/users/' + encodeURIComponent(username), { method: 'DELETE', headers: adminHeaders() });
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke slette bruger');
+                    setAdminStatus('Bruger ' + username + ' er slettet.');
+                    loadAdminUsers();
+                } catch (error) {
+                    setAdminStatus(String(error.message || error), true);
+                }
             }
 
             let _accessInitialized = false;
@@ -8018,18 +8227,43 @@ app.get('/', (req, res) => {
             }
 
             function openModule(moduleKey) {
+                if (!canAccessModule(moduleKey)) {
+                    alert('Du har ikke adgang til dette modul.');
+                    return;
+                }
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
                 const ordreoversigt = document.getElementById('mainOrdreoversigt');
                 const salgordreVia = document.getElementById('mainSalgordreVia');
+                const administration = document.getElementById('mainAdministration');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
+
+                if (moduleKey === 'administration') {
+                    if (loggedUserRole !== 'superadmin') {
+                        alert('Superadmin adgang kræves.');
+                        return;
+                    }
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (workspace) workspace.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (omsaetning) omsaetning.style.display = 'none';
+                    if (ordreindgang) ordreindgang.style.display = 'none';
+                    if (belastning) belastning.style.display = 'none';
+                    if (administration) administration.style.display = 'block';
+                    closeSideMenu();
+                    loadAdminUsers();
+                    window.scrollTo({ top: 0, behavior: 'auto' });
+                    return;
+                }
 
                 if (moduleKey === 'salgordre-via') {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
@@ -8045,6 +8279,7 @@ app.get('/', (req, res) => {
                     if (dashboard) dashboard.style.display = 'none';
                     if (workspace) workspace.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
@@ -8068,6 +8303,7 @@ app.get('/', (req, res) => {
                     if (dashboard) dashboard.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
@@ -8083,6 +8319,7 @@ app.get('/', (req, res) => {
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'block';
@@ -8097,6 +8334,7 @@ app.get('/', (req, res) => {
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'block';
@@ -8111,6 +8349,7 @@ app.get('/', (req, res) => {
                     if (workspace) workspace.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'block';
@@ -8159,7 +8398,7 @@ app.get('/', (req, res) => {
                     salgordreViaSortDirection = salgordreViaSortDirection === 'asc' ? 'desc' : 'asc';
                 } else {
                     salgordreViaSortField = field;
-                    salgordreViaSortDirection = field === 'progress' || field === 'openProductionOrders' ? 'desc' : 'asc';
+                    salgordreViaSortDirection = field === 'progress' ? 'desc' : 'asc';
                 }
                 renderSalgordreVia();
             }
@@ -8170,11 +8409,20 @@ app.get('/', (req, res) => {
 
             function renderSalgordreVia() {
                 const target = document.getElementById('viaResults');
+                const kpis = document.getElementById('viaKpis');
                 const query = String((document.getElementById('viaSearchInput') || {}).value || '').trim().toLowerCase();
                 if (!target) return;
                 const rows = salgordreViaRows.filter(row => !query
                     || String(row.OrdNo || '').includes(query)
                     || String(row.CustomerName || '').toLowerCase().includes(query)).slice();
+                const materialCost = rows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
+                const timeCost = rows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
+                const salesValue = rows.reduce((sum, row) => sum + Number(row.SalesValue || 0), 0);
+                if (kpis) {
+                    kpis.innerHTML = '<div class="via-kpi"><span>Materialekost</span><strong>' + formatNumber(materialCost) + ' DKK</strong></div>'
+                        + '<div class="via-kpi"><span>Tidskost (færdigmeldt)</span><strong>' + formatNumber(timeCost) + ' DKK</strong></div>'
+                        + '<div class="via-kpi"><span>Salgsværdi</span><strong>' + formatNumber(salesValue) + ' DKK</strong></div>';
+                }
                 if (!rows.length) {
                     target.innerHTML = '<div class="omsaetning-empty">Ingen aktive salgsordrer matcher søgningen.</div>';
                     return;
@@ -8194,9 +8442,6 @@ app.get('/', (req, res) => {
                     } else if (salgordreViaSortField === 'progress') {
                         leftValue = leftProgress.percentage;
                         rightValue = rightProgress.percentage;
-                    } else if (salgordreViaSortField === 'openProductionOrders') {
-                        leftValue = Number(left.OpenProductionOrders || 0);
-                        rightValue = Number(right.OpenProductionOrders || 0);
                     } else {
                         const key = salgordreViaSortField === 'customer' ? 'CustomerName'
                             : (salgordreViaSortField === 'seller' ? 'SellerUsr' : 'ResourceName');
@@ -8214,7 +8459,6 @@ app.get('/', (req, res) => {
                     + sortHeader('deliveryDate', 'Levdato')
                     + sortHeader('seller', 'Ansvarlig')
                     + sortHeader('progress', 'Procesfremskridt')
-                    + sortHeader('openProductionOrders', 'U-lev åbne')
                     + sortHeader('resource', 'Næste ressource')
                     + '<th>Opdater</th></tr></thead><tbody>';
                 for (const row of rows) {
@@ -8225,7 +8469,6 @@ app.get('/', (req, res) => {
                         + '<td>' + escapeHtml(formatViaDate(row.DeliveryDate)) + '</td>'
                         + '<td>' + escapeHtml(String(row.SellerUsr || '-')) + '</td>'
                         + '<td><div class="via-progress">' + formatNumber(progress.completedMinutes) + ' / ' + formatNumber(progress.effectiveMinutes) + ' min (' + progress.percentage + '%)<div class="via-progress-bar"><span style="width:' + progress.percentage + '%"></span></div></div></td>'
-                        + '<td>' + escapeHtml(String(row.OpenProductionOrders || 0)) + '</td>'
                         + '<td>' + escapeHtml(String(row.ResourceName || '-')) + '<br><small>' + escapeHtml(formatViaDate(row.PlannedDate)) + '</small></td>'
                         + '<td><button class="list-toggle-btn" type="button" onclick="event.stopPropagation();refreshSalgordreViaOrder(' + Number(row.OrdNo) + ', this)" style="padding:4px 8px;margin:0;">Opdater</button></td>'
                         + '</tr>';
@@ -8239,7 +8482,7 @@ app.get('/', (req, res) => {
                     button.textContent = '...';
                 }
                 try {
-                    const response = await fetch('/salgordre-via?ordNo=' + encodeURIComponent(String(ordNo)) + '&force=1');
+                    const response = await fetch('/salgordre-via?ordNo=' + encodeURIComponent(String(ordNo)) + '&force=1', { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
                     const data = await response.json();
                     if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
                     const refreshed = Array.isArray(data.rows) ? data.rows[0] : null;
@@ -8262,7 +8505,7 @@ app.get('/', (req, res) => {
                 const status = document.getElementById('viaStatus');
                 if (target) target.innerHTML = '<div class="loading">Henter aktive salgsordrer...</div>';
                 try {
-                    const response = await fetch('/salgordre-via' + (forceRefresh ? '?force=1' : ''));
+                    const response = await fetch('/salgordre-via' + (forceRefresh ? '?force=1' : ''), { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
                     const data = await response.json();
                     if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
                     salgordreViaRows = Array.isArray(data.rows) ? data.rows : [];
@@ -8558,6 +8801,7 @@ app.get('/', (req, res) => {
                 const workspace = document.getElementById('mainWorkspace');
                 const ordreoversigt = document.getElementById('mainOrdreoversigt');
                 const salgordreVia = document.getElementById('mainSalgordreVia');
+                const administration = document.getElementById('mainAdministration');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
@@ -8565,6 +8809,7 @@ app.get('/', (req, res) => {
                 if (workspace) workspace.style.display = 'none';
                 if (ordreoversigt) ordreoversigt.style.display = 'none';
                 if (salgordreVia) salgordreVia.style.display = 'none';
+                if (administration) administration.style.display = 'none';
                 if (omsaetning) omsaetning.style.display = 'none';
                 if (ordreindgang) ordreindgang.style.display = 'none';
                 if (belastning) belastning.style.display = 'none';

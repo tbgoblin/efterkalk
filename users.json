@@ -22,5 +22,59 @@
       "viewAllUsers": true
     },
     "createdAt": "2026-03-19T12:37:54.959Z"
+  },
+  {
+    "username": "mw",
+    "displayName": "Martin",
+    "passwordSalt": "52dabfad0dae3c01736bd493867aaa47",
+    "passwordHash": "3474ff79c921e2b4583b320cec9a7df31425627fa4d014f35dfabc6a3f8017cf48bbacc4c38935a0535d67d6ea053facb9004b1ef66dca78c7705dafb2c52492",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": true,
+      "salgordreVia": true,
+      "omsaetning": true,
+      "ordreindgang": true,
+      "ordreoversigt": false,
+      "belastning": true,
+      "personalehandbog": true
+    },
+    "createdAt": "2026-08-20T10:10:12.695Z"
+  },
+  {
+    "username": "tb",
+    "displayName": "Tom",
+    "passwordSalt": "1fd3798bf7c3b7026b2ec1dfad82e6d9",
+    "passwordHash": "09cc0744456ee16c7ef0fa7df7f2a9f231c9ce56a812d2886b2a695d903a5f5937176a1ae34a536c441ff4eee226791ed0f4d63d80fc50625bef2d8d856b977c",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": true,
+      "salgordreVia": true,
+      "omsaetning": true,
+      "ordreindgang": true,
+      "ordreoversigt": false,
+      "belastning": true,
+      "personalehandbog": true
+    },
+    "createdAt": "2026-08-20T10:10:23.563Z"
+  },
+  {
+    "username": "bts",
+    "displayName": "Brian",
+    "passwordSalt": "3db0e66f1fb1a2567234aaff823765f6",
+    "passwordHash": "17c292f29c3a4d7f6e60839c2ea73fd10f281ef4cbb60ea8871deb848577914b64a9cdd1848b0d96f179c8ca753f2a262f9a8a63ea19baf8fbbc4ba59f60b27f",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": true,
+      "salgordreVia": true,
+      "omsaetning": false,
+      "ordreindgang": false,
+      "ordreoversigt": false,
+      "belastning": true,
+      "personalehandbog": true
+    },
+    "createdAt": "2026-08-20T10:10:34.078Z"
   }
 ]
