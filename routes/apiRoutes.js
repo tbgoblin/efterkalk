@@ -943,7 +943,7 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
 
-            const cacheKey = 'salgordre_via_v9';
+            const cacheKey = 'salgordre_via_v12';
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
@@ -972,41 +972,53 @@ function createApiRouter({
                                             )
                                                 AND (@requestedOrdNo IS NULL OR OrdNo = @requestedOrdNo)
                 ),
-                OpenProductionOrders AS (
+                ProductionOrders AS (
                     SELECT DISTINCT
                         P.OrdBasNo AS SalesOrderNo,
                         P.OrdNo
                     FROM Ord P WITH(NOLOCK)
                     INNER JOIN OpenSalesOrders S ON S.OrdNo = P.OrdBasNo
-                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = P.OrdNo
                     WHERE P.TrTp <> 6
-                                            AND L.ProdTp4 IN (1, 3)
-                                            AND L.R7 <> ''
-                                            AND ISNULL(L.TransGr3, 0) < 80
                 ),
                 ResourceMinutes AS (
                     SELECT
-                        OpenProductionOrders.SalesOrderNo,
+                        ProductionOrders.SalesOrderNo,
                         L.OrdNo,
                         L.LnNo,
-                        ISNULL(L.TransGr3, 0) AS ResourceStatus,
+                        CASE
+                            WHEN R.Nm LIKE '%laser%'
+                             AND ISNULL(Nesting.TotalLaserLines, 0) > 0
+                             AND Nesting.FinishedLaserLines = Nesting.TotalLaserLines
+                            THEN 80
+                            ELSE ISNULL(L.TransGr3, 0)
+                        END AS ResourceStatus,
                         ISNULL(L.NoOrg, 0) AS OriginalMinutes,
                         COALESCE(NULLIF(ProdTr.FinishedMinutes, 0), ISNULL(L.NoFin, 0)) AS FinishedMinutes
-                    FROM OpenProductionOrders
-                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = OpenProductionOrders.OrdNo
+                    FROM ProductionOrders
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
+                    LEFT JOIN R7 R WITH(NOLOCK) ON R.RNo = L.R7
                     OUTER APPLY (
                         SELECT SUM(CAST(P.NoInvoAb AS decimal(18, 6))) AS FinishedMinutes
                         FROM ProdTr P WITH(NOLOCK)
                         WHERE P.OrdNo = L.OrdNo
                           AND P.OrdLnNo = L.LnNo
                     ) ProdTr
+                    OUTER APPLY (
+                        SELECT
+                            COUNT(*) AS TotalLaserLines,
+                            SUM(CASE WHEN ISNULL(N.NoFin, 0) > 0 THEN 1 ELSE 0 END) AS FinishedLaserLines
+                        FROM OrdLn N WITH(NOLOCK)
+                        WHERE N.TrInf2 = CONVERT(varchar(20), L.OrdNo)
+                          AND N.TrTp = 7
+                          AND N.ProdNo LIKE '%L%'
+                    ) Nesting
                     WHERE L.ProdTp4 IN (1, 3)
                       AND L.R7 <> ''
                 ),
                 ActiveProduction AS (
                     SELECT
                         SalesOrderNo,
-                        COUNT(DISTINCT OrdNo) AS OpenProductionOrders,
+                        COUNT(DISTINCT CASE WHEN ResourceStatus < 80 THEN OrdNo END) AS OpenProductionOrders,
                         COUNT(*) AS TotalResources,
                         SUM(CASE WHEN ResourceStatus = 80 THEN 1 ELSE 0 END) AS CompletedResources,
                         SUM(CASE WHEN ResourceStatus < 80 THEN 1 ELSE 0 END) AS RemainingResources,
