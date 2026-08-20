@@ -8037,6 +8037,7 @@ app.get('/', (req, res) => {
                     closeSideMenu();
                     if (salgordreViaRows.length > 0) renderSalgordreVia();
                     else loadSalgordreVia();
+                    window.scrollTo({ top: 0, behavior: 'auto' });
                     return;
                 }
 
@@ -8546,12 +8547,14 @@ app.get('/', (req, res) => {
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
                 const ordreoversigt = document.getElementById('mainOrdreoversigt');
+                const salgordreVia = document.getElementById('mainSalgordreVia');
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
                 closeSideMenu();
                 if (workspace) workspace.style.display = 'none';
                 if (ordreoversigt) ordreoversigt.style.display = 'none';
+                if (salgordreVia) salgordreVia.style.display = 'none';
                 if (omsaetning) omsaetning.style.display = 'none';
                 if (ordreindgang) ordreindgang.style.display = 'none';
                 if (belastning) belastning.style.display = 'none';
