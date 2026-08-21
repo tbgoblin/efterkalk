@@ -1180,6 +1180,8 @@ app.get('/', (req, res) => {
             .via-col-resizer:hover, .via-col-resizer.active { background: rgba(15,53,96,0.2); }
             .order-list-table td { padding: 8px 10px; border-bottom: 1px solid #e7eff9; cursor: pointer; }
             .order-list-table tr:hover td { background: #edf5ff; }
+            .lagerliste-plate-detail-row { display:none !important; }
+            .lagerliste-plate-detail-row.is-open { display:table-row !important; }
             .note-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; border:1px solid; cursor:pointer; white-space:nowrap; }
             .note-badge.ok  { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
             .note-badge.error { background:#ffebee; color:#b71c1c; border-color:#ef9a9a; }
@@ -1658,6 +1660,12 @@ app.get('/', (req, res) => {
                                 <p>Aktive salgsordrer med åben produktion, fremdrift og næste ressource.</p>
                                 <button onclick="openModule('salgordre-via')">Åbn SalgOrdre VIA</button>
                             </article>
+                            <article class="dash-card" data-module-key="lagerliste">
+                                <span class="dash-chip">Ny</span>
+                                <h4>Lagerliste</h4>
+                                <p>Lagerværdi for plader, stangmateriale, VIA og færdige ikke-fakturerede varer.</p>
+                                <button onclick="openModule('lagerliste')">Åbn Lagerliste</button>
+                            </article>
                             <article class="dash-card" id="administrationDashCard" style="display:none;">
                                 <span class="dash-chip">Superadmin</span>
                                 <h4>Administration</h4>
@@ -2105,6 +2113,21 @@ app.get('/', (req, res) => {
             </section>
         </div>
 
+        <div class="container main-omsaetning" id="mainLagerliste">
+            <section class="omsaetning-shell">
+                <div class="omsaetning-head">
+                    <div><h3>Lagerliste</h3><p>Aktuel lagerværdi og månedlig lukning.</p></div>
+                </div>
+                <div class="via-toolbar">
+                    <button type="button" onclick="loadLagerliste()">Opdater</button>
+                    <input id="lagerlisteMonth" type="month" />
+                    <button type="button" onclick="saveLagerlisteSnapshot()">Gem månedslukning</button>
+                    <span id="lagerlisteSnapshotStatus" class="via-status"></span>
+                </div>
+                <div id="lagerlisteResults" class="omsaetning-empty">Indlæser Lagerliste...</div>
+            </section>
+        </div>
+
         <div class="container main-omsaetning" id="mainAdministration">
             <section class="omsaetning-shell">
                 <div class="omsaetning-head"><div><h3>Administration</h3><p>Brugere og modulrettigheder.</p></div></div>
@@ -2350,6 +2373,12 @@ app.get('/', (req, res) => {
                 <div class="settings-modal-body">
                     <div id="settingsDbWarning" class="settings-db-warning"></div>
                     <div class="settings-section">
+                        <h4>Preise Rest Plader (DKK/kg)</h4>
+                        <div id="restPricesForm" class="settings-form"></div>
+                        <div class="settings-form-actions"><button class="primary" onclick="saveRestPrices()">Gem Rest-Preise</button></div>
+                        <div id="restPricesStatus" style="font-size:12px;color:#c00;margin-top:6px;"></div>
+                    </div>
+                    <div class="settings-section">
                         <h4>Aktive profiler</h4>
                         <div id="settingsProfileList" class="settings-profile-list">
                             <div style="color:#888;font-size:13px;">Indlæser...</div>
@@ -2376,6 +2405,7 @@ app.get('/', (req, res) => {
         
         <script src="/assets/js/via.js?v=${pkgVersion}"></script>
         <script src="/assets/js/qms-ph.js?v=${pkgVersion}"></script>
+        <script src="/assets/js/lagerliste.js?v=${pkgVersion}"></script>
         <script>
             function formatNumber(num) {
                 const fixed = parseFloat(num).toFixed(2);
@@ -3292,7 +3322,8 @@ app.get('/', (req, res) => {
                 ordreindgang: 'ordreindgang',
                 ordreoversigt: 'ordreoversigt',
                 belastning: 'belastning',
-                personalehåndbog: 'personalehandbog'
+                personalehåndbog: 'personalehandbog',
+                lagerliste: 'lagerliste'
             };
 
             function canAccessModule(moduleKey) {
@@ -3329,10 +3360,33 @@ app.get('/', (req, res) => {
                     _settingsProfiles = d.profiles || [];
                     _settingsActiveId = d.activeProfileId || 'production';
                     _updateDbBadge(d.activeProfile);
+                    renderRestPrices(d.restPrices || {});
                     renderSettingsProfileList();
                     renderSettingsWarning(d.activeProfile);
                 } catch (err) {
                     console.warn('[settings] load failed:', err.message);
+                }
+            }
+
+            function renderRestPrices(prices) {
+                const form = document.getElementById('restPricesForm');
+                if (!form) return;
+                const labels = { '301': '301 Stålplader', '311': '311 Rustfri', '321': '321 Aluminium', '331': '331 Galvaniseret', '381': '381 Kobber/Messing', '302': '302 Andet' };
+                form.innerHTML = Object.keys(labels).map(key => '<div><label>' + labels[key] + '</label><input type="number" min="0" step="0.01" data-rest-price="' + key + '" value="' + Number(prices[key] || 0) + '" /></div>').join('');
+            }
+
+            async function saveRestPrices() {
+                const values = {};
+                document.querySelectorAll('[data-rest-price]').forEach(input => { values[input.dataset.restPrice] = Number(input.value || 0); });
+                const status = document.getElementById('restPricesStatus');
+                try {
+                    const response = await fetch('/settings/rest-prices', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + String(authToken || '') }, body: JSON.stringify({ restPrices: values }) });
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+                    renderRestPrices(data.restPrices || values);
+                    if (status) { status.style.color = '#1b5e20'; status.textContent = 'Rest-Preise gemt.'; }
+                } catch (err) {
+                    if (status) { status.style.color = '#b71c1c'; status.textContent = 'Fejl: ' + String(err.message || err); }
                 }
             }
 
@@ -7729,6 +7783,7 @@ app.get('/', (req, res) => {
                 ['ordreoversigt', 'Ordreoversigt'],
                 ['belastning', 'Belastning'],
                 ['personalehandbog', 'Personalehåndbog']
+                ,['lagerliste', 'Lagerliste']
             ];
 
             function adminHeaders() {
@@ -7819,7 +7874,7 @@ app.get('/', (req, res) => {
             async function deleteAdminUser(username) {
                 if (!username || !confirm('Slet bruger ' + username + '?')) return;
                 try {
-                    const response = await fetch('/admin/users/' + encodeURIComponent(username), { method: 'DELETE', headers: adminHeaders() });
+                    const response = await fetch('/admin/users/' + encodeURIComponent(username) + '/delete', { method: 'POST', headers: adminHeaders() });
                     const raw = await response.text();
                     let data = {};
                     try { data = raw ? JSON.parse(raw) : {}; } catch (_) {
@@ -7874,6 +7929,7 @@ app.get('/', (req, res) => {
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
+                const lagerliste = document.getElementById('mainLagerliste');
 
                 if (moduleKey === 'administration') {
                     if (loggedUserRole !== 'superadmin') {
@@ -7887,6 +7943,7 @@ app.get('/', (req, res) => {
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (administration) administration.style.display = 'block';
                     closeSideMenu();
                     loadAdminUsers();
@@ -7902,6 +7959,7 @@ app.get('/', (req, res) => {
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (salgordreVia) salgordreVia.style.display = 'block';
                     closeSideMenu();
                     if (salgordreViaRows.length > 0) renderSalgordreVia();
@@ -7918,6 +7976,7 @@ app.get('/', (req, res) => {
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (ordreoversigt) ordreoversigt.style.display = 'block';
                     closeSideMenu();
                     setTimeout(() => {
@@ -7942,6 +8001,7 @@ app.get('/', (req, res) => {
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (workspace) workspace.style.display = 'block';
                     closeSideMenu();
                     goBackToList();
@@ -7957,6 +8017,7 @@ app.get('/', (req, res) => {
                     if (administration) administration.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'block';
                     closeSideMenu();
                     initializeOmsaetningIfNeeded();
@@ -7972,6 +8033,7 @@ app.get('/', (req, res) => {
                     if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'block';
                     closeSideMenu();
                     initializeOrdreindgangIfNeeded();
@@ -7987,10 +8049,27 @@ app.get('/', (req, res) => {
                     if (administration) administration.style.display = 'none';
                     if (omsaetning) omsaetning.style.display = 'none';
                     if (ordreindgang) ordreindgang.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'none';
                     if (belastning) belastning.style.display = 'block';
                     closeSideMenu();
                     initializeBelastningIfNeeded();
                     setTimeout(syncStickyOffsets, 0);
+                    return;
+                }
+
+                if (moduleKey === 'lagerliste') {
+                    if (dashboard) dashboard.style.display = 'none';
+                    if (workspace) workspace.style.display = 'none';
+                    if (ordreoversigt) ordreoversigt.style.display = 'none';
+                    if (salgordreVia) salgordreVia.style.display = 'none';
+                    if (administration) administration.style.display = 'none';
+                    if (omsaetning) omsaetning.style.display = 'none';
+                    if (ordreindgang) ordreindgang.style.display = 'none';
+                    if (belastning) belastning.style.display = 'none';
+                    if (lagerliste) lagerliste.style.display = 'block';
+                    closeSideMenu();
+                    loadLagerliste();
+                    window.scrollTo({ top: 0, behavior: 'auto' });
                     return;
                 }
 
@@ -8285,6 +8364,7 @@ app.get('/', (req, res) => {
                 const omsaetning = document.getElementById('mainOmsaetning');
                 const ordreindgang = document.getElementById('mainOrdreindgang');
                 const belastning = document.getElementById('mainBelastning');
+                const lagerliste = document.getElementById('mainLagerliste');
                 closeSideMenu();
                 if (workspace) workspace.style.display = 'none';
                 if (ordreoversigt) ordreoversigt.style.display = 'none';
@@ -8293,6 +8373,7 @@ app.get('/', (req, res) => {
                 if (omsaetning) omsaetning.style.display = 'none';
                 if (ordreindgang) ordreindgang.style.display = 'none';
                 if (belastning) belastning.style.display = 'none';
+                if (lagerliste) lagerliste.style.display = 'none';
                 if (dashboard) dashboard.style.display = 'block';
                 const detailModal = document.getElementById('orderDetailModal');
                 const detailBody = document.getElementById('orderDetailModalBody');

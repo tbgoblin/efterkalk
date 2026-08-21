@@ -6,15 +6,30 @@ const path = require('path');
 const crypto = require('crypto');
 
 function createAuthService({ fs, usersFile }) {
-    const resolvedUsersFile = usersFile || path.join(__dirname, '..', 'users.json');
+    const legacyUsersFile = usersFile || path.join(__dirname, '..', 'users.json');
+    const dataDir = String(process.env.GANTECH_DATA_DIR || '').trim();
+    const resolvedUsersFile = dataDir ? path.join(dataDir, 'users.json') : legacyUsersFile;
     const authSessions = new Map();
 
+    function ensureUsersFile() {
+        if (fs.existsSync(resolvedUsersFile)) return;
+        if (resolvedUsersFile !== legacyUsersFile && fs.existsSync(legacyUsersFile)) {
+            fs.mkdirSync(path.dirname(resolvedUsersFile), { recursive: true });
+            fs.copyFileSync(legacyUsersFile, resolvedUsersFile);
+            return;
+        }
+        fs.mkdirSync(path.dirname(resolvedUsersFile), { recursive: true });
+        fs.writeFileSync(resolvedUsersFile, '[]\n', 'utf8');
+    }
+
     function readUsers() {
+        ensureUsersFile();
         const parsed = JSON.parse(fs.readFileSync(resolvedUsersFile, 'utf8'));
         return Array.isArray(parsed) ? parsed : [];
     }
 
     function writeUsers(users) {
+        ensureUsersFile();
         fs.writeFileSync(resolvedUsersFile, JSON.stringify(users, null, 2) + '\n', 'utf8');
     }
 

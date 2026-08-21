@@ -78,6 +78,9 @@ function getUserPort() {
 
 const USER_PORT = getUserPort();
 process.env.PORT = String(USER_PORT);
+if (!process.env.GANTECH_DATA_DIR) {
+    process.env.GANTECH_DATA_DIR = path.join(app.getPath('userData'), 'data');
+}
 
 const { ensureServerStarted } = require('./server');
 

@@ -20,6 +20,7 @@ const {
 const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
 const { createAuthService } = require('../services/authService');
 const { fetchSalgordreViaRows } = require('../services/viaService');
+const { createLagerlisteService } = require('../services/lagerlisteService');
 const settingsService = require('../services/settingsService');
 const getConnectionModule = require('../db');
 const { createOmsaetningService } = require('../services/omsaetningService');
@@ -129,7 +130,7 @@ function createApiRouter({
         return res.json({ user: safeUser(user) });
     });
 
-    router.delete('/admin/users/:username', (req, res) => {
+    function deleteAdminUserHandler(req, res) {
         try {
             if (!requireSuperadmin(req, res)) return;
             const username = String(req.params.username || '').toLowerCase();
@@ -146,11 +147,24 @@ function createApiRouter({
             logEvent('ERROR admin/users DELETE: ' + err.message);
             return res.status(500).json({ error: err.message || 'Kunne ikke slette bruger' });
         }
-    });
+    }
+
+    router.delete('/admin/users/:username', deleteAdminUserHandler);
+    router.post('/admin/users/:username/delete', deleteAdminUserHandler);
     const legacyAftercalcPrefixes = ['aftercalc_v22_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
     const ordreindgangService = createOrdreindgangService({ getConnection, sql });
     const bomService = createBomService({ getConnection, sql, diskCache, logEvent });
+    const lagerlisteService = createLagerlisteService({
+        getConnection,
+        sql,
+        diskCache,
+        fs,
+        getSalgordreViaRows: fetchSalgordreViaRows,
+        getRestPrices: settingsService.getRestPrices,
+        dataDir: process.env.GANTECH_DATA_DIR ? path.join(process.env.GANTECH_DATA_DIR, 'lagerliste') : undefined
+    });
+    lagerlisteService.scheduleMonthlySnapshot({ onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message) });
 
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
@@ -1612,6 +1626,17 @@ function createApiRouter({
         }
     });
 
+    router.post('/settings/rest-prices', express.json(), (req, res) => {
+        try {
+            if (!requireSuperadmin(req, res)) return;
+            const restPrices = settingsService.updateRestPrices(req.body && req.body.restPrices);
+            diskCache.del('lagerliste_v8');
+            return res.json({ ok: true, restPrices });
+        } catch (err) {
+            return res.status(400).json({ ok: false, error: err.message });
+        }
+    });
+
     router.post('/settings/db-profiles/active', express.json(), (req, res) => {
         try {
             const profileId = String((req.body && req.body.profileId) || '').trim();
@@ -2485,6 +2510,40 @@ function createApiRouter({
             res.json({ ok: true, dataset: saved });
         } catch (err) {
             res.status(500).json({ ok: false, error: err.message || 'Kunne ikke gemme QMS dataset' });
+        }
+    });
+
+    router.get('/lagerliste/current', requireModulePermission('lagerliste'), async (_req, res) => {
+        try {
+            return res.json({ ok: true, ...(await lagerlisteService.getCurrent()) });
+        } catch (err) {
+            logEvent('ERROR lagerliste/current: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Lagerliste fejl' });
+        }
+    });
+
+    router.get('/lagerliste/snapshot/:month', requireModulePermission('lagerliste'), (req, res) => {
+        try {
+            const snapshot = lagerlisteService.loadMonthlySnapshot({ fs, month: req.params.month });
+            if (!snapshot) return res.status(404).json({ ok: false, error: 'Snapshot ikke fundet' });
+            return res.json({ ok: true, ...snapshot });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshot: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot fejl' });
+        }
+    });
+
+    router.post('/lagerliste/snapshot/:month', requireSuperadmin, async (req, res) => {
+        try {
+            const month = String(req.params.month || '').trim();
+            if (!/^\d{4}-\d{2}$/.test(month)) {
+                return res.status(400).json({ ok: false, error: 'Måned skal være YYYY-MM' });
+            }
+            const diverse = Array.isArray(req.body && req.body.diverse) ? req.body.diverse : [];
+            return res.json({ ok: true, ...(await lagerlisteService.saveMonthlySnapshot({ fs, month, diverse })) });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshot create: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot fejl' });
         }
     });
     // ────────────────────────────────────────────────────────────────────────

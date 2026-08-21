@@ -47,6 +47,7 @@ const DEFAULT_PROFILES = [
 ];
 
 let _settings = null;
+const DEFAULT_REST_PRICES = { '301': 3, '311': 10, '321': 15, '331': 4, '381': 10, '302': 1 };
 
 function _load() {
     if (_settings !== null) return;
@@ -146,7 +147,25 @@ function getSettingsSummary() {
         activeProfileId: _settings.activeProfileId,
         activeProfile:   getActiveProfile(),
         profiles:        getAllProfiles()
+        ,restPrices: getRestPrices()
     };
 }
 
-module.exports = { getAllProfiles, getActiveProfile, setActiveProfile, upsertProfile, deleteProfile, getSettingsSummary };
+function getRestPrices() {
+    _load();
+    return { ...DEFAULT_REST_PRICES, ...(_settings.restPrices || {}) };
+}
+
+function updateRestPrices(prices) {
+    _load();
+    const next = { ...DEFAULT_REST_PRICES };
+    for (const key of Object.keys(DEFAULT_REST_PRICES)) {
+        const value = Number(prices && prices[key]);
+        if (Number.isFinite(value) && value >= 0) next[key] = value;
+    }
+    _settings.restPrices = next;
+    _save();
+    return next;
+}
+
+module.exports = { getAllProfiles, getActiveProfile, setActiveProfile, upsertProfile, deleteProfile, getSettingsSummary, getRestPrices, updateRestPrices };
