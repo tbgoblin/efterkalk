@@ -2097,6 +2097,7 @@ app.get('/', (req, res) => {
                 <div class="via-toolbar">
                     <input id="viaSearchInput" type="search" placeholder="Søg ordre eller kunde..." oninput="renderSalgordreVia()" />
                     <button type="button" onclick="loadSalgordreVia(true)">Opdater</button>
+                    <button type="button" onclick="exportSalgordreViaCsv()">Eksporter CSV</button>
                     <span id="viaStatus" class="via-status"></span>
                 </div>
                 <div id="viaKpis" class="via-kpis"></div>

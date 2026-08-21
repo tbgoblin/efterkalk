@@ -91,28 +91,11 @@ function setSalgordreViaSortFromElement(element) {
     setSalgordreViaSort(String(element && element.dataset && element.dataset.sortField || 'deliveryDate'));
 }
 
-function renderSalgordreVia() {
-    const target = document.getElementById('viaResults');
-    const kpis = document.getElementById('viaKpis');
+function getSalgordreViaVisibleRows() {
     const query = String((document.getElementById('viaSearchInput') || {}).value || '').trim().toLowerCase();
-    if (!target) return;
     const rows = salgordreViaRows.filter(row => !query
         || String(row.OrdNo || '').includes(query)
         || String(row.CustomerName || '').toLowerCase().includes(query)).slice();
-    const materialCost = rows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
-    const timeCost = rows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
-    const totalCost = materialCost + timeCost;
-    const salesValue = rows.reduce((sum, row) => sum + Number(row.SalesValue || 0), 0);
-    if (kpis) {
-        kpis.innerHTML = '<div class="via-kpi"><span>Materialekost</span><strong>' + formatNumber(materialCost) + ' DKK</strong></div>'
-            + '<div class="via-kpi"><span>Tidskost (færdigmeldt)</span><strong>' + formatNumber(timeCost) + ' DKK</strong></div>'
-            + '<div class="via-kpi"><span>Samlet kost</span><strong>' + formatNumber(totalCost) + ' DKK</strong></div>'
-            + '<div class="via-kpi"><span>Salgsværdi</span><strong>' + formatNumber(salesValue) + ' DKK</strong></div>';
-    }
-    if (!rows.length) {
-        target.innerHTML = '<div class="omsaetning-empty">Ingen aktive salgsordrer matcher søgningen.</div>';
-        return;
-    }
     rows.sort((left, right) => {
         const leftProgress = getSalgordreViaProgress(left);
         const rightProgress = getSalgordreViaProgress(right);
@@ -148,6 +131,65 @@ function renderSalgordreVia() {
         const comparison = leftValue < rightValue ? -1 : (leftValue > rightValue ? 1 : 0);
         return salgordreViaSortDirection === 'asc' ? comparison : -comparison;
     });
+    return rows;
+}
+
+function exportSalgordreViaCsv() {
+    const rows = getSalgordreViaVisibleRows();
+    if (!rows.length) {
+        alert('Ingen rækker at eksportere.');
+        return;
+    }
+    const csvNumber = value => Number(value || 0).toFixed(2).replace('.', ',');
+    const csvText = value => '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
+    const lines = ['Salgsordre;Kunde;Levdato;Ansvarlig;Materialekost;Tidskost;Total kost'];
+    let sumMaterial = 0;
+    let sumTime = 0;
+    for (const row of rows) {
+        const materialCost = Number(row.MaterialCost || 0);
+        const timeCost = Number(row.TimeCost || 0);
+        sumMaterial += materialCost;
+        sumTime += timeCost;
+        lines.push([
+            csvText(row.OrdNo || ''),
+            csvText(row.CustomerName || ''),
+            csvText(formatViaDate(row.DeliveryDate)),
+            csvText(row.SellerUsr || ''),
+            csvNumber(materialCost),
+            csvNumber(timeCost),
+            csvNumber(materialCost + timeCost)
+        ].join(';'));
+    }
+    lines.push(['"I alt"', '""', '""', '""', csvNumber(sumMaterial), csvNumber(sumTime), csvNumber(sumMaterial + sumTime)].join(';'));
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'salgordre-via_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+}
+
+function renderSalgordreVia() {
+    const target = document.getElementById('viaResults');
+    const kpis = document.getElementById('viaKpis');
+    if (!target) return;
+    const rows = getSalgordreViaVisibleRows();
+    const materialCost = rows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
+    const timeCost = rows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
+    const totalCost = materialCost + timeCost;
+    const salesValue = rows.reduce((sum, row) => sum + Number(row.SalesValue || 0), 0);
+    if (kpis) {
+        kpis.innerHTML = '<div class="via-kpi"><span>Materialekost</span><strong>' + formatNumber(materialCost) + ' DKK</strong></div>'
+            + '<div class="via-kpi"><span>Tidskost (færdigmeldt)</span><strong>' + formatNumber(timeCost) + ' DKK</strong></div>'
+            + '<div class="via-kpi"><span>Samlet kost</span><strong>' + formatNumber(totalCost) + ' DKK</strong></div>'
+            + '<div class="via-kpi"><span>Salgsværdi</span><strong>' + formatNumber(salesValue) + ' DKK</strong></div>';
+    }
+    if (!rows.length) {
+        target.innerHTML = '<div class="omsaetning-empty">Ingen aktive salgsordrer matcher søgningen.</div>';
+        return;
+    }
     const sortHeader = (field, label) => '<th data-sort-field="' + field + '" data-column-field="' + field + '" onclick="event.stopPropagation();setSalgordreViaSortFromElement(this)" style="cursor:pointer;user-select:none;">'
         + label + (salgordreViaSortField === field ? (salgordreViaSortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕')
         + '<span class="via-col-resizer" onmousedown="startSalgordreViaColumnResize(event, &#39;' + field + '&#39;)"></span></th>';
