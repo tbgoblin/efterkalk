@@ -105,10 +105,21 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                         SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS MaterialCost
                     FROM ProductionOrders
                     INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
-                    WHERE L.ProdTp4 = 2
+                                        WHERE L.ProdTp4 = 2
                       AND L.ProdNo NOT LIKE '%L'
                     GROUP BY ProductionOrders.SalesOrderNo
                 ),
+                                    StangCosts AS (
+                                        SELECT
+                                            ProductionOrders.SalesOrderNo,
+                                            SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS StangCost
+                                        FROM ProductionOrders
+                                        INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
+                                        INNER JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
+                                        WHERE P.Gr6 = 2
+                                          AND L.ProdNo NOT LIKE '%L'
+                                        GROUP BY ProductionOrders.SalesOrderNo
+                                    ),
                 NestingMaterialCosts AS (
                     SELECT
                         ProductionOrders.SalesOrderNo,
@@ -136,6 +147,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                     Active.CompletedResourceMinutes,
                     Active.EffectiveResourceMinutes,
                     ISNULL(MaterialCosts.MaterialCost, 0) + ISNULL(NestingMaterialCosts.MaterialCost, 0) AS MaterialCost,
+                    ISNULL(StangCosts.StangCost, 0) AS StangCost,
                     ISNULL(Active.TimeCost, 0) AS TimeCost,
                     (ISNULL(S.InvoSF, 0) + ISNULL(S.InvoIF, 0)) * (ISNULL(NULLIF(S.ExRt, 0), 100) / 100.0) AS SalesValue,
                     CAST(NULL AS datetime) AS PlannedDate,
@@ -144,6 +156,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                 LEFT JOIN Actor C WITH(NOLOCK) ON C.CustNo = S.CustNo
                 LEFT JOIN ActiveProduction Active ON Active.SalesOrderNo = S.OrdNo
                 LEFT JOIN MaterialCosts ON MaterialCosts.SalesOrderNo = S.OrdNo
+                LEFT JOIN StangCosts ON StangCosts.SalesOrderNo = S.OrdNo
                 LEFT JOIN NestingMaterialCosts ON NestingMaterialCosts.SalesOrderNo = S.OrdNo
                 ORDER BY
                     CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,

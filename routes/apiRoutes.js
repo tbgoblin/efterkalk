@@ -130,17 +130,22 @@ function createApiRouter({
     });
 
     router.delete('/admin/users/:username', (req, res) => {
-        if (!requireSuperadmin(req, res)) return;
-        const username = String(req.params.username || '').toLowerCase();
-        if (username === 'admin') return res.status(400).json({ error: 'Bootstrap superadmin kan ikke slettes' });
-        const users = readUsers();
-        const remaining = users.filter(item => String(item.username || '').toLowerCase() !== username);
-        if (remaining.length === users.length) return res.status(404).json({ error: 'Bruger findes ikke' });
-        writeUsers(remaining);
-        for (const [token, session] of authSessions.entries()) {
-            if (String(session.user && session.user.username || '').toLowerCase() === username) authSessions.delete(token);
+        try {
+            if (!requireSuperadmin(req, res)) return;
+            const username = String(req.params.username || '').toLowerCase();
+            if (username === 'admin') return res.status(400).json({ error: 'Bootstrap superadmin kan ikke slettes' });
+            const users = readUsers();
+            const remaining = users.filter(item => String(item.username || '').toLowerCase() !== username);
+            if (remaining.length === users.length) return res.status(404).json({ error: 'Bruger findes ikke' });
+            writeUsers(remaining);
+            for (const [token, session] of authSessions.entries()) {
+                if (String(session.user && session.user.username || '').toLowerCase() === username) authSessions.delete(token);
+            }
+            return res.json({ ok: true });
+        } catch (err) {
+            logEvent('ERROR admin/users DELETE: ' + err.message);
+            return res.status(500).json({ error: err.message || 'Kunne ikke slette bruger' });
         }
-        return res.json({ ok: true });
     });
     const legacyAftercalcPrefixes = ['aftercalc_v22_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
@@ -174,7 +179,7 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
 
-            const cacheKey = 'salgordre_via_v20';
+            const cacheKey = 'salgordre_via_v22';
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });

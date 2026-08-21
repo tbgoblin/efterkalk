@@ -7820,7 +7820,11 @@ app.get('/', (req, res) => {
                 if (!username || !confirm('Slet bruger ' + username + '?')) return;
                 try {
                     const response = await fetch('/admin/users/' + encodeURIComponent(username), { method: 'DELETE', headers: adminHeaders() });
-                    const data = await response.json();
+                    const raw = await response.text();
+                    let data = {};
+                    try { data = raw ? JSON.parse(raw) : {}; } catch (_) {
+                        throw new Error('Serverfejl HTTP ' + response.status + ': ' + raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180));
+                    }
                     if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke slette bruger');
                     setAdminStatus('Bruger ' + username + ' er slettet.');
                     loadAdminUsers();

@@ -111,17 +111,19 @@ function getSalgordreViaVisibleRows() {
         } else if (salgordreViaSortField === 'progress') {
             leftValue = leftProgress.percentage;
             rightValue = rightProgress.percentage;
-        } else if (salgordreViaSortField === 'materialCost' || salgordreViaSortField === 'timeCost' || salgordreViaSortField === 'totalCost') {
+        } else if (salgordreViaSortField === 'materialCost' || salgordreViaSortField === 'stangCost' || salgordreViaSortField === 'timeCost' || salgordreViaSortField === 'totalCost') {
             const leftMaterialCost = Number(left.MaterialCost || 0);
             const rightMaterialCost = Number(right.MaterialCost || 0);
+            const leftStangCost = Number(left.StangCost || 0);
+            const rightStangCost = Number(right.StangCost || 0);
             const leftTimeCost = Number(left.TimeCost || 0);
             const rightTimeCost = Number(right.TimeCost || 0);
             leftValue = salgordreViaSortField === 'materialCost'
                 ? leftMaterialCost
-                : (salgordreViaSortField === 'timeCost' ? leftTimeCost : leftMaterialCost + leftTimeCost);
+                : (salgordreViaSortField === 'stangCost' ? leftStangCost : (salgordreViaSortField === 'timeCost' ? leftTimeCost : leftMaterialCost + leftStangCost + leftTimeCost));
             rightValue = salgordreViaSortField === 'materialCost'
                 ? rightMaterialCost
-                : (salgordreViaSortField === 'timeCost' ? rightTimeCost : rightMaterialCost + rightTimeCost);
+                : (salgordreViaSortField === 'stangCost' ? rightStangCost : (salgordreViaSortField === 'timeCost' ? rightTimeCost : rightMaterialCost + rightStangCost + rightTimeCost));
         } else {
             const key = salgordreViaSortField === 'customer' ? 'CustomerName'
                 : (salgordreViaSortField === 'seller' ? 'SellerUsr' : 'ResourceName');
@@ -142,13 +144,16 @@ function exportSalgordreViaCsv() {
     }
     const csvNumber = value => Number(value || 0).toFixed(2).replace('.', ',');
     const csvText = value => '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
-    const lines = ['Salgsordre;Kunde;Levdato;Ansvarlig;Materialekost;Tidskost;Total kost'];
+    const lines = ['Salgsordre;Kunde;Levdato;Ansvarlig;Materialekost;Stangkost;Tidskost;Total kost'];
     let sumMaterial = 0;
+    let sumStang = 0;
     let sumTime = 0;
     for (const row of rows) {
         const materialCost = Number(row.MaterialCost || 0);
+        const stangCost = Number(row.StangCost || 0);
         const timeCost = Number(row.TimeCost || 0);
         sumMaterial += materialCost;
+        sumStang += stangCost;
         sumTime += timeCost;
         lines.push([
             csvText(row.OrdNo || ''),
@@ -156,11 +161,12 @@ function exportSalgordreViaCsv() {
             csvText(formatViaDate(row.DeliveryDate)),
             csvText(row.SellerUsr || ''),
             csvNumber(materialCost),
+            csvNumber(stangCost),
             csvNumber(timeCost),
-            csvNumber(materialCost + timeCost)
+            csvNumber(materialCost + stangCost + timeCost)
         ].join(';'));
     }
-    lines.push(['"I alt"', '""', '""', '""', csvNumber(sumMaterial), csvNumber(sumTime), csvNumber(sumMaterial + sumTime)].join(';'));
+    lines.push(['"I alt"', '""', '""', '""', csvNumber(sumMaterial), csvNumber(sumStang), csvNumber(sumTime), csvNumber(sumMaterial + sumStang + sumTime)].join(';'));
     const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -177,11 +183,13 @@ function renderSalgordreVia() {
     if (!target) return;
     const rows = getSalgordreViaVisibleRows();
     const materialCost = rows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
+    const stangCost = rows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
     const timeCost = rows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
-    const totalCost = materialCost + timeCost;
+    const totalCost = materialCost + stangCost + timeCost;
     const salesValue = rows.reduce((sum, row) => sum + Number(row.SalesValue || 0), 0);
     if (kpis) {
         kpis.innerHTML = '<div class="via-kpi"><span>Materialekost</span><strong>' + formatNumber(materialCost) + ' DKK</strong></div>'
+            + '<div class="via-kpi"><span>Stangkost</span><strong>' + formatNumber(stangCost) + ' DKK</strong></div>'
             + '<div class="via-kpi"><span>Tidskost (færdigmeldt)</span><strong>' + formatNumber(timeCost) + ' DKK</strong></div>'
             + '<div class="via-kpi"><span>Samlet kost</span><strong>' + formatNumber(totalCost) + ' DKK</strong></div>'
             + '<div class="via-kpi"><span>Salgsværdi</span><strong>' + formatNumber(salesValue) + ' DKK</strong></div>';
@@ -201,6 +209,7 @@ function renderSalgordreVia() {
         + sortHeader('deliveryDate', 'Levdato')
         + sortHeader('seller', 'Ansvarlig')
         + sortHeader('materialCost', 'Materiale')
+        + sortHeader('stangCost', 'Stang')
         + sortHeader('timeCost', 'Tid')
         + sortHeader('totalCost', 'Total kost')
         + sortHeader('progress', 'Procesfremskridt')
@@ -209,14 +218,16 @@ function renderSalgordreVia() {
     for (const row of rows) {
         const progress = getSalgordreViaProgress(row);
         const rowMaterialCost = Number(row.MaterialCost || 0);
+        const rowStangCost = Number(row.StangCost || 0);
         const rowTimeCost = Number(row.TimeCost || 0);
-        const rowTotalCost = rowMaterialCost + rowTimeCost;
+        const rowTotalCost = rowMaterialCost + rowStangCost + rowTimeCost;
         html += '<tr onclick="openSalgordreViaOrder(' + Number(row.OrdNo) + ')">'
             + '<td><strong>' + escapeHtml(String(row.OrdNo || '-')) + '</strong></td>'
             + '<td>' + escapeHtml(String(row.CustomerName || '-')) + '</td>'
             + '<td>' + escapeHtml(formatViaDate(row.DeliveryDate)) + '</td>'
             + '<td>' + escapeHtml(String(row.SellerUsr || '-')) + '</td>'
             + '<td>' + formatNumber(rowMaterialCost) + ' DKK</td>'
+            + '<td>' + formatNumber(rowStangCost) + ' DKK</td>'
             + '<td>' + formatNumber(rowTimeCost) + ' DKK</td>'
             + '<td><strong>' + formatNumber(rowTotalCost) + ' DKK</strong></td>'
             + '<td><div class="via-progress">' + formatNumber(progress.completedMinutes) + ' min registrati (' + progress.percentage + '%)<div class="via-progress-bar"><span style="width:' + progress.percentage + '%"></span></div></div></td>'
