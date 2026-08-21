@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 26;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 27;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -79,16 +79,12 @@ function createAftercalcService({
     function getOperationTimeInfo(line) {
         const prodTrMinutesRaw = Number(line && line.ProdTrMinutes);
         const hasProdTrMinutes = Number.isFinite(prodTrMinutesRaw) && prodTrMinutesRaw !== 0;
-        const effectiveMinutes = hasProdTrMinutes
-            ? prodTrMinutesRaw
-            : Number(getEffectiveOperationMinutes(line) || 0);
-        const usesEstimatedMinutes = !hasProdTrMinutes && Boolean(isEstimatedOperationMinutesFallback(line));
+        const effectiveMinutes = hasProdTrMinutes ? prodTrMinutesRaw : 0;
+        const usesEstimatedMinutes = false;
         return {
             effectiveMinutes,
             usesEstimatedMinutes,
-            infoText: usesEstimatedMinutes
-                ? 'Færdigmeldt minutter var 0; beregnet ud fra Stykliste Minutter.'
-                : ''
+            infoText: ''
         };
     }
 
