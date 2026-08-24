@@ -175,6 +175,26 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
               AND P.ProdNo <> '301001'
               AND COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0) <> 0
         `);
+        const gr5Result = await pool.request().query(`
+            SELECT
+                P.ProdNo,
+                P.Descr,
+                P.Gr5,
+                P.NWgtU,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0) AS Quantity,
+                COALESCE(TRY_CONVERT(decimal(18, 6), REPLACE(CONVERT(varchar(100), P.Inf), ',', '.')), 0) AS StandardPrice,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PhCstPr), 0) AS UnitCost,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0)
+                    * COALESCE(TRY_CONVERT(decimal(18, 6), REPLACE(CONVERT(varchar(100), P.Inf), ',', '.')), 0) AS Value,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0)
+                    * COALESCE(TRY_CONVERT(decimal(18, 6), B.PhCstPr), 0) AS FifoValue
+            FROM Prod P WITH(NOLOCK)
+            INNER JOIN StcBal B WITH(NOLOCK) ON B.ProdNo = P.ProdNo AND B.StcNo = 1
+            WHERE TRY_CONVERT(decimal(18, 6), P.Gr5) = 11
+              AND COALESCE(TRY_CONVERT(decimal(18, 6), P.ProdGr), 0) <> 99999
+              AND COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0) <> 0
+            ORDER BY P.ProdNo
+        `);
         const stangResult = await pool.request()
             .input('closeDate', sql.Int, todayInt)
             .query(`
@@ -315,6 +335,14 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             Value: round(row.Value),
             FifoValue: round(row.FifoValue),
             PlateCount: toNumber(row.NWgtU) > 0 ? Math.round(toNumber(row.Quantity) / toNumber(row.NWgtU)) : 0
+        }));
+        const gr5Items = (gr5Result.recordset || []).map(row => ({
+            ...row,
+            Quantity: toNumber(row.Quantity),
+            StandardPrice: toNumber(row.StandardPrice),
+            UnitCost: toNumber(row.UnitCost),
+            Value: round(row.Value),
+            FifoValue: round(row.FifoValue)
         }));
         const plateGroupMap = new Map();
         const plateTypeLabels = {
@@ -497,6 +525,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             generatedAt: new Date().toISOString(),
             categories: {
                 plates,
+                gr5Items,
                 plateGroups,
                 restPlates,
                 restPlateGroups,

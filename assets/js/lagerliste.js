@@ -187,14 +187,18 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
     const previousViaLaser = previousViaRows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
     const previousViaStang = previousViaRows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
     const previousViaPlader = previousNestingCuttingRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
+    const lagerKomponenterValue = (Array.isArray(categories && categories.gr5Items) ? categories.gr5Items : [])
+        .reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
+    const previousLagerKomponenterValue = (Array.isArray(comparison && comparison.categories && comparison.categories.gr5Items) ? comparison.categories.gr5Items : [])
+        .reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
     const workInProgress = Number(totals.finishedNotInvoiced || 0) + viaTid + viaLaser + viaStang + viaPlader;
     const previousWorkInProgress = previousTotals
         ? Number(previousTotals.finishedNotInvoiced || 0) + previousViaTid + previousViaLaser + previousViaStang + previousViaPlader
         : null;
-    const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0);
+    const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0) + lagerKomponenterValue;
     const warehouseWithRest = warehouseWithoutRest + Number(totals.restPlates || 0);
     const previousWarehouseWithoutRest = previousTotals
-        ? Number(previousTotals.plates || 0) + Number(previousTotals.opfolgningvare || 0) + Number(previousTotals.stang || 0)
+        ? Number(previousTotals.plates || 0) + Number(previousTotals.opfolgningvare || 0) + Number(previousTotals.stang || 0) + previousLagerKomponenterValue
         : null;
     const previousWarehouseWithRest = previousWarehouseWithoutRest === null
         ? null
@@ -204,6 +208,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         ['Rest plader', totals.restPlates, previousTotals && previousTotals.restPlates, 'lagerliste-rest-section'],
         ['Stang materiale', totals.stang, previousTotals && previousTotals.stang, 'lagerliste-stang-section'],
         ['Opfølgningsvarer', totals.opfolgningvare, previousTotals && previousTotals.opfolgningvare, 'lagerliste-opfolgning-section'],
+        ['Lager Komponenter (FIFO)', lagerKomponenterValue, previousLagerKomponenterValue, 'lagerliste-gr5-section'],
         ['Varelager uden rest', warehouseWithoutRest, previousWarehouseWithoutRest, null],
         ['Varelager', warehouseWithRest, previousWarehouseWithRest, null],
         ['Færdige SO kostpris', totals.finishedNotInvoiced, previousTotals && previousTotals.finishedNotInvoiced, 'lagerliste-ready-invoice-section'],
@@ -462,6 +467,22 @@ function lagerlisteStangTable(rows) {
     return table + '<div class="lagerliste-total-row"><strong>Sum af Værdi</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong><strong>Sum af FIFO</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalFifo)) + '</strong></div>';
 }
 
+function lagerlisteGr5Table(rows) {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    if (!safeRows.length) return '<div class="omsaetning-empty">Ingen Lager Komponenter.</div>';
+    const totalValue = safeRows.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
+    const totalStandard = safeRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
+    return lagerlisteRowsTable(safeRows, [
+        { key: 'ProdNo', label: 'Produkt' },
+        { key: 'Descr', label: 'Beskrivelse' },
+        { key: 'Quantity', label: 'Beholdning', format: value => Number(value || 0).toFixed(2) },
+        { key: 'StandardPrice', label: 'Pris', format: lagerlisteFormat },
+        { key: 'UnitCost', label: 'FIFO-pris', format: lagerlisteFormat },
+        { key: 'FifoValue', label: 'Værdi (FIFO)', format: lagerlisteFormat },
+        { key: 'FifoValue', label: 'FIFO', format: lagerlisteFormat }
+    ]) + '<div class="lagerliste-total-row"><strong>Sum af Værdi (FIFO)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong><strong>Sum af Værdi (standard)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalStandard)) + '</strong></div>';
+}
+
 function lagerlisteNestingCuttingTable(rows) {
     const safeRows = Array.isArray(rows) ? rows : [];
     if (!safeRows.length) return '<div class="omsaetning-empty">Ingen plader i aktivt snit de seneste 3 måneder.</div>';
@@ -582,6 +603,7 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth) {
     const totals = payload.totals || {};
     const plateGroups = categories.plateGroups || [];
     const stangRows = categories.stang || [];
+    const gr5Rows = categories.gr5Items || [];
     const opfolgningRows = categories.opfolgningvare || [];
     const nestingCuttingRows = categories.nestingCutting || [];
     const readyToInvoiceRows = categories.finishedNotInvoiced || [];
@@ -592,6 +614,7 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth) {
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
         + lagerlisteCollapsibleSection('Rest Plader', lagerlisteRestGroupsTable(categories.restPlateGroups || []), 'lagerliste-rest-section', totals.restPlates)
         + lagerlisteCollapsibleSection('Stang materiale', lagerlisteStangTable(stangRows), 'lagerliste-stang-section', totals.stang)
+        + lagerlisteCollapsibleSection('Lager Komponenter', lagerlisteGr5Table(gr5Rows), 'lagerliste-gr5-section', sumRows(gr5Rows))
         + lagerlisteCollapsibleSection('Plader VIA', lagerlisteNestingCuttingTable(nestingCuttingRows), 'lagerliste-nesting-cutting-section', sumRows(nestingCuttingRows))
         + lagerlisteCollapsibleSection('Opfølgningsvarer', lagerlisteOpfolgningTable(opfolgningRows), 'lagerliste-opfolgning-section', totals.opfolgningvare)
         + lagerlisteCollapsibleSection('Ordrer klar til fakturering', lagerlisteReadyToInvoiceTable(readyToInvoiceRows), 'lagerliste-ready-invoice-section', totals.finishedNotInvoiced)
