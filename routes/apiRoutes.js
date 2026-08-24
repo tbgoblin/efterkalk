@@ -2537,14 +2537,22 @@ function createApiRouter({
         }
     });
 
-    router.post('/lagerliste/snapshot/:month', requireSuperadmin, async (req, res) => {
+    router.post('/lagerliste/snapshot/:month', (req, res, next) => {
+        if (!requireSuperadmin(req, res)) return;
+        return next();
+    }, async (req, res) => {
         try {
             const month = String(req.params.month || '').trim();
             if (!/^\d{4}-\d{2}$/.test(month)) {
                 return res.status(400).json({ ok: false, error: 'Måned skal være YYYY-MM' });
             }
             const diverse = Array.isArray(req.body && req.body.diverse) ? req.body.diverse : [];
-            return res.json({ ok: true, ...(await lagerlisteService.saveMonthlySnapshot({ fs, month, diverse })) });
+            const saved = await lagerlisteService.saveMonthlySnapshot({ fs, month, diverse });
+            return res.json({
+                ok: true,
+                month: saved.month,
+                createdAt: saved.createdAt
+            });
         } catch (err) {
             logEvent('ERROR lagerliste/snapshot create: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Snapshot fejl' });
@@ -2572,7 +2580,10 @@ function createApiRouter({
         }
     });
 
-    router.post('/lagerliste/snapshots', requireSuperadmin, async (req, res) => {
+    router.post('/lagerliste/snapshots', (req, res, next) => {
+        if (!requireSuperadmin(req, res)) return;
+        return next();
+    }, async (req, res) => {
         try {
             const capturedAtRaw = req.body && req.body.capturedAt;
             const capturedAt = capturedAtRaw ? new Date(capturedAtRaw) : new Date();

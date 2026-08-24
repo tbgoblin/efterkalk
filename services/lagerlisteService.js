@@ -6,7 +6,7 @@ const path = require('path');
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v12';
+    const cacheKey = 'lagerliste_v15';
     let currentMemoryCache = null;
 
     function toNumber(value) {
@@ -29,10 +29,15 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return JSON.parse(fsRef.readFileSync(file, 'utf8'));
     }
 
-    function writeSnapshotFile(fsRef, month, payload) {
+    async function writeSnapshotFile(fsRef, month, payload) {
         fsRef.mkdirSync(snapshotDir, { recursive: true });
         const file = path.join(snapshotDir, String(month || '').replace(/[^0-9-]/g, '') + '.json');
-        fsRef.writeFileSync(file, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+        const content = JSON.stringify(payload) + '\n';
+        if (fsRef.promises && typeof fsRef.promises.writeFile === 'function') {
+            await fsRef.promises.writeFile(file, content, 'utf8');
+        } else {
+            fsRef.writeFileSync(file, content, 'utf8');
+        }
         return file;
     }
 
@@ -130,7 +135,10 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
 
         const pool = await getConnection();
         const todayInt = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
-        const currentMonthStart = Number(new Date().toISOString().slice(0, 7).replace('-', '') + '01');
+        const currentMonthDate = new Date();
+        currentMonthDate.setDate(1);
+        currentMonthDate.setMonth(currentMonthDate.getMonth() - 2);
+        const currentMonthStart = Number(currentMonthDate.toISOString().slice(0, 7).replace('-', '') + '01');
         const nextMonthDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1));
         const nextMonthStart = Number(nextMonthDate.toISOString().slice(0, 10).replace(/-/g, ''));
         const plateResult = await pool.request().query(`
@@ -269,6 +277,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                         INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = O.OrdNo
                         WHERE TRY_CONVERT(int, O.OrdDt) >= @currentMonthStart
                             AND TRY_CONVERT(int, O.OrdDt) < @nextMonthStart
+                            AND TRY_CONVERT(decimal(18, 6), O.Gr3) = 2
                             AND L.TrTp IN (5, 7)
                             AND NULLIF(LTRIM(RTRIM(CONVERT(varchar(100), L.TrInf4))), '') IS NOT NULL
                         ORDER BY O.OrdNo, L.TrInf4, L.LnNo
@@ -514,10 +523,18 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return payload;
     }
 
-    async function saveMonthlySnapshot({ fs, month, diverse = [] }) {
-        const current = await getCurrent();
+    async function saveMonthlySnapshot({ fs, month, diverse = [], currentOverride = null }) {
+        const current = currentOverride && typeof currentOverride === 'object'
+            ? currentOverride
+            : currentMemoryCache;
+        if (!current) throw new Error('Lagerliste cache er ikke klar. Tryk Opdater lagerliste først.');
         const payload = { month, createdAt: new Date().toISOString(), current, diverse };
-        return { ...payload, file: writeSnapshotFile(fs, month, payload) };
+        const file = path.join(snapshotDir, String(month || '').replace(/[^0-9-]/g, '') + '.json');
+        setImmediate(() => {
+            writeSnapshotFile(fs, month, payload)
+                .catch(err => console.warn('[lagerliste] monthly snapshot write failed:', err.message));
+        });
+        return { ...payload, file };
     }
 
     async function savePointInTimeSnapshot({ fs, capturedAt, note = '', diverse = [], currentOverride = null, forceRefresh = true }) {

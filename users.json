@@ -128,8 +128,8 @@
   {
     "username": "lh",
     "displayName": "Lena",
-    "passwordSalt": "30c2fa129f0a73e08ff05cbe82ee97de",
-    "passwordHash": "f882bc77418acb64b9b460e76b1550c3da7a69e1fc04db6d0f8165c4f5d66cf24889c2d70ae29ca7d5834cbafbad132016520dfd0f16b3196b3f881ffe3c2fa7",
+    "passwordSalt": "3a690f30652e77aadf94261ee3f8bef3",
+    "passwordHash": "9bbe870eba57c991bc268833c869db0ca9c9bde479be43cdf61ffed8339d0311bf6d37aed3af615af59e6458731fd933b186cf2062f5f2646e0898faf40fc061",
     "role": "user",
     "active": true,
     "permissions": {
@@ -137,8 +137,8 @@
       "salgordreVia": true,
       "omsaetning": true,
       "ordreindgang": true,
-      "ordreoversigt": false,
-      "belastning": false,
+      "ordreoversigt": true,
+      "belastning": true,
       "personalehandbog": true,
       "lagerliste": true
     },

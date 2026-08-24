@@ -464,7 +464,7 @@ function lagerlisteStangTable(rows) {
 
 function lagerlisteNestingCuttingTable(rows) {
     const safeRows = Array.isArray(rows) ? rows : [];
-    if (!safeRows.length) return '<div class="omsaetning-empty">Ingen plader i aktivt snit denne måned.</div>';
+    if (!safeRows.length) return '<div class="omsaetning-empty">Ingen plader i aktivt snit de seneste 3 måneder.</div>';
     const totalValue = safeRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
     return lagerlisteRowsTable(safeRows, [
         { key: 'OrdNo', label: 'Nestingordre' },
