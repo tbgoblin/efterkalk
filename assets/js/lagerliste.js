@@ -471,16 +471,14 @@ function lagerlisteGr5Table(rows) {
     const safeRows = Array.isArray(rows) ? rows : [];
     if (!safeRows.length) return '<div class="omsaetning-empty">Ingen Lager Komponenter.</div>';
     const totalValue = safeRows.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
-    const totalStandard = safeRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
     return lagerlisteRowsTable(safeRows, [
         { key: 'ProdNo', label: 'Produkt' },
         { key: 'Descr', label: 'Beskrivelse' },
         { key: 'Quantity', label: 'Beholdning', format: value => Number(value || 0).toFixed(2) },
         { key: 'StandardPrice', label: 'Pris', format: lagerlisteFormat },
         { key: 'UnitCost', label: 'FIFO-pris', format: lagerlisteFormat },
-        { key: 'FifoValue', label: 'Værdi (FIFO)', format: lagerlisteFormat },
-        { key: 'FifoValue', label: 'FIFO', format: lagerlisteFormat }
-    ]) + '<div class="lagerliste-total-row"><strong>Sum af Værdi (FIFO)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong><strong>Sum af Værdi (standard)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalStandard)) + '</strong></div>';
+        { key: 'FifoValue', label: 'Værdi (FIFO)', format: lagerlisteFormat }
+    ]) + '<div class="lagerliste-total-row"><strong>Sum af Værdi (FIFO)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong></div>';
 }
 
 function lagerlisteNestingCuttingTable(rows) {
@@ -614,7 +612,7 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth) {
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
         + lagerlisteCollapsibleSection('Rest Plader', lagerlisteRestGroupsTable(categories.restPlateGroups || []), 'lagerliste-rest-section', totals.restPlates)
         + lagerlisteCollapsibleSection('Stang materiale', lagerlisteStangTable(stangRows), 'lagerliste-stang-section', totals.stang)
-        + lagerlisteCollapsibleSection('Lager Komponenter', lagerlisteGr5Table(gr5Rows), 'lagerliste-gr5-section', sumRows(gr5Rows))
+        + lagerlisteCollapsibleSection('Lager Komponenter', lagerlisteGr5Table(gr5Rows), 'lagerliste-gr5-section', sumRows(gr5Rows, 'FifoValue'))
         + lagerlisteCollapsibleSection('Plader VIA', lagerlisteNestingCuttingTable(nestingCuttingRows), 'lagerliste-nesting-cutting-section', sumRows(nestingCuttingRows))
         + lagerlisteCollapsibleSection('Opfølgningsvarer', lagerlisteOpfolgningTable(opfolgningRows), 'lagerliste-opfolgning-section', totals.opfolgningvare)
         + lagerlisteCollapsibleSection('Ordrer klar til fakturering', lagerlisteReadyToInvoiceTable(readyToInvoiceRows), 'lagerliste-ready-invoice-section', totals.finishedNotInvoiced)
