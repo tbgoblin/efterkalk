@@ -161,6 +161,8 @@ function createApiRouter({
         diskCache,
         fs,
         getSalgordreViaRows: fetchSalgordreViaRows,
+        getOrComputeAftercalc,
+        getProductionSummary,
         getRestPrices: settingsService.getRestPrices,
         dataDir: process.env.GANTECH_DATA_DIR ? path.join(process.env.GANTECH_DATA_DIR, 'lagerliste') : undefined
     });
@@ -170,7 +172,8 @@ function createApiRouter({
         try {
             const ordNo = parseInt(req.params.ordno);
             logEvent('SEARCH: OrdNo=' + ordNo);
-            const data = await getOrComputeAftercalc(ordNo, { priority: 'high' });
+            const forceRefresh = String(req.query && req.query.force || '') === '1';
+            const data = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh });
             if (!data || data.error) {
                 return res.json(data);
             }
@@ -2513,9 +2516,10 @@ function createApiRouter({
         }
     });
 
-    router.get('/lagerliste/current', requireModulePermission('lagerliste'), async (_req, res) => {
+    router.get('/lagerliste/current', requireModulePermission('lagerliste'), async (req, res) => {
         try {
-            return res.json({ ok: true, ...(await lagerlisteService.getCurrent()) });
+            const forceRefresh = String(req.query && req.query.force || '') === '1';
+            return res.json({ ok: true, ...(await lagerlisteService.getCurrent({ forceRefresh })) });
         } catch (err) {
             logEvent('ERROR lagerliste/current: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Lagerliste fejl' });
@@ -2544,6 +2548,61 @@ function createApiRouter({
         } catch (err) {
             logEvent('ERROR lagerliste/snapshot create: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Snapshot fejl' });
+        }
+    });
+
+    router.get('/lagerliste/snapshots', requireModulePermission('lagerliste'), (req, res) => {
+        try {
+            const rows = lagerlisteService.listPointInTimeSnapshots(fs);
+            return res.json({ ok: true, rows });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshots list: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot liste fejl' });
+        }
+    });
+
+    router.get('/lagerliste/snapshots/:id', requireModulePermission('lagerliste'), (req, res) => {
+        try {
+            const snapshot = lagerlisteService.loadPointInTimeSnapshot(fs, req.params.id);
+            if (!snapshot) return res.status(404).json({ ok: false, error: 'Snapshot ikke fundet' });
+            return res.json({ ok: true, snapshot });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshots load: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot hentning fejl' });
+        }
+    });
+
+    router.post('/lagerliste/snapshots', requireSuperadmin, async (req, res) => {
+        try {
+            const capturedAtRaw = req.body && req.body.capturedAt;
+            const capturedAt = capturedAtRaw ? new Date(capturedAtRaw) : new Date();
+            if (Number.isNaN(capturedAt.getTime())) {
+                return res.status(400).json({ ok: false, error: 'capturedAt er ugyldig' });
+            }
+            const note = String(req.body && req.body.note || '').trim();
+            const diverse = Array.isArray(req.body && req.body.diverse) ? req.body.diverse : [];
+            const currentOverride = req.body && req.body.current && typeof req.body.current === 'object'
+                ? req.body.current
+                : null;
+            const forceRefresh = String(req.body && req.body.forceRefresh || '') === '1';
+            const pad = value => String(value).padStart(2, '0');
+            const snapshotId = capturedAt.getFullYear() + '-' + pad(capturedAt.getMonth() + 1) + '-' + pad(capturedAt.getDate())
+                + '_' + pad(capturedAt.getHours()) + '-' + pad(capturedAt.getMinutes()) + '-' + pad(capturedAt.getSeconds());
+            setImmediate(() => {
+                lagerlisteService.savePointInTimeSnapshot({ fs, capturedAt, note, diverse, currentOverride, forceRefresh })
+                    .catch(err => logEvent('ERROR lagerliste/snapshots background save: ' + err.message));
+            });
+            return res.json({
+                ok: true,
+                snapshotId,
+                kind: 'point-in-time',
+                capturedAt: capturedAt.toISOString(),
+                createdAt: new Date().toISOString(),
+                note
+            });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshots create: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot oprettelse fejl' });
         }
     });
     // ────────────────────────────────────────────────────────────────────────

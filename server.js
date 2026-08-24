@@ -30,14 +30,18 @@ const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v24_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v21_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v22_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
 // Parser JSON globale 256kb, ma /bom/analyze-file ha il proprio parser 40mb a livello di route
 const jsonBodyParser = express.json({ limit: '256kb' });
+const snapshotJsonBodyParser = express.json({ limit: '15mb' });
 app.use((req, res, next) => {
     if (req.path === '/bom/analyze-file') return next();
+    if (req.path === '/lagerliste/snapshots' && req.method === 'POST') {
+        return snapshotJsonBodyParser(req, res, next);
+    }
     return jsonBodyParser(req, res, next);
 });
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
@@ -188,22 +192,27 @@ function getAftercalcCacheWithFallback(ordNo, promoteToCurrent = false) {
 
 async function getOrComputeAftercalc(ordNo, options = {}) {
     const priority = options.priority || 'normal';
+    const forceRefresh = Boolean(options.forceRefresh);
     const key = Number(ordNo);
     if (!Number.isFinite(key)) {
         throw new Error('Ordrenummer ugyldigt');
     }
 
     const cacheKey = AFTERCALC_CACHE_KEY_PREFIX + key;
+    if (forceRefresh) {
+        diskCache.del(cacheKey);
+    }
     const cached = getAftercalcCacheWithFallback(key, true);
-    if (cached) {
+    if (cached && !forceRefresh) {
         logEvent('AFTERCALC CACHE HIT: ordNo=' + key);
         return cached;
     }
 
     let computePromise = afterCalcInFlight.get(key);
-    if (computePromise) {
+    if (computePromise && !forceRefresh) {
         logEvent('AFTERCALC IN-FLIGHT REUSE: ordNo=' + key);
     }
+    if (forceRefresh) computePromise = null;
     if (!computePromise) {
         logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
         computePromise = runWithDbCalcLimit(async () => {
@@ -1182,6 +1191,100 @@ app.get('/', (req, res) => {
             .order-list-table tr:hover td { background: #edf5ff; }
             .lagerliste-plate-detail-row { display:none !important; }
             .lagerliste-plate-detail-row.is-open { display:table-row !important; }
+            .lagerliste-total-row { display:flex; justify-content:flex-end; gap:10px 18px; flex-wrap:wrap; margin-top:8px; padding:9px 12px; background:#eef5ff; border:1px solid #d8e6f8; color:#0f3560; font-size:13px; }
+            .lagerliste-order-link { border: none; background: transparent; color: #1565c0; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+            .lagerliste-order-link:hover { color: #0d47a1; }
+            .lagerliste-diff-pos { color: #1b5e20; font-weight: 700; }
+            .lagerliste-diff-neg { color: #b71c1c; font-weight: 700; }
+            .lagerliste-diff-zero { color: #546e7a; font-weight: 700; }
+            .lagerliste-overview { margin: 4px 0 14px; padding: 12px; border: 1px solid #d8e6f8; border-radius: 14px; background: linear-gradient(180deg, #fafdff 0%, #f2f8ff 100%); }
+            .lagerliste-overview-head { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+            .lagerliste-overview-head h4 { margin: 0; color: #0f3560; font-size: 16px; }
+            .lagerliste-overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+            .lagerliste-overview-card { background: #fff; border: 1px solid #dce8f7; border-radius: 12px; padding: 10px; box-shadow: 0 5px 14px rgba(15,53,96,0.06); }
+            .lagerliste-overview-title { color: #335b84; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; }
+            .lagerliste-overview-value { color: #0f3560; font-size: 20px; font-weight: 800; margin: 5px 0 3px; }
+            .lagerliste-overview-value.is-emphasis { font-size: 24px; color: #0c2d50; }
+            .lagerliste-overview-meta { color: #5f7894; font-size: 12px; margin-bottom: 8px; }
+            .lagerliste-overview-action { border: 1px solid #b9d3f3; background: #f2f8ff; color: #0f3560; border-radius: 8px; padding: 6px 9px; font-size: 12px; font-weight: 700; cursor: pointer; }
+            .lagerliste-overview-action:hover { background: #e7f1ff; }
+            .lagerliste-generated-at { color: #607d8b; font-size: 12px; font-weight: 600; }
+            .lagerliste-summary-board { margin: 6px 0 14px; border: 1px solid #d8e6f8; border-radius: 8px; background: #f7fbff; padding: 8px; }
+            .lagerliste-summary-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+            .lagerliste-summary-head h4 { margin: 0; color: #0f3560; font-size: 16px; }
+            .lagerliste-sheet-block { border: 1px solid #d5e4f7; border-radius: 4px; background: #fff; margin-bottom: 8px; overflow: hidden; }
+            .lagerliste-sheet-table { width: 100%; border-collapse: collapse; }
+            .lagerliste-sheet-table th, .lagerliste-sheet-table td { padding: 6px 8px; border-bottom: 1px solid #e6eef8; text-align: left; font-size: 13px; }
+            .lagerliste-sheet-table th { color: #0f3560; background: #eaf3ff; font-weight: 700; }
+            .lagerliste-sheet-value { background: #e8f5e9; font-weight: 700; text-align: right; white-space: nowrap; }
+            .lagerliste-sheet-total td { font-weight: 800; background: #eef5ff; color: #0f3560; }
+            .lagerliste-sheet-grand td { font-weight: 900; background: #dcecff; color: #0b2f56; }
+            .lagerliste-sheet-link { border: none; background: transparent; color: #0f3560; font: inherit; font-weight: 700; cursor: pointer; padding: 0; text-decoration: underline; }
+            .lagerliste-sheet-link:hover { color: #14577e; }
+            .lagerliste-comparison-block { border: 1px solid #c7d9ed; background: #fff; margin: 0 0 10px; overflow: hidden; }
+            .lagerliste-comparison-title { padding: 8px 10px; background: #e7f0fa; color: #0f3560; font-size: 13px; font-weight: 800; }
+            .lagerliste-comparison-table th, .lagerliste-comparison-table td { text-align: right; }
+            .lagerliste-comparison-table th:first-child, .lagerliste-comparison-table td:first-child { text-align: left; }
+            .lagerliste-comparison-empty { padding: 10px; color: #607d8b; font-size: 13px; }
+            #mainLagerliste .omsaetning-shell { background: #f4f5f2; border: 1px solid #cbd0ca; border-radius: 4px; box-shadow: 0 8px 24px rgba(34,48,39,0.08); }
+            #mainLagerliste .omsaetning-head { border-bottom: 2px solid #315c49; padding-bottom: 12px; }
+            #mainLagerliste .omsaetning-head h3 { color: #173b2d; letter-spacing: .01em; }
+            #mainLagerliste .omsaetning-head p { color: #65736a; }
+            .lagerliste-toolbar { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; padding: 12px 0 14px; margin-bottom: 10px; border-bottom: 1px solid #cbd0ca; }
+            .lagerliste-toolbar-group { display: flex; align-items: end; gap: 6px; padding-right: 10px; border-right: 1px solid #d2d7d1; }
+            .lagerliste-toolbar-group:last-of-type { border-right: 0; }
+            .lagerliste-toolbar-group label { display: flex; flex-direction: column; gap: 4px; color: #526158; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+            .lagerliste-toolbar input, .lagerliste-toolbar select { height: 36px; min-width: 150px; padding: 6px 9px; border: 1px solid #aeb8b0; border-radius: 3px; background: #fff; color: #24352c; font: inherit; }
+            .lagerliste-toolbar select { min-width: 220px; }
+            .lagerliste-toolbar button { min-height: 36px; padding: 7px 11px; border: 1px solid #315c49; border-radius: 3px; background: #fff; color: #244536; font-weight: 700; cursor: pointer; }
+            .lagerliste-toolbar button:hover { background: #e6eee9; }
+            .lagerliste-toolbar .lagerliste-button-primary { background: #315c49; color: #fff; }
+            .lagerliste-toolbar .lagerliste-button-primary:hover { background: #244536; }
+            .lagerliste-toolbar .lagerliste-button-compare { border-color: #a46a1f; color: #7c4d13; background: #fffaf2; }
+            .lagerliste-toolbar-history { flex: 1 1 290px; }
+            .lagerliste-toolbar-export { padding-right: 0; }
+            #mainLagerliste .via-status { flex: 1 1 100%; margin: 0; min-height: 18px; color: #526158; }
+            #mainLagerliste .lagerliste-summary-board { margin: 0 0 14px; padding: 0; border: 1px solid #aeb8b0; border-radius: 3px; background: #fff; }
+            #mainLagerliste .lagerliste-summary-head { padding: 11px 12px; margin: 0; background: #315c49; color: #fff; }
+            #mainLagerliste .lagerliste-summary-head h4, #mainLagerliste .lagerliste-summary-head .lagerliste-generated-at { color: #fff; }
+            #mainLagerliste .lagerliste-summary-table-wrap { overflow-x: auto; }
+            #mainLagerliste .lagerliste-overview-table { min-width: 680px; }
+            #mainLagerliste .lagerliste-overview-table th:not(:first-child), #mainLagerliste .lagerliste-overview-table td:not(:first-child) { width: 190px; text-align: right; white-space: nowrap; }
+            #mainLagerliste .lagerliste-overview-table td:first-child { width: 40%; }
+            #mainLagerliste .lagerliste-comparison-block, #mainLagerliste .lagerliste-sheet-block { margin: 0; border: 0; border-bottom: 1px solid #cbd0ca; border-radius: 0; }
+            #mainLagerliste .lagerliste-comparison-title { background: #f0e5d2; color: #69440f; border-bottom: 1px solid #dbc49e; }
+            #mainLagerliste .lagerliste-sheet-table th { background: #e8ece8; color: #294938; border-bottom: 1px solid #bdc8bf; }
+            #mainLagerliste .lagerliste-sheet-table td { color: #26362c; }
+            #mainLagerliste .lagerliste-sheet-table td:not(:first-child), #mainLagerliste .lagerliste-sheet-table th:not(:first-child), #mainLagerliste .order-list-table td:not(:first-child) { font-variant-numeric: tabular-nums; }
+            #mainLagerliste .lagerliste-sheet-value { background: #edf4ee; color: #244536; }
+            #mainLagerliste .lagerliste-sheet-total td { background: #f0f3f0; color: #244536; }
+            #mainLagerliste .lagerliste-sheet-grand td { background: #dbe9df; color: #173b2d; border-top: 2px solid #315c49; }
+            #mainLagerliste .lagerliste-summary-subrow td:first-child { padding-left: 28px; font-size: 12px; }
+            #mainLagerliste .lagerliste-section { margin: 0 0 10px; border: 1px solid #b9c3bb; border-radius: 3px; background: #fff; overflow: hidden; }
+            #mainLagerliste .lagerliste-section h4 { position: relative; display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 180px 10px 12px; border-left: 5px solid #315c49; background: #e8ece8; color: #173b2d; font-size: 15px; }
+            #mainLagerliste .lagerliste-section-value { position: absolute; top: 0; right: 12px; bottom: 0; display: flex; align-items: center; justify-content: flex-end; min-width: 160px; color: #173b2d; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+            #mainLagerliste .lagerliste-section h4 button { width: 28px; height: 28px; border: 1px solid #9eaaa1; border-radius: 3px; background: #fff; color: #315c49; font-size: 18px; line-height: 1; cursor: pointer; }
+            #mainLagerliste .lagerliste-section > div[id] { padding: 10px; background: #fff; }
+            #mainLagerliste .order-list-table { border: 1px solid #cbd0ca; border-radius: 3px; }
+            #mainLagerliste .order-list-table th { background: #e8ece8; color: #294938; border-bottom: 1px solid #bdc8bf; white-space: nowrap; }
+            #mainLagerliste .order-list-table td { border-bottom: 1px solid #e1e6e1; }
+            #mainLagerliste .order-list-table tr:hover td { background: #f3f7f3; }
+            #mainLagerliste .lagerliste-total-row { background: #edf4ee; border-color: #c1d2c5; color: #244536; }
+            #mainLagerliste .lagerliste-table-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 6px; }
+            #mainLagerliste .lagerliste-table-tools label { display: inline-flex; align-items: center; gap: 7px; color: #526158; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+            #mainLagerliste .lagerliste-table-tools input { width: 190px; height: 30px; padding: 5px 8px; border: 1px solid #aeb8b0; border-radius: 3px; background: #fff; color: #24352c; font: inherit; text-transform: none; }
+            #mainLagerliste .lagerliste-table-hint { color: #718078; font-size: 11px; }
+            #mainLagerliste .lagerliste-sheet-table th[role="button"], #mainLagerliste .order-list-table th[role="button"] { cursor: pointer; user-select: none; }
+            #mainLagerliste th.lagerliste-sort-active { box-shadow: inset 0 -3px 0 #315c49; }
+            #mainLagerliste th[role="button"]:focus { outline: 2px solid #a46a1f; outline-offset: -2px; }
+            @media (max-width: 760px) {
+                .lagerliste-toolbar { align-items: stretch; }
+                .lagerliste-toolbar-group { width: 100%; padding: 0 0 8px; border-right: 0; border-bottom: 1px solid #d2d7d1; }
+                .lagerliste-toolbar-group button, .lagerliste-toolbar input, .lagerliste-toolbar select { flex: 1; min-width: 0; }
+                .lagerliste-toolbar-group label { flex: 1; }
+                #mainLagerliste .lagerliste-summary-board { overflow-x: auto; }
+                #mainLagerliste .lagerliste-summary-board .lagerliste-sheet-table { min-width: 620px; }
+            }
             .note-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; border:1px solid; cursor:pointer; white-space:nowrap; }
             .note-badge.ok  { background:#e8f5e9; color:#1b5e20; border-color:#a5d6a7; }
             .note-badge.error { background:#ffebee; color:#b71c1c; border-color:#ef9a9a; }
@@ -1660,12 +1763,6 @@ app.get('/', (req, res) => {
                                 <p>Aktive salgsordrer med åben produktion, fremdrift og næste ressource.</p>
                                 <button onclick="openModule('salgordre-via')">Åbn SalgOrdre VIA</button>
                             </article>
-                            <article class="dash-card" data-module-key="lagerliste">
-                                <span class="dash-chip">Ny</span>
-                                <h4>Lagerliste</h4>
-                                <p>Lagerværdi for plader, stangmateriale, VIA og færdige ikke-fakturerede varer.</p>
-                                <button onclick="openModule('lagerliste')">Åbn Lagerliste</button>
-                            </article>
                             <article class="dash-card" id="administrationDashCard" style="display:none;">
                                 <span class="dash-chip">Superadmin</span>
                                 <h4>Administration</h4>
@@ -1684,11 +1781,26 @@ app.get('/', (req, res) => {
                                 <p>Ordreindgang fra SSRS: budget, ordre, tilbud og udvikling pr. uge/periode.</p>
                                 <button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button>
                             </article>
-                            <article class="dash-card" data-module-key="ordreoversigt">
+                        </div>
+                    </section>
+
+                    <section class="dashboard-category dashboard-category-accounting">
+                        <div class="dashboard-category-head">
+                            <h3>Bogholderi</h3>
+                            <span>Fakturagrundlag og lagerkontrol</span>
+                        </div>
+                        <div class="dashboard-category-grid">
+                            <article class="dash-card">
                                 <span class="dash-chip">Planlagt</span>
                                 <h4>Faktura</h4>
                                 <p>Fakturastatus, kreditnota og opfølgning på åbne poster.</p>
                                 <button type="button" disabled>Kommer snart</button>
+                            </article>
+                            <article class="dash-card" data-module-key="lagerliste">
+                                <span class="dash-chip">Aktiv</span>
+                                <h4>Lagerliste</h4>
+                                <p>Lagerværdi for plader, stangmateriale, VIA og færdige ikke-fakturerede varer.</p>
+                                <button type="button" onclick="openModule('lagerliste')">Åbn Lagerliste</button>
                             </article>
                         </div>
                     </section>
@@ -2118,10 +2230,28 @@ app.get('/', (req, res) => {
                 <div class="omsaetning-head">
                     <div><h3>Lagerliste</h3><p>Aktuel lagerværdi og månedlig lukning.</p></div>
                 </div>
-                <div class="via-toolbar">
-                    <button type="button" onclick="loadLagerliste()">Opdater</button>
-                    <input id="lagerlisteMonth" type="month" />
-                    <button type="button" onclick="saveLagerlisteSnapshot()">Gem månedslukning</button>
+                <div class="lagerliste-toolbar">
+                    <div class="lagerliste-toolbar-group lagerliste-toolbar-primary">
+                        <button type="button" class="lagerliste-button-primary" onclick="loadLagerliste()">Opdater lagerliste</button>
+                    </div>
+                    <div class="lagerliste-toolbar-group">
+                        <label for="lagerlisteMonth">Månedslukning</label>
+                        <input id="lagerlisteMonth" type="month" />
+                        <button type="button" onclick="saveLagerlisteSnapshot()">Gem måned</button>
+                    </div>
+                    <div class="lagerliste-toolbar-group">
+                        <button type="button" class="lagerliste-button-compare" onclick="compareLagerlistePreviousMonth()">Sammenlign forrige måned</button>
+                        <button type="button" onclick="saveLagerlistePointSnapshot()">Gem dags-snapshot</button>
+                    </div>
+                    <div class="lagerliste-toolbar-group lagerliste-toolbar-history">
+                        <label for="lagerlisteSnapshotSelect">Historik</label>
+                        <select id="lagerlisteSnapshotSelect" class="filter-select"><option value="">Vælg snapshot...</option></select>
+                        <button type="button" onclick="openSelectedLagerlisteSnapshot()">Åbn</button>
+                    </div>
+                    <div class="lagerliste-toolbar-group lagerliste-toolbar-export">
+                        <button type="button" onclick="exportLagerlisteJson()">JSON</button>
+                        <button type="button" onclick="exportLagerlistePdf()">PDF</button>
+                    </div>
                     <span id="lagerlisteSnapshotStatus" class="via-status"></span>
                 </div>
                 <div id="lagerlisteResults" class="omsaetning-empty">Indlæser Lagerliste...</div>
@@ -2953,7 +3083,7 @@ app.get('/', (req, res) => {
                 }
 
                 const fetchPromise = (async () => {
-                    const response = await fetch('/aftercalc/' + encodeURIComponent(normalizedOrdNo));
+                    const response = await fetch('/aftercalc/' + encodeURIComponent(normalizedOrdNo) + (forceReload ? '?force=1' : ''));
                     const data = await response.json();
                     if (!response.ok) {
                         throw new Error((data && data.error) ? data.error : ('HTTP ' + response.status));
@@ -9939,7 +10069,7 @@ app.get('/', (req, res) => {
                 );
                 
                 try {
-                    const data = await requestAftercalcData(ordNo);
+                    const data = await requestAftercalcData(ordNo, { forceReload: true });
                     if (requestId !== activeSearchRequestId) return;
                     
                     if (data.error) {
@@ -10085,7 +10215,16 @@ app.get('/', (req, res) => {
 
                         for (const line of data.salesOrderLines) {
                             const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
-                            const lineCost = line.EffectiveLineCost || 0;
+                            const linkedProductionTotal = Number(line.ProductionOrderTotalCost || 0);
+                            const productionTotalByLineOrder = line.PurcNo
+                                ? Number((productionOrderByOrdNo.get(Number(line.PurcNo)) || {}).totalCost || 0)
+                                : 0;
+                            const singleProductionTotal = data.productionOrders.length === 1
+                                ? Number(data.productionOrders[0].totalCost || 0)
+                                : 0;
+                            const lineCost = linkedProductionTotal > 0
+                                ? linkedProductionTotal
+                                : (productionTotalByLineOrder > 0 ? productionTotalByLineOrder : singleProductionTotal);
                             const lineProdNo = String(line.ProdNo || '').trim();
                             const includeForMargin = lineProdNo.startsWith('1') || lineProdNo.startsWith('3');
                             const lineMarginValue = calculateLineMarginPercent(lineSalesPrice, lineCost);

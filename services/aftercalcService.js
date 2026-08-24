@@ -1083,7 +1083,9 @@ function createAftercalcService({
                 if (!includedProductionOrdNos.has(Number(ord.ordNo))) return sum;
                 return sum + (ord.totalCost || 0);
             }, 0);
-            const totalCost = salesNoPOTotalCost + salesPurchaseLinkedTotalCost + productionTotalCost;
+            const calculatedTotalCost = salesNoPOTotalCost + salesPurchaseLinkedTotalCost + productionTotalCost;
+            const productionOrdersCostFallback = productionOrders.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
+            const totalCost = calculatedTotalCost > 0 ? calculatedTotalCost : productionOrdersCostFallback;
             const totalRevenue = Number(orderHeader.InvoAm || 0) + Number(orderHeader.DInvoIF || 0);
             const margin = totalRevenue - totalCost;
             const marginPercentage = totalCost > 0 ? ((totalRevenue / totalCost) * 100).toFixed(2) : 0;

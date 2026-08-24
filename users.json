@@ -25,7 +25,8 @@
       "ordreindgang": true,
       "ordreoversigt": false,
       "belastning": true,
-      "personalehandbog": true
+      "personalehandbog": true,
+      "lagerliste": true
     },
     "createdAt": "2026-08-20T10:10:12.695Z"
   },
@@ -43,7 +44,8 @@
       "ordreindgang": true,
       "ordreoversigt": false,
       "belastning": true,
-      "personalehandbog": true
+      "personalehandbog": true,
+      "lagerliste": true
     },
     "createdAt": "2026-08-20T10:10:23.563Z"
   },
@@ -61,7 +63,8 @@
       "ordreindgang": false,
       "ordreoversigt": false,
       "belastning": true,
-      "personalehandbog": true
+      "personalehandbog": true,
+      "lagerliste": false
     },
     "createdAt": "2026-08-20T10:10:34.078Z"
   },
@@ -79,8 +82,104 @@
       "ordreindgang": true,
       "ordreoversigt": true,
       "belastning": true,
-      "personalehandbog": true
+      "personalehandbog": true,
+      "lagerliste": true
     },
     "createdAt": "2026-08-21T09:40:13.119Z"
+  },
+  {
+    "username": "jrs",
+    "displayName": "Jonas",
+    "passwordSalt": "ba7dfffea54cafaaa50312061b5b49a0",
+    "passwordHash": "27eff4e4c21653de847a4b68e8d3f62e307d2e7616ed736a5eb34d74674947595be60b48e1ce828f0ae1ba1ecef2434912f4c3d71ff93cce6edc1cc05f17b392",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": false,
+      "salgordreVia": false,
+      "omsaetning": false,
+      "ordreindgang": false,
+      "ordreoversigt": true,
+      "belastning": true,
+      "personalehandbog": true,
+      "lagerliste": false
+    },
+    "createdAt": "2026-08-24T10:25:39.847Z"
+  },
+  {
+    "username": "lv",
+    "displayName": "Lars",
+    "passwordSalt": "6462a846fd247a57d0e3069085d65e01",
+    "passwordHash": "10c52d9004b5b34e9af0a0742212dc285de80fd3ba9ad966bcd179447df795b0db250a000f57aca1361fb73bc8e66014eb8820052b1c4e90657dbf71ed98e11e",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": true,
+      "salgordreVia": false,
+      "omsaetning": true,
+      "ordreindgang": true,
+      "ordreoversigt": true,
+      "belastning": true,
+      "personalehandbog": true,
+      "lagerliste": true
+    },
+    "createdAt": "2026-08-24T10:26:13.990Z"
+  },
+  {
+    "username": "lh",
+    "displayName": "Lena",
+    "passwordSalt": "30c2fa129f0a73e08ff05cbe82ee97de",
+    "passwordHash": "f882bc77418acb64b9b460e76b1550c3da7a69e1fc04db6d0f8165c4f5d66cf24889c2d70ae29ca7d5834cbafbad132016520dfd0f16b3196b3f881ffe3c2fa7",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": true,
+      "salgordreVia": true,
+      "omsaetning": true,
+      "ordreindgang": true,
+      "ordreoversigt": false,
+      "belastning": false,
+      "personalehandbog": true,
+      "lagerliste": true
+    },
+    "createdAt": "2026-08-24T10:26:41.640Z"
+  },
+  {
+    "username": "cg",
+    "displayName": "Cristian",
+    "passwordSalt": "932da530e61caa8c0551bfdb7c33189e",
+    "passwordHash": "d3a8b827e47eab331028f91ae88e81876b71861dee46b76dfa40fa8de2294de6e7dab6710d720e6ea608c6c7954fd17a6f517aec7353cfd492462b6cec7aabb5",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": false,
+      "salgordreVia": false,
+      "omsaetning": false,
+      "ordreindgang": false,
+      "ordreoversigt": true,
+      "belastning": true,
+      "personalehandbog": true,
+      "lagerliste": false
+    },
+    "createdAt": "2026-08-24T10:27:08.314Z"
+  },
+  {
+    "username": "lager",
+    "displayName": "Lager",
+    "passwordSalt": "45e2656be0fc536d899f466b115c6559",
+    "passwordHash": "ae9b0c102857a6cefda40ac5c3586813315c28c56c3ef8a656b362f934118eef5db617c6f159088abd115def0ac650b0d43ea42c43839c6fd7291fb1643df070",
+    "role": "user",
+    "active": true,
+    "permissions": {
+      "efterkalk": false,
+      "salgordreVia": false,
+      "omsaetning": false,
+      "ordreindgang": false,
+      "ordreoversigt": false,
+      "belastning": true,
+      "personalehandbog": true,
+      "lagerliste": false
+    },
+    "createdAt": "2026-08-24T10:28:19.614Z"
   }
 ]
