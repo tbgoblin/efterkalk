@@ -6,8 +6,13 @@ const path = require('path');
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v17';
+    const cacheKey = 'lagerliste_v29';
+    const excludedOrderNumbers = new Set([61423, 75330, 131790, 140134, 331368]);
     let currentMemoryCache = null;
+
+    function isExcludedOrder(ordNo) {
+        return excludedOrderNumbers.has(Number(ordNo || 0));
+    }
 
     function toNumber(value) {
         if (typeof value === 'string') {
@@ -103,6 +108,15 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return JSON.parse(fsRef.readFileSync(file, 'utf8'));
     }
 
+    function deletePointInTimeSnapshot(fsRef, snapshotId) {
+        const safeId = String(snapshotId || '').replace(/[^0-9A-Za-z_\-]/g, '');
+        if (!safeId || safeId !== String(snapshotId || '')) return false;
+        const file = path.join(historyDir, safeId + '.json');
+        if (!fsRef.existsSync(file)) return false;
+        fsRef.unlinkSync(file);
+        return true;
+    }
+
     async function mapWithConcurrency(items, worker, concurrency = 4) {
         const safeItems = Array.isArray(items) ? items : [];
         const out = new Array(safeItems.length);
@@ -121,7 +135,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return out;
     }
 
-    async function getCurrent({ requestedOrdNo = null, forceRefresh = false } = {}) {
+    async function getCurrent({ requestedOrdNo = null, forceRefresh = false, forceAftercalc = false } = {}) {
         const key = requestedOrdNo ? cacheKey + '_stang_v6_' + requestedOrdNo : cacheKey + '_stang_v6';
         if (!forceRefresh) {
             const cached = diskCache.get(key);
@@ -274,6 +288,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             FROM FreeInf1 F WITH(NOLOCK)
             LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = F.ProdNo
             WHERE F.FrInfTp = 120
+                            AND COALESCE(TRY_CONVERT(decimal(18, 6), F.Gr7), 0) = 1
               AND F.ProdNo <> '3021000843542'
         `);
                 const nestingCuttingRequest = pool.request();
@@ -282,6 +297,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 const nestingCuttingResult = await nestingCuttingRequest.query(`
                         SELECT
                                 O.OrdNo,
+                            COALESCE(TRY_CONVERT(int, O.R4), 0) AS SalesOrdNo,
                                 O.OrdDt,
                                 L.LnNo,
                                 L.TrInf2,
@@ -383,14 +399,13 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             const quantity = toNumber(row.Quantity);
             const standardPrice = toNumber(row.StandardPrice);
             const unitCost = toNumber(row.UnitCost);
-            const value = round(quantity * standardPrice);
             const fifoValue = round(quantity * unitCost);
             return {
                 ...row,
                 Quantity: quantity,
                 StandardPrice: standardPrice,
                 UnitCost: unitCost,
-                Value: value,
+                Value: fifoValue,
                 FifoValue: fifoValue
             };
         });
@@ -411,7 +426,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 _preciseValue: preciseValue
             };
         });
-        const finishedNotInvoiced = await mapWithConcurrency(finishedResult.recordset || [], async row => {
+        const finishedNotInvoiced = await mapWithConcurrency((finishedResult.recordset || []).filter(row => !isExcludedOrder(row.OrdNo)), async row => {
             const legacyValue = round(row.LegacyValue);
             const ordNo = Number(row.OrdNo || 0);
             let effectiveCost = legacyValue;
@@ -419,7 +434,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
 
             if (typeof getOrComputeAftercalc === 'function' && Number.isFinite(ordNo) && ordNo > 0) {
                 try {
-                    const aftercalc = await getOrComputeAftercalc(ordNo, { priority: 'high' });
+                    const aftercalc = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh: forceAftercalc });
                     const aftercalcCost = Number(aftercalc && aftercalc.summary && aftercalc.summary.totalCost);
                     if (Number.isFinite(aftercalcCost) && !(aftercalcCost === 0 && legacyValue > 0)) {
                         effectiveCost = aftercalcCost;
@@ -448,7 +463,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 Value: round(effectiveCost)
             };
         });
-        const restPlates = (restPlateResult.recordset || []).map(row => {
+        const restPlates = (restPlateResult.recordset || []).filter(row => !isExcludedOrder(row.OrdNo)).map(row => {
             const weight = toNumber(row.Val5) * toNumber(row.Val8);
             const pricePerKg = toNumber(restPrices[String(row.PriceType || '').trim()] || 0);
             return {
@@ -478,10 +493,12 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         );
         const nestingCuttingGroups = new Map();
         for (const row of nestingCuttingResult.recordset || []) {
+            if (isExcludedOrder(row.OrdNo)) continue;
             const route = String(row.TrInf4 || '').trim();
             const key = String(row.OrdNo || '') + '|' + route;
             const group = nestingCuttingGroups.get(key) || {
                 OrdNo: row.OrdNo,
+                SalesOrdNo: toNumber(row.SalesOrdNo),
                 OrdDt: row.OrdDt,
                 Route: route,
                 plates: [],
@@ -494,32 +511,51 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         const nestingCutting = [];
         for (const group of nestingCuttingGroups.values()) {
             if (!group.plates.length || !group.products.length) continue;
-            const plateIsFinished = group.plates.every(row => toNumber(row.NoFin) > 0);
+            // Negative platelinjer (rest-retur) starter med NoFin=0 og må ikke blokere ruten.
+            const consumptionPlates = group.plates.filter(row => toNumber(row.NoOrg) > 0);
+            const plateIsFinished = consumptionPlates.length > 0 && consumptionPlates.every(row => toNumber(row.NoFin) > 0);
             const allProductsUnfinished = group.products.every(row => toNumber(row.NoFin) === 0);
             if (!plateIsFinished || !allProductsUnfinished) continue;
             for (const plate of group.plates) {
-                const value = toNumber(plate.IncCst) || toNumber(plate.CstPr) * toNumber(plate.NoFin);
+                const isEstimatedRest = toNumber(plate.NoOrg) < 0;
+                const finishedQty = toNumber(plate.NoFin);
+                const unitCost = toNumber(plate.CstPr);
+                const orderedQty = toNumber(plate.NoOrg);
+                const value = isEstimatedRest
+                    ? toNumber(plate.IncCst)
+                    : (unitCost !== 0
+                        ? unitCost * finishedQty
+                        : (orderedQty !== 0 ? toNumber(plate.IncCst) * (finishedQty / orderedQty) : toNumber(plate.IncCst)));
+                if (finishedQty === 0 && value === 0) continue;
+                const productNames = Array.from(new Set(group.products.map(row => String(row.ProdNo || '').trim()).filter(Boolean)));
                 nestingCutting.push({
                     OrdNo: group.OrdNo,
+                    SalesOrdNo: group.SalesOrdNo,
                     OrdDt: group.OrdDt,
                     Route: group.Route,
                     ProdNo: String(plate.ProdNo || '').trim(),
                     Quantity: round(plate.NoFin),
                     Value: round(value),
-                    ProductCount: group.products.length
+                    CountedValue: round(isEstimatedRest ? 0 : value),
+                    IsEstimatedRest: isEstimatedRest,
+                    ProductCount: group.products.length,
+                    Products: productNames.slice(0, 3).join(', ') + (productNames.length > 3 ? ' +' + (productNames.length - 3) : '')
                 });
             }
         }
         const salgordreViaRows = typeof getSalgordreViaRows === 'function'
             ? await getSalgordreViaRows({ getConnection, sql, requestedOrdNo: null })
             : [];
-        const salgordreVia = salgordreViaRows.map(row => ({
+        const salgordreVia = salgordreViaRows.filter(row => !isExcludedOrder(row.OrdNo)).map(row => ({
             OrdNo: row.OrdNo,
             CustomerName: row.CustomerName,
+            MainProdNo: String(row.MainProdNo || '').trim(),
+            MainProdDescr: String(row.MainProdDescr || '').trim(),
             MaterialCost: round(row.MaterialCost),
             StangCost: round(row.StangCost),
             PurchasedPartCost: round(row.PurchasedPartCost),
             TimeCost: round(row.TimeCost),
+            SalesValue: round(row.SalesValue),
             Value: round(toNumber(row.MaterialCost) + toNumber(row.StangCost) + toNumber(row.PurchasedPartCost) + toNumber(row.TimeCost))
         }));
         const payload = {
@@ -540,7 +576,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             totals: {
                 plates: round(plates.reduce((sum, row) => sum + row.Value, 0)),
                 restPlates: round(restPlates.reduce((sum, row) => sum + row.Value, 0)),
-                stang: round(stang.reduce((sum, row) => sum + row.Value, 0)),
+                stang: round(stang.reduce((sum, row) => sum + row.FifoValue, 0)),
                 opfolgningvare: round(opfolgningvare.reduce((sum, row) => sum + toNumber(row._preciseValue), 0)),
                 finishedNotInvoiced: round(finishedNotInvoiced.reduce((sum, row) => sum + row.Value, 0)),
                 salgordreVia: round(salgordreVia.reduce((sum, row) => sum + row.Value, 0)),
@@ -600,6 +636,133 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return readSnapshotFile(fs, month);
     }
 
+    function listMonthlySnapshots(fsRef) {
+        if (!fsRef.existsSync(snapshotDir)) return [];
+        return fsRef.readdirSync(snapshotDir)
+            .filter(name => /^\d{4}-\d{2}\.json$/i.test(String(name)))
+            .map(name => String(name).replace(/\.json$/i, ''))
+            .sort((left, right) => right.localeCompare(left));
+    }
+
+    async function lookupProduct(prodNoRaw) {
+        const prodNo = String(prodNoRaw || '').trim();
+        if (!prodNo) throw new Error('Varenummer mangler');
+        const pool = await getConnection();
+
+        const masterRequest = pool.request();
+        masterRequest.input('prodNo', sql.NVarChar, prodNo);
+        const masterResult = await masterRequest.query(`
+            SELECT
+                P.ProdNo, P.Descr, P.ProdGr, P.Gr5, P.Gr6, P.Gr9, P.NWgtU,
+                COALESCE(TRY_CONVERT(decimal(18, 6), REPLACE(CONVERT(varchar(100), P.Inf), ',', '.')), 0) AS StandardPrice,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.Bal), 0) AS Bal,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.StcInc), 0) AS StcInc,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.ShpRsv), 0) AS ShpRsv,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.ShpRsvIn), 0) AS ShpRsvIn,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PicNotR), 0) AS PicNotR,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0) AS PoPhStB,
+                COALESCE(TRY_CONVERT(decimal(18, 6), B.PhCstPr), 0) AS PhCstPr
+            FROM Prod P WITH(NOLOCK)
+            LEFT JOIN StcBal B WITH(NOLOCK) ON B.ProdNo = P.ProdNo AND B.StcNo = 1
+            WHERE P.ProdNo = @prodNo
+        `);
+        if (!masterResult.recordset.length) return null;
+        const master = masterResult.recordset[0];
+
+        const lotsRequest = pool.request();
+        lotsRequest.input('prodNo', sql.NVarChar, prodNo);
+        const lotsResult = await lotsRequest.query(`
+            SELECT TOP 200
+                S.ShpNo, S.Loc,
+                COALESCE(TRY_CONVERT(decimal(18, 6), S.RestBal), 0) AS RestBal,
+                COALESCE(TRY_CONVERT(decimal(18, 6), S.NoRsv), 0) AS NoRsv,
+                COALESCE(TRY_CONVERT(decimal(18, 6), S.CstPr), 0) AS CstPr,
+                S.RecDt, S.SupNo, S.OrdNo,
+                COALESCE(TRY_CONVERT(decimal(18, 6), S.RestBal), 0)
+                    * COALESCE(TRY_CONVERT(decimal(18, 6), S.CstPr), 0) AS Value
+            FROM ShpBal S WITH(NOLOCK)
+            WHERE S.ProdNo = @prodNo
+              AND COALESCE(TRY_CONVERT(decimal(18, 6), S.RestBal), 0) <> 0
+            ORDER BY S.RecDt DESC, S.ShpNo DESC
+        `);
+
+        const reservationsRequest = pool.request();
+        reservationsRequest.input('prodNo', sql.NVarChar, prodNo);
+        const reservationsResult = await reservationsRequest.query(`
+            SELECT TOP 200
+                R.OrdNo, R.OrdLnNo, R.ShpNo,
+                COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0) AS NoRsv,
+                COALESCE(TRY_CONVERT(decimal(18, 6), R.NoPic), 0) AS NoPic,
+                COALESCE(TRY_CONVERT(decimal(18, 6), R.NoFin), 0) AS NoFin,
+                COALESCE(TRY_CONVERT(decimal(18, 6), R.CstPr), 0) AS CstPr,
+                COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0)
+                    * COALESCE(TRY_CONVERT(decimal(18, 6), R.CstPr), 0) AS Value,
+                O.TrTp AS OrderTrTp, O.DelDt, O.CustNo,
+                COALESCE(TRY_CONVERT(int, O.R4), 0) AS SalesOrdNo,
+                LTRIM(RTRIM(COALESCE(A.Nm, A2.Nm, ''))) AS CustomerName
+            FROM Rsv R WITH(NOLOCK)
+            LEFT JOIN Ord O WITH(NOLOCK) ON O.OrdNo = R.OrdNo
+            LEFT JOIN Actor A WITH(NOLOCK) ON A.CustNo = O.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), O.CustNo), 0) <> 0
+            LEFT JOIN Ord SO WITH(NOLOCK) ON SO.OrdNo = TRY_CONVERT(int, O.R4) AND COALESCE(TRY_CONVERT(int, O.R4), 0) > 0
+            LEFT JOIN Actor A2 WITH(NOLOCK) ON A2.CustNo = SO.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), SO.CustNo), 0) <> 0
+            WHERE R.ProdNo = @prodNo
+              AND COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0) > 0
+            ORDER BY R.OrdNo DESC
+        `);
+
+        const orderLinesRequest = pool.request();
+        orderLinesRequest.input('prodNo', sql.NVarChar, prodNo);
+        const orderLinesResult = await orderLinesRequest.query(`
+            SELECT TOP 200
+                L.OrdNo, L.LnNo, L.TrTp,
+                COALESCE(TRY_CONVERT(decimal(18, 6), L.NoOrg), 0) AS NoOrg,
+                COALESCE(TRY_CONVERT(decimal(18, 6), L.NoFin), 0) AS NoFin,
+                COALESCE(TRY_CONVERT(decimal(18, 6), L.NoRsv), 0) AS NoRsv,
+                COALESCE(TRY_CONVERT(decimal(18, 6), L.CstPr), 0) AS CstPr,
+                L.PurcNo,
+                O.TrTp AS OrderTrTp, O.DelDt, O.CustNo,
+                COALESCE(TRY_CONVERT(int, O.R4), 0) AS SalesOrdNo,
+                LTRIM(RTRIM(COALESCE(A.Nm, A2.Nm, ''))) AS CustomerName
+            FROM OrdLn L WITH(NOLOCK)
+            INNER JOIN Ord O WITH(NOLOCK) ON O.OrdNo = L.OrdNo
+            LEFT JOIN Actor A WITH(NOLOCK) ON A.CustNo = O.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), O.CustNo), 0) <> 0
+            LEFT JOIN Ord SO WITH(NOLOCK) ON SO.OrdNo = TRY_CONVERT(int, O.R4) AND COALESCE(TRY_CONVERT(int, O.R4), 0) > 0
+            LEFT JOIN Actor A2 WITH(NOLOCK) ON A2.CustNo = SO.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), SO.CustNo), 0) <> 0
+            WHERE L.ProdNo = @prodNo
+              AND (
+                    COALESCE(TRY_CONVERT(decimal(18, 6), L.NoOrg), 0)
+                    - COALESCE(TRY_CONVERT(decimal(18, 6), L.NoFin), 0)
+                  ) <> 0
+            ORDER BY L.OrdNo DESC
+        `);
+
+        const lots = lotsResult.recordset;
+        const reservations = reservationsResult.recordset;
+        const openOrderLines = orderLinesResult.recordset;
+        const fifoValue = Number(master.PoPhStB || 0) * Number(master.PhCstPr || 0);
+        return {
+            product: master,
+            summary: {
+                physicalStock: Number(master.PoPhStB || 0),
+                bal: Number(master.Bal || 0),
+                incoming: Number(master.StcInc || 0),
+                reserved: Number(master.ShpRsv || 0),
+                reservedIncoming: Number(master.ShpRsvIn || 0),
+                available: Number(master.Bal || 0) + Number(master.StcInc || 0) - Number(master.ShpRsv || 0),
+                fifoPrice: Number(master.PhCstPr || 0),
+                standardPrice: Number(master.StandardPrice || 0),
+                fifoValue,
+                lotCount: lots.length,
+                locations: Array.from(new Set(lots.map(l => String(l.Loc || '').trim()).filter(Boolean))),
+                reservationCount: reservations.length,
+                openOrderLineCount: openOrderLines.length
+            },
+            lots,
+            reservations,
+            openOrderLines
+        };
+    }
+
     function scheduleMonthlySnapshot({ onError } = {}) {
         const runIfMonthEnd = async () => {
             const now = new Date();
@@ -621,9 +784,12 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         getCurrent,
         saveMonthlySnapshot,
         loadMonthlySnapshot,
+        listMonthlySnapshots,
         savePointInTimeSnapshot,
         listPointInTimeSnapshots,
         loadPointInTimeSnapshot,
+        deletePointInTimeSnapshot,
+        lookupProduct,
         scheduleMonthlySnapshot
     };
 }

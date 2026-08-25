@@ -806,7 +806,7 @@ function createAftercalcService({
                         const displayQuantity = key === '1'
                             ? operationTimeInfo.effectiveMinutes
                             : (isPurchasedPartLine(line)
-                                ? (noFinValue || noOrgValue)
+                                ? noFinValue
                                 : (isInvoiceTracked
                                     ? ydelseCostInfo.effectiveQuantity
                                     : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
@@ -816,6 +816,9 @@ function createAftercalcService({
                         let childProductionTotalCost = null;
                         let specialLaserCostInfo = null;
                         const warningMessages = buildLineWarnings(line, ydelseCostInfo.usesNoFinFallback ? [ydelseCostInfo.infoText] : []);
+                        if (isPurchasedPartLine(line) && noFinValue === 0 && noOrgValue > 0) {
+                            warningMessages.push('Ikke færdigmeldt endnu: kost beregnet med bestilt antal (' + noOrgValue + ').');
+                        }
 
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));

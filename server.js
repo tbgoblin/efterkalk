@@ -29,8 +29,8 @@ const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match ba
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v24_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v22_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v25_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v23_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
@@ -1251,6 +1251,21 @@ app.get('/', (req, res) => {
             #mainLagerliste .lagerliste-overview-table { min-width: 680px; }
             #mainLagerliste .lagerliste-overview-table th:not(:first-child), #mainLagerliste .lagerliste-overview-table td:not(:first-child) { width: 190px; text-align: right; white-space: nowrap; }
             #mainLagerliste .lagerliste-overview-table td:first-child { width: 40%; }
+            #mainLagerliste .lagerliste-overview-table th:last-child, #mainLagerliste .lagerliste-overview-table td:last-child { width: 52px; min-width: 52px; text-align: center; white-space: nowrap; }
+            #mainLagerliste .lagerliste-info-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 1px solid #6a7c71; border-radius: 50%; background: #fff; color: #315c49; font-size: 12px; font-weight: 800; cursor: help; }
+            #mainLagerliste .lagerliste-vareopslag-panel { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #b9c6bd; border-radius: 10px; background: #f6f8f5; }
+            #mainLagerliste .lagerliste-vareopslag-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+            #mainLagerliste .lagerliste-vareopslag-head h4 { margin: 0; color: #294938; }
+            #mainLagerliste .lagerliste-vareopslag-close { border: 1px solid #b9c6bd; border-radius: 6px; background: #fff; padding: 4px 12px; cursor: pointer; }
+            #mainLagerliste .lagerliste-vareopslag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-bottom: 12px; }
+            #mainLagerliste .lagerliste-vareopslag-kpi { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid #d2d7d1; border-radius: 8px; background: #fff; }
+            #mainLagerliste .lagerliste-vareopslag-kpi span { color: #526158; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+            #mainLagerliste .lagerliste-vareopslag-kpi strong { color: #1e2c23; font-variant-numeric: tabular-nums; }
+            #mainLagerliste .lagerliste-vareopslag-panel h5 { margin: 14px 0 6px; color: #294938; }
+            #mainLagerliste .lagerliste-diff-tooltip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+            #mainLagerliste .lagerliste-material-note { margin: 6px 0 10px; color: #526158; font-size: 12px; }
+            #mainLagerliste .lagerliste-movement-filter { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+            #mainLagerliste .lagerliste-movement-filter label { color: #526158; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
             #mainLagerliste .lagerliste-comparison-block, #mainLagerliste .lagerliste-sheet-block { margin: 0; border: 0; border-bottom: 1px solid #cbd0ca; border-radius: 0; }
             #mainLagerliste .lagerliste-comparison-title { background: #f0e5d2; color: #69440f; border-bottom: 1px solid #dbc49e; }
             #mainLagerliste .lagerliste-sheet-table th { background: #e8ece8; color: #294938; border-bottom: 1px solid #bdc8bf; }
@@ -2233,6 +2248,7 @@ app.get('/', (req, res) => {
                 <div class="lagerliste-toolbar">
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-primary">
                         <button type="button" class="lagerliste-button-primary" onclick="loadLagerliste()">Opdater lagerliste</button>
+                        <button type="button" onclick="loadLagerliste(true)">Genberegn Efterkalk</button>
                     </div>
                     <div class="lagerliste-toolbar-group">
                         <label for="lagerlisteMonth">Månedslukning</label>
@@ -2243,17 +2259,32 @@ app.get('/', (req, res) => {
                         <button type="button" class="lagerliste-button-compare" onclick="compareLagerlistePreviousMonth()">Sammenlign forrige måned</button>
                         <button type="button" onclick="saveLagerlistePointSnapshot()">Gem dags-snapshot</button>
                     </div>
+                    <div class="lagerliste-toolbar-group lagerliste-toolbar-compare">
+                        <label for="lagerlisteCompareA">Periode A</label>
+                        <select id="lagerlisteCompareA" class="filter-select"><option value="">Vælg periode...</option></select>
+                        <label for="lagerlisteCompareB">Periode B</label>
+                        <select id="lagerlisteCompareB" class="filter-select"><option value="">Vælg periode...</option></select>
+                        <button type="button" onclick="lagerlisteComparePeriods()">Sammenlign</button>
+                    </div>
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-history">
                         <label for="lagerlisteSnapshotSelect">Historik</label>
                         <select id="lagerlisteSnapshotSelect" class="filter-select"><option value="">Vælg snapshot...</option></select>
                         <button type="button" onclick="openSelectedLagerlisteSnapshot()">Åbn</button>
+                        <button type="button" onclick="deleteSelectedLagerlisteSnapshot()">Slet</button>
                     </div>
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-export">
                         <button type="button" onclick="exportLagerlisteJson()">JSON</button>
                         <button type="button" onclick="exportLagerlistePdf()">PDF</button>
                     </div>
+                    <div class="lagerliste-toolbar-group lagerliste-toolbar-vareopslag">
+                        <label for="lagerlisteVareopslagInput">Vareopslag</label>
+                        <input id="lagerlisteVareopslagInput" type="search" placeholder="Varenummer..." onkeydown="if(event.key==='Enter'){event.preventDefault();lagerlisteVareopslag();}" />
+                        <button type="button" onclick="lagerlisteVareopslag()">Søg</button>
+                    </div>
                     <span id="lagerlisteSnapshotStatus" class="via-status"></span>
                 </div>
+                <div id="lagerlisteVareopslagResults"></div>
+                <div id="lagerlisteCompareResults"></div>
                 <div id="lagerlisteResults" class="omsaetning-empty">Indlæser Lagerliste...</div>
             </section>
         </div>

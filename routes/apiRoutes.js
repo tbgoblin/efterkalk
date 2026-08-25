@@ -196,7 +196,7 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
 
-            const cacheKey = 'salgordre_via_v22';
+            const cacheKey = 'salgordre_via_v31';
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
@@ -2519,10 +2519,115 @@ function createApiRouter({
     router.get('/lagerliste/current', requireModulePermission('lagerliste'), async (req, res) => {
         try {
             const forceRefresh = String(req.query && req.query.force || '') === '1';
-            return res.json({ ok: true, ...(await lagerlisteService.getCurrent({ forceRefresh })) });
+            const forceAftercalc = String(req.query && req.query.aftercalc || '') === '1';
+            return res.json({ ok: true, ...(await lagerlisteService.getCurrent({ forceRefresh, forceAftercalc })) });
         } catch (err) {
             logEvent('ERROR lagerliste/current: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Lagerliste fejl' });
+        }
+    });
+
+    router.get('/lagerliste/vareopslag/:prodno', requireModulePermission('lagerliste'), async (req, res) => {
+        try {
+            const result = await lagerlisteService.lookupProduct(req.params.prodno);
+            if (!result) return res.status(404).json({ ok: false, error: 'Varenummer ikke fundet: ' + String(req.params.prodno || '') });
+            return res.json({ ok: true, ...result });
+        } catch (err) {
+            logEvent('ERROR lagerliste/vareopslag: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Vareopslag fejl' });
+        }
+    });
+
+    // TEMP debug (read-only): discover how reservations (ShpRsv) link to orders
+    router.get('/lagerliste/reservations-debug', (req, res, next) => {
+        if (!requireSuperadmin(req, res)) return;
+        return next();
+    }, async (req, res) => {
+        try {
+            const pool = await getConnection();
+            const out = {};
+
+            // Iterative mode: ?table=X [&prodno=Y] — table name validated against INFORMATION_SCHEMA
+            const reqTable = String(req.query && req.query.table || '').trim();
+            if (reqTable) {
+                const tblCheck = pool.request();
+                tblCheck.input('tbl', sql.NVarChar, reqTable);
+                const found = await tblCheck.query(`
+                    SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @tbl`);
+                if (!found.recordset.length) {
+                    return res.status(404).json({ ok: false, error: 'Tabel ikke fundet: ' + reqTable });
+                }
+                const safeName = found.recordset[0].TABLE_NAME;
+                const colReq = pool.request();
+                colReq.input('tbl', sql.NVarChar, safeName);
+                const cols = await colReq.query(`
+                    SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = @tbl ORDER BY ORDINAL_POSITION`);
+                out.table = safeName;
+                out.columns = cols.recordset;
+                const colNames = cols.recordset.map(c => c.COLUMN_NAME);
+                const prodNo = String(req.query.prodno || '').trim();
+                const ordNo = String(req.query.ordno || '').trim();
+                const rowReq = pool.request();
+                let where = '';
+                if (prodNo && colNames.includes('ProdNo')) {
+                    rowReq.input('prodNo', sql.NVarChar, prodNo);
+                    where = ' WHERE ProdNo = @prodNo';
+                } else if (ordNo && colNames.includes('OrdNo') && /^\d+$/.test(ordNo)) {
+                    rowReq.input('ordNo', sql.Numeric, Number(ordNo));
+                    where = ' WHERE OrdNo = @ordNo';
+                }
+                const rows = await rowReq.query(`SELECT TOP 300 * FROM [${safeName}] WITH(NOLOCK)${where}`);
+                out.rows = rows.recordset;
+                return res.json({ ok: true, ...out });
+            }
+
+            const tables = await pool.request().query(`
+                SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_NAME LIKE '%Shp%' OR TABLE_NAME LIKE '%Rsv%' OR TABLE_NAME LIKE '%Parti%'
+                ORDER BY TABLE_NAME`);
+            out.tables = tables.recordset;
+
+            const columns = await pool.request().query(`
+                SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = 'ShpBal' ORDER BY ORDINAL_POSITION`);
+            out.shpBalColumns = columns.recordset;
+
+            const ordLnRsv = await pool.request().query(`
+                SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = 'OrdLn' AND (COLUMN_NAME LIKE '%Rsv%' OR COLUMN_NAME LIKE '%Alloc%' OR COLUMN_NAME LIKE '%Pic%')
+                ORDER BY ORDINAL_POSITION`);
+            out.ordLnReservationColumns = ordLnRsv.recordset;
+
+            const reserved = await pool.request().query(`
+                SELECT TOP 8 B.ProdNo, B.Bal, B.StcInc, B.ShpRsv, B.PoPhStB
+                FROM StcBal B WITH(NOLOCK)
+                WHERE B.StcNo = 1 AND TRY_CONVERT(decimal(18,6), B.ShpRsv) > 0
+                ORDER BY TRY_CONVERT(decimal(18,6), B.ShpRsv) DESC`);
+            out.reservedProducts = reserved.recordset;
+
+            out.shpBalRows = {};
+            const prodNos = reserved.recordset.map(r => String(r.ProdNo).trim()).filter(Boolean).slice(0, 4);
+            for (const prodNo of prodNos) {
+                const request = pool.request();
+                request.input('prodNo', sql.NVarChar, prodNo);
+                const rows = await request.query(`SELECT TOP 10 * FROM ShpBal WITH(NOLOCK) WHERE ProdNo = @prodNo`);
+                out.shpBalRows[prodNo] = rows.recordset;
+            }
+
+            return res.json({ ok: true, ...out });
+        } catch (err) {
+            logEvent('ERROR lagerliste/reservations-debug: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/lagerliste/snapshot-months', requireModulePermission('lagerliste'), (req, res) => {
+        try {
+            return res.json({ ok: true, months: lagerlisteService.listMonthlySnapshots(fs) });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshot-months: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot måneder fejl' });
         }
     });
 
@@ -2566,6 +2671,22 @@ function createApiRouter({
         } catch (err) {
             logEvent('ERROR lagerliste/snapshots list: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Snapshot liste fejl' });
+        }
+    });
+
+    router.delete('/lagerliste/snapshots/:id', (req, res, next) => {
+        if (!requireSuperadmin(req, res)) return;
+        return next();
+    }, (req, res) => {
+        try {
+            const snapshotId = String(req.params.id || '').trim();
+            const deleted = lagerlisteService.deletePointInTimeSnapshot(fs, snapshotId);
+            if (!deleted) return res.status(404).json({ ok: false, error: 'Snapshot ikke fundet' });
+            logEvent('Lagerliste dags-snapshot slettet: ' + snapshotId);
+            return res.json({ ok: true, snapshotId });
+        } catch (err) {
+            logEvent('ERROR lagerliste/snapshot delete: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Snapshot kunne ikke slettes' });
         }
     });
 

@@ -105,8 +105,11 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                         SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS MaterialCost
                     FROM ProductionOrders
                     INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
+                    LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
                                         WHERE L.ProdTp4 = 2
                       AND L.ProdNo NOT LIKE '%L'
+                      AND ISNULL(P.Gr6, 0) <> 2
+                      AND ISNULL(L.PurcNo, 0) = 0
                     GROUP BY ProductionOrders.SalesOrderNo
                 ),
                                     StangCosts AS (
@@ -118,27 +121,46 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                                         INNER JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
                                         WHERE P.Gr6 = 2
                                           AND L.ProdNo NOT LIKE '%L'
+                                          AND NOT (
+                                                ISNULL(L.PurcNo, 0) <> 0
+                                            AND EXISTS (
+                                                    SELECT 1 FROM Rsv R WITH(NOLOCK)
+                                                    WHERE R.OrdNo = L.OrdNo AND R.OrdLnNo = L.LnNo
+                                                )
+                                          )
                                         GROUP BY ProductionOrders.SalesOrderNo
                                     ),
                                     PurchasedPartCosts AS (
                                         SELECT
                                             ProductionOrders.SalesOrderNo,
-                                            SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS PurchasedPartCost
+                                            SUM(
+                                                CASE WHEN ISNULL(L.NoFin, 0) <> 0 THEN ISNULL(L.NoFin, 0) ELSE ISNULL(L.NoOrg, 0) END
+                                                * ISNULL(PurchasePrice.UnitPrice, ISNULL(L.CCstPr, 0))
+                                            ) AS PurchasedPartCost
                                         FROM ProductionOrders
                                         INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
-                                        LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
-                                        WHERE L.ProdTp4 = 9 OR TRY_CONVERT(decimal(18, 6), P.Gr5) = 11
-                                        GROUP BY ProductionOrders.SalesOrderNo
-                                        UNION ALL
-                                        SELECT
-                                            ProductionOrders.SalesOrderNo,
-                                            SUM(ISNULL(PurchaseLine.NoFin, 0) * ISNULL(PurchaseLine.CCstPr, 0)) AS PurchasedPartCost
-                                        FROM ProductionOrders
-                                        INNER JOIN OrdLn LinkLine WITH(NOLOCK) ON LinkLine.OrdNo = ProductionOrders.OrdNo
-                                        INNER JOIN Ord PurchaseOrder WITH(NOLOCK) ON PurchaseOrder.OrdNo = LinkLine.PurcNo AND PurchaseOrder.TrTp = 6
-                                        INNER JOIN OrdLn PurchaseLine WITH(NOLOCK) ON PurchaseLine.OrdNo = PurchaseOrder.OrdNo
-                                        LEFT JOIN Prod PurchaseProduct WITH(NOLOCK) ON PurchaseProduct.ProdNo = PurchaseLine.ProdNo
-                                        WHERE PurchaseLine.ProdTp4 = 9 OR TRY_CONVERT(decimal(18, 6), PurchaseProduct.Gr5) = 11
+                                        LEFT JOIN Prod PP WITH(NOLOCK) ON PP.ProdNo = L.ProdNo
+                                        OUTER APPLY (
+                                            SELECT TOP 1
+                                                COALESCE(NULLIF(PurchaseLine.DPrice, 0), PurchaseLine.CCstPr, 0) AS UnitPrice
+                                            FROM Ord PurchaseOrder WITH(NOLOCK)
+                                            INNER JOIN OrdLn PurchaseLine WITH(NOLOCK) ON PurchaseLine.OrdNo = PurchaseOrder.OrdNo
+                                            WHERE PurchaseOrder.OrdNo = L.PurcNo
+                                              AND PurchaseOrder.TrTp = 6
+                                              AND PurchaseLine.ProdNo = L.ProdNo
+                                            ORDER BY PurchaseLine.LnNo
+                                        ) PurchasePrice
+                                                                                WHERE L.PurcNo IS NOT NULL
+                                                                                    AND L.PurcNo <> 0
+                                          AND L.ProdTp4 = 2
+                                          AND L.ProdNo NOT LIKE '%L'
+                                          AND (
+                                                ISNULL(PP.Gr6, 0) <> 2
+                                             OR EXISTS (
+                                                    SELECT 1 FROM Rsv R WITH(NOLOCK)
+                                                    WHERE R.OrdNo = L.OrdNo AND R.OrdLnNo = L.LnNo
+                                                )
+                                          )
                                         GROUP BY ProductionOrders.SalesOrderNo
                                     ),
                 NestingMaterialCosts AS (
@@ -161,6 +183,8 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                     S.Gr12,
                     S.OrdPrSt,
                     C.Nm AS CustomerName,
+                    MainLine.ProdNo AS MainProdNo,
+                    MainLine.Descr AS MainProdDescr,
                     Active.OpenProductionOrders,
                     Active.TotalResources,
                     Active.CompletedResources,
@@ -176,6 +200,12 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                     CAST(NULL AS varchar(100)) AS ResourceName
                 FROM OpenSalesOrders S
                 LEFT JOIN Actor C WITH(NOLOCK) ON C.CustNo = S.CustNo
+                OUTER APPLY (
+                    SELECT TOP 1 ML.ProdNo, ML.Descr
+                    FROM OrdLn ML WITH(NOLOCK)
+                    WHERE ML.OrdNo = S.OrdNo
+                    ORDER BY ML.LnNo
+                ) MainLine
                 LEFT JOIN ActiveProduction Active ON Active.SalesOrderNo = S.OrdNo
                 LEFT JOIN MaterialCosts ON MaterialCosts.SalesOrderNo = S.OrdNo
                 LEFT JOIN StangCosts ON StangCosts.SalesOrderNo = S.OrdNo
