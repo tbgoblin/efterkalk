@@ -1264,8 +1264,16 @@ app.get('/', (req, res) => {
             #mainLagerliste .lagerliste-vareopslag-panel h5 { margin: 14px 0 6px; color: #294938; }
             #mainLagerliste .lagerliste-diff-tooltip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
             #mainLagerliste .lagerliste-material-note { margin: 6px 0 10px; color: #526158; font-size: 12px; }
-            #mainLagerliste .lagerliste-movement-filter { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
-            #mainLagerliste .lagerliste-movement-filter label { color: #526158; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+            #mainLagerliste .lagerliste-movement-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+            #mainLagerliste .lagerliste-movement-filter-menu { position: relative; }
+            #mainLagerliste .lagerliste-movement-filter-menu summary { padding: 6px 26px 6px 9px; border: 1px solid #b9c6bd; border-radius: 6px; background: #fff; color: #33443a; font-size: 12px; font-weight: 800; cursor: pointer; }
+            #mainLagerliste .lagerliste-movement-filter-options { position: absolute; z-index: 20; top: calc(100% + 3px); left: 0; display: flex; flex-direction: column; gap: 5px; min-width: 190px; max-height: 240px; overflow-y: auto; padding: 8px; border: 1px solid #b9c6bd; border-radius: 6px; background: #fff; box-shadow: 0 6px 16px rgba(31, 53, 41, .16); }
+            #mainLagerliste .lagerliste-movement-filter-options label { display: inline-flex; align-items: center; gap: 5px; color: #33443a; font-size: 12px; white-space: nowrap; }
+            #mainLagerliste .lagerliste-manual-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin: 8px 0; padding: 9px; border: 1px solid #c6d5c9; border-radius: 6px; background: #f4f8f3; }
+            #mainLagerliste .lagerliste-manual-form > span { flex-basis: 100%; color: #405247; font-size: 12px; }
+            #mainLagerliste .lagerliste-manual-form label { display: flex; flex-direction: column; gap: 3px; color: #526158; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+            #mainLagerliste .lagerliste-manual-form input { min-width: 130px; padding: 5px 7px; border: 1px solid #b9c6bd; border-radius: 4px; font: inherit; text-transform: none; }
+            #mainLagerliste .lagerliste-manual-form #lagerlisteManualNote { min-width: 250px; }
             #mainLagerliste .lagerliste-comparison-block, #mainLagerliste .lagerliste-sheet-block { margin: 0; border: 0; border-bottom: 1px solid #cbd0ca; border-radius: 0; }
             #mainLagerliste .lagerliste-comparison-title { background: #f0e5d2; color: #69440f; border-bottom: 1px solid #dbc49e; }
             #mainLagerliste .lagerliste-sheet-table th { background: #e8ece8; color: #294938; border-bottom: 1px solid #bdc8bf; }

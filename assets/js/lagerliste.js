@@ -3,6 +3,7 @@ let lagerlisteCurrent = null;
 let lagerlisteSnapshotRows = [];
 let lagerlistePreviousMonth = null;
 let lagerlistePreviousMonthLabel = '';
+let lagerlisteReconciliationContext = null;
 
 function lagerlisteFormat(value) {
     return new Intl.NumberFormat('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0)) + ' DKK';
@@ -926,6 +927,22 @@ function lagerlisteBuildMovements(payloadA, payloadB) {
             movement.Flow = 'Forbliver i VIA';
         }
     }
+    for (const movement of movements) {
+        const flowParts = String(movement.Flow || '').split(' → ');
+        if (flowParts.length === 2) {
+            movement.FromCategory = flowParts[0] || '-';
+            movement.ToCategory = flowParts[1] || '-';
+        } else if (movement.Status === 'Ny') {
+            movement.FromCategory = '-';
+            movement.ToCategory = movement.Category;
+        } else if (movement.Status === 'Udgået') {
+            movement.FromCategory = movement.Category;
+            movement.ToCategory = '-';
+        } else {
+            movement.FromCategory = movement.Category;
+            movement.ToCategory = movement.Category;
+        }
+    }
     movements.sort((left, right) => Math.abs(right.Diff) - Math.abs(left.Diff));
     return movements;
 }
@@ -934,19 +951,19 @@ function lagerlisteBuildMaterialBalance(payloadA, payloadB) {
     const categoriesA = (payloadA && payloadA.categories) || {};
     const categoriesB = (payloadB && payloadB.categories) || {};
     const flatPlateRows = payload => (payload.plateGroups || []).flatMap(group => group.details || []);
-    const compareRows = (rowsA, rowsB, keyOf, labelOf, valueOf, category, direction) => {
+    const compareRows = (rowsA, rowsB, keyOf, labelOf, valueOf, productKeyOf, category, direction) => {
         const values = new Map();
         for (const row of rowsA || []) {
             const key = String(keyOf(row) || '');
             if (!key) continue;
-            const entry = values.get(key) || { Key: key, Label: labelOf(row), ValueA: 0, ValueB: 0 };
+            const entry = values.get(key) || { Key: key, ProductKey: String(productKeyOf(row) || '').trim(), Label: labelOf(row), ValueA: 0, ValueB: 0 };
             entry.ValueA += Number(valueOf(row) || 0);
             values.set(key, entry);
         }
         for (const row of rowsB || []) {
             const key = String(keyOf(row) || '');
             if (!key) continue;
-            const entry = values.get(key) || { Key: key, Label: labelOf(row), ValueA: 0, ValueB: 0 };
+            const entry = values.get(key) || { Key: key, ProductKey: String(productKeyOf(row) || '').trim(), Label: labelOf(row), ValueA: 0, ValueB: 0 };
             entry.ValueB += Number(valueOf(row) || 0);
             if (!entry.Label) entry.Label = labelOf(row);
             values.set(key, entry);
@@ -958,6 +975,7 @@ function lagerlisteBuildMaterialBalance(payloadA, payloadB) {
                 Side: direction === 'out' ? 'Ud af lager (FIFO)' : 'Ind i VIA',
                 Category: category,
                 Key: entry.Key,
+                ProductKey: entry.ProductKey,
                 Label: String(entry.Label || '').trim(),
                 ValueA: entry.ValueA,
                 ValueB: entry.ValueB,
@@ -966,21 +984,72 @@ function lagerlisteBuildMaterialBalance(payloadA, payloadB) {
         });
     };
     const stockOut = [
-        ...compareRows(flatPlateRows(categoriesA), flatPlateRows(categoriesB), r => r.ProdNo, r => r.Descr, r => r.FifoValue ?? r.Value, 'Pladelager', 'out'),
-        ...compareRows(categoriesA.stang, categoriesB.stang, r => r.ProdNo, r => r.Descr, r => r.FifoValue ?? r.Value, 'Stang materiale', 'out'),
-        ...compareRows(categoriesA.gr5Items, categoriesB.gr5Items, r => r.ProdNo, r => r.Descr, r => r.FifoValue ?? r.Value, 'Lager Komponenter', 'out'),
-        ...compareRows(categoriesA.opfolgningvare, categoriesB.opfolgningvare, r => r.ProdNo, r => r.Descr, r => r.Value, 'Opfølgningsvarer', 'out')
+        ...compareRows(flatPlateRows(categoriesA), flatPlateRows(categoriesB), r => r.ProdNo, r => r.Descr, r => r.FifoValue ?? r.Value, r => r.ProdNo, 'Pladelager', 'out'),
+        ...compareRows(categoriesA.stang, categoriesB.stang, r => r.ProdNo, r => r.Descr, r => r.FifoValue ?? r.Value, r => r.ProdNo, 'Stang materiale', 'out'),
+        ...compareRows(categoriesA.gr5Items, categoriesB.gr5Items, r => r.ProdNo, r => r.Descr, r => r.FifoValue ?? r.Value, r => r.ProdNo, 'Lager Komponenter', 'out'),
+        ...compareRows(categoriesA.opfolgningvare, categoriesB.opfolgningvare, r => r.ProdNo, r => r.Descr, r => r.Value, r => r.ProdNo, 'Opfølgningsvarer', 'out')
     ];
     const viaIn = [
-        ...compareRows(categoriesA.nestingCutting, categoriesB.nestingCutting, r => String(r.OrdNo || '') + '/' + String(r.ProdNo || ''), r => (r.Products ? r.Products + ' · ' : '') + 'Rute ' + String(r.Route || '-'), lagerlisteNestingCountedValue, 'Plader VIA', 'in'),
-        ...compareRows(categoriesA.salgordreVia, categoriesB.salgordreVia, r => r.OrdNo, r => [r.MainProdNo, r.CustomerName].filter(Boolean).join(' · '), r => r.MaterialCost, 'VIA Laser', 'in'),
-        ...compareRows(categoriesA.salgordreVia, categoriesB.salgordreVia, r => r.OrdNo, r => [r.MainProdNo, r.CustomerName].filter(Boolean).join(' · '), r => r.StangCost, 'VIA Stang', 'in'),
-        ...compareRows(categoriesA.salgordreVia, categoriesB.salgordreVia, r => r.OrdNo, r => [r.MainProdNo, r.CustomerName].filter(Boolean).join(' · '), r => r.PurchasedPartCost, 'Indkøbt dele', 'in')
+        ...compareRows(categoriesA.nestingCutting, categoriesB.nestingCutting, r => String(r.OrdNo || '') + '/' + String(r.ProdNo || ''), r => (r.Products ? r.Products + ' · ' : '') + 'Rute ' + String(r.Route || '-'), lagerlisteNestingCountedValue, r => r.ProdNo, 'Plader VIA', 'in'),
+        ...compareRows(categoriesA.salgordreVia, categoriesB.salgordreVia, r => r.OrdNo, r => [r.MainProdNo, r.CustomerName].filter(Boolean).join(' · '), r => r.MaterialCost, () => '', 'VIA Laser', 'in'),
+        ...compareRows(categoriesA.salgordreVia, categoriesB.salgordreVia, r => r.OrdNo, r => [r.MainProdNo, r.CustomerName].filter(Boolean).join(' · '), r => r.StangCost, () => '', 'VIA Stang', 'in'),
+        ...compareRows(categoriesA.salgordreVia, categoriesB.salgordreVia, r => r.OrdNo, r => [r.MainProdNo, r.CustomerName].filter(Boolean).join(' · '), r => r.PurchasedPartCost, () => '', 'Indkøbt dele', 'in')
     ];
     const fifoOut = stockOut.reduce((sum, row) => sum + row.Amount, 0);
     const viaMaterialIn = viaIn.reduce((sum, row) => sum + row.Amount, 0);
     const rows = stockOut.concat(viaIn).sort((left, right) => right.Amount - left.Amount);
     return { fifoOut, viaMaterialIn, difference: viaMaterialIn - fifoOut, rows };
+}
+
+function lagerlisteBuildReconciliation(materialBalance) {
+    const sources = (materialBalance.rows || []).filter(row => row.Side === 'Ud af lager (FIFO)' && row.ProductKey);
+    const targets = (materialBalance.rows || []).filter(row => row.Side === 'Ind i VIA' && row.ProductKey);
+    const targetsByProduct = new Map();
+    for (const row of targets) {
+        const productKey = String(row.ProductKey).trim();
+        const list = targetsByProduct.get(productKey) || [];
+        list.push({ ...row, Remaining: Number(row.Amount || 0) });
+        targetsByProduct.set(productKey, list);
+    }
+    const rows = [];
+    let matched = 0;
+    let unmatchedOut = 0;
+    for (const source of sources) {
+        let remaining = Number(source.Amount || 0);
+        const targetsForProduct = targetsByProduct.get(String(source.ProductKey).trim()) || [];
+        for (const target of targetsForProduct) {
+            if (remaining <= 0.005 || target.Remaining <= 0.005) continue;
+            const amount = Math.min(remaining, target.Remaining);
+            rows.push({
+                Status: 'Afstemt',
+                Product: source.ProductKey,
+                From: source.Category + ' · ' + source.Key,
+                To: target.Category + ' · ' + target.Key,
+                FromLabel: source.Label,
+                ToLabel: target.Label,
+                Amount: amount
+            });
+            matched += amount;
+            remaining -= amount;
+            target.Remaining -= amount;
+        }
+        if (remaining > 0.005) {
+            rows.push({ Status: 'Manglende modpost', Product: source.ProductKey, From: source.Category + ' · ' + source.Key, To: '-', FromLabel: source.Label, ToLabel: '-', Amount: remaining });
+            unmatchedOut += remaining;
+        }
+    }
+    let unmatchedIn = 0;
+    for (const targetList of targetsByProduct.values()) {
+        for (const target of targetList) {
+            if (target.Remaining <= 0.005) continue;
+            rows.push({ Status: 'Manglende lagerudgang', Product: target.ProductKey, From: '-', To: target.Category + ' · ' + target.Key, FromLabel: '-', ToLabel: target.Label, Amount: target.Remaining });
+            unmatchedIn += target.Remaining;
+        }
+    }
+    const indirectVia = (materialBalance.rows || []).filter(row => row.Side === 'Ind i VIA' && !row.ProductKey)
+        .reduce((sum, row) => sum + Number(row.Amount || 0), 0);
+    rows.sort((left, right) => right.Amount - left.Amount);
+    return { rows, matched, unmatchedOut, unmatchedIn, indirectVia };
 }
 
 async function lagerlisteResolvePeriod(key) {
@@ -1042,17 +1111,92 @@ function lagerlisteCompareClear() {
     if (root) root.innerHTML = '';
 }
 
-function lagerlisteFilterMovementCategory() {
-    const select = document.getElementById('lagerlisteMovementCategory');
+function lagerlisteAddManualReconciliation(index) {
+    const context = lagerlisteReconciliationContext;
+    const source = context && context.rows && context.rows[Number(index)];
+    if (!context || !source) return;
+    const form = document.getElementById('lagerlisteManualReconciliationForm');
+    if (!form) return;
+    form.hidden = false;
+    form.dataset.index = String(index);
+    const sourceEl = document.getElementById('lagerlisteManualSource');
+    const toEl = document.getElementById('lagerlisteManualTo');
+    const amountEl = document.getElementById('lagerlisteManualAmount');
+    const noteEl = document.getElementById('lagerlisteManualNote');
+    if (sourceEl) sourceEl.textContent = source.Product + ' · ' + source.From + ' · ' + lagerlisteFormat(source.Amount);
+    if (toEl) toEl.value = 'Nesting før snapshot';
+    if (amountEl) amountEl.value = Number(source.Amount || 0).toFixed(2);
+    if (noteEl) { noteEl.value = ''; noteEl.focus(); }
+}
+
+async function lagerlisteSaveManualReconciliation() {
+    const context = lagerlisteReconciliationContext;
+    const form = document.getElementById('lagerlisteManualReconciliationForm');
+    const source = context && context.rows && context.rows[Number(form && form.dataset.index)];
+    if (!context || !form || !source) return;
+    const destination = String(document.getElementById('lagerlisteManualTo')?.value || '').trim();
+    const amountText = String(document.getElementById('lagerlisteManualAmount')?.value || '').trim();
+    const note = String(document.getElementById('lagerlisteManualNote')?.value || '').trim();
+    const amount = Number(amountText.replace(',', '.'));
+    if (!destination || !Number.isFinite(amount) || amount <= 0 || !note) {
+        alert('Til, positivt beløb og forklarende note kræves.');
+        return;
+    }
+    try {
+        const response = await fetch('/lagerliste/reconciliations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + String(authToken || '') },
+            body: JSON.stringify({ periodKey: context.periodKey, productKey: source.Product, from: source.From, to: destination, amount, note })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+        await lagerlisteComparePeriods();
+    } catch (err) {
+        alert('Manuel afstemning kunne ikke gemmes: ' + String(err.message || err));
+    }
+}
+
+async function lagerlisteDeleteManualReconciliation(id) {
+    if (!confirm('Slet den manuelle afstemning?')) return;
+    try {
+        const response = await fetch('/lagerliste/reconciliations/' + encodeURIComponent(id), {
+            method: 'DELETE', headers: { Authorization: 'Bearer ' + String(authToken || '') }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+        await lagerlisteComparePeriods();
+    } catch (err) {
+        alert('Manuel afstemning kunne ikke slettes: ' + String(err.message || err));
+    }
+}
+
+function lagerlisteFilterMovements() {
     const root = document.getElementById('lagerlisteCompareResults');
-    if (!select || !root) return;
-    const category = String(select.value || '');
+    if (!root) return;
     const table = root.querySelector('#lagerlisteMovementTable');
     if (!table) return;
+    const selected = group => Array.from(root.querySelectorAll('[data-movement-filter="' + group + '"]:checked')).map(input => String(input.value || ''));
+    const categories = selected('category');
+    const fromValues = selected('from');
+    const toValues = selected('to');
     table.querySelectorAll(':scope > tbody > tr').forEach(row => {
-        const rowCategory = String(row.dataset.category || '');
-        row.style.display = !category || rowCategory === category ? '' : 'none';
+        const categoryOk = !categories.length || categories.includes(String(row.dataset.category || ''));
+        const fromOk = !fromValues.length || fromValues.includes(String(row.dataset.from || ''));
+        const toOk = !toValues.length || toValues.includes(String(row.dataset.to || ''));
+        row.style.display = categoryOk && fromOk && toOk ? '' : 'none';
     });
+    const summary = root.querySelector('#lagerlisteMovementSelectionSummary');
+    if (summary) {
+        let incoming = 0;
+        let outgoing = 0;
+        table.querySelectorAll(':scope > tbody > tr').forEach(row => {
+            if (row.style.display === 'none') return;
+            const amount = Number(row.dataset.diff || 0);
+            if (amount > 0) incoming += amount;
+            if (amount < 0) outgoing += Math.abs(amount);
+        });
+        summary.innerHTML = '<strong>Indgang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(incoming)) + '</strong><strong>Udgang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(outgoing)) + '</strong><strong>Netto</strong><strong>' + lagerlisteEscape(lagerlisteFormat(incoming - outgoing)) + '</strong>';
+    }
 }
 
 async function lagerlisteComparePeriods() {
@@ -1071,10 +1215,18 @@ async function lagerlisteComparePeriods() {
     root.innerHTML = '<div class="loading">Henter perioder...</div>';
     try {
         const [periodA, periodB] = await Promise.all([lagerlisteResolvePeriod(keyA), lagerlisteResolvePeriod(keyB)]);
+        const periodKey = String(keyA) + '__' + String(keyB);
+        let manualRows = [];
+        try {
+            const manualResponse = await fetch('/lagerliste/reconciliations/' + encodeURIComponent(periodKey), { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
+            const manualData = await manualResponse.json();
+            if (manualResponse.ok && manualData.ok) manualRows = Array.isArray(manualData.rows) ? manualData.rows : [];
+        } catch (_err) { /* Manual entries are optional. */ }
         const figuresA = lagerlisteComputeFigures(periodA.payload);
         const figuresB = lagerlisteComputeFigures(periodB.payload);
         const movements = lagerlisteBuildMovements(periodA.payload, periodB.payload);
         const materialBalance = lagerlisteBuildMaterialBalance(periodA.payload, periodB.payload);
+        const reconciliation = lagerlisteBuildReconciliation(materialBalance);
         const movementsByCategory = new Map();
         for (const movement of movements) {
             const list = movementsByCategory.get(movement.Category) || [];
@@ -1150,6 +1302,8 @@ async function lagerlisteComparePeriods() {
             { key: 'Category', label: 'Kategori' },
             { key: 'Key', label: 'Produkt/Ordre' },
             { key: 'Label', label: 'Beskrivelse', format: value => String(value || '').trim() || '-' },
+            { key: 'FromCategory', label: 'Fra kategori' },
+            { key: 'ToCategory', label: 'Til kategori' },
             { key: 'Status', label: 'Status', allowHtml: true, format: value => {
                 const cls = value === 'Ny' ? 'lagerliste-diff-pos' : (value === 'Udgået' ? 'lagerliste-diff-neg' : (value === 'Overført' ? 'lagerliste-diff-pos' : 'lagerliste-diff-zero'));
                 return '<span class="' + cls + '">' + lagerlisteEscape(value) + '</span>';
@@ -1162,11 +1316,18 @@ async function lagerlisteComparePeriods() {
                 const cls = diff > 0 ? 'lagerliste-diff-pos' : (diff < 0 ? 'lagerliste-diff-neg' : 'lagerliste-diff-zero');
                 return '<span class="' + cls + '">' + lagerlisteEscape(lagerlisteFormat(diff)) + '</span>';
             } }
-        ], row => ' data-category="' + lagerlisteEscape(row.Category) + '"');
+        ], row => ' data-category="' + lagerlisteEscape(row.Category) + '" data-from="' + lagerlisteEscape(row.FromCategory) + '" data-to="' + lagerlisteEscape(row.ToCategory) + '" data-diff="' + Number(row.Diff || 0) + '"');
         const movementCategories = Array.from(new Set(movements.map(row => String(row.Category || '')).filter(Boolean))).sort((left, right) => left.localeCompare(right));
-        const movementFilter = '<div class="lagerliste-movement-filter"><label for="lagerlisteMovementCategory">Kategori</label><select id="lagerlisteMovementCategory" class="filter-select" onchange="lagerlisteFilterMovementCategory()"><option value="">Alle kategorier</option>'
-            + movementCategories.map(category => '<option value="' + lagerlisteEscape(category) + '">' + lagerlisteEscape(category) + '</option>').join('')
-            + '</select></div>';
+        const movementFrom = Array.from(new Set(movements.map(row => String(row.FromCategory || '-')))).sort((left, right) => left.localeCompare(right));
+        const movementTo = Array.from(new Set(movements.map(row => String(row.ToCategory || '-')))).sort((left, right) => left.localeCompare(right));
+        const checkboxDropdown = (label, filterKey, values) => '<details class="lagerliste-movement-filter-menu"><summary>' + lagerlisteEscape(label) + '</summary><div class="lagerliste-movement-filter-options">'
+            + values.map(value => '<label><input type="checkbox" data-movement-filter="' + filterKey + '" value="' + lagerlisteEscape(value) + '" onchange="lagerlisteFilterMovements()" /> ' + lagerlisteEscape(value) + '</label>').join('')
+            + '</div></details>';
+        const movementFilter = '<div class="lagerliste-movement-filter">'
+            + checkboxDropdown('Kategori', 'category', movementCategories)
+            + checkboxDropdown('Fra kategori', 'from', movementFrom)
+            + checkboxDropdown('Til kategori', 'to', movementTo)
+            + '</div>';
         const materialRowsTable = lagerlisteRowsTable(materialBalance.rows, [
             { key: 'Side', label: 'Bilagsside' },
             { key: 'Category', label: 'Kategori' },
@@ -1175,6 +1336,32 @@ async function lagerlisteComparePeriods() {
             { key: 'ValueA', label: periodA.label, format: lagerlisteFormat },
             { key: 'ValueB', label: periodB.label, format: lagerlisteFormat },
             { key: 'Amount', label: 'Beløb', format: lagerlisteFormat }
+        ]);
+        const reconciliationTable = lagerlisteRowsTable(reconciliation.rows, [
+            { key: 'Status', label: 'Status', allowHtml: true, format: value => {
+                const cls = value === 'Afstemt' ? 'lagerliste-diff-pos' : 'lagerliste-diff-neg';
+                return '<span class="' + cls + '">' + lagerlisteEscape(value) + '</span>';
+            } },
+            { key: 'Product', label: 'Produkt' },
+            { key: 'From', label: 'Fra' },
+            { key: 'To', label: 'Til' },
+            { key: 'FromLabel', label: 'Fra beskrivelse', format: value => String(value || '').trim() || '-' },
+            { key: 'ToLabel', label: 'Til beskrivelse', format: value => String(value || '').trim() || '-' },
+            { key: 'Amount', label: 'Afstemt beløb', format: lagerlisteFormat },
+            { key: 'Manual', label: 'Handling', allowHtml: true, format: (_value, row) => {
+                const index = reconciliation.rows.indexOf(row);
+                return row.Status === 'Afstemt' ? '-' : '<button type="button" onclick="lagerlisteAddManualReconciliation(' + index + ')">Afstem manuelt</button>';
+            } }
+        ]);
+        lagerlisteReconciliationContext = { periodKey, rows: reconciliation.rows };
+        const manualTable = lagerlisteRowsTable(manualRows, [
+            { key: 'productKey', label: 'Produkt' },
+            { key: 'from', label: 'Fra' },
+            { key: 'to', label: 'Til' },
+            { key: 'amount', label: 'Manuelt beløb', format: lagerlisteFormat },
+            { key: 'note', label: 'Note' },
+            { key: 'createdAt', label: 'Oprettet', format: lagerlisteFormatDateTime },
+            { key: 'id', label: 'Handling', allowHtml: true, format: value => '<button type="button" onclick="lagerlisteDeleteManualReconciliation(\'' + lagerlisteEscape(value) + '\')">Slet</button>' }
         ]);
         const materialDiffClass = materialBalance.difference > 0 ? 'lagerliste-diff-pos' : (materialBalance.difference < 0 ? 'lagerliste-diff-neg' : 'lagerliste-diff-zero');
         const totalIn = movements.reduce((sum, row) => sum + (row.Diff > 0 ? row.Diff : 0), 0);
@@ -1188,9 +1375,18 @@ async function lagerlisteComparePeriods() {
             + '<div class="lagerliste-total-row"><strong>Ud af lager (FIFO)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(materialBalance.fifoOut)) + '</strong><strong>Ind i VIA (uden tid)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(materialBalance.viaMaterialIn)) + '</strong><strong>Difference (VIA − FIFO)</strong><strong><span class="' + materialDiffClass + '">' + lagerlisteEscape(lagerlisteFormat(materialBalance.difference)) + '</span></strong></div>'
             + '<div class="lagerliste-material-note">Lagerindgange og VIA Tid er ikke medregnet. Pladelager, stang, komponenter og opfølgningsvarer værdisættes til FIFO; VIA følger den gældende VIA-kostregel.</div>'
             + materialRowsTable
+            + '<h5>FIFO-konciliation</h5>'
+            + '<div class="lagerliste-total-row"><strong>Afstemt</strong><strong>' + lagerlisteEscape(lagerlisteFormat(reconciliation.matched)) + '</strong><strong>Manglende modpost</strong><strong>' + lagerlisteEscape(lagerlisteFormat(reconciliation.unmatchedOut)) + '</strong><strong>Manglende lagerudgang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(reconciliation.unmatchedIn)) + '</strong></div>'
+            + '<div class="lagerliste-material-note">Afstemmer kun samme varenummer. Ét FIFO-udtræk kan fordeles over flere VIA-rækker. VIA Laser/Stang/Indkøbt dele uden varenummer: ' + lagerlisteEscape(lagerlisteFormat(reconciliation.indirectVia)) + ' vises kun i Materialebalance og matches ikke automatisk.</div>'
+            + reconciliationTable
+            + '<h5>Manuelle afstemninger (' + manualRows.length + ')</h5>'
+            + '<div class="lagerliste-material-note">Manuelle afstemninger dokumenterer en kendt årsag, f.eks. materiale der allerede var nesting før første snapshot. De ændrer aldrig Visma eller Lagerliste-totaller.</div>'
+            + '<div id="lagerlisteManualReconciliationForm" class="lagerliste-manual-form" hidden><strong>Afstem manuelt</strong><span id="lagerlisteManualSource"></span><label>Til <input id="lagerlisteManualTo" type="text" placeholder="Ordre, konto eller forklaring" /></label><label>Beløb <input id="lagerlisteManualAmount" type="number" min="0.01" step="0.01" /></label><label>Note <input id="lagerlisteManualNote" type="text" placeholder="Forklarende note" /></label><button type="button" onclick="lagerlisteSaveManualReconciliation()">Gem afstemning</button><button type="button" onclick="document.getElementById(\'lagerlisteManualReconciliationForm\').hidden=true">Annuller</button></div>'
+            + manualTable
             + '<h5>Bevægelser (' + movements.length + ')</h5>'
             + movementFilter
             + movementsTable.replace('<table class="order-list-table">', '<table id="lagerlisteMovementTable" class="order-list-table">')
+            + '<div id="lagerlisteMovementSelectionSummary" class="lagerliste-total-row"><strong>Indgang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalIn)) + '</strong><strong>Udgang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(Math.abs(totalOut))) + '</strong><strong>Netto</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalIn + totalOut)) + '</strong></div>'
             + '<div class="lagerliste-total-row"><strong>Ind (tilgang)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalIn)) + '</strong><strong>Ud (afgang)</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalOut)) + '</strong><strong>Netto</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalIn + totalOut)) + '</strong></div>'
             + '</div>';
         lagerlisteEnhanceTables();

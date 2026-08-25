@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const orderNotesService = require('../services/orderNotesService');
+const lagerlisteReconciliationService = require('../services/lagerlisteReconciliationService');
 const phCrawler = require('../services/phCrawlerService');
 const { readQmsDataset, validateQmsDataset, writeQmsDataset } = require('../services/qmsService');
 const {
@@ -2629,6 +2630,36 @@ function createApiRouter({
             logEvent('ERROR lagerliste/snapshot-months: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Snapshot måneder fejl' });
         }
+    });
+
+    router.get('/lagerliste/reconciliations/:periodKey', requireModulePermission('lagerliste'), (req, res) => {
+        return res.json({ ok: true, rows: lagerlisteReconciliationService.list(req.params.periodKey) });
+    });
+
+    router.post('/lagerliste/reconciliations', (req, res, next) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        req.reconciliationUser = user;
+        return next();
+    }, express.json(), (req, res) => {
+        try {
+            const row = lagerlisteReconciliationService.add({
+                ...(req.body || {}),
+                createdBy: req.reconciliationUser && req.reconciliationUser.username
+            });
+            return res.json({ ok: true, row });
+        } catch (err) {
+            return res.status(400).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.delete('/lagerliste/reconciliations/:id', (req, res, next) => {
+        if (!requireSuperadmin(req, res)) return;
+        return next();
+    }, (req, res) => {
+        const deleted = lagerlisteReconciliationService.remove(req.params.id);
+        if (!deleted) return res.status(404).json({ ok: false, error: 'Manuel afstemning ikke fundet' });
+        return res.json({ ok: true });
     });
 
     router.get('/lagerliste/snapshot/:month', requireModulePermission('lagerliste'), (req, res) => {

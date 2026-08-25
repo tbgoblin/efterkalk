@@ -40,7 +40,7 @@ Electron (electron-main.js)
 - Snapshots: måned (`data/lagerliste/YYYY-MM.json`) + dags-snapshot; gemmes i baggrund via setImmediate, kompakt JSON.
 - `lookupProduct(prodNo)` → Vareopslag: Prod+StcBal nøgletal, ShpBal-partier (RestBal≠0), aktive reservationer (Rsv NoRsv>0 + Ord/Actor), åbne ordrelinjer (OrdLn NoOrg−NoFin≠0).
 - Endpoint: `GET /lagerliste/vareopslag/:prodno` (module-perm lagerliste).
-- Periodesammenligning: `GET /lagerliste/snapshot-months` (liste af YYYY-MM) + klient `lagerlisteComparePeriods()` (Periode A/B: aktuel/måned/snapshot → kategori-tabel + bevægelser pr. produkt/ordre med Ny/Udgået/Ændret + Ind/Ud/Netto). `Fra → Til` sporer observerede Plader VIA↔materiale-VIA og VIA→Færdige SO flyt pr. Salgsordre. Materialebalance (FIFO) tæller kun lagerfald mod positivt materialetilløb i VIA; ekskluderer VIA Tid og lagerindgange.
+- Periodesammenligning: `GET /lagerliste/snapshot-months` (liste af YYYY-MM) + klient `lagerlisteComparePeriods()` (Periode A/B: aktuel/måned/snapshot → kategori-tabel + bevægelser pr. produkt/ordre med Ny/Udgået/Ændret + Ind/Ud/Netto). `Fra → Til` sporer observerede Plader VIA↔materiale-VIA og VIA→Færdige SO flyt pr. Salgsordre. Materialebalance (FIFO) tæller kun lagerfald mod positivt materialetilløb i VIA; ekskluderer VIA Tid og lagerindgange. Manuelle afstemninger gemmes i bruger-skrivbar `lagerliste_reconciliations.json` via superadmin API; kræver note og ændrer aldrig Visma eller Lagerliste-totaller.
 - TEMP: `GET /lagerliste/reservations-debug` (superadmin, read-only, `?table=X&prodno=Y` itererbar) — fjernes efter reservationsfeature.
 
 ## Salgsordre VIA (services/viaService.js)
