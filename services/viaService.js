@@ -120,6 +120,15 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                                           AND L.ProdNo NOT LIKE '%L'
                                         GROUP BY ProductionOrders.SalesOrderNo
                                     ),
+                                    PurchasedPartCosts AS (
+                                        SELECT
+                                            ProductionOrders.SalesOrderNo,
+                                            SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS PurchasedPartCost
+                                        FROM ProductionOrders
+                                        INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
+                                        WHERE L.ProdTp4 = 9
+                                        GROUP BY ProductionOrders.SalesOrderNo
+                                    ),
                 NestingMaterialCosts AS (
                     SELECT
                         ProductionOrders.SalesOrderNo,
@@ -148,6 +157,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                     Active.EffectiveResourceMinutes,
                     ISNULL(MaterialCosts.MaterialCost, 0) + ISNULL(NestingMaterialCosts.MaterialCost, 0) AS MaterialCost,
                     ISNULL(StangCosts.StangCost, 0) AS StangCost,
+                    ISNULL(PurchasedPartCosts.PurchasedPartCost, 0) AS PurchasedPartCost,
                     ISNULL(Active.TimeCost, 0) AS TimeCost,
                     (ISNULL(S.InvoSF, 0) + ISNULL(S.InvoIF, 0)) * (ISNULL(NULLIF(S.ExRt, 0), 100) / 100.0) AS SalesValue,
                     CAST(NULL AS datetime) AS PlannedDate,
@@ -157,6 +167,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                 LEFT JOIN ActiveProduction Active ON Active.SalesOrderNo = S.OrdNo
                 LEFT JOIN MaterialCosts ON MaterialCosts.SalesOrderNo = S.OrdNo
                 LEFT JOIN StangCosts ON StangCosts.SalesOrderNo = S.OrdNo
+                    LEFT JOIN PurchasedPartCosts ON PurchasedPartCosts.SalesOrderNo = S.OrdNo
                 LEFT JOIN NestingMaterialCosts ON NestingMaterialCosts.SalesOrderNo = S.OrdNo
                 ORDER BY
                     CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,

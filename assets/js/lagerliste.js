@@ -178,6 +178,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
     const viaTid = viaRows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
     const viaLaser = viaRows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
     const viaStang = viaRows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
+    const viaIndkobt = viaRows.reduce((sum, row) => sum + Number(row.PurchasedPartCost || 0), 0);
     const nestingCuttingRows = Array.isArray(categories && categories.nestingCutting) ? categories.nestingCutting : [];
     const previousNestingCuttingRows = Array.isArray(comparison && comparison.categories && comparison.categories.nestingCutting)
         ? comparison.categories.nestingCutting
@@ -186,14 +187,15 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
     const previousViaTid = previousViaRows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
     const previousViaLaser = previousViaRows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
     const previousViaStang = previousViaRows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
+    const previousViaIndkobt = previousViaRows.reduce((sum, row) => sum + Number(row.PurchasedPartCost || 0), 0);
     const previousViaPlader = previousNestingCuttingRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
     const lagerKomponenterValue = (Array.isArray(categories && categories.gr5Items) ? categories.gr5Items : [])
         .reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
     const previousLagerKomponenterValue = (Array.isArray(comparison && comparison.categories && comparison.categories.gr5Items) ? comparison.categories.gr5Items : [])
         .reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
-    const workInProgress = Number(totals.finishedNotInvoiced || 0) + viaTid + viaLaser + viaStang + viaPlader;
+    const workInProgress = Number(totals.finishedNotInvoiced || 0) + viaTid + viaLaser + viaStang + viaIndkobt + viaPlader;
     const previousWorkInProgress = previousTotals
-        ? Number(previousTotals.finishedNotInvoiced || 0) + previousViaTid + previousViaLaser + previousViaStang + previousViaPlader
+        ? Number(previousTotals.finishedNotInvoiced || 0) + previousViaTid + previousViaLaser + previousViaStang + previousViaIndkobt + previousViaPlader
         : null;
     const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0) + lagerKomponenterValue;
     const warehouseWithRest = warehouseWithoutRest + Number(totals.restPlates || 0);
@@ -215,6 +217,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         ['VIA Tid', viaTid, previousViaRows.length ? previousViaTid : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow'],
         ['VIA Laser', viaLaser, previousViaRows.length ? previousViaLaser : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow'],
         ['VIA Stang', viaStang, previousViaRows.length ? previousViaStang : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow'],
+        ['Indkøbt dele', viaIndkobt, previousViaRows.length ? previousViaIndkobt : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow'],
         ['VIA Plader (Værdi i skæring)', viaPlader, previousNestingCuttingRows.length ? previousViaPlader : null, 'lagerliste-nesting-cutting-section', 'lagerliste-summary-subrow'],
         ['Vare i arbejde', workInProgress, previousWorkInProgress, null],
         ['TOTAL', warehouseWithRest + workInProgress, previousWarehouseWithRest === null || previousWorkInProgress === null ? null : previousWarehouseWithRest + previousWorkInProgress, null]
@@ -560,6 +563,7 @@ function lagerlisteSalgordreViaTable(rows) {
     const totalTime = safeRows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
     const totalMaterial = safeRows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
     const totalStang = safeRows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
+    const totalPurchased = safeRows.reduce((sum, row) => sum + Number(row.PurchasedPartCost || 0), 0);
     const totalValue = safeRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
     const table = lagerlisteRowsTable(safeRows, [
         {
@@ -577,11 +581,13 @@ function lagerlisteSalgordreViaTable(rows) {
         { key: 'TimeCost', label: 'VIA Tid', format: lagerlisteFormat },
         { key: 'MaterialCost', label: 'VIA Laser', format: lagerlisteFormat },
         { key: 'StangCost', label: 'VIA Stang', format: lagerlisteFormat },
+        { key: 'PurchasedPartCost', label: 'Indkøbt dele', format: lagerlisteFormat },
         { key: 'Value', label: 'Vare i arbejde', format: lagerlisteFormat }
     ]);
     return table + '<div class="lagerliste-total-row"><strong>VIA Tid</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalTime))
         + '</strong><strong>VIA Laser</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalMaterial))
         + '</strong><strong>VIA Stang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalStang))
+        + '</strong><strong>Indkøbt dele</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalPurchased))
         + '</strong><strong>Vare i arbejde</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong></div>';
 }
 

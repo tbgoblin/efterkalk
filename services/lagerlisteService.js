@@ -6,7 +6,7 @@ const path = require('path');
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v15';
+    const cacheKey = 'lagerliste_v16';
     let currentMemoryCache = null;
 
     function toNumber(value) {
@@ -518,8 +518,9 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             CustomerName: row.CustomerName,
             MaterialCost: round(row.MaterialCost),
             StangCost: round(row.StangCost),
+            PurchasedPartCost: round(row.PurchasedPartCost),
             TimeCost: round(row.TimeCost),
-            Value: round(toNumber(row.MaterialCost) + toNumber(row.StangCost) + toNumber(row.TimeCost))
+            Value: round(toNumber(row.MaterialCost) + toNumber(row.StangCost) + toNumber(row.PurchasedPartCost) + toNumber(row.TimeCost))
         }));
         const payload = {
             generatedAt: new Date().toISOString(),
