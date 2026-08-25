@@ -6,7 +6,7 @@ const path = require('path');
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v16';
+    const cacheKey = 'lagerliste_v17';
     let currentMemoryCache = null;
 
     function toNumber(value) {

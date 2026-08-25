@@ -126,7 +126,19 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                                             SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS PurchasedPartCost
                                         FROM ProductionOrders
                                         INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
-                                        WHERE L.ProdTp4 = 9
+                                        LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
+                                        WHERE L.ProdTp4 = 9 OR TRY_CONVERT(decimal(18, 6), P.Gr5) = 11
+                                        GROUP BY ProductionOrders.SalesOrderNo
+                                        UNION ALL
+                                        SELECT
+                                            ProductionOrders.SalesOrderNo,
+                                            SUM(ISNULL(PurchaseLine.NoFin, 0) * ISNULL(PurchaseLine.CCstPr, 0)) AS PurchasedPartCost
+                                        FROM ProductionOrders
+                                        INNER JOIN OrdLn LinkLine WITH(NOLOCK) ON LinkLine.OrdNo = ProductionOrders.OrdNo
+                                        INNER JOIN Ord PurchaseOrder WITH(NOLOCK) ON PurchaseOrder.OrdNo = LinkLine.PurcNo AND PurchaseOrder.TrTp = 6
+                                        INNER JOIN OrdLn PurchaseLine WITH(NOLOCK) ON PurchaseLine.OrdNo = PurchaseOrder.OrdNo
+                                        LEFT JOIN Prod PurchaseProduct WITH(NOLOCK) ON PurchaseProduct.ProdNo = PurchaseLine.ProdNo
+                                        WHERE PurchaseLine.ProdTp4 = 9 OR TRY_CONVERT(decimal(18, 6), PurchaseProduct.Gr5) = 11
                                         GROUP BY ProductionOrders.SalesOrderNo
                                     ),
                 NestingMaterialCosts AS (
