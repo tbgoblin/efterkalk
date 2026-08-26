@@ -230,7 +230,7 @@ function renderSalgordreVia() {
             + '<td>' + formatNumber(rowStangCost) + ' DKK</td>'
             + '<td>' + formatNumber(rowTimeCost) + ' DKK</td>'
             + '<td><strong>' + formatNumber(rowTotalCost) + ' DKK</strong></td>'
-            + '<td><div class="via-progress">' + formatNumber(progress.completedMinutes) + ' min registrati (' + progress.percentage + '%)<div class="via-progress-bar"><span style="width:' + progress.percentage + '%"></span></div></div></td>'
+            + '<td><div class="via-progress">' + formatNumber(progress.completedMinutes) + ' af ' + formatNumber(progress.effectiveMinutes) + ' min (' + progress.percentage + '%)<div class="via-progress-bar"><span style="width:' + progress.percentage + '%"></span></div></div></td>'
             + '<td>' + escapeHtml(String(row.ResourceName || '-')) + '<br><small>' + escapeHtml(formatViaDate(row.PlannedDate)) + '</small></td>'
             + '<td><button class="list-toggle-btn" type="button" onclick="event.stopPropagation();refreshSalgordreViaOrder(' + Number(row.OrdNo) + ', this)" style="padding:4px 8px;margin:0;">Opdater</button></td>'
             + '</tr>';
@@ -266,15 +266,36 @@ async function refreshSalgordreViaOrder(ordNo, button) {
 async function loadSalgordreVia(forceRefresh = false) {
     const target = document.getElementById('viaResults');
     const status = document.getElementById('viaStatus');
-    if (target) target.innerHTML = '<div class="loading">Henter aktive salgsordrer...</div>';
-    try {
-        const response = await fetch('/salgordre-via' + (forceRefresh ? '?force=1' : ''), { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
-        const data = await response.json();
-        if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
+    const applyRows = data => {
         salgordreViaRows = Array.isArray(data.rows) ? data.rows : [];
         if (status) status.textContent = salgordreViaRows.length + ' aktive salgsordrer';
         renderSalgordreVia();
+    };
+    if (target) target.innerHTML = '<div class="loading">Henter aktive salgsordrer...</div>';
+    try {
+        // Stale-while-revalidate: vis cache straks, genberegn i baggrunden hvis forældet
+        let staleFingerprint = null;
+        if (!forceRefresh) {
+            try {
+                const cachedResponse = await fetch('/salgordre-via?cached=1', { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
+                const cachedData = await cachedResponse.json();
+                if (cachedResponse.ok && cachedData && !cachedData.error && !cachedData.notCached && Array.isArray(cachedData.rows)) {
+                    applyRows(cachedData);
+                    if (cachedData.fresh === true) return; // cache frisk (<5 min): færdig
+                    staleFingerprint = JSON.stringify(cachedData.rows);
+                }
+            } catch (_) { /* ingen cache: fortsat normal hentning */ }
+        }
+        const response = await fetch('/salgordre-via' + ((forceRefresh || staleFingerprint !== null) ? '?force=1' : ''), { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(data.error || ('HTTP ' + response.status));
+        if (staleFingerprint !== null && JSON.stringify(data.rows || []) === staleFingerprint) return;
+        applyRows(data);
+        if (staleFingerprint !== null && typeof showOrderDetailUpdateNotice === 'function') {
+            showOrderDetailUpdateNotice('SalgOrdre VIA er opdateret med nye tal');
+        }
     } catch (err) {
+        if (salgordreViaRows.length > 0) return; // cached visning står
         if (target) target.innerHTML = '<div class="error">Kunne ikke hente SalgOrdre VIA: ' + escapeHtml(String(err.message || err)) + '</div>';
     }
 }

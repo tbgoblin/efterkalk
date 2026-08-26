@@ -234,6 +234,18 @@ async function getOrComputeAftercalc(ordNo, options = {}) {
         return cached;
     }
 
+    // Solo lettura cache (locale → GOH): nessun calcolo Visma, null se assente
+    if (options.cachedOnly) {
+        if (forceRefresh) return null;
+        const shared = await gohCache.get(cacheKey);
+        if (shared) {
+            logEvent('AFTERCALC GOH-CACHE HIT (cachedOnly): ordNo=' + key);
+            localDiskCache.set(cacheKey, shared, CACHE_TTL_AFTERCALC_MS);
+            return shared;
+        }
+        return null;
+    }
+
     let computePromise = afterCalcInFlight.get(key);
     if (computePromise && !forceRefresh) {
         logEvent('AFTERCALC IN-FLIGHT REUSE: ordNo=' + key);
@@ -628,7 +640,7 @@ app.get('/', (req, res) => {
     logEvent('HTTP GET /');
     res.send(`
     <!DOCTYPE html>
-    <html>
+    <html lang="da">
     <head>
         <meta charset="UTF-8">
         <title>Gantech Operations Hub</title>
@@ -2144,12 +2156,12 @@ app.get('/', (req, res) => {
                 </div>
                 <div class="omsaetning-filters" style="grid-template-columns:180px 180px 140px 190px 130px minmax(180px,1fr);">
                     <div class="omsaetning-field">
-                        <label for="ordreindgangFraWeek">Fra uge (YYYYWW)</label>
-                        <input id="ordreindgangFraWeek" type="text" maxlength="6" placeholder="202627" onchange="scheduleOrdreindgangAutoReload()" />
+                        <label for="ordreindgangFraWeek">Fra uge</label>
+                        <select id="ordreindgangFraWeek" onchange="scheduleOrdreindgangAutoReload()"></select>
                     </div>
                     <div class="omsaetning-field">
-                        <label for="ordreindgangTilWeek">Til uge (YYYYWW)</label>
-                        <input id="ordreindgangTilWeek" type="text" maxlength="6" placeholder="202612" onchange="scheduleOrdreindgangAutoReload()" />
+                        <label for="ordreindgangTilWeek">Til uge</label>
+                        <select id="ordreindgangTilWeek" onchange="scheduleOrdreindgangAutoReload()"></select>
                     </div>
                     <div class="omsaetning-field">
                         <label for="ordreindgangShowTilbud">Tilbud</label>
@@ -2176,13 +2188,13 @@ app.get('/', (req, res) => {
                 </div>
                 <div class="ordreindgang-holiday-box">
                     <div class="omsaetning-field">
-                        <label for="ordreindgangHolidayWeeks">Ferieuger (YYYYWW)</label>
-                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630,202631" onchange="onOrdreindgangHolidaySettingsChanged()" />
+                        <label for="ordreindgangHolidayWeeks">Ferieuger (uge eller periode)</label>
+                        <input id="ordreindgangHolidayWeeks" type="text" placeholder="fx 202629,202630 eller 202628-202631" onchange="onOrdreindgangHolidaySettingsChanged()" />
                         <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
                             <button type="button" class="omsaetning-collapse-btn" onclick="saveOrdreindgangHolidaySettingsManual()">Gem ferieuger</button>
                             <span id="ordreindgangHolidaySaveInfo" class="ordreindgang-holiday-help" style="margin-top:0;"></span>
                         </div>
-                        <div class="ordreindgang-holiday-help">0,00 i disse uger behandles som ferie (ikke anomali).</div>
+                        <div class="ordreindgang-holiday-help">0,00 i disse uger behandles som ferie (ikke anomali). Gemmes centralt og gælder alle maskiner.</div>
                     </div>
                     <div class="omsaetning-field">
                         <label for="ordreindgangIgnoreHolidayWeeks">Håndtering</label>
@@ -3228,6 +3240,7 @@ app.get('/', (req, res) => {
                 if (!normalizedOrdNo) throw new Error('Ordrenummer mangler');
 
                 const forceReload = Boolean(options.forceReload);
+                const cachedOnly = Boolean(options.cachedOnly);
                 const now = Date.now();
                 const cacheKey = normalizedOrdNo;
                 const existing = aftercalcClientCache.get(cacheKey);
@@ -3239,6 +3252,16 @@ app.get('/', (req, res) => {
                     if (existing.promise) {
                         return existing.promise;
                     }
+                }
+
+                // Solo cache server: svar straks eller null, uden Visma-beregning
+                if (cachedOnly) {
+                    const response = await fetch('/aftercalc/' + encodeURIComponent(normalizedOrdNo) + '?cached=1');
+                    const data = await response.json();
+                    if (!response.ok || !data || data.notCached || data.error) return null;
+                    aftercalcClientCache.set(cacheKey, { data, ts: Date.now(), promise: null });
+                    pruneAftercalcClientCache();
+                    return data;
                 }
 
                 const fetchPromise = (async () => {
@@ -5779,15 +5802,37 @@ app.get('/', (req, res) => {
             function normalizeOrdreindgangHolidayWeeksText(value) {
                 return String(value || '')
                     .split(',')
-                    .map(part => String(part || '').trim().replace(/[^0-9]/g, '').slice(0, 6))
-                    .filter(part => /^[0-9]{6}$/.test(part))
+                    .map(part => {
+                        const cleaned = String(part || '').trim().replace(/[^0-9\-]/g, '');
+                        const rangeMatch = /^([0-9]{6})-([0-9]{6})$/.exec(cleaned);
+                        if (rangeMatch && rangeMatch[2] >= rangeMatch[1]) return rangeMatch[1] + '-' + rangeMatch[2];
+                        const single = cleaned.replace(/-/g, '').slice(0, 6);
+                        return /^[0-9]{6}$/.test(single) ? single : '';
+                    })
+                    .filter(Boolean)
                     .join(',');
             }
 
             function parseOrdreindgangHolidayWeeksSet(value) {
                 const normalized = normalizeOrdreindgangHolidayWeeksText(value);
-                if (!normalized) return new Set();
-                return new Set(normalized.split(','));
+                const result = new Set();
+                if (!normalized) return result;
+                for (const part of normalized.split(',')) {
+                    const rangeMatch = /^([0-9]{6})-([0-9]{6})$/.exec(part);
+                    if (!rangeMatch) { result.add(part); continue; }
+                    let year = Number(rangeMatch[1].slice(0, 4));
+                    let week = Number(rangeMatch[1].slice(4, 6));
+                    const endKey = rangeMatch[2];
+                    let guard = 0;
+                    while (guard++ < 160) {
+                        const key = String(year) + String(week).padStart(2, '0');
+                        result.add(key);
+                        if (key >= endKey) break;
+                        week += 1;
+                        if (week > getIsoWeeksInYear(year)) { year += 1; week = 1; }
+                    }
+                }
+                return result;
             }
 
             function getOrdreindgangHolidaySettingsFromInputs() {
@@ -5829,6 +5874,14 @@ app.get('/', (req, res) => {
                 };
                 try {
                     localStorage.setItem(ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY, JSON.stringify(safe));
+                } catch {}
+                // Delt lagring på GOH: gælder alle maskiner (fail-soft)
+                try {
+                    fetch('/ordreindgang/holiday-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(safe)
+                    }).catch(() => {});
                 } catch {}
                 return safe;
             }
@@ -5875,6 +5928,20 @@ app.get('/', (req, res) => {
             function initializeOrdreindgangHolidaySettings() {
                 const saved = loadOrdreindgangHolidaySettings();
                 applyOrdreindgangHolidaySettingsToInputs(saved);
+                // Delte ferieuger fra GOH vinder over lokale (fail-soft hvis GOH er nede)
+                fetch('/ordreindgang/holiday-settings')
+                    .then(r => r.json())
+                    .then(d => {
+                        if (!d || !d.ok || !d.settings || typeof d.settings !== 'object') return;
+                        const shared = {
+                            holidayWeeksText: normalizeOrdreindgangHolidayWeeksText(d.settings.holidayWeeksText),
+                            ignoreHolidayWeeks: !(d.settings.ignoreHolidayWeeks === false)
+                        };
+                        try { localStorage.setItem(ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY, JSON.stringify(shared)); } catch {}
+                        applyOrdreindgangHolidaySettingsToInputs(shared);
+                        renderOrdreindgangFromLastPayload();
+                    })
+                    .catch(() => {});
             }
 
             function sanitizeOrdreindgangBudgetConfig(rawConfig) {
@@ -6419,8 +6486,8 @@ app.get('/', (req, res) => {
                 const weeklyOpen = !!weeklyWrapEl && weeklyWrapEl.style.display !== 'none';
                 const customersOpen = !!customersWrapEl && customersWrapEl.style.display !== 'none';
 
-                const fraWeek = String((document.getElementById('ordreindgangFraWeek') || {}).value || '-');
-                const tilWeek = String((document.getElementById('ordreindgangTilWeek') || {}).value || '-');
+                const fraWeek = weekInputValueToKey(String((document.getElementById('ordreindgangFraWeek') || {}).value || '-'));
+                const tilWeek = weekInputValueToKey(String((document.getElementById('ordreindgangTilWeek') || {}).value || '-'));
                 const totalOrd = String((document.getElementById('ordreindgangTotalOrd') || {}).textContent || '-').trim();
                 const totalTilbud = String((document.getElementById('ordreindgangTotalTilbud') || {}).textContent || '-').trim();
                 const avgOrd = String((document.getElementById('ordreindgangAvgOrd') || {}).textContent || '-').trim();
@@ -6524,24 +6591,82 @@ app.get('/', (req, res) => {
                 });
             }
 
+            // Standardperiode: uge 27 i indeværende år → nuværende uge (året før hvis uge < 27)
+            function getOrdreindgangDefaultRangeKeys() {
+                const nowMeta = getIsoWeekMeta(new Date());
+                const currentYear = Number(String(nowMeta.weekKey).slice(0, 4));
+                const currentWeek = Number(String(nowMeta.weekKey).slice(4, 6));
+                const fraYear = currentWeek >= 27 ? currentYear : (currentYear - 1);
+                return { fraKey: String(fraYear) + '27', tilKey: String(nowMeta.weekKey) };
+            }
+
+            function getIsoWeeksInYear(year) {
+                // ISO: 28. december ligger altid i årets sidste uge
+                const meta = getIsoWeekMeta(new Date(year, 11, 28));
+                return Number(String(meta.weekKey).slice(4, 6)) || 52;
+            }
+
+            // Dropdown med uger (mandag-baseret, dansk etiket) — uafhængig af browser-locale
+            function populateOrdreindgangWeekSelects() {
+                const fraEl = document.getElementById('ordreindgangFraWeek');
+                const tilEl = document.getElementById('ordreindgangTilWeek');
+                if (!fraEl || !tilEl || fraEl.options.length > 0) return;
+                const nowMeta = getIsoWeekMeta(new Date());
+                const currentYear = Number(String(nowMeta.weekKey).slice(0, 4));
+                const currentWeek = Number(String(nowMeta.weekKey).slice(4, 6));
+                const fmt = d => String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
+                const options = [];
+                for (let year = currentYear - 2; year <= currentYear; year++) {
+                    const lastWeek = year === currentYear ? currentWeek : getIsoWeeksInYear(year);
+                    for (let week = 1; week <= lastWeek; week++) {
+                        const start = getIsoWeekStartDate(year, week);
+                        const end = new Date(start.getTime());
+                        end.setDate(end.getDate() + 6);
+                        const key = String(year) + String(week).padStart(2, '0');
+                        options.push('<option value="' + key + '">Uge ' + week + ' · ' + year + ' (' + fmt(start) + '–' + fmt(end) + ')</option>');
+                    }
+                }
+                options.reverse(); // nyeste øverst
+                fraEl.innerHTML = options.join('');
+                tilEl.innerHTML = options.join('');
+            }
+
             function applyOrdreindgangDefaultWeeks() {
                 const fraEl = document.getElementById('ordreindgangFraWeek');
                 const tilEl = document.getElementById('ordreindgangTilWeek');
                 if (!fraEl || !tilEl) return;
 
-                const today = new Date();
-                const toWeek = getIsoWeekMeta(today);
-                fraEl.value = '202627';
-                tilEl.value = toWeek.weekKey;
+                populateOrdreindgangWeekSelects();
+                const def = getOrdreindgangDefaultRangeKeys();
+                fraEl.value = def.fraKey;
+                tilEl.value = def.tilKey;
+            }
+
+            // Konvertering mellem uge-input ("2026-W27") og weekKey ("202627")
+            function weekInputValueToKey(value) {
+                const match = /^(\d{4})-W(\d{2})$/.exec(String(value || '').trim());
+                return match ? (match[1] + match[2]) : String(value || '').trim();
+            }
+
+            function weekKeyToInputValue(weekKey) {
+                const s = String(weekKey || '').trim();
+                return /^\d{6}$/.test(s) ? (s.slice(0, 4) + '-W' + s.slice(4)) : '';
             }
 
             function buildOrdreindgangRange() {
                 const fraEl = document.getElementById('ordreindgangFraWeek');
                 const tilEl = document.getElementById('ordreindgangTilWeek');
-                const fraMeta = parseWeekKeyMeta(fraEl ? fraEl.value : '');
-                const tilMeta = parseWeekKeyMeta(tilEl ? tilEl.value : '');
-                if (fraEl) fraEl.value = normalizeWeekKeyInput(fraEl.value);
-                if (tilEl) tilEl.value = normalizeWeekKeyInput(tilEl.value);
+                populateOrdreindgangWeekSelects();
+                let fraMeta = parseWeekKeyMeta(weekInputValueToKey(fraEl ? fraEl.value : ''));
+                let tilMeta = parseWeekKeyMeta(weekInputValueToKey(tilEl ? tilEl.value : ''));
+                if (!fraMeta || !tilMeta) {
+                    // Selvhelbredende: tomme/ugyldige felter får automatisk standardperioden
+                    const def = getOrdreindgangDefaultRangeKeys();
+                    if (fraEl) fraEl.value = def.fraKey;
+                    if (tilEl) tilEl.value = def.tilKey;
+                    fraMeta = parseWeekKeyMeta(def.fraKey);
+                    tilMeta = parseWeekKeyMeta(def.tilKey);
+                }
                 if (!fraMeta || !tilMeta) return null;
 
                 const fromStart = getIsoWeekStartDate(fraMeta.year, fraMeta.week);
@@ -10336,10 +10461,22 @@ app.get('/', (req, res) => {
                 );
                 
                 try {
+                    // Hurtig visning: cached data vises straks, friske tal hentes i baggrunden
+                    let shownFingerprint = null;
+                    try {
+                        const cachedData = await requestAftercalcData(ordNo, { cachedOnly: true });
+                        if (requestId !== activeSearchRequestId) return;
+                        if (cachedData && !cachedData.error) {
+                            renderSearchedOrderDetail(cachedData);
+                            shownFingerprint = orderDetailFingerprint(cachedData);
+                        }
+                    } catch (_) { /* ingen cache endnu: vent på friske tal */ }
+
                     const data = await requestAftercalcData(ordNo, { forceReload: true });
                     if (requestId !== activeSearchRequestId) return;
-                    
+
                     if (data.error) {
+                        if (shownFingerprint !== null) return; // cached visning står
                         openOrderDetailModal(
                             '<div class="section"><div class="error">Fejl: ' + escapeHtml(String(data.error)) + '</div></div>',
                             'Ordre ' + escapeHtml(String(ordNo)) + ' - fejl',
@@ -10349,6 +10486,60 @@ app.get('/', (req, res) => {
                         return;
                     }
 
+                    // Re-render kun hvis tallene faktisk har ændret sig
+                    if (shownFingerprint !== null && orderDetailFingerprint(data) === shownFingerprint) return;
+                    renderSearchedOrderDetail(data);
+                    if (shownFingerprint !== null) showOrderDetailUpdateNotice();
+                } catch (err) {
+                    if (requestId !== activeSearchRequestId) return;
+                    openOrderDetailModal(
+                        '<div class="section"><div class="error">Fejl: ' + escapeHtml(String(err.message || err)) + '</div></div>',
+                        'Ordre ' + escapeHtml(String(ordNo)) + ' - fejl',
+                        'Der opstod en fejl under indlæsning'
+                    );
+                    result.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
+                }
+            }
+
+            function orderDetailFingerprint(d) {
+                const s = (d && d.summary) || {};
+                return [s.totalRevenue, s.totalCost, s.styklisteFallbackCost,
+                    (Array.isArray(d.productionOrders) ? d.productionOrders.length : 0),
+                    (Array.isArray(d.salesOrderLines) ? d.salesOrderLines.length : 0)].join('|');
+            }
+
+            function showOrderDetailUpdateNotice(message) {
+                const noticeText = String(message || 'Nye værdier tilgængelige — visningen er opdateret');
+                const existing = document.getElementById('orderDetailUpdateNotice');
+                if (existing) existing.remove();
+                const notice = document.createElement('div');
+                notice.id = 'orderDetailUpdateNotice';
+                notice.style.cssText = 'position:fixed; top:18px; left:50%; transform:translateX(-50%); z-index:20000;'
+                    + ' background:linear-gradient(135deg,#1565c0 0%,#0f3560 100%); color:#fff; font-weight:700; font-size:14px;'
+                    + ' padding:11px 18px; border-radius:10px; box-shadow:0 12px 30px rgba(15,53,96,0.4);'
+                    + ' display:flex; align-items:center; gap:10px; opacity:0; transition:opacity .25s ease;';
+                const icon = document.createElement('span');
+                icon.style.fontSize = '17px';
+                icon.textContent = '🔄';
+                const textSpan = document.createElement('span');
+                textSpan.textContent = noticeText;
+                notice.appendChild(icon);
+                notice.appendChild(textSpan);
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '×';
+                closeBtn.style.cssText = 'border:none; background:rgba(255,255,255,0.2); color:#fff; border-radius:999px; width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1;';
+                closeBtn.onclick = function() { notice.remove(); };
+                notice.appendChild(closeBtn);
+                document.body.appendChild(notice);
+                requestAnimationFrame(function() { notice.style.opacity = '1'; });
+                setTimeout(function() {
+                    notice.style.opacity = '0';
+                    setTimeout(function() { notice.remove(); }, 300);
+                }, 7000);
+            }
+
+            function renderSearchedOrderDetail(data) {
+                const result = document.getElementById('result');
                     // NOTE: Gr4 is order type (e.g., Multiordre). Do not change Gr4 logic here.
                     currentSalesOrderGr4 = Number((data.orderHeader && data.orderHeader.Gr4) || 0);
                     currentSearchOrderData = data;
@@ -10941,15 +11132,6 @@ app.get('/', (req, res) => {
                     result.innerHTML = '';
                     loadSalesOrderLaserSummary(data);
                     loadSalesOrderOperationSummary(data);
-                } catch (err) {
-                    if (requestId !== activeSearchRequestId) return;
-                    openOrderDetailModal(
-                        '<div class="section"><div class="error">Fejl: ' + escapeHtml(String(err.message || err)) + '</div></div>',
-                        'Ordre ' + escapeHtml(String(ordNo)) + ' - fejl',
-                        'Der opstod en fejl under indlæsning'
-                    );
-                    result.innerHTML = '<div class="error">Fejl: ' + err.message + '</div>';
-                }
             }
 
             function loadSalesOrderOperationSummary(orderData) {

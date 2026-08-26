@@ -84,6 +84,27 @@ function createApiRouter({
         logEvent('GOH-STATE: ' + hydrated + '/4 delte tilstande hentet fra GOH (users/noter/graenser/afstemninger)');
     });
 
+    const VIA_CACHE_KEY = 'salgordre_via_v32';
+    const VIA_CACHE_TTL_MS = 5 * 60 * 1000;
+    const VIA_WARM_INTERVAL_MS = 10 * 60 * 1000;
+    let viaWarmRunning = false;
+    async function warmSalgordreVia(label) {
+        if (viaWarmRunning) return;
+        viaWarmRunning = true;
+        try {
+            const rows = await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo: null });
+            diskCache.set(VIA_CACHE_KEY, { rows }, VIA_CACHE_TTL_MS);
+            logEvent('WARM-VIA (' + label + '): ' + rows.length + ' rækker cachet');
+        } catch (err) {
+            logEvent('WARM-VIA ERROR (' + label + '): ' + err.message);
+        } finally {
+            viaWarmRunning = false;
+        }
+    }
+    // Startup con lieve ritardo (dopo order-list) + refresh periodico in background
+    setTimeout(() => { warmSalgordreVia('startup'); }, 20000);
+    setInterval(() => { warmSalgordreVia('interval'); }, VIA_WARM_INTERVAL_MS);
+
     router.post('/auth/login', express.json(), (req, res) => {
         const username = String(req.body && req.body.username || '').trim().toLowerCase();
         const password = String(req.body && req.body.password || '');
@@ -186,9 +207,13 @@ function createApiRouter({
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
             const ordNo = parseInt(req.params.ordno);
-            logEvent('SEARCH: OrdNo=' + ordNo);
+            const cachedOnly = String(req.query && req.query.cached || '') === '1';
+            if (!cachedOnly) logEvent('SEARCH: OrdNo=' + ordNo);
             const forceRefresh = String(req.query && req.query.force || '') === '1';
-            const data = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh });
+            const data = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh, cachedOnly });
+            if (cachedOnly && !data) {
+                return res.json({ notCached: true });
+            }
             if (!data || data.error) {
                 return res.json(data);
             }
@@ -211,7 +236,15 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
 
-            const cacheKey = 'salgordre_via_v31';
+            const cacheKey = VIA_CACHE_KEY;
+            // Solo cache (anche scaduta): risposta immediata per stale-while-revalidate
+            if (requestedOrdNo === null && String(req.query.cached || '') === '1') {
+                const freshCached = diskCache.get(cacheKey);
+                if (freshCached) return res.json({ ...freshCached, cached: true, fresh: true });
+                const staleCached = diskCache.getStale(cacheKey);
+                if (staleCached) return res.json({ ...staleCached, cached: true, fresh: false });
+                return res.json({ notCached: true });
+            }
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
                 if (cached) return res.json({ ...cached, cached: true });
@@ -222,11 +255,33 @@ function createApiRouter({
 
             const rows = await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo });
             const payload = { rows };
-            if (requestedOrdNo === null) diskCache.set(cacheKey, payload, 5 * 60 * 1000);
+            if (requestedOrdNo === null) diskCache.set(cacheKey, payload, VIA_CACHE_TTL_MS);
             res.json(payload);
         } catch (err) {
             logEvent('ERROR salgordre-via: ' + err.message);
             res.status(500).json({ error: err.message || 'SalgOrdre VIA fejl' });
+        }
+    });
+
+    router.get('/ordreindgang/holiday-settings', async (req, res) => {
+        try {
+            const state = await gohData.getAppState('ordreindgang_holiday_settings');
+            return res.json({ ok: true, settings: state ? state.payload : null });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/ordreindgang/holiday-settings', express.json(), async (req, res) => {
+        try {
+            const settings = {
+                holidayWeeksText: String(req.body && req.body.holidayWeeksText || '').slice(0, 2000),
+                ignoreHolidayWeeks: !(req.body && req.body.ignoreHolidayWeeks === false)
+            };
+            const saved = await gohData.setAppState('ordreindgang_holiday_settings', settings);
+            return res.json({ ok: saved, settings });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
         }
     });
 

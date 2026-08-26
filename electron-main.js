@@ -14,6 +14,8 @@ app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('no-sandbox');
+// Danish locale: native date/week pickers start the week on Monday
+app.commandLine.appendSwitch('lang', 'da-DK');
 
 // Keep logs in a predictable shared folder when possible.
 if (!process.env.GANTECH_LOG_DIR) {

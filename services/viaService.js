@@ -50,7 +50,8 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                             THEN 80
                             ELSE ISNULL(L.TransGr3, 0)
                         END AS ResourceStatus,
-                        ISNULL(ProdTr.FinishedMinutes, 0) AS FinishedMinutes
+                        ISNULL(ProdTr.FinishedMinutes, 0) AS FinishedMinutes,
+                        ISNULL(L.NoOrg, 0) AS PlannedMinutes
                         ,ISNULL(L.CCstPr, 0) * CASE
                             WHEN UPPER(ISNULL(L.ProdNo, '')) = 'R1100'
                              AND UPPER(ISNULL(LastEmployee.EmployeeName, '')) LIKE '%LASER EAGLE%'
@@ -94,7 +95,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                         SUM(CASE WHEN ResourceStatus = 80 THEN 1 ELSE 0 END) AS CompletedResources,
                         SUM(CASE WHEN ResourceStatus < 80 THEN 1 ELSE 0 END) AS RemainingResources,
                         SUM(FinishedMinutes) AS CompletedResourceMinutes,
-                        SUM(FinishedMinutes) AS EffectiveResourceMinutes,
+                        SUM(PlannedMinutes) AS EffectiveResourceMinutes,
                         SUM(FinishedMinutes * ResourceUnitCost) AS TimeCost
                     FROM ResourceMinutes
                     GROUP BY SalesOrderNo
