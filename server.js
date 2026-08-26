@@ -13,7 +13,13 @@ const diskCache = {
     get: localDiskCache.get,
     getStale: localDiskCache.getStale,
     list: localDiskCache.list,
-    clearAll: localDiskCache.clearAll,
+    // "Ryd cache" deve svuotare anche la cache condivisa, altrimenti la sync
+    // riporta subito indietro i dati vecchi da GOH.
+    clearAll() {
+        const deleted = localDiskCache.clearAll();
+        gohCache.clearAll().catch(() => {});
+        return deleted;
+    },
     set(key, data, ttlMs) {
         localDiskCache.set(key, data, ttlMs);
         gohCache.set(key, data, ttlMs).catch(() => {});
@@ -47,8 +53,8 @@ const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match ba
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v25_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v23_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v26_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v24_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
@@ -456,6 +462,7 @@ async function syncCacheWithGoh() {
         const pingOk = await withTimeout(gohCache.ping(), 15000, 'GOH ping timeout (15s)')
             .catch(err => { logEvent('GOH-SYNC: ' + err.message); return false; });
         if (!pingOk) return;
+        gohCache.purgeExpired().then(n => { if (n > 0) logEvent('GOH-CACHE PURGE: ' + n + ' udløbne entries slettet'); }).catch(() => {});
         const localEntries = localDiskCache.list().filter(e => e.key && e.fresh);
         const localByKey = new Map(localEntries.map(e => [e.key, e]));
         const remote = await gohCache.getAllFresh();
@@ -10525,7 +10532,22 @@ app.get('/', (req, res) => {
                                 ? (lineQty > 0 ? (productionTotalCost / lineQty) : productionTotalCost)
                                 : (line.CCstPr || 0));
                             html += '<td>' + formatNumber(displayKostpris) + '</td>';
-                            html += '<td><strong>' + formatNumber(lineCost) + '</strong></td>';
+                            // Kost 0 med kendt enhedspris: vis estimat i stedet for et vildledende 0,00
+                            let samletKostCell = '<strong>' + formatNumber(lineCost) + '</strong>';
+                            if (lineCost === 0 && displayKostpris > 0 && lineQty > 0) {
+                                const estCost = displayKostpris * lineQty;
+                                const estMargin = (includeForMargin && lineSalesPrice > 0)
+                                    ? calculateLineMarginPercent(lineSalesPrice, estCost)
+                                    : null;
+                                const pendingBadge = isPurchaseLinkedOrder
+                                    ? '<span style="display:inline-block; font-size:11px; padding:2px 6px; border-radius:4px; background:#fff7e0; color:#8a6d00; border:1px solid #e8d48a; white-space:nowrap;">⏳ Afventer indkøbsfaktura</span>'
+                                    : '<span style="display:inline-block; font-size:11px; padding:2px 6px; border-radius:4px; background:#eef3f9; color:#4d6680; border:1px solid #d5e2f1; white-space:nowrap;">Ikke bogført</span>';
+                                samletKostCell = pendingBadge +
+                                    '<div style="color:#8a93a3; font-size:12px; margin-top:3px;">' + formatNumber(estCost) + ' (estimat)' +
+                                    (estMargin !== null ? ' · margin ~' + estMargin.toFixed(1) + '%' : '') +
+                                    '</div>';
+                            }
+                            html += '<td>' + samletKostCell + '</td>';
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + formatNumber(lineSalesPrice) + '</td>';
                             html += '<td>' + lineMarginBadge + '</td>';
@@ -10709,12 +10731,14 @@ app.get('/', (req, res) => {
                             });
 
                             let orderVisibleTotal = 0;
+                            // Su indkøbsordrer (TrTp=6) riga 1 er selve det købte produkt — skal med i totalen
+                            const includeLineOne = Number(prodOrder.trTp || 0) === 6;
 
                             for (let i = 0; i < groupKeys.length; i++) {
                                 const key = groupKeys[i];
                                 const lines = groupedLines[key];
                                 const subtotal = key === '2'
-                                    ? lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
+                                    ? lines.filter(line => includeLineOne || line.LnNo !== 1).reduce((sum, line) => {
                                         if (!isLaserLProdNo(line.ProdNo)) {
                                             return sum + (line.EffectiveLineCost !== undefined && line.EffectiveLineCost !== null ? (line.EffectiveLineCost || 0) : (line.LineCost || 0));
                                         }
@@ -10726,7 +10750,7 @@ app.get('/', (req, res) => {
                                             ? ((line.NestingCost || 0) * (line.NoFin || 0))
                                             : (line.LineCost || 0));
                                     }, 0)
-                                    : lines.filter(line => line.LnNo !== 1).reduce((sum, line) => {
+                                    : lines.filter(line => includeLineOne || line.LnNo !== 1).reduce((sum, line) => {
                                         if (String(key) === '1') {
                                             const effectiveNoFin = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
                                             return sum + (effectiveNoFin * Number(line.CCstPr || 0));

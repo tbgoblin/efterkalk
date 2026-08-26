@@ -176,4 +176,33 @@ async function del(key) {
     }
 }
 
-module.exports = { configure, isEnabled, ping, get, getMany, getAllFresh, set, del, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };
+// Svuota tutta la cache condivisa (usato da "Ryd cache": vale per tutte le macchine).
+async function clearAll() {
+    const pool = await getPool();
+    if (!pool) return false;
+    try {
+        await pool.request().query('DELETE FROM dbo.AppCache');
+        logEvent('GOH-CACHE CLEARED (alle maskiner)');
+        return true;
+    } catch (err) {
+        markUnavailable(err);
+        return false;
+    }
+}
+
+// Rimuove le entry scadute (chiamata periodica dalla sync).
+async function purgeExpired() {
+    const pool = await getPool();
+    if (!pool) return 0;
+    try {
+        const result = await pool.request()
+            .input('now', sql.BigInt, Date.now())
+            .query('DELETE FROM dbo.AppCache WHERE CachedAtMs + TtlMs < @now');
+        return (result.rowsAffected && result.rowsAffected[0]) || 0;
+    } catch (err) {
+        markUnavailable(err);
+        return 0;
+    }
+}
+
+module.exports = { configure, isEnabled, ping, get, getMany, getAllFresh, set, del, clearAll, purgeExpired, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };

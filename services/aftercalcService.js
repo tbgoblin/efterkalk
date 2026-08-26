@@ -130,15 +130,17 @@ function createAftercalcService({
         }
     }
 
-    function computeVisibleProductionTotal(lines) {
+    function computeVisibleProductionTotal(lines, options = {}) {
         const safeLines = Array.isArray(lines) ? lines : [];
+        // Sugli ordini di acquisto (TrTp=6) riga 1 è il prodotto comprato, non un padre da saltare
+        const skipLineOne = options.isPurchaseOrder !== true;
         const operationTotalsByProd = new Map();
         let total = 0;
 
         for (const line of safeLines) {
             const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
             const lnNo = Number((line && line.LnNo) || 0);
-            if (lnNo === 1 || key === '0' || key === '3' || key === '5') continue;
+            if ((skipLineOne && lnNo === 1) || key === '0' || key === '3' || key === '5') continue;
 
             if (key === '1') {
                 const prodKey = String((line && line.ProdNo) || '').trim().toUpperCase() || ('LN_' + String(lnNo || 0));
@@ -899,7 +901,7 @@ function createAftercalcService({
 
                     applyOperationMinuteCorrections(lines);
 
-                    total = computeVisibleProductionTotal(lines);
+                    total = computeVisibleProductionTotal(lines, { isPurchaseOrder: isPurchaseLinkedOrder });
 
                     return {
                         lines,
@@ -988,7 +990,7 @@ function createAftercalcService({
                             }
                             return line;
                         });
-                        adjustedTotalCost = computeVisibleProductionTotal(prodDetails.lines);
+                        adjustedTotalCost = computeVisibleProductionTotal(prodDetails.lines, { isPurchaseOrder: Number(prodOrder.TrTp) === 6 });
                         prodDetails.totalCost = parseFloat(Number(adjustedTotalCost).toFixed(2));
                     }
                 }

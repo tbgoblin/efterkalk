@@ -159,7 +159,14 @@ function isTransientGitHubUpdateError(err) {
         message.includes('cannot parse releases feed') ||
         (message.includes('releases/latest') && message.includes('504')) ||
         message.includes('gateway time-out') ||
-        message.includes('httperror: 504')
+        message.includes('httperror: 504') ||
+        // Errori di rete Chromium/Node: GitHub o la rete non raggiungibili al momento
+        message.includes('net::err_') ||
+        message.includes('enotfound') ||
+        message.includes('econnreset') ||
+        message.includes('econnrefused') ||
+        message.includes('etimedout') ||
+        message.includes('socket hang up')
     );
 }
 

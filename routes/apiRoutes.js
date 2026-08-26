@@ -1763,7 +1763,9 @@ function createApiRouter({
                     orderMarginInFlight.delete(ordNo);
                     afterCalcInFlight.delete(ordNo);
 
-                    const aftercalc = await getOrComputeAftercalc(ordNo, { priority: 'high' });
+                    // forceRefresh: salta la cache GOH e ricalcola da Visma; il risultato
+                    // viene riscritto sia in locale sia su GOH (mirror) per tutte le macchine.
+                    const aftercalc = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh: true });
                     if (aftercalc && !aftercalc.error) {
                         const marginInfo = {
                             ordNo,
