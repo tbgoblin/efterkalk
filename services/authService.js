@@ -4,6 +4,8 @@
 // iniettato per mantenere identici i call site del router.
 const path = require('path');
 const crypto = require('crypto');
+const gohData = require('./gohDataService');
+const USERS_STATE_KEY = 'app_users';
 
 function createAuthService({ fs, usersFile }) {
     const legacyUsersFile = usersFile || path.join(__dirname, '..', 'users.json');
@@ -31,6 +33,21 @@ function createAuthService({ fs, usersFile }) {
     function writeUsers(users) {
         ensureUsersFile();
         fs.writeFileSync(resolvedUsersFile, JSON.stringify(users, null, 2) + '\n', 'utf8');
+        gohData.setAppState(USERS_STATE_KEY, users).catch(() => {});
+    }
+
+    // All'avvio gli utenti condivisi su GOH vincono sul file locale (fail-soft).
+    async function hydrateUsersFromDb() {
+        const state = await gohData.getAppState(USERS_STATE_KEY);
+        if (!state || !Array.isArray(state.payload)) {
+            // Primo avvio con DB vuoto: pubblica gli utenti locali come base condivisa
+            const localUsers = readUsers();
+            if (localUsers.length > 0) gohData.setAppState(USERS_STATE_KEY, localUsers).catch(() => {});
+            return false;
+        }
+        ensureUsersFile();
+        fs.writeFileSync(resolvedUsersFile, JSON.stringify(state.payload, null, 2) + '\n', 'utf8');
+        return true;
     }
 
     function safeUser(user) {
@@ -76,6 +93,7 @@ function createAuthService({ fs, usersFile }) {
         authSessions,
         readUsers,
         writeUsers,
+        hydrateUsersFromDb,
         safeUser,
         makePasswordHash,
         getSessionUser,

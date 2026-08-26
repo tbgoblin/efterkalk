@@ -3,7 +3,7 @@
 // separate from live values so closing a month remains reproducible.
 const path = require('path');
 
-function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir }) {
+function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
     const cacheKey = 'lagerliste_v29';
@@ -599,6 +599,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         setImmediate(() => {
             writeSnapshotFile(fs, month, payload)
                 .catch(err => console.warn('[lagerliste] monthly snapshot write failed:', err.message));
+            if (gohData) gohData.saveRawImport('lagerliste_' + month, 'lagerliste_monthly', payload).catch(() => {});
         });
         return { ...payload, file };
     }
@@ -628,6 +629,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         setImmediate(() => {
             writePointInTimeSnapshotFile(fs, snapshotId, payload)
                 .catch(err => console.warn('[lagerliste] point snapshot write failed:', err.message));
+            if (gohData) gohData.saveRawImport('lagerliste_' + snapshotId, 'lagerliste_point', payload).catch(() => {});
         });
         return { ...payload, file };
     }

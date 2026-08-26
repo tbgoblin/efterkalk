@@ -8,6 +8,8 @@
  */
 const fs = require('fs');
 const path = require('path');
+const gohData = require('./gohDataService');
+const STATE_KEY = 'order_notes';
 
 function resolveLegacyNotesFile() {
     return path.join(require('process').env.PORTABLE_EXECUTABLE_DIR || __dirname, '..', 'order_notes.json');
@@ -76,6 +78,20 @@ function _save() {
     } catch (err) {
         console.error('[orderNotes] save error:', err.message);
     }
+    gohData.setAppState(STATE_KEY, _notes).catch(() => {});
+}
+
+// All'avvio il DB condiviso vince sul file locale (fail-soft se GOH è giù).
+async function hydrateFromDb() {
+    const state = await gohData.getAppState(STATE_KEY);
+    if (!state || !state.payload || typeof state.payload !== 'object') return false;
+    _notes = state.payload;
+    try {
+        const notesFile = resolveNotesFile();
+        ensureNotesDir(notesFile);
+        fs.writeFileSync(notesFile, JSON.stringify(_notes, null, 2), 'utf8');
+    } catch { /* file locale è solo fallback */ }
+    return true;
 }
 
 function getNote(ordNo) {
@@ -114,4 +130,4 @@ function deleteNote(ordNo) {
     _save();
 }
 
-module.exports = { getNote, getAllNotes, setNote, deleteNote };
+module.exports = { getNote, getAllNotes, setNote, deleteNote, hydrateFromDb };

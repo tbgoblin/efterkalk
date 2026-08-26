@@ -10,6 +10,8 @@
  */
 const fs = require('fs');
 const path = require('path');
+const gohData = require('./gohDataService');
+const STATE_KEY = 'omsaetning_thresholds';
 
 const DEFAULT_WARN_THRESHOLD = 3;
 const DEFAULT_GOOD_THRESHOLD = 5;
@@ -101,6 +103,20 @@ function _save() {
     } catch (err) {
         console.error('[omsaetning-thresholds] save error:', err.message);
     }
+    gohData.setAppState(STATE_KEY, _thresholds).catch(() => {});
+}
+
+// All'avvio il DB condiviso vince sul file locale (fail-soft se GOH è giù).
+async function hydrateFromDb() {
+    const state = await gohData.getAppState(STATE_KEY);
+    if (!state || !state.payload || typeof state.payload !== 'object') return false;
+    _thresholds = state.payload;
+    try {
+        const thresholdsFile = resolveThresholdsFile();
+        ensureThresholdsDir(thresholdsFile);
+        fs.writeFileSync(thresholdsFile, JSON.stringify(_thresholds, null, 2), 'utf8');
+    } catch { /* file locale è solo fallback */ }
+    return true;
 }
 
 function getThreshold(custNo) {
@@ -152,5 +168,6 @@ module.exports = {
     DEFAULT_GOOD_THRESHOLD,
     getThreshold,
     setThreshold,
-    getStorageMeta
+    getStorageMeta,
+    hydrateFromDb
 };

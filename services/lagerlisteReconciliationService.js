@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const gohData = require('./gohDataService');
+const STATE_KEY = 'lagerliste_reconciliations';
 
 function resolveBaseDir() {
     const explicitDir = String(process.env.GANTECH_NOTES_DIR || '').trim();
@@ -27,6 +29,19 @@ function load() {
 function save() {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(entries, null, 2), 'utf8');
+    gohData.setAppState(STATE_KEY, entries).catch(() => {});
+}
+
+// All'avvio il DB condiviso vince sul file locale (fail-soft se GOH è giù).
+async function hydrateFromDb() {
+    const state = await gohData.getAppState(STATE_KEY);
+    if (!state || !Array.isArray(state.payload)) return false;
+    entries = state.payload;
+    try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify(entries, null, 2), 'utf8');
+    } catch { /* file locale è solo fallback */ }
+    return true;
 }
 
 function list(periodKey) {
@@ -67,4 +82,4 @@ function remove(id) {
     return true;
 }
 
-module.exports = { list, add, remove };
+module.exports = { list, add, remove, hydrateFromDb };

@@ -34,6 +34,7 @@ function createApiRouter({
     fs,
     spawn,
     diskCache,
+    gohData,
     logEvent,
     getOrComputeAftercalc,
     getOrComputeOrderMargin,
@@ -64,12 +65,24 @@ function createApiRouter({
         authSessions,
         readUsers,
         writeUsers,
+        hydrateUsersFromDb,
         safeUser,
         makePasswordHash,
         getSessionUser,
         requireSuperadmin,
         requireModulePermission
     } = createAuthService({ fs, usersFile: path.join(__dirname, '..', 'users.json') });
+
+    // Stato condiviso da GOH: DB vince sul file locale, fail-soft se non raggiungibile
+    Promise.allSettled([
+        hydrateUsersFromDb(),
+        orderNotesService.hydrateFromDb(),
+        omsaetningThresholdsService.hydrateFromDb(),
+        lagerlisteReconciliationService.hydrateFromDb()
+    ]).then(results => {
+        const hydrated = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+        logEvent('GOH-STATE: ' + hydrated + '/4 delte tilstande hentet fra GOH (users/noter/graenser/afstemninger)');
+    });
 
     router.post('/auth/login', express.json(), (req, res) => {
         const username = String(req.body && req.body.username || '').trim().toLowerCase();
@@ -160,6 +173,7 @@ function createApiRouter({
         getConnection,
         sql,
         diskCache,
+        gohData,
         fs,
         getSalgordreViaRows: fetchSalgordreViaRows,
         getOrComputeAftercalc,

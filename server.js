@@ -4,7 +4,25 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const getConnection = require('./db');
-const diskCache = require('./diskCache');
+const localDiskCache = require('./diskCache');
+const gohCache = require('./services/gohCacheService');
+const gohData = require('./services/gohDataService');
+// Mirror trasparente: ogni scrittura/cancellazione locale viene replicata su GOH
+// (fail-soft, fire-and-forget). Le letture restano locali e sincrone.
+const diskCache = {
+    get: localDiskCache.get,
+    getStale: localDiskCache.getStale,
+    list: localDiskCache.list,
+    clearAll: localDiskCache.clearAll,
+    set(key, data, ttlMs) {
+        localDiskCache.set(key, data, ttlMs);
+        gohCache.set(key, data, ttlMs).catch(() => {});
+    },
+    del(key) {
+        localDiskCache.del(key);
+        gohCache.del(key).catch(() => {});
+    }
+};
 const { createLogger } = require('./utils/logger');
 const {
     isLaserLProduct,
@@ -57,6 +75,8 @@ try {
 const APP_VERSION = 'Gantech Operations Hub - v' + pkgVersion;
 
 const { logEvent } = createLogger(APP_VERSION);
+gohCache.configure({ logEvent });
+gohData.configure({ logEvent });
 const ORDER_LIST_CACHE_TTL_MS = 8 * 60 * 60 * 1000;
 const ORDER_LIST_MAX_ROWS = 150;
 const ORDER_LIST_DAYS_BACK = 30;
@@ -64,7 +84,7 @@ const STARTUP_MARGIN_WARM_COUNT = ORDER_LIST_MAX_ROWS;
 const BACKGROUND_WARM_INTERVAL_MS = 8 * 60 * 60 * 1000;
 const BACKGROUND_AFTERCALC_WARM_COUNT = ORDER_LIST_MAX_ROWS;  // Warm full aftercalc for ALL orders in the list so clicking is instant
 const BACKGROUND_WARM_DELAY_MS = 10;  // Small stagger between queue submissions to keep DB stable
-const MAX_DB_CALC_CONCURRENCY = 2;  // Controlled parallel DB calculations for faster startup warmup
+const MAX_DB_CALC_CONCURRENCY = 3;  // Controlled parallel DB calculations for faster startup warmup
 const AFTERCALC_QUERY_TIMEOUT_MS = 4 * 60 * 1000;
 
 const orderListCache = {
@@ -214,18 +234,32 @@ async function getOrComputeAftercalc(ordNo, options = {}) {
     }
     if (forceRefresh) computePromise = null;
     if (!computePromise) {
-        logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
-        computePromise = runWithDbCalcLimit(async () => {
-            const data = await withTimeout(
-                getAfterCalc(key),
-                AFTERCALC_QUERY_TIMEOUT_MS,
-                'Aftercalc timeout for ordNo=' + key
-            );
-            if (!data.error) {
-                diskCache.set(cacheKey, data, CACHE_TTL_AFTERCALC_MS);
+        computePromise = (async () => {
+            // Prova la cache condivisa GOH prima di occupare uno slot di calcolo Visma
+            if (!forceRefresh) {
+                const shared = await gohCache.get(cacheKey);
+                if (shared) {
+                    logEvent('AFTERCALC GOH-CACHE HIT: ordNo=' + key);
+                    localDiskCache.set(cacheKey, shared, CACHE_TTL_AFTERCALC_MS);
+                    return shared;
+                }
             }
-            return data;
-        }, priority).finally(() => {
+            logEvent('AFTERCALC FRESH COMPUTE: ordNo=' + key + ', priority=' + priority);
+            return runWithDbCalcLimit(async () => {
+                const data = await withTimeout(
+                    getAfterCalc(key),
+                    AFTERCALC_QUERY_TIMEOUT_MS,
+                    'Aftercalc timeout for ordNo=' + key
+                );
+                if (!data.error) {
+                    diskCache.set(cacheKey, data, CACHE_TTL_AFTERCALC_MS);
+                    if (data.summary) {
+                        gohData.recordAftercalcSnapshot(key, data.summary).catch(() => {});
+                    }
+                }
+                return data;
+            }, priority);
+        })().finally(() => {
             afterCalcInFlight.delete(key);
         });
         afterCalcInFlight.set(key, computePromise);
@@ -267,12 +301,13 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
         return orderMarginInFlight.get(key);
     }
 
-    const computePromise = runWithDbCalcLimit(async () => {
-        const data = await withTimeout(
-            getAfterCalc(key),
-            AFTERCALC_QUERY_TIMEOUT_MS,
-            'Aftercalc timeout for ordNo=' + key
-        );
+    // Deriva il margine dalla cache/calcolo aftercalc condiviso: evita il doppio
+    // calcolo DB per ordine durante il warmup (aftercalc + margin sono lo stesso dato).
+    const computePromise = (async () => {
+        const data = await getOrComputeAftercalc(key, {
+            priority: options.priority || 'normal',
+            forceRefresh
+        });
         if (data.error) {
             throw new Error(data.error);
         }
@@ -289,7 +324,7 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
         // Also save to persistent disk cache (24 hours) for faster startup next time
         diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + key, marginInfo, 24 * 60 * 60 * 1000);
         return marginInfo;
-    }).finally(() => {
+    })().finally(() => {
         orderMarginInFlight.delete(key);
     });
 
@@ -337,6 +372,23 @@ async function warmAftercalcInBackground(ordNos, sourceLabel, maxDelayMs = BACKG
     const queuedComputations = [];
 
     try {
+        // Prefetch bulk dalla cache condivisa GOH: gli ordini già calcolati da
+        // un'altra macchina diventano hit locali senza toccare Visma.
+        const missingKeys = ordNos
+            .map(o => Number(o))
+            .filter(n => Number.isFinite(n) && !getAftercalcCacheWithFallback(n, false))
+            .map(n => AFTERCALC_CACHE_KEY_PREFIX + n);
+        if (missingKeys.length > 0 && gohCache.isEnabled()) {
+            const shared = await gohCache.getMany(missingKeys);
+            for (const [sharedKey, entry] of shared) {
+                const remainingTtl = Math.max(60 * 1000, entry.ttlMs - (Date.now() - entry.cachedAtMs));
+                localDiskCache.set(sharedKey, entry.data, remainingTtl);
+            }
+            if (shared.size > 0) {
+                logEvent('WARM-AFTERCALC (' + sourceLabel + '): ' + shared.size + '/' + missingKeys.length + ' ordini precaricati da GOH-cache');
+            }
+        }
+
         for (const ordNo of ordNos) {
             const numericOrdNo = Number(ordNo);
             if (!Number.isFinite(numericOrdNo)) continue;
@@ -391,6 +443,49 @@ function tryLoadOrderListFromCache() {
         logEvent('ORDER-LIST-CACHE READ ERROR: ' + e.message);
     }
     return null;
+}
+
+// Sync bidirezionale con la cache condivisa GOH: scarica in locale le entry
+// più fresche calcolate da altre macchine, pubblica quelle locali mancanti.
+// Da qui in poi ogni scrittura runtime è già replicata dal mirror diskCache.
+async function syncCacheWithGoh() {
+    if (!gohCache.isEnabled()) return;
+    try {
+        logEvent('GOH-SYNC: start (ping ' + gohCache.serverLabel + ')');
+        // Timeout duro: msnodesqlv8 può restare appeso oltre il connectionTimeout
+        const pingOk = await withTimeout(gohCache.ping(), 15000, 'GOH ping timeout (15s)')
+            .catch(err => { logEvent('GOH-SYNC: ' + err.message); return false; });
+        if (!pingOk) return;
+        const localEntries = localDiskCache.list().filter(e => e.key && e.fresh);
+        const localByKey = new Map(localEntries.map(e => [e.key, e]));
+        const remote = await gohCache.getAllFresh();
+        if (!gohCache.isEnabled()) return;
+
+        let downloaded = 0;
+        for (const [key, entry] of remote) {
+            const local = localByKey.get(key);
+            const localMs = local ? (Date.parse(local.cachedAt) || 0) : 0;
+            if (entry.cachedAtMs <= localMs) continue;
+            const remainingTtl = Math.max(60 * 1000, entry.ttlMs - (Date.now() - entry.cachedAtMs));
+            localDiskCache.set(key, entry.data, remainingTtl);
+            downloaded += 1;
+        }
+
+        let uploaded = 0;
+        for (const entry of localEntries) {
+            const remoteEntry = remote.get(entry.key);
+            const localCachedAtMs = Date.parse(entry.cachedAt) || 0;
+            if (remoteEntry && Number(remoteEntry.cachedAtMs) >= localCachedAtMs) continue;
+            const data = localDiskCache.get(entry.key);
+            if (!data) continue;
+            const remainingTtlMs = Math.max(60 * 1000, (entry.ttlMinutes - entry.ageMinutes) * 60 * 1000);
+            if (await gohCache.set(entry.key, data, remainingTtlMs)) uploaded += 1;
+            if (!gohCache.isEnabled()) return;
+        }
+        logEvent('GOH-SYNC: scaricati ' + downloaded + ', pubblicati ' + uploaded + ' (remoto=' + remote.size + ', locale=' + localEntries.length + ')');
+    } catch (err) {
+        logEvent('GOH-SYNC ERROR: ' + err.message);
+    }
 }
 
 function preloadMarginsAndDetailsFromCache(ordNos) {
@@ -477,6 +572,7 @@ app.use(createApiRouter({
     fs,
     spawn,
     diskCache,
+    gohData,
     logEvent,
     getOrComputeAftercalc,
     getOrComputeOrderMargin,
@@ -502,6 +598,20 @@ app.use(createApiRouter({
     ORDER_LIST_DAYS_BACK,
     pkgVersion
 }));
+
+// Storico efterkalk (GantechOperationHub): serie temporale omsætning/kost per ordine
+app.get('/order-trend/:ordno', async (req, res) => {
+    const ordNo = parseInt(req.params.ordno, 10);
+    if (!Number.isFinite(ordNo)) {
+        return res.status(400).json({ ok: false, error: 'Ugyldigt ordrenummer' });
+    }
+    try {
+        const readings = await gohData.getOrderTrend(ordNo);
+        res.json({ ok: true, ordNo, available: gohData.isEnabled(), readings });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
 
 // Endpoint per HTML
 app.get('/', (req, res) => {
@@ -10089,6 +10199,112 @@ app.get('/', (req, res) => {
                 summaryEl.innerHTML = buildOrderListSummaryHtml(orders);
             }
 
+            // Trend storico da GantechOperationHub (grafico SVG costruito via DOM)
+            async function openOrderTrend(ordNo) {
+                let overlay = document.getElementById('orderTrendOverlay');
+                if (overlay) overlay.remove();
+                overlay = document.createElement('div');
+                overlay.id = 'orderTrendOverlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,35,0.55);z-index:16000;display:flex;align-items:center;justify-content:center;padding:20px;';
+                overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+                const box = document.createElement('div');
+                box.style.cssText = 'background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:85vh;overflow:auto;padding:18px;box-shadow:0 24px 60px rgba(0,0,0,0.35);';
+                const head = document.createElement('div');
+                head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;';
+                const title = document.createElement('h3');
+                title.style.cssText = 'margin:0;color:#0f3560;font-size:17px;';
+                title.textContent = 'Historik for ordre ' + ordNo;
+                const closeBtn = document.createElement('button');
+                closeBtn.style.cssText = 'border:none;background:#dce9fb;color:#0f3560;border-radius:999px;width:30px;height:30px;cursor:pointer;font-size:16px;line-height:1;';
+                closeBtn.textContent = '×';
+                closeBtn.onclick = function() { overlay.remove(); };
+                head.appendChild(title);
+                head.appendChild(closeBtn);
+                const body = document.createElement('div');
+                body.innerHTML = '<div class="loading">Henter historik...</div>';
+                box.appendChild(head);
+                box.appendChild(body);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
+
+                let payload = null;
+                try {
+                    const resp = await fetch('/order-trend/' + encodeURIComponent(ordNo));
+                    payload = await resp.json();
+                } catch (err) {
+                    body.innerHTML = '<div class="error">Kunne ikke hente historik: ' + escapeHtml(String(err.message || err)) + '</div>';
+                    return;
+                }
+                if (!payload || !payload.ok) {
+                    body.innerHTML = '<div class="error">Fejl: ' + escapeHtml(String((payload && payload.error) || 'ukendt')) + '</div>';
+                    return;
+                }
+
+                // Raggruppa le letture per timestamp → snapshot {time, revenue, cost}
+                const byTime = {};
+                for (const r of (payload.readings || [])) {
+                    const key = String(r.readingTime);
+                    if (!byTime[key]) byTime[key] = { time: new Date(r.readingTime), revenue: null, cost: null, status: r.resultStatus };
+                    if (r.typeName === 'Omsaetning') byTime[key].revenue = Number(r.value || 0);
+                    if (r.typeName === 'Kostpris') byTime[key].cost = Number(r.value || 0);
+                }
+                const snapshots = Object.values(byTime)
+                    .filter(s => s.revenue !== null || s.cost !== null)
+                    .sort((a, b) => a.time - b.time);
+
+                if (snapshots.length === 0) {
+                    body.innerHTML = '<div style="padding:18px;color:#456383;">Ingen historik endnu for denne ordre.<br>Der gemmes automatisk et snapshot hver gang efterkalkulationen genberegnes med ændrede tal.</div>';
+                    return;
+                }
+
+                const fmtDt = d => d.toLocaleDateString('da-DK', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
+                const W = 760, H = 240, padL = 70, padR = 16, padT = 14, padB = 30;
+                const values = [];
+                snapshots.forEach(s => { if (s.revenue !== null) values.push(s.revenue); if (s.cost !== null) values.push(s.cost); });
+                const vMax = Math.max.apply(null, values.concat([1]));
+                const vMin = Math.min.apply(null, values.concat([0]));
+                const xFor = i => snapshots.length === 1 ? (padL + (W - padL - padR) / 2) : (padL + (W - padL - padR) * i / (snapshots.length - 1));
+                const yFor = v => padT + (H - padT - padB) * (1 - (v - vMin) / ((vMax - vMin) || 1));
+                const linePoints = field => snapshots.map((s, i) => xFor(i).toFixed(1) + ',' + yFor(Number(s[field] || 0)).toFixed(1)).join(' ');
+
+                let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;background:#f7fbff;border:1px solid #dce8f7;border-radius:10px;">';
+                for (let g = 0; g <= 4; g++) {
+                    const gv = vMin + (vMax - vMin) * g / 4;
+                    const gy = yFor(gv).toFixed(1);
+                    svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="#dce8f7" stroke-width="1"/>';
+                    svg += '<text x="' + (padL - 6) + '" y="' + gy + '" text-anchor="end" dominant-baseline="middle" font-size="10" fill="#456383">' + formatNumber(gv) + '</text>';
+                }
+                svg += '<polyline points="' + linePoints('revenue') + '" fill="none" stroke="#1565c0" stroke-width="2.5"/>';
+                svg += '<polyline points="' + linePoints('cost') + '" fill="none" stroke="#c62828" stroke-width="2.5"/>';
+                snapshots.forEach((s, i) => {
+                    svg += '<circle cx="' + xFor(i).toFixed(1) + '" cy="' + yFor(Number(s.revenue || 0)).toFixed(1) + '" r="3.5" fill="#1565c0"/>';
+                    svg += '<circle cx="' + xFor(i).toFixed(1) + '" cy="' + yFor(Number(s.cost || 0)).toFixed(1) + '" r="3.5" fill="#c62828"/>';
+                    if (snapshots.length <= 10 || i === 0 || i === snapshots.length - 1) {
+                        svg += '<text x="' + xFor(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9" fill="#456383">' + fmtDt(s.time) + '</text>';
+                    }
+                });
+                svg += '</svg>';
+
+                let tbl = '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;">';
+                tbl += '<tr style="background:#eef5ff;color:#0f3560;"><th style="padding:6px;text-align:left;">Tidspunkt</th><th style="padding:6px;text-align:right;">Omsætning</th><th style="padding:6px;text-align:right;">Kostpris</th><th style="padding:6px;text-align:right;">Margin</th></tr>';
+                snapshots.slice().reverse().forEach(s => {
+                    const margin = calculateOrderMarginPercent(Number(s.revenue || 0), Number(s.cost || 0));
+                    tbl += '<tr style="border-bottom:1px solid #e6eef8;">' +
+                        '<td style="padding:6px;">' + fmtDt(s.time) + '</td>' +
+                        '<td style="padding:6px;text-align:right;">' + formatNumber(s.revenue || 0) + ' DKK</td>' +
+                        '<td style="padding:6px;text-align:right;">' + formatNumber(s.cost || 0) + ' DKK</td>' +
+                        '<td style="padding:6px;text-align:right;"><strong>' + margin.toFixed(1) + '%</strong></td>' +
+                        '</tr>';
+                });
+                tbl += '</table>';
+
+                body.innerHTML = '<div style="display:flex;gap:14px;font-size:12px;color:#456383;margin-bottom:6px;">' +
+                    '<span><span style="display:inline-block;width:10px;height:10px;background:#1565c0;border-radius:2px;margin-right:4px;"></span>Omsætning</span>' +
+                    '<span><span style="display:inline-block;width:10px;height:10px;background:#c62828;border-radius:2px;margin-right:4px;"></span>Kostpris</span>' +
+                    '</div>' + svg + tbl;
+            }
+
             async function searchOrder() {
                 const ordNo = document.getElementById('orderInput').value;
                 if (!ordNo) {
@@ -10187,6 +10403,7 @@ app.get('/', (req, res) => {
                     html += '<button onclick="openNotePopup(' + _noteOrdNo + ',true)" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#888;padding:0 0 8px 0;">📝 ' + (_existingNote && (_existingNote.status || _existingNote.text || _existingNote.isCreditNote) ? 'Rediger note' : 'Tilføj note') + '</button>';
                     html += '<div class="order-report-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 12px 0;">';
                     html += '<button class="list-toggle-btn" onclick="openLatestOrderReportPreview()" title="Åbn rapporten i separat visning">Rapport 2.0</button>';
+                    html += '<button class="list-toggle-btn" onclick="openOrderTrend(' + _noteOrdNo + ')" title="Historik for omsætning og kost over tid">📈 Historik</button>';
                     html += '</div>';
                     loadOrderNote(_noteOrdNo).catch(() => {});
                     html += '<div class="order-header-row">';
@@ -12151,6 +12368,7 @@ function startScheduledRefresh() {
             .catch(err => {
                 logEvent('ERROR scheduled refresh: ' + err.message);
             });
+        syncCacheWithGoh().catch(() => {});
     }, BACKGROUND_WARM_INTERVAL_MS);
 }
 
@@ -12180,6 +12398,8 @@ function ensureServerStarted() {
 
                 logEvent('Cache primed: order list loaded and ready');
                 startScheduledRefresh();
+                // Connessione eager a GOH + sync bidirezionale della cache (fail-soft)
+                syncCacheWithGoh().catch(() => {});
                 resolve(server);
             } catch (err) {
                 logEvent('WARNING cache warmup error (non-fatal): ' + err.message);
