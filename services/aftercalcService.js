@@ -132,15 +132,20 @@ function createAftercalcService({
 
     function computeVisibleProductionTotal(lines, options = {}) {
         const safeLines = Array.isArray(lines) ? lines : [];
-        // Sugli ordini di acquisto (TrTp=6) riga 1 è il prodotto comprato, non un padre da saltare
-        const skipLineOne = options.isPurchaseOrder !== true;
+        // Sugli ordini di acquisto (TrTp=6) le righe sono gli articoli comprati:
+        // niente riga-padre da saltare e anche ProdTp4=0 (færdigvare) conta come costo.
+        const isPurchaseOrder = options.isPurchaseOrder === true;
         const operationTotalsByProd = new Map();
         let total = 0;
 
         for (const line of safeLines) {
             const key = (line && line.ProdTp4 !== null && line.ProdTp4 !== undefined) ? String(line.ProdTp4) : 'NA';
             const lnNo = Number((line && line.LnNo) || 0);
-            if ((skipLineOne && lnNo === 1) || key === '0' || key === '3' || key === '5') continue;
+            if (isPurchaseOrder) {
+                if (key === '3' || key === '5') continue;
+            } else if (lnNo === 1 || key === '0' || key === '3' || key === '5') {
+                continue;
+            }
 
             if (key === '1') {
                 const prodKey = String((line && line.ProdNo) || '').trim().toUpperCase() || ('LN_' + String(lnNo || 0));
@@ -824,7 +829,8 @@ function createAftercalcService({
 
                         if (key === '1') {
                             effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
-                        } else if (isPurchaseLinkedOrder && key === '2') {
+                        } else if (isPurchaseLinkedOrder && key !== '3' && key !== '5') {
+                            // Ordine di acquisto: costo = qty × prezzo reale pagato, qualsiasi tipo riga
                             const purchaseQty = noFinValue > 0 ? noFinValue : noOrgValue;
                             const purchaseUnitCost = Number(line.NestingCost || line.CstPr || line.DPrice || line.CCstPr || 0);
                             if (purchaseQty > 0 && purchaseUnitCost > 0) {
@@ -1092,6 +1098,21 @@ function createAftercalcService({
             const productionOrdersCostFallback = productionOrders.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
             const totalCost = calculatedTotalCost > 0 ? calculatedTotalCost : productionOrdersCostFallback;
             const totalRevenue = Number(orderHeader.InvoAm || 0) + Number(orderHeader.DInvoIF || 0);
+            // Operazioni con 0 minuti færdigmeldt ma minuti stykliste: costo potenziale
+            // esposto a parte (il margine in lista/efterkalk lo somma, i report no).
+            let styklisteFallbackCost = 0;
+            for (const ord of productionOrders) {
+                const includeLineOne = Number(ord.trTp || 0) === 6;
+                for (const line of (Array.isArray(ord.lines) ? ord.lines : [])) {
+                    const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+                    if (key !== '1') continue;
+                    if (!includeLineOne && Number(line.LnNo || 0) === 1) continue;
+                    const effectiveMinutes = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
+                    if (effectiveMinutes === 0 && Number(line.NoOrg || 0) > 0 && Number(line.CCstPr || 0) > 0) {
+                        styklisteFallbackCost += Number(line.NoOrg) * Number(line.CCstPr);
+                    }
+                }
+            }
             const margin = totalRevenue - totalCost;
             const marginPercentage = totalCost > 0 ? ((totalRevenue / totalCost) * 100).toFixed(2) : 0;
             const hasWarnings = salesOrderLinesWithProductionTotal.some(line => line.HasWarning)
@@ -1115,6 +1136,7 @@ function createAftercalcService({
                 summary: {
                     totalRevenue: parseFloat(totalRevenue.toFixed(2)),
                     totalCost: parseFloat(totalCost.toFixed(2)),
+                    styklisteFallbackCost: parseFloat(styklisteFallbackCost.toFixed(2)),
                     margin: parseFloat(margin.toFixed(2)),
                     marginPercentage,
                     hasInvoiceWarning: productionOrders.some(ord => Array.isArray(ord.lines) && ord.lines.some(line => line.UsesMissingInvoiceFallback))

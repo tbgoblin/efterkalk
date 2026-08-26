@@ -53,8 +53,8 @@ const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match ba
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v26_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v24_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v27_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v25_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
@@ -295,6 +295,7 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
                 ordNo: key,
                 totalRevenue: Number(diskMargin.totalRevenue || 0),
                 totalCost: Number(diskMargin.totalCost || 0),
+                styklisteFallbackCost: Number(diskMargin.styklisteFallbackCost || 0),
                 hasInvoiceWarning: diskMargin.hasInvoiceWarning === true,
                 computedAt: Date.now()
             };
@@ -322,6 +323,8 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
             ordNo: key,
             totalRevenue: Number(data.summary.totalRevenue || 0),
             totalCost: Number(data.summary.totalCost || 0),
+            // Campo separato: sommato SOLO dal client Efterkalkulation, mai da altri moduli
+            styklisteFallbackCost: Number(data.summary.styklisteFallbackCost || 0),
             hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning),
             computedAt: Date.now()
         };
@@ -9376,7 +9379,8 @@ app.get('/', (req, res) => {
                         marginStateByOrdNo[String(ordNo)] = {
                             status: 'success',
                             totalRevenue: Number(o.InvoAm || 0),
-                            totalCost: Number(o.TotalCost || 0)
+                            // Kun efterkalk-listen: kost inkl. stykliste-fallback
+                            totalCost: Number(o.TotalCost || 0) + Number(o.StyklisteFallbackCost || 0)
                         };
                     }
                 }
@@ -9421,7 +9425,8 @@ app.get('/', (req, res) => {
                     marginStateByOrdNo[key] = {
                         status: 'success',
                         totalRevenue: Number(data.totalRevenue || 0),
-                        totalCost: Number(data.totalCost || 0),
+                        // Kun efterkalk-listen: kost inkl. stykliste-fallback
+                        totalCost: Number(data.totalCost || 0) + Number(data.styklisteFallbackCost || 0),
                         hasInvoiceWarning: Boolean(data.hasInvoiceWarning)
                     };
                     updateOrderMarginCell(ordNo);
@@ -10347,7 +10352,27 @@ app.get('/', (req, res) => {
                     // NOTE: Gr4 is order type (e.g., Multiordre). Do not change Gr4 logic here.
                     currentSalesOrderGr4 = Number((data.orderHeader && data.orderHeader.Gr4) || 0);
                     currentSearchOrderData = data;
-                    const orderMarginPercent = calculateOrderMarginPercent(data.summary.totalRevenue, data.summary.totalCost).toFixed(2);
+                    // Kun i denne efterkalk-visning: operationer med 0 færdigmeldte minutter
+                    // tælles med fra stykliste-minutter (samme regel som gruppetabellen).
+                    let styklisteFallbackExtra = 0;
+                    for (const po of (Array.isArray(data.productionOrders) ? data.productionOrders : [])) {
+                        const poLines = Array.isArray(po && po.lines) ? po.lines : [];
+                        const poIncludeLineOne = Number((po && po.trTp) || 0) === 6;
+                        for (const l of poLines) {
+                            const k = (l && l.ProdTp4 !== null && l.ProdTp4 !== undefined) ? String(l.ProdTp4) : 'NA';
+                            if (k !== '1') continue;
+                            if (!poIncludeLineOne && Number(l.LnNo || 0) === 1) continue;
+                            const em = Number((l.EffectiveOperationMinutes ?? l.NoFin) || 0);
+                            if (em === 0 && Number(l.NoOrg || 0) > 0 && Number(l.CCstPr || 0) > 0) {
+                                styklisteFallbackExtra += Number(l.NoOrg || 0) * Number(l.CCstPr || 0);
+                            }
+                        }
+                    }
+                    const displayHeaderTotalCost = Number(data.summary.totalCost || 0) + styklisteFallbackExtra;
+                    const styklisteNoteHtml = styklisteFallbackExtra > 0
+                        ? '<div style="font-size:11px; opacity:0.8; margin-top:3px;">inkl. ' + formatNumber(styklisteFallbackExtra) + ' fra stykliste</div>'
+                        : '';
+                    const orderMarginPercent = calculateOrderMarginPercent(data.summary.totalRevenue, displayHeaderTotalCost).toFixed(2);
                     const _invoAm = Number(data.orderHeader.InvoAm || 0);
                     const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
                     let invoiceStatusBadge, invoiceStatusSub = '';
@@ -10428,7 +10453,7 @@ app.get('/', (req, res) => {
                         }
                     } else {
                         html += '<div class="order-header-item"><div class="order-header-label">Faktureret beløb</div><div class="order-header-value">' + formatNumber(data.summary.totalRevenue) + ' DKK</div></div>';
-                        html += '<div class="order-header-item"><div class="order-header-label">Kostpris</div><div class="order-header-value">' + formatNumber(data.summary.totalCost) + ' DKK</div></div>';
+                        html += '<div class="order-header-item"><div class="order-header-label">Kostpris</div><div class="order-header-value">' + formatNumber(displayHeaderTotalCost) + ' DKK' + styklisteNoteHtml + '</div></div>';
                         html += '<div class="order-header-item"><div class="order-header-label">Margin (' + getMarginModeLabel() + ')</div><div class="order-header-value">' + getMarginBadge(orderMarginPercent) + '</div></div>';
                     }
                     html += '<div class="order-header-item"><div class="order-header-label">Fakturastatus</div><div class="order-header-value">' + invoiceStatusBadge + invoiceStatusSub + '</div></div>';
@@ -10482,14 +10507,18 @@ app.get('/', (req, res) => {
                             const productionTotalByLineOrder = line.PurcNo
                                 ? Number((productionOrderByOrdNo.get(Number(line.PurcNo)) || {}).totalCost || 0)
                                 : 0;
-                            const singleProductionTotal = data.productionOrders.length === 1
+                            const lineProdNo = String(line.ProdNo || '').trim();
+                            const includeForMargin = lineProdNo.startsWith('1') || lineProdNo.startsWith('3');
+                            // Fallback "unico ordine di produzione" solo per la riga prodotto
+                            // principale: paller/fragt mostrano il proprio costo bogført, non il totale.
+                            const singleProductionTotal = (includeForMargin && data.productionOrders.length === 1)
                                 ? Number(data.productionOrders[0].totalCost || 0)
                                 : 0;
                             const lineCost = linkedProductionTotal > 0
                                 ? linkedProductionTotal
-                                : (productionTotalByLineOrder > 0 ? productionTotalByLineOrder : singleProductionTotal);
-                            const lineProdNo = String(line.ProdNo || '').trim();
-                            const includeForMargin = lineProdNo.startsWith('1') || lineProdNo.startsWith('3');
+                                : (productionTotalByLineOrder > 0
+                                    ? productionTotalByLineOrder
+                                    : (singleProductionTotal > 0 ? singleProductionTotal : Number(line.LineCost || 0)));
                             const lineMarginValue = calculateLineMarginPercent(lineSalesPrice, lineCost);
                             const isExactlyHundred = Math.abs(lineMarginValue - 100) < 0.0001;
                             const lineMarginPercent = lineMarginValue.toFixed(2);
@@ -10753,6 +10782,10 @@ app.get('/', (req, res) => {
                                     : lines.filter(line => includeLineOne || line.LnNo !== 1).reduce((sum, line) => {
                                         if (String(key) === '1') {
                                             const effectiveNoFin = Number((line.EffectiveOperationMinutes ?? line.NoFin) || 0);
+                                            // Samme stykliste-fallback som rækkevisningen: kun i denne efterkalk-visning
+                                            if (effectiveNoFin === 0 && Number(line.NoOrg || 0) > 0 && Number(line.CCstPr || 0) > 0) {
+                                                return sum + (Number(line.NoOrg || 0) * Number(line.CCstPr || 0));
+                                            }
                                             return sum + (effectiveNoFin * Number(line.CCstPr || 0));
                                         }
                                         const pn = String(line.ProdNo || '').toUpperCase();
@@ -10834,9 +10867,15 @@ app.get('/', (req, res) => {
                                         html += '<td>' + formatNumber(Math.max(0, Number(line.NoOrg || 0))) + '</td>';
                                         html += '<td>' + formatNumber(effectiveNoFin) + '</td>';
                                         const displayUnitCost1 = (line.CCstPr || 0);
-                                        const displayTotalCost1 = effectiveNoFin * Number(line.CCstPr || 0);
+                                        let displayTotalCost1 = effectiveNoFin * Number(line.CCstPr || 0);
+                                        // Kun i denne efterkalk-visning: 0 færdigmeldte minutter → vis kost fra stykliste-minutter
+                                        let opCostNote = '';
+                                        if (displayTotalCost1 === 0 && Number(effectiveNoFin) === 0 && Number(line.NoOrg || 0) > 0 && displayUnitCost1 > 0) {
+                                            displayTotalCost1 = Number(line.NoOrg || 0) * Number(displayUnitCost1);
+                                            opCostNote = ' <span style="font-size:11px; color:#8a93a3; font-weight:400;">(fra stykliste)</span>';
+                                        }
                                         html += '<td>' + formatNumber(displayUnitCost1) + '</td>';
-                                        html += '<td><strong>' + formatNumber(displayTotalCost1) + '</strong></td>';
+                                        html += '<td><strong>' + formatNumber(displayTotalCost1) + '</strong>' + opCostNote + '</td>';
                                     } else {
                                         const displayQty = (line.DisplayQuantity !== undefined && line.DisplayQuantity !== null)
                                             ? line.DisplayQuantity

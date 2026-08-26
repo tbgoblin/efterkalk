@@ -924,6 +924,7 @@ function createApiRouter({
                 ordNo: marginInfo.ordNo,
                 totalRevenue: marginInfo.totalRevenue,
                 totalCost: marginInfo.totalCost,
+                styklisteFallbackCost: Number(marginInfo.styklisteFallbackCost || 0),
                 hasInvoiceWarning: Boolean(marginInfo.hasInvoiceWarning),
                 cached: true
             };
@@ -1771,6 +1772,7 @@ function createApiRouter({
                             ordNo,
                             totalRevenue: Number(aftercalc.summary && aftercalc.summary.totalRevenue || 0),
                             totalCost: Number(aftercalc.summary && aftercalc.summary.totalCost || 0),
+                            styklisteFallbackCost: Number(aftercalc.summary && aftercalc.summary.styklisteFallbackCost || 0),
                             computedAt: Date.now()
                         };
                         orderMarginCache.set(ordNo, marginInfo);
@@ -1778,6 +1780,7 @@ function createApiRouter({
                             ordNo,
                             totalRevenue: marginInfo.totalRevenue,
                             totalCost: marginInfo.totalCost,
+                            styklisteFallbackCost: marginInfo.styklisteFallbackCost,
                             cached: true
                         };
                         diskCache.set(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo, marginResult, CACHE_TTL_ORDER_MARGIN_MS);
@@ -2207,6 +2210,7 @@ function createApiRouter({
                             ordNo: ordNoNum,
                             totalRevenue: Number(cachedMargin.totalRevenue || row.InvoAm || 0),
                             totalCost: Number(cachedMargin.totalCost || 0),
+                            styklisteFallbackCost: Number(cachedMargin.styklisteFallbackCost || 0),
                             computedAt: Date.now()
                         };
                         orderMarginCache.set(ordNoNum, marginInfo);
@@ -2222,6 +2226,7 @@ function createApiRouter({
                             ordNo: ordNoNum,
                             totalRevenue: Number(staleMargin.totalRevenue || row.InvoAm || 0),
                             totalCost: Number(staleMargin.totalCost || 0),
+                            styklisteFallbackCost: Number(staleMargin.styklisteFallbackCost || 0),
                             computedAt: Date.now()
                         };
                         orderMarginCache.set(ordNoNum, marginInfo);
@@ -2237,7 +2242,8 @@ function createApiRouter({
                     ...row,
                     HasWarning: hasWarning,
                     WarningText: hasWarning ? 'Ordren indeholder mindst én advarsel.' : '',
-                    TotalCost: marginInfo ? marginInfo.totalCost : null
+                    TotalCost: marginInfo ? marginInfo.totalCost : null,
+                    StyklisteFallbackCost: marginInfo ? Number(marginInfo.styklisteFallbackCost || 0) : null
                 };
             });
 
