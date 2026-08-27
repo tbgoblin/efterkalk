@@ -11,6 +11,18 @@ Introdurre gestione utenti con permessi granulari per modulo e un pannello `Supe
 
 Questo piano e pensato per essere implementato in modo incrementale, senza bloccare il deploy operativo.
 
+## Stato effettivo al 2026-08-27
+
+Il piano è parzialmente implementato:
+
+1. esistono login reale, utenti, ruoli/permessi, pannello Superadmin e `POST /auth/logout`;
+2. la sessione è un token casuale conservato server-side, esposto come bearer per retrocompatibilità e come cookie `HttpOnly`, `SameSite=Strict` per le pagine same-origin;
+3. gli endpoint amministrativi utenti e alcune API modulo sono già protetti;
+4. le scritture critiche BOM/QMS, le mutazioni dei profili database e l'apertura PDF richiedono una sessione autenticata;
+5. restano da completare `GET /auth/me`, audit e controllo granulare server-side di tutti gli endpoint previsti dal piano.
+
+Il token nel cookie è opaco e non contiene dati modificabili dal client: la validità viene verificata nella mappa sessioni del server. Le sessioni durano 8 ore e non sopravvivono al riavvio del processo.
+
 ---
 
 ## 2. Modello ruoli proposto

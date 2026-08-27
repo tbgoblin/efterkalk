@@ -22,11 +22,13 @@ const omsaetningThresholdsService = require('../services/omsaetningThresholdsSer
 const { createAuthService } = require('../services/authService');
 const { fetchSalgordreViaRows } = require('../services/viaService');
 const { createLagerlisteService } = require('../services/lagerlisteService');
+const { createLagerliste2Service } = require('../services/lagerliste2Service');
 const settingsService = require('../services/settingsService');
 const getConnectionModule = require('../db');
 const { createOmsaetningService } = require('../services/omsaetningService');
 const { createOrdreindgangService } = require('../services/ordreindgangService');
 const { createBomService } = require('../services/bomService');
+const { openPdfTarget } = require('../services/pdfOpenService');
 
 function createApiRouter({
     getConnection,
@@ -69,8 +71,13 @@ function createApiRouter({
         safeUser,
         makePasswordHash,
         getSessionUser,
+        requireAuthenticated,
         requireSuperadmin,
-        requireModulePermission
+        requireModulePermission,
+        revokeSession,
+        buildSessionCookie,
+        buildExpiredSessionCookie,
+        sessionTtlMs
     } = createAuthService({ fs, usersFile: path.join(__dirname, '..', 'users.json') });
 
     // Stato condiviso da GOH: DB vince sul file locale, fail-soft se non raggiungibile
@@ -119,8 +126,15 @@ function createApiRouter({
         const normalized = safeUser(user);
         if (bootstrapAdmin) normalized.role = 'superadmin';
         const token = crypto.randomBytes(32).toString('hex');
-        authSessions.set(token, { user: normalized, expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+        authSessions.set(token, { user: normalized, expiresAt: Date.now() + sessionTtlMs });
+        res.setHeader('Set-Cookie', buildSessionCookie(token));
         return res.json({ token, user: normalized });
+    });
+
+    router.post('/auth/logout', (req, res) => {
+        revokeSession(req);
+        res.setHeader('Set-Cookie', buildExpiredSessionCookie());
+        return res.json({ ok: true });
     });
 
     router.get('/admin/users', (req, res) => {
@@ -189,7 +203,13 @@ function createApiRouter({
     const legacyAftercalcPrefixes = ['aftercalc_v22_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
     const omsaetningService = createOmsaetningService({ getConnection, sql });
     const ordreindgangService = createOrdreindgangService({ getConnection, sql });
-    const bomService = createBomService({ getConnection, sql, diskCache, logEvent });
+    const bomService = createBomService({
+        getConnection,
+        sql,
+        diskCache,
+        logEvent,
+        getActiveProfile: settingsService.getActiveProfile
+    });
     const lagerlisteService = createLagerlisteService({
         getConnection,
         sql,
@@ -201,6 +221,11 @@ function createApiRouter({
         getProductionSummary,
         getRestPrices: settingsService.getRestPrices,
         dataDir: process.env.GANTECH_DATA_DIR ? path.join(process.env.GANTECH_DATA_DIR, 'lagerliste') : undefined
+    });
+    const lagerliste2Service = createLagerliste2Service({
+        getConnection,
+        sql,
+        getRestPrices: settingsService.getRestPrices
     });
     lagerlisteService.scheduleMonthlySnapshot({ onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message) });
 
@@ -1711,7 +1736,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/settings/db-profiles/active', express.json(), (req, res) => {
+    router.post('/settings/db-profiles/active', express.json(), requireAuthenticated, (req, res) => {
         try {
             const profileId = String((req.body && req.body.profileId) || '').trim();
             if (!profileId) return res.status(400).json({ ok: false, error: 'profileId mangler' });
@@ -1726,7 +1751,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/settings/db-profiles/upsert', express.json(), (req, res) => {
+    router.post('/settings/db-profiles/upsert', express.json(), requireAuthenticated, (req, res) => {
         try {
             const profile = settingsService.upsertProfile(req.body || {});
             logEvent('SETTINGS: profile upserted: ' + profile.id);
@@ -1736,7 +1761,7 @@ function createApiRouter({
         }
     });
 
-    router.delete('/settings/db-profiles/:id', (req, res) => {
+    router.delete('/settings/db-profiles/:id', requireAuthenticated, (req, res) => {
         try {
             const profileId = String(req.params.id || '').trim();
             settingsService.deleteProfile(profileId);
@@ -1992,55 +2017,46 @@ function createApiRouter({
         }
     });
 
-    router.post('/open-drawing', (req, res) => {
-        (async () => {
-            try {
-                const rawPath = String((req.body && req.body.path) || '').trim();
-                const prodNo = String((req.body && req.body.prodNo) || '').trim();
-                let candidatePath = rawPath;
+    router.post('/open-drawing', requireAuthenticated, async (req, res) => {
+        try {
+            const rawPath = String((req.body && req.body.path) || '').trim();
+            const prodNo = String((req.body && req.body.prodNo) || '').trim();
+            let candidatePath = rawPath;
 
-                if (!candidatePath && prodNo) {
-                    const pool = await getConnection();
-                    const drawingRow = await pool.request()
-                        .input('prodNo', sql.VarChar(100), prodNo)
-                        .query(`
+            if (!candidatePath && prodNo) {
+                const pool = await getConnection();
+                const drawingRow = await pool.request()
+                    .input('prodNo', sql.VarChar(100), prodNo)
+                    .query(`
                             SELECT TOP 1 LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) AS WebPg
                             FROM FreeInf2
                             WHERE LTRIM(RTRIM(CONVERT(VARCHAR(100), ProdNo))) = @prodNo
                               AND WebPg IS NOT NULL
                               AND LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) <> ''
                             ORDER BY LTRIM(RTRIM(CONVERT(VARCHAR(1000), WebPg))) DESC
-                        `);
+                    `);
 
-                    const webPg = String((drawingRow.recordset && drawingRow.recordset[0] && drawingRow.recordset[0].WebPg) || '').trim();
-                    if (webPg) {
-                        candidatePath = webPg;
-                    }
+                const webPg = String((drawingRow.recordset && drawingRow.recordset[0] && drawingRow.recordset[0].WebPg) || '').trim();
+                if (webPg) {
+                    candidatePath = webPg;
                 }
-
-                if (!candidatePath) {
-                    return res.status(400).json({ ok: false, message: 'Path mangler.' });
-                }
-
-                const lower = candidatePath.toLowerCase();
-                if (lower.indexOf('.pdf') === -1) {
-                    return res.status(400).json({ ok: false, message: 'Kun PDF er tilladt.' });
-                }
-
-                const child = spawn('cmd', ['/c', 'start', '', candidatePath], {
-                    windowsHide: true,
-                    detached: true,
-                    stdio: 'ignore'
-                });
-                child.unref();
-
-                logEvent('OPEN-DRAWING: ' + candidatePath + (prodNo ? (' [prodNo=' + prodNo + ']') : ''));
-                return res.json({ ok: true });
-            } catch (err) {
-                logEvent('OPEN-DRAWING ERROR: ' + err.message);
-                return res.status(500).json({ ok: false, message: err.message });
             }
-        })();
+
+            if (!candidatePath) {
+                return res.status(400).json({ ok: false, message: 'Path mangler.' });
+            }
+
+            const opened = await openPdfTarget(candidatePath, {
+                spawn,
+                openPath: global.__desktopOpenPath,
+                openExternal: global.__desktopOpenExternal
+            });
+            logEvent('OPEN-DRAWING: ' + opened.value + (prodNo ? (' [prodNo=' + prodNo + ']') : ''));
+            return res.json({ ok: true });
+        } catch (err) {
+            logEvent('OPEN-DRAWING ERROR: ' + err.message);
+            return res.status(err.statusCode || 500).json({ ok: false, message: err.message });
+        }
     });
 
     router.get('/prodtr/:ordno/:lnno', async (req, res) => {
@@ -2568,7 +2584,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/bom/create-products/execute', express.json(), async (req, res) => {
+    router.post('/bom/create-products/execute', express.json(), requireAuthenticated, async (req, res) => {
         try {
             const result = await bomService.createProductsInVisma(req.body || {});
             logEvent('BOM CREATE: ' + (result.created || []).map(r => r.ProdNo).join(', '));
@@ -2580,7 +2596,7 @@ function createApiRouter({
         }
     });
 
-    router.put('/qms/dataset', (req, res) => {
+    router.put('/qms/dataset', requireAuthenticated, (req, res) => {
         try {
             const dataset = req.body && req.body.dataset;
             const validationError = validateQmsDataset(dataset);
@@ -2602,6 +2618,25 @@ function createApiRouter({
         } catch (err) {
             logEvent('ERROR lagerliste/current: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Lagerliste fejl' });
+        }
+    });
+
+    router.get('/lagerliste2/routes/current', requireModulePermission('lagerliste'), async (req, res) => {
+        try {
+            const forceRefresh = String(req.query && req.query.force || '') === '1';
+            return res.json({ ok: true, ...(await lagerliste2Service.getCurrentRoutes({ forceRefresh })) });
+        } catch (err) {
+            logEvent('ERROR lagerliste2/routes/current: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Lagerliste 2 rutefejl' });
+        }
+    });
+
+    router.post('/lagerliste2/movement-evidence', express.json(), requireModulePermission('lagerliste'), async (req, res) => {
+        try {
+            return res.json({ ok: true, ...(await lagerliste2Service.getMovementEvidence(req.body || {})) });
+        } catch (err) {
+            logEvent('ERROR lagerliste2/movement-evidence: ' + err.message);
+            return res.status(err.statusCode || 500).json({ ok: false, error: err.message || 'Lagerliste 2 bevægelsesforklaring fejlede' });
         }
     });
 

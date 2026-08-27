@@ -84,6 +84,10 @@ if (!process.env.GANTECH_DATA_DIR) {
     process.env.GANTECH_DATA_DIR = path.join(app.getPath('userData'), 'data');
 }
 
+// Il server locale delega a Electron l'apertura sicura col visualizzatore predefinito.
+global.__desktopOpenPath = target => shell.openPath(target);
+global.__desktopOpenExternal = target => shell.openExternal(target);
+
 const { ensureServerStarted } = require('./server');
 
 const APP_URL = 'http://localhost:' + USER_PORT;

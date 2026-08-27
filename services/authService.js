@@ -6,6 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const gohData = require('./gohDataService');
 const USERS_STATE_KEY = 'app_users';
+const SESSION_COOKIE_NAME = 'gantech_session';
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 function createAuthService({ fs, usersFile }) {
     const legacyUsersFile = usersFile || path.join(__dirname, '..', 'users.json');
@@ -64,10 +66,64 @@ function createAuthService({ fs, usersFile }) {
         return crypto.pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
     }
 
+    function getBearerToken(req) {
+        const authorization = String((req.headers && req.headers.authorization) || '');
+        const match = authorization.match(/^Bearer\s+(.+)$/i);
+        return match ? match[1].trim() : '';
+    }
+
+    function getCookieToken(req) {
+        const cookieHeader = String((req.headers && req.headers.cookie) || '');
+        for (const item of cookieHeader.split(';')) {
+            const separator = item.indexOf('=');
+            if (separator === -1) continue;
+            const name = item.slice(0, separator).trim();
+            if (name !== SESSION_COOKIE_NAME) continue;
+            const value = item.slice(separator + 1).trim();
+            try {
+                return decodeURIComponent(value);
+            } catch (_) {
+                return '';
+            }
+        }
+        return '';
+    }
+
+    function getSessionToken(req) {
+        return getBearerToken(req) || getCookieToken(req);
+    }
+
     function getSessionUser(req) {
-        const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const token = getSessionToken(req);
+        if (!token) return null;
         const session = authSessions.get(token);
-        return session && session.expiresAt > Date.now() ? session.user : null;
+        if (!session) return null;
+        if (session.expiresAt <= Date.now()) {
+            authSessions.delete(token);
+            return null;
+        }
+        return session.user;
+    }
+
+    function requireAuthenticated(req, res, next) {
+        if (!getSessionUser(req)) {
+            return res.status(401).json({ error: 'Login kræves' });
+        }
+        return next();
+    }
+
+    function revokeSession(req) {
+        const tokens = new Set([getBearerToken(req), getCookieToken(req)].filter(Boolean));
+        for (const token of tokens) authSessions.delete(token);
+    }
+
+    function buildSessionCookie(token) {
+        return SESSION_COOKIE_NAME + '=' + encodeURIComponent(token)
+            + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + Math.floor(SESSION_TTL_MS / 1000);
+    }
+
+    function buildExpiredSessionCookie() {
+        return SESSION_COOKIE_NAME + '=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
 
     function requireSuperadmin(req, res) {
@@ -97,8 +153,13 @@ function createAuthService({ fs, usersFile }) {
         safeUser,
         makePasswordHash,
         getSessionUser,
+        requireAuthenticated,
         requireSuperadmin,
-        requireModulePermission
+        requireModulePermission,
+        revokeSession,
+        buildSessionCookie,
+        buildExpiredSessionCookie,
+        sessionTtlMs: SESSION_TTL_MS
     };
 }
 

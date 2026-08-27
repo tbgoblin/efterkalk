@@ -35,7 +35,7 @@ Electron (electron-main.js)
 ## Lagerliste (services/lagerlisteService.js)
 
 - Cache-nøgle: `lagerliste_v27`; `currentMemoryCache` holder seneste payload (snapshots kræver den).
-- Kategorier: plateGroups (Gr6=1, '3%'), restPlateGroups (FreeInf1 FrInfTp=120 OG Gr7=1), stang (Gr6=2, ProdTr; total værdisat med FIFO/PhCstPr), gr5Items (Gr5=11, FIFO), opfolgningvare (Gr9=1, Bal+StcInc−ShpRsv), nestingCutting/"Plader VIA" (Ord.Gr3=2, sidste 3 mdr., plade TrTp=5 NoFin>0 + alle produkter TrTp=7 NoFin=0; SalesOrdNo=Ord.R4). Negative pladelinjer er estimeret rest: vises, men CountedValue=0 indtil rest er registreret. finishedNotInvoiced, salgordreVia.
+- Kategorier: plateGroups (Gr6=1, '3%'), restPlateGroups (FreeInf1 FrInfTp=120 OG Gr7=1), stang (Gr6=2, ProdTr; total værdisat med FIFO/PhCstPr), gr5Items (Gr5=11, FIFO), opfolgningvare (Gr9=1, Bal+StcInc−ShpRsv), nestingCutting/"Plader VIA" (Ord.Gr3=2, sidste 3 mdr., plade TrTp=5 NoFin>0 + alle produkter TrTp=7 NoFin=0). Lagerliste 2 løser SalesOrdNo via `OrdLn.R4` → seneste `ProdTr.R4` for samme produkt/linje → `Ord.R4` → `TrInf2/OrdBasNo`; `TrInf1='Søg…'` markeres som uregistreret restkilde. Negative pladelinjer er estimeret rest: vises, men CountedValue=0 indtil rest er registreret. finishedNotInvoiced, salgordreVia.
 - Permanente Lagerliste-eksklusioner: OrdNo `61423`, `75330`, `131790`, `140134`, `331368` må aldrig medtages i Rest plader, Plader VIA, Færdige SO eller Salgsordre VIA.
 - Snapshots: måned (`data/lagerliste/YYYY-MM.json`) + dags-snapshot; gemmes i baggrund via setImmediate, kompakt JSON.
 - `lookupProduct(prodNo)` → Vareopslag: Prod+StcBal nøgletal, ShpBal-partier (RestBal≠0), aktive reservationer (Rsv NoRsv>0 + Ord/Actor), åbne ordrelinjer (OrdLn NoOrg−NoFin≠0).

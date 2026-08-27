@@ -10,6 +10,10 @@
 - controllare operazioni, nesting e materiale laser
 - aprire rapidamente i disegni PDF (`Vis tegning`)
 
+Nel suo stato attuale l'app va considerata un **hub operativo interno**, non soltanto un calcolatore di margini. Riunisce informazioni commerciali e produttive di Visma/SQL Server e include anche moduli per BOM/preventivazione, magazzino, QMS, carico produttivo, fatturato e VIA.
+
+**Versione applicativa documentata:** `1.1.47` (la fonte autorevole è il campo `version` di `package.json`).
+
 L’interfaccia utente usa testi prevalentemente **danesi**, adatti al contesto operativo di fabbrica.
 
 ---
@@ -31,6 +35,8 @@ Configurata in `db.js`:
 - autenticazione: `trustedConnection: true`
 
 > Se la macchina non vede il server SQL o non ha i driver nativi corretti, l’app non caricherà i dati.
+
+I profili database possono essere marcati `readOnly`. Il backend controlla questo flag prima del comando BOM che crea prodotti in Visma e risponde `403` senza aprire una connessione o iniziare una transazione. Anteprima e verifica duplicati restano disponibili perché sono operazioni di lettura.
 
 ---
 
@@ -68,7 +74,9 @@ All’apertura compare una finestra `Adgangskode`.
 
 **Codice attuale:** `12345`
 
-⚠️ Questo controllo è **solo lato interfaccia** e non sostituisce una sicurezza reale server-side.
+Il login crea una sessione server-side in memoria valida per 8 ore. Per compatibilità la pagina principale conserva il bearer token; un cookie `HttpOnly`, `SameSite=Strict` e same-origin permette alle pagine separate BOM/QMS di usare la stessa sessione. Il logout revoca entrambi.
+
+Le scritture critiche BOM/QMS, le modifiche ai profili database e l’apertura locale dei PDF rifiutano richieste anonime. L’app resta destinata alla rete interna: non tutti gli endpoint di lettura hanno autorizzazioni granulari e le sessioni non sopravvivono al riavvio del processo.
 
 ### 4.2 Barra principale
 Nella parte alta sono disponibili:
@@ -80,6 +88,49 @@ Nella parte alta sono disponibili:
 - `Ryd cache` → cancella la cache persistente
 - filtro `Alle brugere`
 - campo `Søg kunde i listen...`
+
+### 4.3 Lagerliste 2 (Beta/Shadow)
+
+`Lagerliste 2` è una pagina autonoma accessibile dalla dashboard e dal menu laterale. È stata separata intenzionalmente da Lagerliste 1: non modifica il calcolo esistente, non salva dati in Visma e usa soltanto endpoint di lettura protetti dal permesso `lagerliste`.
+
+La pagina ha due viste:
+
+1. **Route di nesting attuali**: raggruppa le righe `TrTp=5/7` per `nestingordre + route`, mostra lastre, prodotti (compresi i casi speciali `L2/L3`), ordini di produzione ricavati da `TrInf2`, ordine vendita ricavato dalle fonti `R4/Salgsref` o dalla gerarchia `OrdBasNo`, REST effettivamente registrato e stato della route.
+2. **Confronto tra periodi**: usa gli stessi snapshot e gli stessi valori FIFO di Lagerliste 1, cerca contropartite note e separa i trasferimenti abbinati dalle righe ancora da controllare.
+
+Per ridurre il numero di righe, la tabella route parte dal filtro `Ikke færdige`; le route concluse non vengono eliminate e restano disponibili scegliendo `Færdig` oppure `Alle`.
+
+Stati mostrati:
+
+- `⏳ Ikke startet`: nessun prodotto della route risulta completato;
+- `◐ Delvist færdig`: almeno un prodotto è parziale oppure la route contiene righe con avanzamenti diversi;
+- `✓ Færdig`: tutte le righe prodotto risultano completate;
+- `? Ukendt`: la route non contiene righe prodotto sufficienti per determinarne lo stato.
+
+Regole conservative della Beta:
+
+- una lastra è riconosciuta con le condizioni storiche di Lagerliste 1 (`TrTp=5`, `ProdNo` valido che inizia per `3`, `Gr6=1` e relative esclusioni);
+- qualsiasi riga prodotto `TrTp=7` appartiene alla route, senza esclusione basata sul suffisso: quindi anche `L2/L3` resta nel flusso VIA;
+- per il riferimento alla vendita viene usata la precedenza conservativa `OrdLn.R4` → ultimo `ProdTr.R4` della stessa riga e dello stesso prodotto → `Ord.R4` → catena `TrInf2/OrdBasNo`; la fonte scelta è visibile accanto al numero SO;
+- il filtro sullo stesso `ProdNo` è necessario perché una riga di nesting può essere riutilizzata: vecchie `ProdTr` della stessa `OrdLnNo` possono riferirsi a un prodotto e a una vendita precedenti;
+- un prodotto senza R4 e senza collegamento gerarchico viene marcato `🏭 Ingen R4`: è un candidato per produzione interna o ordine lager, non un errore automaticamente confermato;
+- il REST entra nel pareggio solo se è realmente registrato e collegabile senza ambiguità allo stesso nesting e alla stessa lastra;
+- una riga lastra `TrTp=5` il cui `OrdLn.TrInf1` inizia con `Søg` viene marcata `♻ Søg-rest`: indica una rimanenza fisica non registrata in `Pladelager`/`REST`. Un suo ingresso in `VIA Plader` è spiegato come valore aggiunto da fonte non registrata, non come prelievo inventato dal magazzino. Nel confronto fra periodi il controllo viene eseguito sull'esatto `nestingordre + route + ProdNo`, anche se la route non rientra più nella finestra delle route attuali. I normali codici REST registrati (per esempio suffissi `_SCR0`) non rientrano in questa regola;
+- i REST senza una sola route certa non vengono scartati: restano consultabili nella tabella espandibile `REST-rækker uden sikker routekobling`, con motivo e valore;
+- un valore non spiegato resta visibile come residuo: l’algoritmo non inventa scarti e non forza il totale a zero;
+- `VIA Tid` non proviene dal magazzino: un aumento viene classificato come valore di lavoro registrato e aggiunto all’ordine (`Registreret arbejdstid → VIA Tid`), con netto positivo; quando l’ordine termina può successivamente passare da VIA a `Færdige SO`;
+- un aumento di `Pladelager` viene marcato `Indkøb → Pladelager` soltanto quando nel periodo esiste una corrispondente ricezione `ProdTr` con `TrTp=6`; l’entrata ha netto positivo;
+- se la lastra acquistata viene ricevuta e immediatamente prelevata dallo stesso periodo, il movimento può apparire direttamente come `Indkøb → Pladelager → VIA Plader`, ma soltanto quando ricezione `TrTp=6`, prelievo `TrTp=5`, prodotto e nesting coincidono;
+- una diminuzione di `Pladelager` viene collegata a `VIA Plader` soltanto quando `ProdTr` contiene un prelievo `TrTp=5` dello stesso prodotto nel periodo;
+- la scomparsa di un ordine da `Færdige SO` viene marcata `Færdige SO → Faktureret` soltanto se l’ordine possiede realmente `InvoNo`; è una legittima uscita con netto negativo;
+- il residuo di una route `Plader VIA` completata viene collegato agli ordini di produzione/vendita risaliti da `TrInf2` e `OrdBasNo`, dopo avere prima sottratto l’eventuale REST registrato;
+- un REST non viene mai abbinato alla diminuzione di una lastra per il solo `ProdNo`: deve comparire lo stesso nesting anche nel movimento `Plader VIA` del periodo;
+- un residuo di `Plader VIA` associato a una route non completata viene marcato `⏳ Åben route` invece di essere presentato come errore;
+- i legami per prodotto/REST sono ad alta certezza; i legami basati soltanto sullo stesso ordine vendita sono mostrati con certezza media quando la ripartizione tra più route può essere ambigua.
+
+La query route considera il mese corrente e i due mesi precedenti ed è mantenuta in cache per due minuti. Gli snapshot più vecchi possono non contenere `SalesOrdNo` o l’elenco `Products`; in quel caso la riconciliazione resta volutamente incompleta e conserva le righe per il controllo manuale.
+
+`ShpBal` (`VareParti`) contiene informazioni utili sui lotti e sulle riserve, tra cui `RestBal`, `NoRsv`, `NoRsvInc`, `OrdNo`, costo e valore. Lagerliste 2 non usa ancora questi campi per pareggiare automaticamente gli ordini lager: `OrdNo` può rappresentare l'ordine di origine/ricezione del lotto e non dimostra da solo la successiva vendita destinataria. Finché il legame di prenotazione non è verificato, questi dati rimangono evidenza informativa e non una contropartita contabile.
 
 ### 4.3 Lista ordini
 La lista mostra gli ultimi ordini fatturati:
@@ -461,6 +512,9 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `routes/apiRoutes.js` | API backend principali |
 | `services/aftercalcService.js` | calcoli ordine, produzione, margini |
 | `services/drawingService.js` | ricerca PDF/disegni/immagini |
+| `services/pdfOpenService.js` | validazione destinazione PDF e apertura senza shell |
+| `services/authService.js` | utenti, sessioni bearer/cookie e guard di autenticazione |
+| `services/bomService.js` | letture BOM e creazione transazionale prodotti, con blocco `readOnly` |
 | `utils/productRules.js` | regole dedicate ai prodotti |
 | `utils/logger.js` | log su file + console |
 | `diskCache.js` | cache persistente JSON su disco |
@@ -490,7 +544,7 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `POST /cache-clear` | svuota cache persistente |
 | `GET /cache-status` | elenco elementi in cache |
 | `GET /warmup-status` | stato warmup iniziale |
-| `POST /open-drawing` | apertura disegno PDF |
+| `POST /open-drawing` | apertura autenticata del PDF tramite viewer Windows predefinito |
 | `POST /desktop-update-check` | avvia controllo aggiornamenti desktop |
 
 ---
@@ -580,7 +634,7 @@ npm run build:win
 ```
 
 Genera:
-- `dist/Gantech-Efterkalk-Setup-<version>.exe`
+- `dist/Gantech-Operations-Hub-Setup-<version>.exe`
 - `dist/latest.yml`
 - blockmap per auto-update
 
@@ -640,6 +694,7 @@ All’avvio desktop, l’app controlla se esiste una release più nuova e notifi
 - usare `Ryd cache` solo se necessario
 
 #### Dopo modifiche codice
+- eseguire `npm test` (suite isolata: non usa Visma o database reali)
 - controllare `GET /health`
 - provare `GET /order-list`
 - testare almeno un `GET /aftercalc/<ordNo reale>`
@@ -695,6 +750,29 @@ Azioni:
 - `server.js` resta il composition root e contiene ancora la UI HTML inline.
 - `views/indexPage.js` risulta al momento **non integrato** e va ignorato finché non viene completato correttamente.
 - In questo progetto è importante fare **refactor strutturali senza cambiare la logica**.
+
+### Copertura dei test e rischio di regressione
+
+Il progetto dispone di una prima suite automatica per autenticazione/sessioni, protezione delle scritture, comportamento BOM `readOnly` e apertura PDF. Usa esclusivamente simulazioni in memoria e non scrive su Visma o su database reali. Le verifiche operative su ordini reali rimangono necessarie perché la suite non copre ancora le formule di costing.
+
+La priorità consigliata prima di ulteriori refactor è estendere i test di caratterizzazione con dati anonimizzati e risultati attesi per:
+
+- esclusioni prodotto e operazione (`R1090`, `R8200`, componenti `R*`);
+- fallback da `NoFin` a `NoOrg`;
+- risoluzione ricorsiva dei costi degli ordini figli;
+- calcolo e allocazione laser nei `MultiOrdre`;
+- ordini con nesting multipli e fatturazione parziale;
+- coerenza tra dati calcolati dal DB e dati letti dalla cache.
+
+Questi test devono fissare il comportamento business approvato prima di separare o riscrivere le formule. I candidati principali per l'estrazione di funzioni di calcolo pure sono `services/aftercalcService.js` e `utils/productRules.js`.
+
+### Priorità strutturali consigliate
+
+1. Estendere la rete iniziale di test alle formule correnti con casi di caratterizzazione approvati.
+2. Separare accesso SQL, normalizzazione dei dati e calcolo.
+3. Suddividere `routes/apiRoutes.js` per dominio mantenendo invariati endpoint e payload.
+4. Rendere tracciabile l'origine dei risultati (`memoria`, `disco`, `DB`), la data di calcolo e la versione dell'algoritmo.
+5. Separare dal codice attivo snapshot, backup e artefatti operativi, senza eliminarli finché non esiste una politica di archiviazione approvata.
 
 ### Regola pratica
 Prima di dichiarare conclusa una modifica, verificare sempre con chiamate reali o build reali, non solo con supposizioni.

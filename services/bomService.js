@@ -1,4 +1,4 @@
-function createBomService({ getConnection, sql, diskCache, logEvent }) {
+function createBomService({ getConnection, sql, diskCache, logEvent, getActiveProfile }) {
     const memoryCache = new Map();
 
     const TTL = {
@@ -1474,6 +1474,14 @@ function createBomService({ getConnection, sql, diskCache, logEvent }) {
 
     // ── Opret produkter i Visma via transaktion ──
     async function createProductsInVisma(input) {
+        const activeProfile = typeof getActiveProfile === 'function' ? getActiveProfile() : null;
+        if (activeProfile && activeProfile.readOnly === true) {
+            const err = new Error('Den aktive databaseprofil er kun-læsning. Oprettelse i Visma er blokeret.');
+            err.statusCode = 403;
+            err.code = 'READ_ONLY_PROFILE';
+            throw err;
+        }
+
         const preview = await previewCreateProducts(input);
         if (preview.conflicts.length > 0) {
             const err = new Error('Produkterne eksisterer allerede i Visma: ' + preview.conflicts.join(', '));

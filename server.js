@@ -1837,6 +1837,7 @@ app.get('/', (req, res) => {
                             <button type="button" disabled>Faktura - Kommer snart</button>
                             <button type="button" data-module-key="ordreoversigt" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
                             <button type="button" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
+                            <button type="button" data-module-key="lagerliste" onclick="window.location.href='/assets/lagerliste2.html'">🧪 Lagerliste 2 (Beta)</button>
                             <button type="button" disabled>APV - Kommer snart</button>
                             <button type="button" data-module-key="belastning" onclick="openModule('belastning')">Belastning</button>
                             <button type="button" data-module-key="personalehåndbog" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
@@ -1956,6 +1957,12 @@ app.get('/', (req, res) => {
                                 <h4>Lagerliste</h4>
                                 <p>Lagerværdi for plader, stangmateriale, VIA og færdige ikke-fakturerede varer.</p>
                                 <button type="button" onclick="openModule('lagerliste')">Åbn Lagerliste</button>
+                            </article>
+                            <article class="dash-card" data-module-key="lagerliste">
+                                <span class="dash-chip">Beta</span>
+                                <h4>Lagerliste 2</h4>
+                                <p>Eksperimentel route- og transaktionsafstemning uden ændringer i Lagerliste 1.</p>
+                                <button type="button" onclick="window.location.href='/assets/lagerliste2.html'">Åbn Lagerliste 2</button>
                             </article>
                         </div>
                     </section>
@@ -4277,6 +4284,7 @@ app.get('/', (req, res) => {
             }
 
             function logoutFromSideMenu() {
+                const tokenToRevoke = authToken;
                 accessGranted = false;
                 authToken = null;
                 loggedUserRole = 'user';
@@ -4289,6 +4297,10 @@ app.get('/', (req, res) => {
                 const gateInput = document.getElementById('accessGateInput');
                 if (gateInput) gateInput.value = '';
                 refreshSideMenuAuthState();
+                fetch('/auth/logout', {
+                    method: 'POST',
+                    headers: tokenToRevoke ? { 'Authorization': 'Bearer ' + tokenToRevoke } : {}
+                }).catch(() => {});
             }
 
             function openBrugermanual() {

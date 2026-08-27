@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lagerliste 2 Beta - Gantech</title>
+    <style>
+        :root { --ink:#173b2d; --muted:#62736a; --line:#ccd8cf; --bg:#edf3ef; --card:#fff; --green:#237044; --amber:#a76200; --red:#a92d28; --blue:#245f91; }
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:"Segoe UI",sans-serif; color:var(--ink); background:linear-gradient(160deg,#f9fbfa,var(--bg)); }
+        .wrap { max-width:1700px; margin:0 auto; padding:18px; }
+        .hero { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px 24px; border-radius:16px; color:#fff; background:linear-gradient(135deg,#173b2d,#315c49 62%,#3b7160); box-shadow:0 14px 34px rgba(23,59,45,.2); }
+        .hero h1 { margin:0; font-size:28px; } .hero p { margin:7px 0 0; max-width:900px; color:#e6f0e9; }
+        button,select,input { font:inherit; } button { cursor:pointer; border:0; border-radius:8px; padding:9px 13px; font-weight:700; }
+        .hero button { background:#fff; color:var(--ink); }
+        .beta { display:inline-block; margin-left:8px; padding:3px 8px; border-radius:999px; background:#f6c65b; color:#4a3200; font-size:11px; vertical-align:middle; }
+        .notice { margin:14px 0; padding:11px 14px; border:1px solid #d7c38e; border-radius:10px; color:#65470d; background:#fff9e8; font-size:13px; }
+        .metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin:14px 0; }
+        .metric,.panel { background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 7px 20px rgba(30,70,48,.07); }
+        .metric { padding:13px; } .metric span { display:block; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; } .metric strong { display:block; margin-top:7px; font-size:24px; }
+        .panel { margin-top:14px; overflow:hidden; }
+        .panel-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:13px 15px; border-bottom:1px solid var(--line); background:#f6f9f7; }
+        .panel-head h2 { margin:0; font-size:17px; } .panel-head p { margin:3px 0 0; color:var(--muted); font-size:12px; }
+        .toolbar { display:flex; flex-wrap:wrap; align-items:end; gap:9px; }
+        .field { display:grid; gap:4px; min-width:190px; } .field label { color:var(--muted); font-size:10px; font-weight:800; text-transform:uppercase; }
+        select,input { min-height:36px; border:1px solid #afc1b5; border-radius:7px; padding:7px 9px; background:#fff; color:var(--ink); }
+        .primary { color:#fff; background:var(--green); } .secondary { color:#fff; background:#587268; }
+        .panel-body { padding:12px 14px 16px; }
+        .status { min-height:20px; margin-bottom:8px; color:var(--muted); font-size:12px; }
+        .table-wrap { max-height:620px; overflow:auto; border:1px solid #d9e2dc; border-radius:8px; }
+        table { width:100%; border-collapse:collapse; font-size:12px; }
+        th { position:sticky; top:0; z-index:1; padding:8px; text-align:left; white-space:nowrap; color:#fff; background:#315c49; }
+        td { padding:8px; border-bottom:1px solid #e2e8e4; vertical-align:top; }
+        tbody tr:nth-child(even) td { background:#fafcfb; } tbody tr:hover td { background:#eff6f1; }
+        .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .pill { display:inline-flex; align-items:center; gap:5px; padding:3px 7px; border-radius:999px; font-weight:800; white-space:nowrap; }
+        .pill.open { color:#744900; background:#fff0c8; } .pill.partial { color:#744900; background:#ffe1a2; }
+        .pill.done { color:#165d34; background:#dcefe3; } .pill.unknown { color:#53655c; background:#e8eeea; }
+        .pill.error { color:#8a2622; background:#fae0de; } .pill.info { color:#174f7e; background:#dfedf8; }
+        .items { display:grid; gap:4px; min-width:220px; } .item { white-space:nowrap; } .item small { color:var(--muted); }
+        .positive { color:var(--green); font-weight:800; } .negative { color:var(--red); font-weight:800; } .zero { color:var(--muted); }
+        .compare-grid { display:grid; grid-template-columns:1fr; gap:14px; }
+        .subpanel h3 { margin:4px 0 8px; font-size:14px; } .subpanel-note { margin:-3px 0 8px; color:var(--muted); font-size:12px; }
+        .toggle { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; }
+        details.review { margin-top:12px; border:1px solid var(--line); border-radius:10px; background:#fffaf1; }
+        details.review summary { cursor:pointer; padding:10px 12px; font-weight:800; color:#744900; }
+        .hidden { display:none !important; } .empty { padding:26px; text-align:center; color:var(--muted); }
+        @media(max-width:1000px){ .metrics{grid-template-columns:repeat(2,1fr)} .hero{align-items:flex-start;flex-direction:column}.table-wrap{max-height:none} }
+    </style>
+</head>
+<body>
+    <main class="wrap">
+        <header class="hero">
+            <div><h1>Lagerliste 2 <span class="beta">BETA / SHADOW</span></h1><p>Automatisk sporing af plader gennem nesting, VIA, lagerførte produkter, restplader og færdige salgsordrer.</p></div>
+            <button type="button" onclick="window.location.href='/'">← Tilbage til Operations Hub</button>
+        </header>
+        <div class="notice"><strong>Lagerliste 1 ændres ikke.</strong> Denne side er read-only og viser afledte sammenhænge. Rå værdier og reelle restbeløb tvinges aldrig til nul. ♻ markerer en plade med <code>TrInf1 = Søg…</code>, og 🏭 markerer produkter uden sikker salgsreference (typisk intern produktion eller lagerordre, men ikke automatisk klassificeret).</div>
+
+        <section class="metrics">
+            <div class="metric"><span>Åbne ruter</span><strong id="metricOpen">–</strong></div>
+            <div class="metric"><span>Delvist færdige</span><strong id="metricPartial">–</strong></div>
+            <div class="metric"><span>Færdige ruter</span><strong id="metricDone">–</strong></div>
+            <div class="metric"><span>Automatisk forklaret</span><strong id="metricMatched">–</strong></div>
+            <div class="metric"><span>Resterende bevægelser</span><strong id="metricResidual">–</strong></div>
+        </section>
+
+        <section class="panel">
+            <header class="panel-head">
+                <div><h2>Aktuelle nesting-ruter</h2><p>⏳ betyder, at route/ordre endnu ikke er færdig. Salgsreferencen viser også kilden: OrdLn.R4, ProdTr.R4, Ord.R4 eller OrdBasNo.</p></div>
+                <div class="toolbar">
+                    <div class="field"><label for="routeStatusFilter">Status</label><select id="routeStatusFilter"><option value="active" selected>⏳ Ikke færdige</option><option value="">Alle</option><option value="not_started">⏳ Ikke startet</option><option value="partial">◐ Delvist færdig</option><option value="completed">✓ Færdig</option><option value="unknown">? Ukendt</option></select></div>
+                    <div class="field"><label for="routeSearch">Søg</label><input id="routeSearch" type="search" placeholder="Nesting, route, plade, produkt..." /></div>
+                    <button id="refreshRoutesBtn" class="secondary" type="button">Opdater ruter</button>
+                </div>
+            </header>
+            <div class="panel-body"><div id="routeStatus" class="status">Indlæser…</div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Nesting / route</th><th>Plader</th><th>Produkter</th><th>Ordrelink</th><th class="num">Plade FIFO</th><th class="num">Færdige produkter</th><th class="num">Registreret REST</th><th class="num">Foreløbigt residuum</th></tr></thead><tbody id="routeRows"></tbody></table></div><details id="unassignedRestPanel" class="review hidden"><summary id="unassignedRestSummary">REST uden sikker routekobling</summary><div class="table-wrap"><table><thead><tr><th>Nesting</th><th>Plade</th><th>Beskrivelse</th><th>Årsag</th><th class="num">Vægt</th><th class="num">Værdi</th></tr></thead><tbody id="unassignedRestRows"></tbody></table></div></details></div>
+        </section>
+
+        <section class="panel">
+            <header class="panel-head">
+                <div><h2>Transaktioner mellem perioder</h2><p>Sammenkobler kendte plus/minus-bevægelser. Kun ikke-matchede restbeløb står tilbage til kontrol.</p></div>
+                <div class="toolbar">
+                    <div class="field"><label for="periodA">Fra</label><select id="periodA"></select></div>
+                    <div class="field"><label for="periodB">Til</label><select id="periodB"></select></div>
+                    <button id="compareBtn" class="primary" type="button">Sammenlign</button>
+                </div>
+            </header>
+            <div class="panel-body">
+                <div id="compareStatus" class="status">Vælg to perioder.</div>
+                <div class="toolbar" style="margin-bottom:10px"><label class="toggle"><input id="showMatched" type="checkbox" checked /> Vis automatisk afstemte</label><label class="toggle"><input id="showRaw" type="checkbox" /> Vis rå bevægelser</label></div>
+                <div class="compare-grid">
+                    <div id="matchedPanel" class="subpanel"><h3>✓ Automatisk forklarede bevægelser</h3><p class="subpanel-note">Lageroverførsler giver netto 0. Indkøb og registreret arbejdstid giver positiv netto; fakturering giver en legitim negativ udgang.</p><div class="table-wrap"><table><thead><tr><th>Flow</th><th>Nøgle</th><th>Fra</th><th>Til</th><th>Tillid</th><th class="num">Beløb</th><th class="num">Netto</th></tr></thead><tbody id="matchedRows"></tbody></table></div></div>
+                    <div class="subpanel"><h3>⚠ Resterende bevægelser</h3><p class="subpanel-note">Disse værdier er ikke blevet skjult eller tvunget til nul.</p><div class="table-wrap"><table><thead><tr><th>Status</th><th>Kategori</th><th>Produkt/ordre</th><th>Beskrivelse</th><th class="num">Før</th><th class="num">Efter</th><th class="num">Residuum</th></tr></thead><tbody id="residualRows"></tbody></table></div></div>
+                    <div id="rawPanel" class="subpanel hidden"><h3>Rå bevægelser</h3><div class="table-wrap"><table><thead><tr><th>Kategori</th><th>Nøgle</th><th class="num">Før</th><th class="num">Efter</th><th class="num">Ændring</th></tr></thead><tbody id="rawRows"></tbody></table></div></div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="/assets/js/lagerliste2-engine.js"></script>
+    <script src="/assets/js/lagerliste2.js"></script>
+</body>
+</html>

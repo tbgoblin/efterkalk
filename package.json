@@ -8,7 +8,7 @@
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
     "build:win": "electron-builder --win nsis",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/run.js"
   },
   "keywords": [],
   "author": "Gantech",

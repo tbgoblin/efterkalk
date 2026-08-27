@@ -2,7 +2,9 @@
 
 App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso interno in ambiente produzione/fabbrica.
 
-**Versione attuale:** `1.1.0`
+Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al costing degli ordini riunisce dati commerciali e produttivi provenienti da Visma/SQL Server e comprende aree dedicate a BOM/preventivazione, magazzino, QMS, carico produttivo, fatturato e VIA.
+
+**Versione attuale:** `1.1.47` (fonte: `package.json`)
 
 ---
 
@@ -13,6 +15,7 @@ App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso i
 - calcolo costi/ricavi/margine per ordine
 - dettaglio ordini di produzione collegati
 - apertura **tegning/PDF** con pulsante `Vis tegning`
+- **Lagerliste 2 (Beta/Shadow)** separata: riconcilia i movimenti tra periodi e mostra lo stato delle route di nesting senza cambiare Lagerliste 1
 - cache locale + warmup automatico per velocizzare l’avvio
 - pacchetto desktop Windows con aggiornamento automatico via GitHub Releases
 
@@ -108,16 +111,49 @@ Per la guida completa vedi:
 | `diskCache.js` | cache persistente su file |
 | `routes/apiRoutes.js` | endpoint API principali |
 | `services/aftercalcService.js` | logica calcolo aftercalc e production summary |
+| `services/lagerlisteService.js` | Lagerliste 1 e snapshot storici (fonte dei valori FIFO) |
+| `services/lagerliste2Service.js` | lettura route/nesting per la vista Beta, senza scritture DB |
 | `services/drawingService.js` | ricerca/apertura disegni e immagini |
 | `utils/productRules.js` | regole business prodotto |
 | `utils/logger.js` | logging applicativo |
 | `publish.ps1` | build + release automatizzata |
 
+### Flusso applicativo
+
+```text
+Electron
+  → avvia il server Express locale
+  → attende il warmup di cache e margini
+  → carica l'interfaccia operativa
+  → API Express → servizi di dominio → SQL Server / cache su disco
+```
+
+### Stato dei test
+
+Il progetto dispone di una prima suite automatica eseguibile con:
+
+```bash
+npm test
+```
+
+I test sono isolati e non si collegano a Visma: verificano sessioni bearer/cookie e logout, rifiuto delle scritture anonime, blocco BOM su profili `readOnly`, conservazione di anteprima/duplicati/transazione, apertura sicura dei PDF locali/UNC/HTTPS e le regole pure di Lagerliste 2. Per Lagerliste 2 sono coperti prodotti speciali `L2/L3`, REST registrato, route aperte/completate, priorità delle fonti R4, lastre non registrate marcate `Søg`, pareggio `plade → VIA + REST`, conservazione dei residui reali e passaggio `VIA Laser → Færdige SO`.
+
+Questa è una rete di sicurezza iniziale, non ancora una copertura completa. Prima di refactor importanti è consigliato introdurre test di caratterizzazione con casi anonimizzati e risultati attesi, in particolare per:
+
+- esclusioni `R1090`, `R8200` e righe `R*` nei componenti;
+- fallback `NoFin` → `NoOrg`;
+- ordini e sottoordini ricorsivi;
+- `MultiOrdre`, laser e nesting;
+- ricavo, costo totale e margine;
+- equivalenza tra risultato fresco e risultato recuperato dalla cache.
+
 ---
 
 ## ⚠️ Nota importante
 
-Il codice di accesso attuale è un **blocco lato client/UI**, non una vera sicurezza server-side.
+Il login crea una sessione server-side in memoria valida per 8 ore, disponibile sia come bearer token compatibile con la UI esistente sia come cookie `HttpOnly` same-origin. Le scritture critiche BOM/QMS, la modifica dei profili database e l’apertura locale dei PDF richiedono una sessione autenticata; il logout revoca la sessione.
+
+L’applicazione resta un servizio interno: non tutti gli endpoint di lettura hanno autorizzazioni granulari e la sessione viene persa al riavvio del processo.
 
 ---
 
