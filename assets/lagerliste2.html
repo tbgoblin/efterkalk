@@ -18,6 +18,8 @@
         .metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin:14px 0; }
         .metric,.panel { background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 7px 20px rgba(30,70,48,.07); }
         .metric { padding:13px; } .metric span { display:block; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; } .metric strong { display:block; margin-top:7px; font-size:24px; }
+        .value-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+        .value-metrics .metric { box-shadow:none; background:#f9fbfa; }
         .panel { margin-top:14px; overflow:hidden; }
         .panel-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:13px 15px; border-bottom:1px solid var(--line); background:#f6f9f7; }
         .panel-head h2 { margin:0; font-size:17px; } .panel-head p { margin:3px 0 0; color:var(--muted); font-size:12px; }
@@ -45,7 +47,7 @@
         details.review { margin-top:12px; border:1px solid var(--line); border-radius:10px; background:#fffaf1; }
         details.review summary { cursor:pointer; padding:10px 12px; font-weight:800; color:#744900; }
         .hidden { display:none !important; } .empty { padding:26px; text-align:center; color:var(--muted); }
-        @media(max-width:1000px){ .metrics{grid-template-columns:repeat(2,1fr)} .hero{align-items:flex-start;flex-direction:column}.table-wrap{max-height:none} }
+        @media(max-width:1000px){ .metrics,.value-metrics{grid-template-columns:repeat(2,1fr)} .hero{align-items:flex-start;flex-direction:column}.table-wrap{max-height:none} }
     </style>
 </head>
 <body>
@@ -54,7 +56,7 @@
             <div><h1>Lagerliste 2 <span class="beta">BETA / SHADOW</span></h1><p>Automatisk sporing af plader gennem nesting, VIA, lagerførte produkter, restplader og færdige salgsordrer.</p></div>
             <button type="button" onclick="window.location.href='/'">← Tilbage til Operations Hub</button>
         </header>
-        <div class="notice"><strong>Lagerliste 1 ændres ikke.</strong> Denne side er read-only og viser afledte sammenhænge. Rå værdier og reelle restbeløb tvinges aldrig til nul. ♻ markerer en plade med <code>TrInf1 = Søg…</code>, og 🏭 markerer produkter uden sikker salgsreference (typisk intern produktion eller lagerordre, men ikke automatisk klassificeret).</div>
+            <div class="notice"><strong>Lagerliste 1 ændres ikke.</strong> Denne side er read-only og viser afledte sammenhænge. Rå værdier og reelle restbeløb tvinges aldrig til nul. ↩ viser forventet REST fra nesting, ✓ REST Plader viser den faktiske registrering, ♻ markerer en plade med <code>TrInf1 = Søg…</code>, og 🏭 markerer produkter uden sikker salgsreference.</div>
 
         <section class="metrics">
             <div class="metric"><span>Åbne ruter</span><strong id="metricOpen">–</strong></div>
@@ -66,6 +68,26 @@
 
         <section class="panel">
             <header class="panel-head">
+                <div><h2>Aktuel lagerværdi og reservationer</h2><p>V1-reference følger de eksisterende Lagerliste 1-regler. V2 fjerner kun dokumenterede VIA/Færdige-overlap efter NoPac. Rsv vises som placering/destination og lægges aldrig oven i lagerværdien.</p></div>
+                <div class="toolbar">
+                    <div class="field"><label for="reservationFilter">Reservationer</label><select id="reservationFilter"><option value="active" selected>Kun åbne</option><option value="all">Alle registreringer</option><option value="finished">Færdigmeldte</option></select></div>
+                    <button id="refreshReservationsBtn" class="secondary" type="button">Opdater værdi</button>
+                </div>
+            </header>
+            <div class="panel-body">
+                <div class="value-metrics">
+                    <div class="metric"><span>V1 referenceværdi</span><strong id="valuationV1">–</strong></div>
+                    <div class="metric"><span>V2 uden overlap</span><strong id="valuationV2">–</strong></div>
+                    <div class="metric"><span>Fjernet dobbeltværdi</span><strong id="valuationDedup">–</strong></div>
+                    <div class="metric"><span>Åben Rsv-værdi · info</span><strong id="reservationActiveValue">–</strong></div>
+                </div>
+                <div id="reservationStatus" class="status">Indlæser lager og reservationer…</div>
+                <div class="table-wrap"><table><thead><tr><th>Status</th><th>Produkt</th><th>Ordrelink</th><th>Kunde</th><th class="num">Fysisk</th><th class="num">V1 disponibel</th><th class="num">Reserveret</th><th class="num">Plukket</th><th class="num">Færdigmeldt</th><th class="num">Aktiv værdi</th></tr></thead><tbody id="reservationRows"><tr><td colspan="10" class="empty">Indlæser…</td></tr></tbody></table></div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <header class="panel-head">
                 <div><h2>Aktuelle nesting-ruter</h2><p>⏳ betyder, at route/ordre endnu ikke er færdig. Salgsreferencen viser også kilden: OrdLn.R4, ProdTr.R4, Ord.R4 eller OrdBasNo.</p></div>
                 <div class="toolbar">
                     <div class="field"><label for="routeStatusFilter">Status</label><select id="routeStatusFilter"><option value="active" selected>⏳ Ikke færdige</option><option value="">Alle</option><option value="not_started">⏳ Ikke startet</option><option value="partial">◐ Delvist færdig</option><option value="completed">✓ Færdig</option><option value="unknown">? Ukendt</option></select></div>
@@ -73,7 +95,7 @@
                     <button id="refreshRoutesBtn" class="secondary" type="button">Opdater ruter</button>
                 </div>
             </header>
-            <div class="panel-body"><div id="routeStatus" class="status">Indlæser…</div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Nesting / route</th><th>Plader</th><th>Produkter</th><th>Ordrelink</th><th class="num">Plade FIFO</th><th class="num">Færdige produkter</th><th class="num">Registreret REST</th><th class="num">Foreløbigt residuum</th></tr></thead><tbody id="routeRows"></tbody></table></div><details id="unassignedRestPanel" class="review hidden"><summary id="unassignedRestSummary">REST uden sikker routekobling</summary><div class="table-wrap"><table><thead><tr><th>Nesting</th><th>Plade</th><th>Beskrivelse</th><th>Årsag</th><th class="num">Vægt</th><th class="num">Værdi</th></tr></thead><tbody id="unassignedRestRows"></tbody></table></div></details></div>
+            <div class="panel-body"><div id="routeStatus" class="status">Indlæser…</div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Nesting / route</th><th>Plader</th><th>REST Plader</th><th>Produkter</th><th>Ordrelink</th><th class="num">Plade FIFO</th><th class="num">Færdige produkter</th><th class="num">Forventet REST FIFO</th><th class="num">Registreret REST-værdi</th><th class="num">REST-nedskrivning</th><th class="num">Materialeafvigelse</th></tr></thead><tbody id="routeRows"></tbody></table></div><details id="unassignedRestPanel" class="review hidden"><summary id="unassignedRestSummary">REST uden sikker routekobling</summary><div class="table-wrap"><table><thead><tr><th>Nesting</th><th>Plade</th><th>Beskrivelse</th><th>Årsag</th><th class="num">Vægt</th><th class="num">Værdi</th></tr></thead><tbody id="unassignedRestRows"></tbody></table></div></details></div>
         </section>
 
         <section class="panel">

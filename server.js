@@ -47,6 +47,8 @@ const {
     getLatestDrawingByProdNo
 } = require('./services/drawingService');
 const { createAftercalcService } = require('./services/aftercalcService');
+const aftercalcCostExclusionsService = require('./services/aftercalcCostExclusionsService');
+const { calculateAdjustedCost } = require('./assets/js/aftercalc-cost-exclusions');
 const { createApiRouter } = require('./routes/apiRoutes');
 
 const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match background refresh cadence
@@ -54,7 +56,7 @@ const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v27_';
-const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v25_';
+const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v26_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
@@ -293,22 +295,35 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
     if (!Number.isFinite(key)) {
         throw new Error('Ordrenummer ugyldigt');
     }
+    await aftercalcCostExclusionsService.ensureHydrated();
+    const costExclusionFingerprint = aftercalcCostExclusionsService.getFingerprintSync(key);
 
     if (!forceRefresh && orderMarginCache.has(key)) {
-        return orderMarginCache.get(key);
+        const memoryMargin = orderMarginCache.get(key);
+        if (memoryMargin && memoryMargin.costExclusionFingerprint === costExclusionFingerprint) {
+            return memoryMargin;
+        }
+        orderMarginCache.delete(key);
     }
 
     if (!forceRefresh) {
         const diskMargin = diskCache.get(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
             || diskCache.getStale(ORDER_MARGIN_CACHE_KEY_PREFIX + key)
             || diskCache.getStale('order_margin_v6_' + key);
-        if (diskMargin && diskMargin.totalCost !== null && diskMargin.totalCost !== undefined) {
+        const diskFingerprint = diskMargin && typeof diskMargin.costExclusionFingerprint === 'string'
+            ? diskMargin.costExclusionFingerprint
+            : '';
+        if (diskMargin
+            && diskMargin.totalCost !== null
+            && diskMargin.totalCost !== undefined
+            && diskFingerprint === costExclusionFingerprint) {
             const marginInfo = {
                 ordNo: key,
                 totalRevenue: Number(diskMargin.totalRevenue || 0),
                 totalCost: Number(diskMargin.totalCost || 0),
                 styklisteFallbackCost: Number(diskMargin.styklisteFallbackCost || 0),
                 hasInvoiceWarning: diskMargin.hasInvoiceWarning === true,
+                costExclusionFingerprint,
                 computedAt: Date.now()
             };
             orderMarginCache.set(key, marginInfo);
@@ -330,14 +345,18 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
         if (data.error) {
             throw new Error(data.error);
         }
-
         const marginInfo = {
             ordNo: key,
             totalRevenue: Number(data.summary.totalRevenue || 0),
-            totalCost: Number(data.summary.totalCost || 0),
+            totalCost: calculateAdjustedCost(
+                Number(data.summary.totalCost || 0),
+                data.salesOrderLines,
+                aftercalcCostExclusionsService.getExcludedLineKeysSync(key)
+            ).adjustedCost,
             // Campo separato: sommato SOLO dal client Efterkalkulation, mai da altri moduli
             styklisteFallbackCost: Number(data.summary.styklisteFallbackCost || 0),
             hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning),
+            costExclusionFingerprint,
             computedAt: Date.now()
         };
 
@@ -1278,6 +1297,8 @@ app.get('/', (req, res) => {
                 .omsaetning-actions { grid-column:span 2; }
                 .omsaetning-kpis { grid-template-columns:1fr; }
                 .omsaetning-charts { grid-template-columns:1fr; }
+                .omsaetning-month-workspace { grid-template-columns:1fr; }
+                .omsaetning-month-detail-kpis { grid-template-columns:1fr; }
                 #belastningGrafiskWrap.omsaetning-charts { grid-template-columns:1fr; }
                 .belastning-bars { grid-template-columns:1fr; }
                 .modal-content-wrap { grid-template-columns: 1fr; }
@@ -1530,10 +1551,15 @@ app.get('/', (req, res) => {
             .omsaetning-year-note { margin:-2px 0 10px 0; color:#4f6d8c; font-size:12px; }
             .omsaetning-year-btn { border:1px solid #c9ddf8; background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); color:#0f3560; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
             .omsaetning-year-btn.active { background:linear-gradient(180deg,#1565c0 0%,#0f3560 100%); color:#fff; border-color:#0f3560; }
-            .omsaetning-filters { display:grid; grid-template-columns:160px 160px minmax(260px,1fr) minmax(260px,1fr) 220px; gap:10px; align-items:end; }
+            .omsaetning-filters { display:grid; grid-template-columns:160px 160px minmax(240px,1fr) minmax(240px,1fr) minmax(290px,0.9fr); gap:10px; align-items:end; }
             .omsaetning-field label { display:block; font-size:12px; color:#3f5875; font-weight:700; margin-bottom:4px; }
             .omsaetning-field input, .omsaetning-field select { width:100%; border:1px solid #cfe0f7; border-radius:8px; padding:8px 10px; font-size:13px; }
             .omsaetning-threshold-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+            .omsaetning-threshold-mode { display:flex; align-items:center; gap:7px; margin-bottom:7px; color:#244a6d; font-size:11px; font-weight:700; cursor:pointer; }
+            .omsaetning-threshold-mode input { width:15px; height:15px; margin:0; accent-color:#1565c0; }
+            .omsaetning-threshold-value label { margin-bottom:3px; font-size:10px; }
+            .omsaetning-threshold-value input { padding:6px 7px; }
+            .omsaetning-threshold-help { min-height:14px; margin-top:5px; color:#587590; font-size:10px; line-height:1.35; }
             .omsaetning-accounts-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
             .omsaetning-accounts-toggle { border:1px solid #c6dcf8; border-radius:999px; background:#fff; color:#0f3560; padding:5px 10px; cursor:pointer; font-size:11px; font-weight:700; }
             .omsaetning-accounts-summary { font-size:11px; color:#4f6d8c; font-weight:700; }
@@ -1605,6 +1631,37 @@ app.get('/', (req, res) => {
             .omsaetning-table-card { margin-top:12px; border:1px solid #dbe8f9; border-radius:10px; background:#fff; overflow:hidden; }
             .omsaetning-table-title { padding:8px 10px; font-size:12px; font-weight:700; color:#2f5475; background:#f4f9ff; border-bottom:1px solid #dbe8f9; }
             .omsaetning-table-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+            .omsaetning-period-budget { display:grid; grid-template-columns:1fr; gap:8px; padding:10px; border-bottom:1px solid #dbe8f9; background:#fbfdff; }
+            .omsaetning-period-budget > .omsaetning-status { justify-self:start; }
+            .omsaetning-period-budget-values { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 14px; color:#355675; font-size:11px; }
+            .omsaetning-period-budget-values strong { color:#0f3560; font-variant-numeric:tabular-nums; }
+            .omsaetning-period-budget-deltas { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 14px; padding-top:8px; border-top:1px solid #dbe8f9; color:#355675; font-size:11px; }
+            .omsaetning-period-budget-deltas strong { font-variant-numeric:tabular-nums; }
+            .omsaetning-period-budget-deltas .positive strong { color:#1b5e20; }
+            .omsaetning-period-budget-deltas .negative strong { color:#b71c1c; }
+            @media(max-width:600px) {
+                .omsaetning-period-budget-values { grid-template-columns:1fr; }
+                .omsaetning-period-budget-deltas { grid-template-columns:1fr; }
+            }
+            .omsaetning-month-workspace { display:grid; grid-template-columns:minmax(390px,0.85fr) minmax(560px,1.15fr); gap:10px; align-items:start; }
+            .omsaetning-month-workspace .omsaetning-table-card { min-width:0; }
+            .omsaetning-month-pick { width:100%; border:none; background:transparent; color:#0f4f91; font:inherit; font-weight:800; text-align:left; cursor:pointer; padding:2px 0; text-decoration:underline; text-decoration-color:#9bc2eb; text-underline-offset:3px; }
+            .omsaetning-month-pick:hover, .omsaetning-month-pick:focus-visible { color:#08365f; text-decoration-color:#1565c0; outline:none; }
+            .omsaetning-threshold-row.selected td { background:#e8f3ff; }
+            .omsaetning-month-detail-body { min-height:210px; padding:10px; }
+            .omsaetning-month-detail-empty { color:#5f7892; font-size:12px; line-height:1.5; padding:10px; border:1px dashed #c9ddef; border-radius:8px; background:#f8fbff; }
+            .omsaetning-month-detail-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
+            .omsaetning-month-detail-kpi { border:1px solid #d7e6f8; border-radius:8px; background:#f7fbff; padding:8px; min-width:0; }
+            .omsaetning-month-detail-kpi span { display:block; color:#607a95; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; }
+            .omsaetning-month-detail-kpi strong { display:block; margin-top:3px; color:#0f3560; font-size:15px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+            .omsaetning-month-detail-section { margin-top:10px; }
+            .omsaetning-month-detail-section h4 { margin:0 0 6px; color:#244f74; font-size:12px; }
+            .omsaetning-month-detail-note { margin:5px 0 0; color:#5f7892; font-size:11px; line-height:1.4; }
+            .omsaetning-month-order-link { border:none; background:transparent; color:#0d5ea8; padding:0; font:inherit; font-weight:800; cursor:pointer; text-decoration:underline; }
+            .omsaetning-month-link-state { display:inline-flex; border-radius:999px; padding:2px 7px; font-size:10px; font-weight:800; }
+            .omsaetning-month-link-state.unmatched { color:#7a4d00; background:#fff3d6; border:1px solid #edcf82; }
+            .omsaetning-month-link-state.ambiguous { color:#8b1d1d; background:#ffe8e8; border:1px solid #efb1b1; }
+            .omsaetning-month-loading { display:flex; align-items:center; gap:8px; color:#476784; font-size:12px; padding:12px; }
             .omsaetning-collapse-btn { border:1px solid #bcd2eb; border-radius:999px; background:#ffffff; color:#1e4768; font-size:11px; font-weight:700; padding:5px 10px; cursor:pointer; }
             .omsaetning-collapse-btn:hover { background:#ebf4ff; }
             .omsaetning-table-wrap { margin-top:12px; overflow:auto; border:1px solid #dbe8f9; border-radius:10px; }
@@ -1641,6 +1698,30 @@ app.get('/', (req, res) => {
             .omsaetning-gauge-legend { display:flex; justify-content:space-between; font-size:10px; color:#6a829b; margin-top:3px; }
             .omsaetning-gauge-delta { margin-top:4px; font-size:11px; color:#355675; }
             .omsaetning-gauge-delta strong { color:#0f3560; }
+            #omsaetningThresholdTable { overflow-x:hidden; }
+            .omsaetning-threshold-table { min-width:0; width:100%; table-layout:fixed; }
+            .omsaetning-threshold-table th, .omsaetning-threshold-table td { padding:6px 8px; }
+            .omsaetning-threshold-table th { line-height:1.15; }
+            .omsaetning-threshold-table th:nth-child(1) { width:20%; }
+            .omsaetning-threshold-table th:nth-child(2) { width:24%; }
+            .omsaetning-threshold-table th:nth-child(3) { width:56%; }
+            .omsaetning-threshold-table td:nth-child(1), .omsaetning-threshold-table td:nth-child(2) { white-space:nowrap; }
+            .omsaetning-threshold-table .omsaetning-gauge-wrap { min-width:0; }
+            .omsaetning-threshold-table .omsaetning-gauge-delta { overflow-wrap:anywhere; }
+            .omsaetning-compact-table-wrap { overflow-x:hidden; }
+            .omsaetning-month-orders-table, .omsaetning-month-weeks-table { min-width:0; width:100%; table-layout:fixed; }
+            .omsaetning-month-orders-table th:nth-child(1) { width:18%; }
+            .omsaetning-month-orders-table th:nth-child(2) { width:30%; }
+            .omsaetning-month-orders-table th:nth-child(3) { width:27%; }
+            .omsaetning-month-orders-table th:nth-child(4) { width:25%; }
+            .omsaetning-month-orders-table th, .omsaetning-month-orders-table td,
+            .omsaetning-month-weeks-table th, .omsaetning-month-weeks-table td { padding:6px 8px; }
+            .omsaetning-month-orders-table td { overflow-wrap:anywhere; }
+            .omsaetning-month-orders-table td:first-child, .omsaetning-month-orders-table td:last-child { white-space:nowrap; }
+            .omsaetning-month-weeks-table th:nth-child(1) { width:25%; }
+            .omsaetning-month-weeks-table th:nth-child(2), .omsaetning-month-weeks-table th:nth-child(3) { width:37.5%; }
+            .omsaetning-month-weeks-table td { white-space:nowrap; }
+            .omsaetning-month-weeks-table tfoot td { background:#eaf3ff; color:#0f3560; border-top:2px solid #b9d3f1; border-bottom:none; font-weight:800; }
             .omsaetning-empty { margin-top:10px; padding:10px; border:1px dashed #c7daef; border-radius:8px; color:#4f6d8c; background:#f8fbff; }
             .ordreindgang-budget-panel { margin-top:10px; border:1px solid #dbe8f9; border-radius:10px; background:linear-gradient(180deg,#f7fbff 0%,#eef6ff 100%); padding:10px; }
             .ordreindgang-budget-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -1680,7 +1761,20 @@ app.get('/', (req, res) => {
             .admin-user-actions { display:flex; gap:8px; margin-top:9px; }
             .admin-user-actions button { padding:5px 8px; border:0; border-radius:5px; background:#1565c0; color:#fff; font-weight:700; cursor:pointer; }
             .admin-user-actions button.danger { background:#b71c1c; }
+            .admin-working-days-panel { grid-column:1/-1; }
+            .admin-working-days-head { display:flex; align-items:end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+            .admin-working-days-head label { display:flex; flex-direction:column; gap:4px; color:#355675; font-size:12px; font-weight:700; }
+            .admin-working-days-head input { width:110px; padding:7px 9px; border:1px solid #c7d7ea; border-radius:6px; font-size:14px; }
+            .admin-working-days-grid { display:grid; grid-template-columns:repeat(6,minmax(100px,1fr)); gap:9px; margin-top:12px; }
+            .admin-working-day { display:flex; flex-direction:column; gap:4px; padding:9px; border:1px solid #d6e6f8; border-radius:7px; background:#f7fbff; color:#355675; font-size:12px; font-weight:700; }
+            .admin-working-day input { width:100%; box-sizing:border-box; padding:7px 8px; border:1px solid #b9cde5; border-radius:5px; font-size:15px; font-variant-numeric:tabular-nums; }
+            .admin-working-day small { min-height:14px; color:#6a829a; font-size:10px; font-weight:600; }
+            .admin-working-days-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:12px; }
+            .admin-working-days-actions button { padding:8px 12px; border:0; border-radius:6px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
+            .admin-working-days-actions button.secondary { border:1px solid #c7d7ea; background:#fff; color:#0f3560; }
             @media(max-width:800px) { .admin-layout { grid-template-columns:1fr; } }
+            @media(max-width:800px) { .admin-working-days-grid { grid-template-columns:repeat(3,minmax(90px,1fr)); } }
+            @media(max-width:480px) { .admin-working-days-grid { grid-template-columns:repeat(2,minmax(90px,1fr)); } }
             .via-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
             .via-toolbar input { width:260px; padding:8px 10px; border:1px solid #c7d7ea; border-radius:8px; font-size:14px; }
             .via-toolbar button { padding:8px 14px; border:0; border-radius:8px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
@@ -1778,6 +1872,13 @@ app.get('/', (req, res) => {
             .manual-card p { margin:0 0 6px 0; color:#355675; font-size:13px; }
             .manual-card ul { margin:0; padding-left:18px; color:#23384f; font-size:13px; }
             .manual-meta { font-size:12px; color:#4f6d8c; }
+            .sales-line-exclusion-help { margin:0 0 10px; padding:9px 11px; border:1px solid #cfe0f4; border-radius:8px; background:#f5f9ff; color:#355675; font-size:12px; line-height:1.45; }
+            .sales-line-exclusion-help.active { border-color:#efc36a; background:#fff8e6; color:#704b00; }
+            .sales-line-excluded td { background:#fff9ec !important; color:#6f7782; }
+            .sales-line-excluded .sales-line-cost-value { text-decoration:line-through; opacity:0.72; }
+            .sales-line-exclusion-toggle { width:18px; height:18px; cursor:pointer; accent-color:#b45309; vertical-align:middle; }
+            .sales-line-exclusion-label { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer; }
+            .report-cost-adjustment { margin:10px 0 0; padding:9px 11px; border:1px solid #efc36a; border-radius:8px; background:#fff8e6; color:#704b00; font-size:12px; line-height:1.45; }
         </style>
     </head>
     <body>
@@ -2096,11 +2197,30 @@ app.get('/', (req, res) => {
                         <div id="omsaetningCustomerThresholds" class="omsaetning-customer-thresholds"></div>
                     </div>
                     <div class="omsaetning-field omsaetning-threshold-field">
-                        <label>Tærskler (Mio)</label>
+                        <label>Tærskler</label>
+                        <label class="omsaetning-threshold-mode" for="omsaetningUseDailyBudget">
+                            <input id="omsaetningUseDailyBudget" type="checkbox" onchange="onOmsaetningThresholdConfigChanged()" />
+                            <span>Brug dagsmål × arbejdsdage</span>
+                        </label>
                         <div class="omsaetning-threshold-grid">
-                            <input id="omsaetningWarnThreshold" type="number" step="0.1" min="0" value="3.0" title="Under denne værdi markeres lav" />
-                            <input id="omsaetningGoodThreshold" type="number" step="0.1" min="0" value="5.0" title="Over denne værdi markeres god" />
+                            <div class="omsaetning-threshold-value">
+                                <label for="omsaetningWarnThreshold">0-punkt (Mio)</label>
+                                <input id="omsaetningWarnThreshold" type="number" step="0.1" min="0" value="3.0" title="Under denne værdi markeres lav" onchange="onOmsaetningThresholdConfigChanged()" />
+                            </div>
+                            <div class="omsaetning-threshold-value">
+                                <label for="omsaetningGoodThreshold">Mål (Mio)</label>
+                                <input id="omsaetningGoodThreshold" type="number" step="0.1" min="0" value="5.0" title="Over denne værdi markeres god" onchange="onOmsaetningThresholdConfigChanged()" />
+                            </div>
+                            <div class="omsaetning-threshold-value">
+                                <label for="omsaetningDailyBreakEven">0-punkt / dag (DKK)</label>
+                                <input id="omsaetningDailyBreakEven" type="number" step="1" min="0" value="208335" onchange="onOmsaetningThresholdConfigChanged()" />
+                            </div>
+                            <div class="omsaetning-threshold-value">
+                                <label for="omsaetningDailyBudget">Budget / dag (DKK)</label>
+                                <input id="omsaetningDailyBudget" type="number" step="1" min="0" value="280851" onchange="onOmsaetningThresholdConfigChanged()" />
+                            </div>
                         </div>
+                        <div id="omsaetningThresholdHelp" class="omsaetning-threshold-help">Manuelle månedsgrænser: 3,0 / 5,0 Mio.</div>
                     </div>
                 </div>
                 <div class="omsaetning-kpis">
@@ -2129,9 +2249,17 @@ app.get('/', (req, res) => {
                         </div>
                     </section>
                 </div>
-                <div id="omsaetningThresholdWrap" class="omsaetning-table-card" style="display:none;">
-                    <div class="omsaetning-table-title">Månedstabel med tærskler</div>
-                    <div id="omsaetningThresholdTable" class="omsaetning-table-wrap" style="margin-top:0;border:none;border-radius:0;"></div>
+                <div class="omsaetning-month-workspace">
+                    <div id="omsaetningThresholdWrap" class="omsaetning-table-card" style="display:none;">
+                        <div class="omsaetning-table-title">Månedstabel med tærskler · klik på en måned</div>
+                        <div id="omsaetningThresholdTable" class="omsaetning-table-wrap" style="margin-top:0;border:none;border-radius:0;"></div>
+                    </div>
+                    <aside id="omsaetningMonthDetailWrap" class="omsaetning-table-card" style="display:none;">
+                        <div id="omsaetningMonthDetailTitle" class="omsaetning-table-title">Månedsforklaring</div>
+                        <div id="omsaetningMonthDetailBody" class="omsaetning-month-detail-body">
+                            <div class="omsaetning-month-detail-empty">Klik på en måned i tærskeltabellen. Her vises de bogførte beløb med tilknyttede efterkalkulationsordrer samt Ordreindgang for månedens uger.</div>
+                        </div>
+                    </aside>
                 </div>
                 <div id="omsaetningDetailsWrap" class="omsaetning-table-card" style="display:none;">
                     <div class="omsaetning-table-title omsaetning-table-title-row">
@@ -2451,6 +2579,20 @@ app.get('/', (req, res) => {
                         <div id="adminStatus" class="via-status" style="margin:12px 0 0;"></div>
                     </section>
                     <section class="admin-panel"><h4>Brugere</h4><div id="adminUsers">Indlæser brugere...</div></section>
+                    <section class="admin-panel admin-working-days-panel">
+                        <div class="admin-working-days-head">
+                            <div><h4>Arbejdsdage pr. måned</h4><div class="via-status">Bruges til Omsætning, når dagsmål er aktiveret.</div></div>
+                            <label for="adminWorkingDaysYear">År
+                                <input id="adminWorkingDaysYear" type="number" min="2000" max="2200" onchange="loadAdminWorkingDays()" />
+                            </label>
+                        </div>
+                        <div id="adminWorkingDaysGrid" class="admin-working-days-grid"></div>
+                        <div class="admin-working-days-actions">
+                            <span id="adminWorkingDaysStatus" class="via-status" style="margin-right:auto;"></span>
+                            <button type="button" class="secondary" onclick="resetAdminWorkingDaysToCalendar()">Brug kalenderforslag</button>
+                            <button type="button" onclick="saveAdminWorkingDays()">Gem arbejdsdage</button>
+                        </div>
+                    </section>
                 </div>
             </section>
         </div>
@@ -2714,6 +2856,8 @@ app.get('/', (req, res) => {
         <script src="/assets/js/via.js?v=${pkgVersion}"></script>
         <script src="/assets/js/qms-ph.js?v=${pkgVersion}"></script>
         <script src="/assets/js/lagerliste.js?v=${pkgVersion}"></script>
+        <script src="/assets/js/aftercalc-cost-exclusions.js?v=${pkgVersion}"></script>
+        <script src="/assets/js/omsaetning-daily-thresholds.js?v=${pkgVersion}"></script>
         <script>
             function formatNumber(num) {
                 const fixed = parseFloat(num).toFixed(2);
@@ -3155,6 +3299,82 @@ app.get('/', (req, res) => {
             const aftercalcClientCache = new Map();
             const routeMetricsClientCache = new Map();
             const ROUTE_METRICS_CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
+            const salesCostExclusionsByOrdNo = new Map();
+            const salesCostExclusionMetaByOrdNo = new Map();
+
+            function getSalesCostExclusionSet(ordNo) {
+                const key = String(ordNo || '').trim();
+                if (!salesCostExclusionsByOrdNo.has(key)) {
+                    salesCostExclusionsByOrdNo.set(key, new Set());
+                }
+                return salesCostExclusionsByOrdNo.get(key);
+            }
+
+            async function loadSalesCostExclusions(ordNo) {
+                const key = String(ordNo || '').trim();
+                if (!key) return;
+                try {
+                    const response = await fetch('/aftercalc-cost-exclusions/' + encodeURIComponent(key));
+                    const payload = await response.json();
+                    if (!response.ok || !payload.ok) throw new Error(payload.error || ('HTTP ' + response.status));
+                    const keys = (Array.isArray(payload.exclusions) ? payload.exclusions : [])
+                        .map(entry => Number(entry && entry.lineNo))
+                        .filter(lineNo => Number.isInteger(lineNo) && lineNo > 0)
+                        .map(lineNo => 'line:' + lineNo);
+                    salesCostExclusionsByOrdNo.set(key, new Set(keys));
+                    salesCostExclusionMetaByOrdNo.set(key, {
+                        shared: payload.shared === true,
+                        source: String(payload.source || '')
+                    });
+                } catch (error) {
+                    salesCostExclusionMetaByOrdNo.set(key, {
+                        shared: false,
+                        source: 'error',
+                        error: String(error.message || error)
+                    });
+                }
+            }
+
+            async function toggleSalesLineCostExclusion(checkbox) {
+                if (!checkbox || !checkbox.dataset) return;
+                const ordNo = String(checkbox.dataset.ordNo || '').trim();
+                const lineNo = Number(checkbox.dataset.lineNo);
+                const lineKey = 'line:' + lineNo;
+                if (!ordNo || !Number.isInteger(lineNo) || lineNo <= 0) return;
+                const exclusions = getSalesCostExclusionSet(ordNo);
+                const wasExcluded = exclusions.has(lineKey);
+                const shouldExclude = checkbox.checked === true;
+                checkbox.disabled = true;
+
+                try {
+                    const response = await fetch('/aftercalc-cost-exclusions/' + encodeURIComponent(ordNo) + '/' + encodeURIComponent(lineNo), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ excluded: shouldExclude })
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.ok || payload.shared !== true) {
+                        throw new Error(payload.error || 'GOH-databasen bekræftede ikke ændringen');
+                    }
+                    if (shouldExclude) exclusions.add(lineKey);
+                    else exclusions.delete(lineKey);
+                    salesCostExclusionMetaByOrdNo.set(ordNo, { shared: true, source: 'goh' });
+                } catch (error) {
+                    checkbox.checked = wasExcluded;
+                    checkbox.disabled = false;
+                    alert('Ændringen blev ikke gemt: ' + String(error.message || error));
+                    return;
+                }
+
+                const currentOrdNo = String((currentSearchOrderData && currentSearchOrderData.orderHeader && currentSearchOrderData.orderHeader.OrdNo) || '').trim();
+                if (currentSearchOrderData && currentOrdNo === ordNo) {
+                    const modalBody = document.getElementById('orderDetailModalBody');
+                    const previousScrollTop = modalBody ? modalBody.scrollTop : 0;
+                    renderSearchedOrderDetail(currentSearchOrderData);
+                    const refreshedModalBody = document.getElementById('orderDetailModalBody');
+                    if (refreshedModalBody) refreshedModalBody.scrollTop = previousScrollTop;
+                }
+            }
 
             function normalizeOrdNoValue(ordNo) {
                 return String(ordNo || '').trim();
@@ -3520,6 +3740,7 @@ app.get('/', (req, res) => {
             let omsaetningSelectedFiscalYears = new Set();
             let omsaetningAutoReloadTimer = null;
             let omsaetningThresholdsByCustomer = new Map();
+            let omsaetningWorkingDaysByMonth = {};
             let omsaetningDetailsCollapsed = true;
             let omsaetningAccountsPanelOpen = false;
             const OMSAETNING_SSRS_DEFAULT_ACCOUNTS = new Set(['11012', '11015', '11040']);
@@ -3527,14 +3748,20 @@ app.get('/', (req, res) => {
             const OMSAETNING_SUMMARY_CACHE_TTL_MS = 15 * 60 * 1000;
             const OMSAETNING_CUSTOMER_SEARCH_CACHE_TTL_MS = 120000;
             const OMSAETNING_CACHE_MAX_ITEMS = 30;
-            const OMSAETNING_SHOW_THRESHOLD_SECTION = false;
+            const OMSAETNING_SHOW_THRESHOLD_SECTION = true;
             let omsaetningThresholdLoadToken = 0;
+            let omsaetningMonthDetailToken = 0;
+            let omsaetningSelectedMonthKey = '';
             const OMSAETNING_DEFAULT_WARN_THRESHOLD = 3;
             const OMSAETNING_DEFAULT_GOOD_THRESHOLD = 5;
+            const OMSAETNING_DEFAULT_DAILY_BREAK_EVEN_DKK = 208335;
+            const OMSAETNING_DEFAULT_DAILY_BUDGET_DKK = 280851;
+            const OMSAETNING_THRESHOLD_UI_STORAGE_KEY = 'afterkalk_omsaetning_threshold_ui_v2';
             let omsaetningSummaryCache = new Map();
             let omsaetningSummaryInFlight = new Map();
             let omsaetningCustomerSearchCache = new Map();
             let omsaetningCustomerSearchInFlight = new Map();
+            let omsaetningMonthDetailCache = new Map();
             let ordreindgangInitialized = false;
             let ordreindgangAutoReloadTimer = null;
             let ordreindgangSummaryCache = new Map();
@@ -3552,6 +3779,7 @@ app.get('/', (req, res) => {
             const ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY = 'afterkalk_ordreindgang_holiday_settings_v1';
             const ORDREINDGANG_SERIES_STORAGE_KEY = 'afterkalk_ordreindgang_series_v1';
             let ordreindgangBudgetPanelCollapsed = false;
+            let ordreindgangHolidaySettingsInitialized = false;
             let belastningInitialized = false;
             let belastningAutoReloadTimer = null;
             let belastningPeriodicTimer = null;
@@ -4575,6 +4803,151 @@ app.get('/', (req, res) => {
                 }
             }
 
+            function formatOmsaetningVismaDate(value) {
+                const raw = String(value || '').replace(/\\D+/g, '');
+                if (!/^\\d{8}$/.test(raw)) return '-';
+                return raw.slice(6, 8) + '-' + raw.slice(4, 6) + '-' + raw.slice(0, 4);
+            }
+
+            function buildOmsaetningMonthDetailCacheKey(month, selectedAccounts, selectedCustomers) {
+                return 'month-detail:' + buildOmsaetningSummaryCacheKey(
+                    String(month || ''),
+                    String(month || ''),
+                    selectedAccounts,
+                    selectedCustomers
+                );
+            }
+
+            function renderOmsaetningMonthDetail(payload) {
+                const wrap = document.getElementById('omsaetningMonthDetailWrap');
+                const title = document.getElementById('omsaetningMonthDetailTitle');
+                const body = document.getElementById('omsaetningMonthDetailBody');
+                if (!wrap || !title || !body) return;
+
+                const month = String(payload && payload.month || omsaetningSelectedMonthKey || '').trim();
+                const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
+                const ordreindgang = payload && payload.ordreindgang ? payload.ordreindgang : {};
+                const weeklyRows = Array.isArray(ordreindgang.weeklyRows) ? ordreindgang.weeklyRows : [];
+                const totalRevenueDkk = Number(payload && payload.totalRevenueDkk || 0);
+                const linkedRevenueDkk = Number(payload && payload.linkedRevenueDkk || 0);
+                const unresolvedRevenueDkk = Number(payload && payload.unresolvedRevenueDkk || 0);
+                const linkedCount = Number(payload && payload.linkedCount || 0);
+                const unresolvedCount = Number(payload && payload.unresolvedCount || 0);
+                const totalOrdDkk = Number(ordreindgang.totalOrdK || 0) * 1000;
+                const displayedWeeklyOrdDkk = weeklyRows.reduce((sum, row) => sum + (Number(row && row.totalOrd || 0) * 1000), 0);
+                const displayedWeeklyTilbudDkk = weeklyRows.reduce((sum, row) => sum + (Number(row && row.totalTilbud || 0) * 1000), 0);
+
+                title.textContent = formatMonthDa(month + '-01') + ' · bogførte ordrer og Ordreindgang';
+                let html = '<div class="omsaetning-month-detail-kpis">' +
+                    '<div class="omsaetning-month-detail-kpi"><span>Bogført omsætning</span><strong>' + escapeHtmlFE(formatDkkDa(totalRevenueDkk)) + ' DKK</strong></div>' +
+                    '<div class="omsaetning-month-detail-kpi"><span>Koblede ordrer</span><strong>' + escapeHtmlFE(formatCount(linkedCount)) + ' · ' + escapeHtmlFE(formatDkkDa(linkedRevenueDkk)) + ' DKK</strong></div>' +
+                    '<div class="omsaetning-month-detail-kpi"><span>Ordreindgang, månedens uger</span><strong>' + escapeHtmlFE(formatDkkDa(totalOrdDkk)) + ' DKK</strong></div>' +
+                    '</div>';
+
+                html += '<section class="omsaetning-month-detail-section"><h4>Efterkalkulationsordrer fra bogføringen</h4>';
+                if (rows.length === 0) {
+                    html += '<div class="omsaetning-month-detail-empty">Ingen bogførte omsætningsbevægelser med de valgte konto- og kundefiltre i denne måned.</div>';
+                } else {
+                    html += '<div class="omsaetning-table-wrap omsaetning-compact-table-wrap" style="margin:0;border-radius:8px;max-height:390px;">' +
+                        '<table class="omsaetning-table omsaetning-month-orders-table"><thead><tr><th>Ordre</th><th>Kunde</th><th>Faktura / dato</th><th class="omsaetning-cell-right">Bogført beløb</th></tr></thead><tbody>';
+                    for (const row of rows) {
+                        const ordNo = Number(row && row.ordNo || 0);
+                        const linkStatus = String(row && row.linkStatus || 'unmatched');
+                        let orderCell;
+                        if (ordNo > 0 && linkStatus === 'matched') {
+                            orderCell = '<button type="button" class="omsaetning-month-order-link" onclick="searchOrderByNo(' + ordNo + ')">' + escapeHtmlFE(String(ordNo)) + '</button>';
+                        } else if (linkStatus === 'ambiguous') {
+                            orderCell = '<span class="omsaetning-month-link-state ambiguous">Flere mulige</span>';
+                        } else {
+                            orderCell = '<span class="omsaetning-month-link-state unmatched">Ikke koblet</span>';
+                        }
+                        const customerLabel = String(row && row.customerName || '').trim() || String(row && row.custNo || '-');
+                        const invoiceLabel = String(row && row.invoiceNo || '').trim() || ('Bilag ' + String(row && row.voucherNo || '-'));
+                        html += '<tr><td>' + orderCell + '</td>' +
+                            '<td>' + escapeHtmlFE(customerLabel) + '</td>' +
+                            '<td>' + escapeHtmlFE(invoiceLabel) + '<div class="omsaetning-month-detail-note">' + escapeHtmlFE(formatOmsaetningVismaDate(row && row.invoiceDate)) + '</div></td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(row && row.revenueDkk)) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div>';
+                }
+                if (unresolvedCount > 0) {
+                    html += '<p class="omsaetning-month-detail-note"><strong>' + escapeHtmlFE(formatCount(unresolvedCount)) + ' bevægelse(r)</strong> svarende til ' + escapeHtmlFE(formatDkkDa(unresolvedRevenueDkk)) + ' DKK kunne ikke kobles entydigt via fakturanummer. De er bevaret i totalen og vises som kontrolrækker.</p>';
+                } else {
+                    html += '<p class="omsaetning-month-detail-note">Beløbene kommer direkte fra de samme AcTr-rækker som månedens Omsætning. Fakturanummeret bruges kun til at åbne den tilhørende efterkalkulation.</p>';
+                }
+                html += '</section>';
+
+                html += '<section class="omsaetning-month-detail-section"><h4>Ordreindgang for uger knyttet til måneden</h4>';
+                if (weeklyRows.length === 0) {
+                    html += '<div class="omsaetning-month-detail-empty">Ingen Ordreindgang-uger blev fundet for måneden.</div>';
+                } else {
+                    html += '<div class="omsaetning-table-wrap omsaetning-compact-table-wrap" style="margin:0;border-radius:8px;">' +
+                        '<table class="omsaetning-table omsaetning-month-weeks-table"><thead><tr><th>Uge</th><th class="omsaetning-cell-right">Ordreindgang</th><th class="omsaetning-cell-right">Tilbud</th></tr></thead><tbody>';
+                    for (const weekRow of weeklyRows) {
+                        html += '<tr><td>' + escapeHtmlFE(formatWeekLabel(weekRow.weekKey)) + '</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Number(weekRow.totalOrd || 0) * 1000)) + ' DKK</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Number(weekRow.totalTilbud || 0) * 1000)) + ' DKK</td></tr>';
+                    }
+                    html += '</tbody><tfoot><tr><td>I alt</td>' +
+                        '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(displayedWeeklyOrdDkk)) + ' DKK</td>' +
+                        '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(displayedWeeklyTilbudDkk)) + ' DKK</td>' +
+                        '</tr></tfoot></table></div>';
+                    html += '<p class="omsaetning-month-detail-note">En uge med dage i to måneder vises som en hel uge, så værdien er identisk med modulet Ordreindgang og ikke opdeles kunstigt.</p>';
+                }
+                html += '</section>';
+
+                body.innerHTML = html;
+                wrap.style.display = 'block';
+            }
+
+            async function loadOmsaetningMonthDetail(monthKey, options) {
+                const month = String(monthKey || '').trim().slice(0, 7);
+                if (!/^\\d{4}-\\d{2}$/.test(month)) return;
+                const safeOptions = options && typeof options === 'object' ? options : {};
+                const selectedAccounts = Array.from(omsaetningSelectedAccounts.values()).filter(Boolean);
+                const selectedCustomers = Array.from(omsaetningSelectedCustomers.keys()).filter(Boolean);
+                if (selectedAccounts.length === 0) return;
+
+                omsaetningSelectedMonthKey = month;
+                const token = ++omsaetningMonthDetailToken;
+                document.querySelectorAll('.omsaetning-threshold-row').forEach(row => {
+                    row.classList.toggle('selected', String(row.getAttribute('data-month') || '') === month);
+                });
+
+                const wrap = document.getElementById('omsaetningMonthDetailWrap');
+                const title = document.getElementById('omsaetningMonthDetailTitle');
+                const body = document.getElementById('omsaetningMonthDetailBody');
+                if (wrap) wrap.style.display = 'block';
+                if (title) title.textContent = formatMonthDa(month + '-01') + ' · indlæser';
+                if (body) body.innerHTML = '<div class="omsaetning-month-loading">Henter bogførte ordrer og Ordreindgang...</div>';
+
+                const cacheKey = buildOmsaetningMonthDetailCacheKey(month, selectedAccounts, selectedCustomers);
+                if (safeOptions.forceRefresh !== true) {
+                    const cached = getOmsaetningCacheEntry(omsaetningMonthDetailCache, cacheKey, OMSAETNING_SUMMARY_CACHE_TTL_MS);
+                    if (cached) {
+                        if (token === omsaetningMonthDetailToken) renderOmsaetningMonthDetail(cached);
+                        return;
+                    }
+                }
+
+                try {
+                    const query = new URLSearchParams({
+                        month,
+                        accounts: selectedAccounts.join(','),
+                        customers: selectedCustomers.join(',')
+                    });
+                    const response = await fetch('/omsaetning/month-detail?' + query.toString());
+                    const payload = await response.json();
+                    if (!response.ok || !payload.ok) throw new Error(payload.error || ('HTTP ' + response.status));
+                    setOmsaetningCacheEntry(omsaetningMonthDetailCache, cacheKey, payload);
+                    if (token === omsaetningMonthDetailToken) renderOmsaetningMonthDetail(payload);
+                } catch (error) {
+                    if (token !== omsaetningMonthDetailToken) return;
+                    if (title) title.textContent = formatMonthDa(month + '-01') + ' · fejl';
+                    if (body) body.innerHTML = '<div class="omsaetning-month-detail-empty">Kunne ikke hente månedsdetaljen: ' + escapeHtmlFE(String(error.message || error)) + '</div>';
+                }
+            }
+
             async function searchOmsaetningCustomersCached(q) {
                 const key = String(q || '').trim().toLowerCase();
                 if (!key) return { customers: [] };
@@ -5062,36 +5435,145 @@ app.get('/', (req, res) => {
                 return 'low';
             }
 
-            function getOmsaetningThresholdInputs() {
-                const warnThresholdInput = document.getElementById('omsaetningWarnThreshold');
-                const goodThresholdInput = document.getElementById('omsaetningGoodThreshold');
-
-                const warnRaw = Number((warnThresholdInput && warnThresholdInput.value) || OMSAETNING_DEFAULT_WARN_THRESHOLD);
+            function sanitizeOmsaetningThresholdConfig(rawConfig) {
+                const raw = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+                const warnRaw = Number(raw.warnThreshold);
                 const warnThreshold = Number.isFinite(warnRaw) ? Math.max(0, warnRaw) : OMSAETNING_DEFAULT_WARN_THRESHOLD;
-
-                const goodRaw = Number((goodThresholdInput && goodThresholdInput.value) || OMSAETNING_DEFAULT_GOOD_THRESHOLD);
+                const goodRaw = Number(raw.goodThreshold);
                 const goodThreshold = Number.isFinite(goodRaw)
                     ? Math.max(warnThreshold, goodRaw)
                     : Math.max(warnThreshold, OMSAETNING_DEFAULT_GOOD_THRESHOLD);
-
-                return { warnThreshold, goodThreshold };
+                const dailyCalculator = typeof OmsaetningDailyThresholds !== 'undefined' ? OmsaetningDailyThresholds : null;
+                const daily = dailyCalculator
+                    ? dailyCalculator.sanitizeConfig(raw)
+                    : {
+                        useDailyBudget: raw.useDailyBudget === true,
+                        dailyBreakEvenDkk: Math.max(0, Number(raw.dailyBreakEvenDkk) || OMSAETNING_DEFAULT_DAILY_BREAK_EVEN_DKK),
+                        dailyBudgetDkk: Math.max(Number(raw.dailyBreakEvenDkk) || OMSAETNING_DEFAULT_DAILY_BREAK_EVEN_DKK, Number(raw.dailyBudgetDkk) || OMSAETNING_DEFAULT_DAILY_BUDGET_DKK)
+                    };
+                return {
+                    warnThreshold,
+                    goodThreshold,
+                    useDailyBudget: daily.useDailyBudget,
+                    dailyBreakEvenDkk: daily.dailyBreakEvenDkk,
+                    dailyBudgetDkk: daily.dailyBudgetDkk
+                };
             }
 
-            function applyOmsaetningThresholdInputs(warnThreshold, goodThreshold) {
+            function getOmsaetningThresholdInputs() {
                 const warnThresholdInput = document.getElementById('omsaetningWarnThreshold');
                 const goodThresholdInput = document.getElementById('omsaetningGoodThreshold');
-                if (!warnThresholdInput || !goodThresholdInput) return;
+                const useDailyBudgetInput = document.getElementById('omsaetningUseDailyBudget');
+                const dailyBreakEvenInput = document.getElementById('omsaetningDailyBreakEven');
+                const dailyBudgetInput = document.getElementById('omsaetningDailyBudget');
+                return sanitizeOmsaetningThresholdConfig({
+                    warnThreshold: warnThresholdInput ? warnThresholdInput.value : OMSAETNING_DEFAULT_WARN_THRESHOLD,
+                    goodThreshold: goodThresholdInput ? goodThresholdInput.value : OMSAETNING_DEFAULT_GOOD_THRESHOLD,
+                    useDailyBudget: !!(useDailyBudgetInput && useDailyBudgetInput.checked),
+                    dailyBreakEvenDkk: dailyBreakEvenInput ? dailyBreakEvenInput.value : OMSAETNING_DEFAULT_DAILY_BREAK_EVEN_DKK,
+                    dailyBudgetDkk: dailyBudgetInput ? dailyBudgetInput.value : OMSAETNING_DEFAULT_DAILY_BUDGET_DKK
+                });
+            }
 
-                const warnRaw = Number(warnThreshold);
-                const normalizedWarn = Number.isFinite(warnRaw) ? Math.max(0, warnRaw) : OMSAETNING_DEFAULT_WARN_THRESHOLD;
+            function applyOmsaetningThresholdInputs(configOrWarnThreshold, legacyGoodThreshold) {
+                const warnThresholdInput = document.getElementById('omsaetningWarnThreshold');
+                const goodThresholdInput = document.getElementById('omsaetningGoodThreshold');
+                const useDailyBudgetInput = document.getElementById('omsaetningUseDailyBudget');
+                const dailyBreakEvenInput = document.getElementById('omsaetningDailyBreakEven');
+                const dailyBudgetInput = document.getElementById('omsaetningDailyBudget');
+                const raw = configOrWarnThreshold && typeof configOrWarnThreshold === 'object'
+                    ? configOrWarnThreshold
+                    : { warnThreshold: configOrWarnThreshold, goodThreshold: legacyGoodThreshold };
+                const safe = sanitizeOmsaetningThresholdConfig(raw);
+                if (warnThresholdInput) {
+                    warnThresholdInput.value = safe.warnThreshold.toFixed(1);
+                    warnThresholdInput.disabled = safe.useDailyBudget;
+                }
+                if (goodThresholdInput) {
+                    goodThresholdInput.value = safe.goodThreshold.toFixed(1);
+                    goodThresholdInput.disabled = safe.useDailyBudget;
+                }
+                if (useDailyBudgetInput) useDailyBudgetInput.checked = safe.useDailyBudget;
+                if (dailyBreakEvenInput) {
+                    dailyBreakEvenInput.value = String(Math.round(safe.dailyBreakEvenDkk));
+                    dailyBreakEvenInput.disabled = !safe.useDailyBudget;
+                }
+                if (dailyBudgetInput) {
+                    dailyBudgetInput.value = String(Math.round(safe.dailyBudgetDkk));
+                    dailyBudgetInput.disabled = !safe.useDailyBudget;
+                }
+                renderOmsaetningThresholdHelp(safe);
+            }
 
-                const goodRaw = Number(goodThreshold);
-                const normalizedGood = Number.isFinite(goodRaw)
-                    ? Math.max(normalizedWarn, goodRaw)
-                    : Math.max(normalizedWarn, OMSAETNING_DEFAULT_GOOD_THRESHOLD);
+            function loadOmsaetningThresholdUiConfig() {
+                try {
+                    const raw = localStorage.getItem(OMSAETNING_THRESHOLD_UI_STORAGE_KEY);
+                    return raw ? sanitizeOmsaetningThresholdConfig(JSON.parse(raw)) : sanitizeOmsaetningThresholdConfig(null);
+                } catch {
+                    return sanitizeOmsaetningThresholdConfig(null);
+                }
+            }
 
-                warnThresholdInput.value = normalizedWarn.toFixed(1);
-                goodThresholdInput.value = normalizedGood.toFixed(1);
+            function saveOmsaetningThresholdUiConfig(config) {
+                const safe = sanitizeOmsaetningThresholdConfig(config);
+                try { localStorage.setItem(OMSAETNING_THRESHOLD_UI_STORAGE_KEY, JSON.stringify(safe)); } catch {}
+                return safe;
+            }
+
+            function getOmsaetningThresholdsForMonth(monthKey, config) {
+                const safe = sanitizeOmsaetningThresholdConfig(config);
+                if (!safe.useDailyBudget || typeof OmsaetningDailyThresholds === 'undefined') {
+                    return {
+                        warnThreshold: safe.warnThreshold,
+                        goodThreshold: safe.goodThreshold,
+                        workingDays: null,
+                        useDailyBudget: false
+                    };
+                }
+                const targets = OmsaetningDailyThresholds.getMonthTargets(monthKey, safe, {
+                    manualWorkingDays: omsaetningWorkingDaysByMonth[monthKey],
+                    holidayWeekKeys: getOrdreindgangHolidayWeeksSet(),
+                    excludeCompanyHolidayWeeks: shouldIgnoreOrdreindgangHolidayWeeks()
+                });
+                return {
+                    warnThreshold: targets.warnThresholdMio,
+                    goodThreshold: targets.goodThresholdMio,
+                    workingDays: targets.workingDays,
+                    useDailyBudget: true
+                };
+            }
+
+            function renderOmsaetningThresholdHelp(config) {
+                const help = document.getElementById('omsaetningThresholdHelp');
+                if (!help) return;
+                const safe = sanitizeOmsaetningThresholdConfig(config);
+                if (!safe.useDailyBudget) {
+                    help.textContent = 'Manuelle månedsgrænser: ' + safe.warnThreshold.toFixed(1).replace('.', ',') + ' / ' + safe.goodThreshold.toFixed(1).replace('.', ',') + ' Mio.';
+                    return;
+                }
+                help.textContent = 'Aktiv: ' + Math.round(safe.dailyBreakEvenDkk).toLocaleString('da-DK') + ' DKK nulpunkt og ' + Math.round(safe.dailyBudgetDkk).toLocaleString('da-DK') + ' DKK budget pr. arbejdsdag. Weekender, danske helligdage og registrerede ferieuger trækkes fra.';
+            }
+
+            async function onOmsaetningThresholdConfigChanged() {
+                const safe = saveOmsaetningThresholdUiConfig(getOmsaetningThresholdInputs());
+                applyOmsaetningThresholdInputs(safe);
+                scheduleOmsaetningAutoReload();
+                try {
+                    const response = await fetch('/omsaetning/daily-budget-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            useDailyBudget: safe.useDailyBudget,
+                            dailyBreakEvenDkk: safe.dailyBreakEvenDkk,
+                            dailyBudgetDkk: safe.dailyBudgetDkk
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) throw new Error(data.error || 'Dagsmål kunne ikke gemmes');
+                } catch (error) {
+                    const help = document.getElementById('omsaetningThresholdHelp');
+                    if (help) help.textContent = 'Fejl: ' + String(error.message || error);
+                }
             }
 
             async function loadOmsaetningThresholdForCustomer(custNo) {
@@ -5104,11 +5586,9 @@ app.get('/', (req, res) => {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     const payload = await response.json();
                     if (token !== omsaetningThresholdLoadToken) return;
-                    omsaetningThresholdsByCustomer.set(key, {
-                        warnThreshold: Number(payload.warnThreshold || OMSAETNING_DEFAULT_WARN_THRESHOLD),
-                        goodThreshold: Number(payload.goodThreshold || OMSAETNING_DEFAULT_GOOD_THRESHOLD)
-                    });
-                    applyOmsaetningThresholdInputs(payload.warnThreshold, payload.goodThreshold);
+                    const config = sanitizeOmsaetningThresholdConfig(payload);
+                    omsaetningThresholdsByCustomer.set(key, config);
+                    applyOmsaetningThresholdInputs(config);
                     renderOmsaetningCustomerThresholds();
                 } catch (err) {
                     if (token !== omsaetningThresholdLoadToken) return;
@@ -5134,10 +5614,12 @@ app.get('/', (req, res) => {
                             escapeHtmlFE(String(custName || key)) + ' (' + escapeHtmlFE(key) + ')' +
                             '</span><span class="thr">tærskler: indlæser...</span></div>';
                     }
+                    const thresholdText = threshold.useDailyBudget
+                        ? ('dagsmål: ' + Math.round(threshold.dailyBreakEvenDkk).toLocaleString('da-DK') + ' / ' + Math.round(threshold.dailyBudgetDkk).toLocaleString('da-DK') + ' DKK')
+                        : ('tærskler: ' + Number(threshold.warnThreshold).toFixed(1) + ' / ' + Number(threshold.goodThreshold).toFixed(1) + ' Mio');
                     return '<div class="omsaetning-customer-threshold-row"><span class="cust">' +
                         escapeHtmlFE(String(custName || key)) + ' (' + escapeHtmlFE(key) + ')' +
-                        '</span><span class="thr">tærskler: ' + escapeHtmlFE(Number(threshold.warnThreshold).toFixed(1)) +
-                        ' / ' + escapeHtmlFE(Number(threshold.goodThreshold).toFixed(1)) + '</span></div>';
+                        '</span><span class="thr">' + escapeHtmlFE(thresholdText) + '</span></div>';
                 });
 
                 wrap.innerHTML = rows.join('');
@@ -5164,17 +5646,16 @@ app.get('/', (req, res) => {
                         const response = await fetch('/omsaetning/customer-threshold/' + encodeURIComponent(custNo));
                         if (!response.ok) throw new Error('HTTP ' + response.status);
                         const payload = await response.json();
-                        return {
-                            custNo,
-                            warnThreshold: Number(payload.warnThreshold || OMSAETNING_DEFAULT_WARN_THRESHOLD),
-                            goodThreshold: Number(payload.goodThreshold || OMSAETNING_DEFAULT_GOOD_THRESHOLD)
-                        };
+                        return { custNo, ...sanitizeOmsaetningThresholdConfig(payload) };
                     } catch (err) {
                         console.warn('refresh threshold failed for', custNo, err && err.message ? err.message : err);
                         return {
                             custNo,
                             warnThreshold: OMSAETNING_DEFAULT_WARN_THRESHOLD,
-                            goodThreshold: OMSAETNING_DEFAULT_GOOD_THRESHOLD
+                            goodThreshold: OMSAETNING_DEFAULT_GOOD_THRESHOLD,
+                            useDailyBudget: false,
+                            dailyBreakEvenDkk: OMSAETNING_DEFAULT_DAILY_BREAK_EVEN_DKK,
+                            dailyBudgetDkk: OMSAETNING_DEFAULT_DAILY_BUDGET_DKK
                         };
                     }
                 }));
@@ -5183,37 +5664,42 @@ app.get('/', (req, res) => {
 
                 omsaetningThresholdsByCustomer = new Map(results.map(item => [item.custNo, {
                     warnThreshold: item.warnThreshold,
-                    goodThreshold: item.goodThreshold
+                    goodThreshold: item.goodThreshold,
+                    useDailyBudget: item.useDailyBudget,
+                    dailyBreakEvenDkk: item.dailyBreakEvenDkk,
+                    dailyBudgetDkk: item.dailyBudgetDkk
                 }]));
 
                 if (safeOptions.applySingleSelectionToInputs === true && selectedCustomers.length === 1) {
                     const single = omsaetningThresholdsByCustomer.get(selectedCustomers[0]);
                     if (single) {
-                        applyOmsaetningThresholdInputs(single.warnThreshold, single.goodThreshold);
+                        applyOmsaetningThresholdInputs(single);
                     }
                 }
 
                 renderOmsaetningCustomerThresholds();
             }
 
-            async function persistOmsaetningThresholdsForCustomers(customerNos, warnThreshold, goodThreshold) {
+            async function persistOmsaetningThresholdsForCustomers(customerNos, config) {
                 const customerKeys = Array.from(new Set((Array.isArray(customerNos) ? customerNos : [])
                     .map(v => String(v || '').trim())
                     .filter(v => /^\\d{1,20}$/.test(v))));
                 if (customerKeys.length === 0) return;
+                const safeConfig = sanitizeOmsaetningThresholdConfig(config);
 
                 await Promise.all(customerKeys.map(async custNo => {
                     const response = await fetch('/omsaetning/customer-threshold/' + encodeURIComponent(custNo), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ warnThreshold, goodThreshold })
+                        body: JSON.stringify(safeConfig)
                     });
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                 }));
             }
 
-            function showOmsaetningThresholdPersistDialog(customerKeys, warnThreshold, goodThreshold) {
+            function showOmsaetningThresholdPersistDialog(customerKeys, config) {
                 return new Promise(resolve => {
+                    const safeConfig = sanitizeOmsaetningThresholdConfig(config);
                     const listHtml = customerKeys.map(custNo => {
                         const name = String(omsaetningSelectedCustomers.get(custNo) || '').trim();
                         const label = custNo + (name ? (' - ' + name) : '');
@@ -5230,7 +5716,9 @@ app.get('/', (req, res) => {
                             '<div class="omsaetning-persist-body">' +
                                 '<div>Flere kunder er valgt. Vælg hvor de nye tærskler skal gemmes.</div>' +
                                 '<div class="omsaetning-persist-customer-list">' + listHtml + '</div>' +
-                                '<div class="omsaetning-persist-thr">Nye tærskler: ' + escapeHtmlFE(Number(warnThreshold).toFixed(1)) + ' / ' + escapeHtmlFE(Number(goodThreshold).toFixed(1)) + '</div>' +
+                                '<div class="omsaetning-persist-thr">' + (safeConfig.useDailyBudget
+                                    ? ('Nye dagsmål: ' + escapeHtmlFE(Math.round(safeConfig.dailyBreakEvenDkk).toLocaleString('da-DK')) + ' / ' + escapeHtmlFE(Math.round(safeConfig.dailyBudgetDkk).toLocaleString('da-DK')) + ' DKK')
+                                    : ('Nye tærskler: ' + escapeHtmlFE(Number(safeConfig.warnThreshold).toFixed(1)) + ' / ' + escapeHtmlFE(Number(safeConfig.goodThreshold).toFixed(1)) + ' Mio')) + '</div>' +
                                 '<div class="omsaetning-persist-pick">Valgt kunde: <span id="omsaetningPersistPicked" class="omsaetning-persist-picked">' + escapeHtmlFE(defaultCustomer) + '</span></div>' +
                                 '</div>' +
                                 '<div class="omsaetning-persist-actions">' +
@@ -5293,7 +5781,7 @@ app.get('/', (req, res) => {
                 });
             }
 
-            async function resolveOmsaetningThresholdPersistTargets(selectedCustomers, warnThreshold, goodThreshold, options) {
+            async function resolveOmsaetningThresholdPersistTargets(selectedCustomers, config, options) {
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const customerKeys = Array.from(new Set((Array.isArray(selectedCustomers) ? selectedCustomers : [])
                     .map(v => String(v || '').trim())
@@ -5307,7 +5795,7 @@ app.get('/', (req, res) => {
                     return customerKeys;
                 }
 
-                const answerRaw = await showOmsaetningThresholdPersistDialog(customerKeys, warnThreshold, goodThreshold);
+                const answerRaw = await showOmsaetningThresholdPersistDialog(customerKeys, config);
                 const answer = String(answerRaw || '').trim().toUpperCase();
 
                 if (!answer || answer === 'NONE' || answer === 'NO' || answer === 'N') {
@@ -5330,7 +5818,7 @@ app.get('/', (req, res) => {
                 if (selectedCustomers.length === 0) {
                     omsaetningThresholdLoadToken += 1;
                     omsaetningThresholdsByCustomer = new Map();
-                    applyOmsaetningThresholdInputs(OMSAETNING_DEFAULT_WARN_THRESHOLD, OMSAETNING_DEFAULT_GOOD_THRESHOLD);
+                    applyOmsaetningThresholdInputs(loadOmsaetningThresholdUiConfig());
                     renderOmsaetningCustomerThresholds();
                     scheduleOmsaetningAutoReload();
                     return;
@@ -5912,6 +6400,9 @@ app.get('/', (req, res) => {
                 const safe = saveOrdreindgangHolidaySettings(getOrdreindgangHolidaySettingsFromInputs());
                 applyOrdreindgangHolidaySettingsToInputs(safe);
                 renderOrdreindgangFromLastPayload();
+                if (omsaetningInitialized && getOmsaetningThresholdInputs().useDailyBudget) {
+                    scheduleOmsaetningAutoReload();
+                }
                 if (ordreindgangLastPayload && Array.isArray(ordreindgangLastPayload.weeklyRows)) {
                     const range = buildOrdreindgangRange();
                     const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
@@ -5938,6 +6429,8 @@ app.get('/', (req, res) => {
             }
 
             function initializeOrdreindgangHolidaySettings() {
+                if (ordreindgangHolidaySettingsInitialized) return;
+                ordreindgangHolidaySettingsInitialized = true;
                 const saved = loadOrdreindgangHolidaySettings();
                 applyOrdreindgangHolidaySettingsToInputs(saved);
                 // Delte ferieuger fra GOH vinder over lokale (fail-soft hvis GOH er nede)
@@ -5952,6 +6445,9 @@ app.get('/', (req, res) => {
                         try { localStorage.setItem(ORDREINDGANG_HOLIDAY_SETTINGS_STORAGE_KEY, JSON.stringify(shared)); } catch {}
                         applyOrdreindgangHolidaySettingsToInputs(shared);
                         renderOrdreindgangFromLastPayload();
+                        if (omsaetningInitialized && getOmsaetningThresholdInputs().useDailyBudget) {
+                            scheduleOmsaetningAutoReload();
+                        }
                     })
                     .catch(() => {});
             }
@@ -6854,10 +7350,17 @@ app.get('/', (req, res) => {
                 const tilbudValues = trendRows.map(r => Number(r.totalTilbud || 0));
                 const budgetValues = trendRows.map(r => Number(r.totalBudget || 0));
                 const movingAvgValues = trendRows.map(r => (Number.isFinite(Number(r.ma3)) ? Number(r.ma3) : null));
+                const rawPeriodAverage = Number(ordreindgangLastPayload && ordreindgangLastPayload.kpis
+                    ? ordreindgangLastPayload.kpis.avgSumOrd
+                    : NaN);
+                const periodAverageValue = Number.isFinite(rawPeriodAverage) ? rawPeriodAverage : null;
                 const ignoreHolidayWeeks = shouldIgnoreOrdreindgangHolidayWeeks();
-                const allValues = showTilbudLine
+                let allValues = showTilbudLine
                     ? ordValues.concat(tilbudValues).concat(budgetValues).concat(showTrendLine ? movingAvgValues.filter(v => Number.isFinite(v)) : [])
                     : ordValues.concat(budgetValues).concat(showTrendLine ? movingAvgValues.filter(v => Number.isFinite(v)) : []);
+                if (periodAverageValue !== null) {
+                    allValues = allValues.concat([periodAverageValue]);
+                }
                 const rawMax = Math.max(...allValues, 0);
                 const chartMax = rawMax <= 0 ? 1000 : (Math.ceil(rawMax / 1000) * 1000);
 
@@ -6984,6 +7487,15 @@ app.get('/', (req, res) => {
                             '</circle>';
                     });
                 }
+                if (periodAverageValue !== null) {
+                    const periodAverageY = toY(periodAverageValue);
+                    const periodAverageLabelY = Math.max(topPad + 14, periodAverageY - 7);
+                    const periodAverageText = 'Gns. ordre i perioden: ' + formatDkkDa(periodAverageValue);
+                    html += '<line x1="' + leftPad + '" y1="' + periodAverageY + '" x2="' + (leftPad + width) + '" y2="' + periodAverageY + '" stroke="#7b1fa2" stroke-width="2.6" vector-effect="non-scaling-stroke">' +
+                        '<title>' + escapeHtmlFE(periodAverageText) + '</title></line>';
+                    html += '<text x="' + (leftPad + width - 8) + '" y="' + periodAverageLabelY + '" text-anchor="end" font-size="12" font-weight="700" fill="#7b1fa2" paint-order="stroke" stroke="#ffffff" stroke-width="4" stroke-linejoin="round">' +
+                        escapeHtmlFE(periodAverageText) + '</text>';
+                }
                 html += '</g>';
 
                 svg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + height);
@@ -7006,6 +7518,9 @@ app.get('/', (req, res) => {
                     }
                     if (showBudgetLine) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#1b8f3b"></span>Budget</span>';
+                    }
+                    if (periodAverageValue !== null) {
+                        legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#7b1fa2"></span>Gns. ordre i perioden: ' + escapeHtmlFE(formatDkkDa(periodAverageValue)) + '</span>';
                     }
                     if (trendRows.some(row => row.isHoliday)) {
                         legendHtml += '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:#cfd8dc"></span>Ferieuge (0,00)</span>';
@@ -8223,6 +8738,92 @@ app.get('/', (req, res) => {
                 status.style.color = isError ? '#b71c1c' : '#1b5e20';
             }
 
+            const ADMIN_MONTH_NAMES = ['Januar', 'Februar', 'Marts', 'April', 'Maj', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'December'];
+
+            function getAdminWorkingDaysYear() {
+                const input = document.getElementById('adminWorkingDaysYear');
+                const year = Number(input && input.value);
+                return Number.isInteger(year) && year >= 2000 && year <= 2200 ? year : new Date().getFullYear();
+            }
+
+            function getCalendarWorkingDays(monthKey) {
+                if (typeof OmsaetningDailyThresholds === 'undefined') return 0;
+                return OmsaetningDailyThresholds.countWorkingDaysInMonth(monthKey, {
+                    holidayWeekKeys: getOrdreindgangHolidayWeeksSet(),
+                    excludeCompanyHolidayWeeks: shouldIgnoreOrdreindgangHolidayWeeks()
+                });
+            }
+
+            function renderAdminWorkingDays(year, months) {
+                const input = document.getElementById('adminWorkingDaysYear');
+                const grid = document.getElementById('adminWorkingDaysGrid');
+                if (input) input.value = String(year);
+                if (!grid) return;
+                grid.innerHTML = ADMIN_MONTH_NAMES.map((name, index) => {
+                    const monthKey = String(year) + '-' + String(index + 1).padStart(2, '0');
+                    const calendarDays = getCalendarWorkingDays(monthKey);
+                    const storedValue = months && Object.prototype.hasOwnProperty.call(months, monthKey) ? Number(months[monthKey]) : calendarDays;
+                    return '<label class="admin-working-day">' + name
+                        + '<input class="admin-working-day-input" type="number" min="0" max="31" step="1" data-month-key="' + monthKey + '" value="' + String(storedValue) + '">'
+                        + '<small>Kalender: ' + String(calendarDays) + '</small></label>';
+                }).join('');
+            }
+
+            function setAdminWorkingDaysStatus(text, isError) {
+                const status = document.getElementById('adminWorkingDaysStatus');
+                if (!status) return;
+                status.textContent = text || '';
+                status.style.color = isError ? '#b71c1c' : '#1b5e20';
+            }
+
+            async function loadAdminWorkingDays() {
+                const year = getAdminWorkingDaysYear();
+                renderAdminWorkingDays(year, {});
+                setAdminWorkingDaysStatus('Indlæser...');
+                try {
+                    const response = await fetch('/admin/working-days?year=' + encodeURIComponent(String(year)), { headers: adminHeaders() });
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) throw new Error(data.error || 'Kunne ikke hente arbejdsdage');
+                    renderAdminWorkingDays(year, data.months || {});
+                    setAdminWorkingDaysStatus(data.updatedAt ? 'Senest gemt: ' + new Date(data.updatedAt).toLocaleString('da-DK') : 'Kalenderforslag vises.');
+                } catch (error) {
+                    setAdminWorkingDaysStatus(String(error.message || error), true);
+                }
+            }
+
+            function resetAdminWorkingDaysToCalendar() {
+                document.querySelectorAll('.admin-working-day-input').forEach(input => {
+                    input.value = String(getCalendarWorkingDays(String(input.dataset.monthKey || '')));
+                });
+                setAdminWorkingDaysStatus('Kalenderforslag er indsat. Klik Gem arbejdsdage.');
+            }
+
+            async function saveAdminWorkingDays() {
+                const year = getAdminWorkingDaysYear();
+                const months = {};
+                let invalid = false;
+                document.querySelectorAll('.admin-working-day-input').forEach(input => {
+                    const value = Number(input.value);
+                    if (!Number.isInteger(value) || value < 0 || value > 31) invalid = true;
+                    else months[String(input.dataset.monthKey || '')] = value;
+                });
+                if (invalid || Object.keys(months).length !== 12) {
+                    setAdminWorkingDaysStatus('Alle måneder skal have et helt tal fra 0 til 31.', true);
+                    return;
+                }
+                setAdminWorkingDaysStatus('Gemmer...');
+                try {
+                    const response = await fetch('/admin/working-days', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ year, months }) });
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) throw new Error(data.error || 'Kunne ikke gemme arbejdsdage');
+                    Object.assign(omsaetningWorkingDaysByMonth, data.months || {});
+                    setAdminWorkingDaysStatus('Arbejdsdage for ' + String(year) + ' er gemt.');
+                    if (omsaetningInitialized && getOmsaetningThresholdInputs().useDailyBudget) scheduleOmsaetningAutoReload();
+                } catch (error) {
+                    setAdminWorkingDaysStatus(String(error.message || error), true);
+                }
+            }
+
             async function loadAdminUsers() {
                 const target = document.getElementById('adminUsers');
                 if (!target) return;
@@ -8373,6 +8974,8 @@ app.get('/', (req, res) => {
                     if (administration) administration.style.display = 'block';
                     closeSideMenu();
                     loadAdminUsers();
+                    initializeOrdreindgangHolidaySettings();
+                    loadAdminWorkingDays();
                     window.scrollTo({ top: 0, behavior: 'auto' });
                     return;
                 }
@@ -8810,19 +9413,52 @@ app.get('/', (req, res) => {
             }
 
             async function initializeOmsaetningIfNeeded() {
-                if (omsaetningInitialized) return;
+                if (omsaetningInitialized) {
+                    await Promise.all([loadOmsaetningWorkingDays(), loadOmsaetningDailyBudgetSettings()]);
+                    if (getOmsaetningThresholdInputs().useDailyBudget) scheduleOmsaetningAutoReload();
+                    return;
+                }
                 omsaetningInitialized = true;
 
                 const currentFiscalYear = getCurrentFiscalYearStart();
                 omsaetningSelectedFiscalYears = new Set([currentFiscalYear]);
                 applySelectedFiscalYearsToInputs();
                 renderOmsaetningYearChips(currentFiscalYear);
-                applyOmsaetningThresholdInputs(OMSAETNING_DEFAULT_WARN_THRESHOLD, OMSAETNING_DEFAULT_GOOD_THRESHOLD);
+                applyOmsaetningThresholdInputs(loadOmsaetningThresholdUiConfig());
+                initializeOrdreindgangHolidaySettings();
                 renderOmsaetningCustomerMode();
                 renderOmsaetningCustomerResults();
 
+                await Promise.all([loadOmsaetningWorkingDays(), loadOmsaetningDailyBudgetSettings()]);
                 await loadOmsaetningAccounts();
                 await loadOmsaetningSummary();
+            }
+
+            async function loadOmsaetningWorkingDays() {
+                try {
+                    const response = await fetch('/omsaetning/working-days');
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) return;
+                    omsaetningWorkingDaysByMonth = typeof OmsaetningDailyThresholds !== 'undefined'
+                        ? OmsaetningDailyThresholds.normalizeWorkingDaysByMonth(data.months)
+                        : (data.months || {});
+                } catch {}
+            }
+
+            async function loadOmsaetningDailyBudgetSettings() {
+                try {
+                    const response = await fetch('/omsaetning/daily-budget-settings');
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) return;
+                    const current = getOmsaetningThresholdInputs();
+                    const merged = saveOmsaetningThresholdUiConfig({
+                        ...current,
+                        useDailyBudget: data.useDailyBudget === true,
+                        dailyBreakEvenDkk: data.dailyBreakEvenDkk,
+                        dailyBudgetDkk: data.dailyBudgetDkk
+                    });
+                    applyOmsaetningThresholdInputs(merged);
+                } catch {}
             }
 
             async function loadOmsaetningAccounts() {
@@ -8884,10 +9520,8 @@ app.get('/', (req, res) => {
                 }
                 const selectedCustomers = Array.from(omsaetningSelectedCustomers.keys()).filter(Boolean);
 
-                const thresholdInputs = getOmsaetningThresholdInputs();
-                const warnThreshold = thresholdInputs.warnThreshold;
-                const goodThreshold = thresholdInputs.goodThreshold;
-                applyOmsaetningThresholdInputs(warnThreshold, goodThreshold);
+                const thresholdConfig = getOmsaetningThresholdInputs();
+                applyOmsaetningThresholdInputs(thresholdConfig);
 
                 if (loadBtn) {
                     loadBtn.disabled = true;
@@ -8899,20 +9533,15 @@ app.get('/', (req, res) => {
 
                     const persistTargets = await resolveOmsaetningThresholdPersistTargets(
                         selectedCustomers,
-                        warnThreshold,
-                        goodThreshold,
+                        thresholdConfig,
                         safeOptions
                     );
 
                     if (persistTargets.length > 0) {
-                        persistOmsaetningThresholdsForCustomers(persistTargets, warnThreshold, goodThreshold)
-                            .catch(err => console.warn('persistOmsaetningThresholdsForCustomers failed:', err && err.message ? err.message : err));
+                        await persistOmsaetningThresholdsForCustomers(persistTargets, thresholdConfig);
 
                         for (const custNo of persistTargets) {
-                            omsaetningThresholdsByCustomer.set(custNo, {
-                                warnThreshold,
-                                goodThreshold
-                            });
+                            omsaetningThresholdsByCustomer.set(custNo, { ...thresholdConfig });
                         }
                         renderOmsaetningCustomerThresholds();
                     }
@@ -8937,10 +9566,20 @@ app.get('/', (req, res) => {
                     const sortedMonths = (monthKeysForPeriod.length > 0
                         ? monthKeysForPeriod.map(monthKey => [monthKey, Number(monthTotals.get(String(monthKey)) || 0)])
                         : Array.from(monthTotals.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
-                    let thresholdHtml = '<table class="omsaetning-table"><thead><tr>' +
+                    let periodRevenueMio = 0;
+                    let periodZeroPointMio = 0;
+                    let periodBudgetMio = 0;
+                    let thresholdHtml = '<table class="omsaetning-table omsaetning-threshold-table"><thead><tr>' +
                         '<th>Måned</th><th class="omsaetning-cell-right">Omsætning (Mio)</th><th>Tærskel</th>' +
                         '</tr></thead><tbody>';
                     for (const [monthKey, amountMio] of sortedMonths) {
+                        const selectableMonth = String(monthKey || '').slice(0, 7);
+                        const monthThresholds = getOmsaetningThresholdsForMonth(selectableMonth, thresholdConfig);
+                        const warnThreshold = monthThresholds.warnThreshold;
+                        const goodThreshold = monthThresholds.goodThreshold;
+                        periodRevenueMio += Number(amountMio || 0);
+                        periodZeroPointMio += Number(warnThreshold || 0);
+                        periodBudgetMio += Number(goodThreshold || 0);
                         const statusClass = getOmsaetningStatusClass(amountMio, warnThreshold, goodThreshold);
                         const monthMioLabel = formatMio(amountMio);
                         const monthDkkLabel = formatDkkFromMio(amountMio);
@@ -8948,13 +9587,16 @@ app.get('/', (req, res) => {
                         const marginPctLabel = formatSigned(gauge.marginPct, 1) + '%';
                         const deltaWarnLabel = formatSigned(gauge.deltaWarn, 3) + ' Mio';
                         const deltaGoodLabel = formatSigned(gauge.deltaGood, 3) + ' Mio';
-                        thresholdHtml += '<tr>' +
-                            '<td>' + escapeHtmlFE(formatMonthDa(monthKey)) + '</td>' +
+                        const workdayLabel = monthThresholds.useDailyBudget ? (' · ' + String(monthThresholds.workingDays) + ' arb.dage') : '';
+                        const zeroGaugeLabel = '0: ' + formatMio(warnThreshold);
+                        const budgetGaugeLabel = 'Budget: ' + formatMio(goodThreshold);
+                        thresholdHtml += '<tr class="omsaetning-threshold-row' + (omsaetningSelectedMonthKey === selectableMonth ? ' selected' : '') + '" data-month="' + escapeHtmlFE(selectableMonth) + '" onclick="loadOmsaetningMonthDetail(\\'' + escapeHtmlFE(selectableMonth) + '\\')" style="cursor:pointer;">' +
+                            '<td><button type="button" class="omsaetning-month-pick" title="Vis bogførte ordrer og Ordreindgang for måneden">' + escapeHtmlFE(formatMonthDa(monthKey)) + '</button></td>' +
                             '<td class="omsaetning-cell-right" title="' + escapeHtmlFE(monthDkkLabel + ' DKK') + '">' + escapeHtmlFE(monthMioLabel) + '</td>' +
                             '<td>' +
                                 '<div class="omsaetning-gauge-wrap">' +
                                     '<div class="omsaetning-gauge-meta">' +
-                                        '<span class="omsaetning-status ' + statusClass + '">' + escapeHtmlFE(getOmsaetningStatusLabel(statusClass)) + '</span>' +
+                                        '<span class="omsaetning-status ' + statusClass + '">' + escapeHtmlFE(getOmsaetningStatusLabel(statusClass) + workdayLabel) + '</span>' +
                                         '<strong>' + escapeHtmlFE(marginPctLabel) + '</strong>' +
                                     '</div>' +
                                     '<div class="omsaetning-gauge-track">' +
@@ -8963,13 +9605,31 @@ app.get('/', (req, res) => {
                                         '<span class="omsaetning-gauge-marker" style="left:' + gauge.targetLeft.toFixed(2) + '%;"></span>' +
                                         '<span class="omsaetning-gauge-point" style="left:' + gauge.pointLeft.toFixed(2) + '%;"></span>' +
                                     '</div>' +
-                                    '<div class="omsaetning-gauge-legend"><span>-30%</span><span>0% (3)</span><span>30% (5)</span><span>60%</span></div>' +
-                                    '<div class="omsaetning-gauge-delta">vs 3: <strong>' + escapeHtmlFE(deltaWarnLabel) + '</strong> · vs 5: <strong>' + escapeHtmlFE(deltaGoodLabel) + '</strong></div>' +
+                                    '<div class="omsaetning-gauge-legend"><span>-30%</span><span>' + escapeHtmlFE(zeroGaugeLabel) + '</span><span>' + escapeHtmlFE(budgetGaugeLabel) + '</span><span>60%</span></div>' +
+                                    '<div class="omsaetning-gauge-delta">vs 0: <strong>' + escapeHtmlFE(deltaWarnLabel) + '</strong> · vs budget: <strong>' + escapeHtmlFE(deltaGoodLabel) + '</strong></div>' +
                                 '</div>' +
                             '</td>' +
                             '</tr>';
                     }
                     thresholdHtml += '</tbody></table>';
+                    const periodZeroDeltaMio = periodRevenueMio - periodZeroPointMio;
+                    const periodZeroDeltaPct = periodZeroPointMio > 0 ? (periodZeroDeltaMio / periodZeroPointMio) * 100 : 0;
+                    const periodDeltaMio = periodRevenueMio - periodBudgetMio;
+                    const periodDeltaPct = periodBudgetMio > 0 ? (periodDeltaMio / periodBudgetMio) * 100 : 0;
+                    const periodIsOverBudget = periodDeltaMio >= 0;
+                    const periodStatusLabel = periodIsOverBudget ? 'Over budget for perioden' : 'Under budget for perioden';
+                    thresholdHtml = '<div class="omsaetning-period-budget">' +
+                        '<span class="omsaetning-status ' + (periodIsOverBudget ? 'good' : 'low') + '">' + escapeHtmlFE(periodStatusLabel) + '</span>' +
+                        '<div class="omsaetning-period-budget-values">' +
+                            '<span>Omsætning: <strong>' + escapeHtmlFE(formatMio(periodRevenueMio)) + ' Mio</strong></span>' +
+                            '<span>0-punkt: <strong>' + escapeHtmlFE(formatMio(periodZeroPointMio)) + ' Mio</strong></span>' +
+                            '<span>Budget: <strong>' + escapeHtmlFE(formatMio(periodBudgetMio)) + ' Mio</strong></span>' +
+                        '</div>' +
+                        '<div class="omsaetning-period-budget-deltas">' +
+                            '<span class="' + (periodZeroDeltaMio >= 0 ? 'positive' : 'negative') + '">Forskel til 0-punkt: <strong>' + escapeHtmlFE(formatSigned(periodZeroDeltaMio, 3)) + ' Mio (' + escapeHtmlFE(formatSigned(periodZeroDeltaPct, 1)) + '%)</strong></span>' +
+                            '<span class="' + (periodDeltaMio >= 0 ? 'positive' : 'negative') + '">Forskel til budget: <strong>' + escapeHtmlFE(formatSigned(periodDeltaMio, 3)) + ' Mio (' + escapeHtmlFE(formatSigned(periodDeltaPct, 1)) + '%)</strong></span>' +
+                        '</div>' +
+                    '</div>' + thresholdHtml;
 
                     let html = '<table class="omsaetning-table"><thead><tr>' +
                         '<th>Måned</th><th>Konto</th><th>Navn</th><th>Kunde</th><th>Kundenavn</th><th style="text-align:right;">Omsætning (Mio)</th>' +
@@ -9008,6 +9668,17 @@ app.get('/', (req, res) => {
                         applyOmsaetningDetailsCollapsedState();
                     }
                     renderOmsaetningCharts(rows, monthKeysForPeriod);
+                    if (omsaetningSelectedMonthKey) {
+                        const selectedMonthStillVisible = sortedMonths.some(entry => String(entry[0] || '').slice(0, 7) === omsaetningSelectedMonthKey);
+                        if (selectedMonthStillVisible) {
+                            loadOmsaetningMonthDetail(omsaetningSelectedMonthKey, { forceRefresh: safeOptions.forceRefresh === true });
+                        } else {
+                            omsaetningSelectedMonthKey = '';
+                            omsaetningMonthDetailToken += 1;
+                            const monthDetailWrap = document.getElementById('omsaetningMonthDetailWrap');
+                            if (monthDetailWrap) monthDetailWrap.style.display = 'none';
+                        }
+                    }
                     if (empty) empty.style.display = 'none';
                 } catch (err) {
                     if (tableWrap) {
@@ -9017,6 +9688,9 @@ app.get('/', (req, res) => {
                     if (detailsWrap) detailsWrap.style.display = 'none';
                     if (thresholdWrap) thresholdWrap.style.display = 'none';
                     if (thresholdTable) thresholdTable.innerHTML = '';
+                    omsaetningMonthDetailToken += 1;
+                    const monthDetailWrap = document.getElementById('omsaetningMonthDetailWrap');
+                    if (monthDetailWrap) monthDetailWrap.style.display = 'none';
                     if (chartsWrap) chartsWrap.style.display = 'none';
                     if (empty) {
                         empty.style.display = 'block';
@@ -9972,6 +10646,12 @@ app.get('/', (req, res) => {
                 const marginPct = orderMarginPercent || '0.00';
                 const revenue = Number((orderData && orderData.summary && orderData.summary.totalRevenue) || 0);
                 const cost = Number((orderData && orderData.summary && orderData.summary.totalCost) || 0);
+                const costExclusion = (orderData && orderData.costExclusion) || {};
+                const excludedCost = Number(costExclusion.excludedCost || 0);
+                const excludedLineCount = Number(costExclusion.excludedLineCount || 0);
+                const originalCost = Number.isFinite(Number(costExclusion.originalCost))
+                    ? Number(costExclusion.originalCost)
+                    : cost;
                 const generatedAt = new Date().toLocaleString('da-DK');
                 const orderTypeLabel = Number(orderHeader.Gr4 || 0) === 3 ? 'Multiordre' : 'Ordre';
                 const statusLabel = Number(orderHeader.InvoAm || 0) === 0
@@ -10001,6 +10681,9 @@ app.get('/', (req, res) => {
                 html += '<span class="report-pill"><strong>' + formatNumber(marginAmount) + ' DKK</strong> margin</span>';
                 html += '<span class="report-pill warn"><strong>' + formatCount(exceptionGroupCount) + '</strong> spor/advarsler</span>';
                 html += '</div>';
+                if (excludedLineCount > 0) {
+                    html += '<div class="report-cost-adjustment"><strong>Permanent kostjustering:</strong> kost fra ' + formatCount(excludedLineCount) + ' salgslinje(r) er markeret som udeladt. Fratrukket kost: ' + formatNumber(excludedCost) + ' DKK; beregnet kost før justering: ' + formatNumber(originalCost) + ' DKK. Salgsprisen er uændret. Valget er gemt i GOH.</div>';
+                }
                 html += '</div>';
 
                 html += '<div class="order-report-grid">';
@@ -10471,8 +11154,10 @@ app.get('/', (req, res) => {
                     'Ordre ' + escapeHtml(String(ordNo)) + ' - indlæser...',
                     'Forbereder produktion, cost og sporbarhed...'
                 );
-                
+
                 try {
+                    await loadSalesCostExclusions(ordNo);
+                    if (requestId !== activeSearchRequestId) return;
                     // Hurtig visning: cached data vises straks, friske tal hentes i baggrunden
                     let shownFingerprint = null;
                     try {
@@ -10571,11 +11256,27 @@ app.get('/', (req, res) => {
                             }
                         }
                     }
-                    const displayHeaderTotalCost = Number(data.summary.totalCost || 0) + styklisteFallbackExtra;
+                    const originalDisplayTotalCost = Number(data.summary.totalCost || 0) + styklisteFallbackExtra;
                     const styklisteNoteHtml = styklisteFallbackExtra > 0
                         ? '<div style="font-size:11px; opacity:0.8; margin-top:3px;">inkl. ' + formatNumber(styklisteFallbackExtra) + ' fra stykliste</div>'
                         : '';
-                    const orderMarginPercent = calculateOrderMarginPercent(data.summary.totalRevenue, displayHeaderTotalCost).toFixed(2);
+                    const detailOrdNo = String((data.orderHeader && data.orderHeader.OrdNo) || '').trim();
+                    const excludedCostLineKeys = getSalesCostExclusionSet(detailOrdNo);
+                    const costExclusion = AftercalcCostExclusions.calculateAdjustedCost(
+                        originalDisplayTotalCost,
+                        data.salesOrderLines,
+                        excludedCostLineKeys
+                    );
+                    const effectiveTotalCost = costExclusion.adjustedCost;
+                    const totalRevenue = Number(data.summary.totalRevenue || 0);
+                    const orderMarginPercent = calculateOrderMarginPercent(totalRevenue, effectiveTotalCost).toFixed(2);
+                    marginStateByOrdNo[detailOrdNo] = {
+                        status: 'success',
+                        totalRevenue,
+                        totalCost: effectiveTotalCost,
+                        hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning)
+                    };
+                    updateOrderMarginCell(detailOrdNo);
                     const _invoAm = Number(data.orderHeader.InvoAm || 0);
                     const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
                     let invoiceStatusBadge, invoiceStatusSub = '';
@@ -10644,23 +11345,31 @@ app.get('/', (req, res) => {
                     html += '<div class="order-header-row">';
                     if (_invoAm === 0) {
                         // I Produktion: show cost to date + projected margin if DInvoIF available
-                        html += '<div class="order-header-item"><div class="order-header-label">Kost til dato (estimat)</div><div class="order-header-value">' + formatNumber(costToDateFromProduction) + ' DKK</div></div>';
+                        html += '<div class="order-header-item"><div class="order-header-label">Kost til dato (estimat)</div><div class="order-header-value">' + formatNumber(effectiveTotalCost) + ' DKK' + styklisteNoteHtml + '</div></div>';
                         if (_dInvoIF > 0) {
-                            const projectedMargin = _dInvoIF - costToDateFromProduction;
-                            const projectedMarginPct = costToDateFromProduction > 0 ? calculateOrderMarginPercent(_dInvoIF, costToDateFromProduction).toFixed(2) : '0.00';
-                            html += '<div class="order-header-item"><div class="order-header-label">Forventet salgsbeløb</div><div class="order-header-value">' + formatNumber(_dInvoIF) + ' DKK</div></div>';
+                            const projectedMargin = totalRevenue - effectiveTotalCost;
+                            const projectedMarginPct = effectiveTotalCost > 0 ? calculateOrderMarginPercent(totalRevenue, effectiveTotalCost).toFixed(2) : '0.00';
+                            html += '<div class="order-header-item"><div class="order-header-label">Forventet salgsbeløb</div><div class="order-header-value">' + formatNumber(totalRevenue) + ' DKK</div></div>';
                             html += '<div class="order-header-item"><div class="order-header-label">Forventet margin (prognose)</div><div class="order-header-value">' + getMarginBadge(projectedMarginPct) + '<div style="font-size:13px; opacity:0.85; margin-top:4px;">' + formatNumber(projectedMargin) + ' DKK</div></div></div>';
                         } else {
                             html += '<div class="order-header-item"><div class="order-header-label">Forventet salgsbeløb</div><div class="order-header-value" style="opacity:0.6; font-size:16px;">— (ukendt)</div></div>';
                             html += '<div class="order-header-item"><div class="order-header-label">Margin</div><div class="order-header-value"><span style="background:rgba(255,255,255,0.15); color:#fff; font-weight:bold; padding:2px 8px; border-radius:4px; font-size:14px;">— Ingen data</span></div></div>';
                         }
                     } else {
-                        html += '<div class="order-header-item"><div class="order-header-label">Faktureret beløb</div><div class="order-header-value">' + formatNumber(data.summary.totalRevenue) + ' DKK</div></div>';
-                        html += '<div class="order-header-item"><div class="order-header-label">Kostpris</div><div class="order-header-value">' + formatNumber(displayHeaderTotalCost) + ' DKK' + styklisteNoteHtml + '</div></div>';
+                        html += '<div class="order-header-item"><div class="order-header-label">Faktureret beløb</div><div class="order-header-value">' + formatNumber(totalRevenue) + ' DKK</div></div>';
+                        html += '<div class="order-header-item"><div class="order-header-label">Kostpris</div><div class="order-header-value">' + formatNumber(effectiveTotalCost) + ' DKK' + styklisteNoteHtml + '</div></div>';
                         html += '<div class="order-header-item"><div class="order-header-label">Margin (' + getMarginModeLabel() + ')</div><div class="order-header-value">' + getMarginBadge(orderMarginPercent) + '</div></div>';
                     }
                     html += '<div class="order-header-item"><div class="order-header-label">Fakturastatus</div><div class="order-header-value">' + invoiceStatusBadge + invoiceStatusSub + '</div></div>';
-                    html += '</div></div>';
+                    html += '</div>';
+                    if (costExclusion.excludedLineCount > 0) {
+                        html += '<div class="sales-line-exclusion-help active"><strong>Permanent GOH-justering:</strong> kost fra ' + formatCount(costExclusion.excludedLineCount) + ' linje(r) er markeret som udeladt. Fratrukket kost: ' + formatNumber(costExclusion.excludedCost) + ' DKK; kost før justering: ' + formatNumber(costExclusion.originalCost) + ' DKK. Salgsprisen er uændret.' + (costExclusion.deferredSharedLineCount > 0 ? '<div style="margin-top:4px;"><strong>Bemærk:</strong> ' + formatCount(costExclusion.deferredSharedLineCount) + ' valgt(e) linje(r) deler produktionsordre med en linje, der stadig er medtaget; den fælles kost er derfor ikke trukket fra endnu.</div>' : '') + '</div>';
+                    }
+                    const costExclusionMeta = salesCostExclusionMetaByOrdNo.get(detailOrdNo);
+                    if (costExclusionMeta && costExclusionMeta.shared === false) {
+                        html += '<div class="sales-line-exclusion-help active"><strong>GOH ikke tilgængelig:</strong> visningen bruger den senest kendte lokale kopi. Nye ændringer kan ikke gemmes permanent, før forbindelsen er tilbage.</div>';
+                    }
+                    html += '</div>';
 
                     html += '<div class="section oversigt-launcher-section">';
                     html += '<h3>Produktionsoversigter</h3>';
@@ -10693,19 +11402,32 @@ app.get('/', (req, res) => {
                     html += '<div id="operationOrderSummaryBody" class="loading">Indlæser operationsdata...</div>';
                     html += '</div>';
 
-                    lastOrderReportHtml = buildOrderDetailReportHtml(data, orderMarginPercent, costToDateFromProduction);
+                    const reportData = Object.assign({}, data, {
+                        summary: Object.assign({}, data.summary, {
+                            totalCost: effectiveTotalCost,
+                            margin: totalRevenue - effectiveTotalCost
+                        }),
+                        costExclusion
+                    });
+                    lastOrderReportHtml = buildOrderDetailReportHtml(reportData, orderMarginPercent, costToDateFromProduction);
                     lastOrderReportTitle = 'Rapport 2.0 - ordre ' + String(data.orderHeader.OrdNo || '-');
                     updateReportOpenButtonState(true, String(data.orderHeader.OrdNo || ''));
 
                     // Sezione linee ORDINE DI VENDITA complete
                     if (data.salesOrderLines && data.salesOrderLines.length > 0) {
                         const hasSalesOrderDrawing = data.salesOrderLines.some(line => !!line.DrawingWebPg);
-                        const salesOrderColspan = hasSalesOrderDrawing ? 11 : 10;
+                        const salesOrderColspan = hasSalesOrderDrawing ? 12 : 11;
                         html += '<div class="section"><h3>Salgsordrelinjer</h3>';
-                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Price</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
+                        html += '<div class="sales-line-exclusion-help">Sæt flueben i <strong>Udelad kost</strong> for ikke at medregne linjens kost i ordretotalen og marginen. <strong>Salgsprisen medregnes altid.</strong> Valget gemmes permanent i GOH, indtil fluebenet fjernes igen.</div>';
+                        html += '<table><tr><th>Linje</th><th>Produkt</th><th>Beskrivelse</th><th>Færdigmeldt</th><th>Kostpris</th><th>Samlet kost</th><th>Udelad kost</th><th>Price</th><th>Salgspris</th><th>Margin (%)</th><th>Prod.ordre</th>' + (hasSalesOrderDrawing ? '<th>Vis tegning</th>' : '') + '</tr>';
 
-                        for (const line of data.salesOrderLines) {
-                            const lineSalesPrice = (line.DPrice || 0) * (line.NoFin || 0);
+                        for (const [lineIndex, line] of data.salesOrderLines.entries()) {
+                            const lineKey = AftercalcCostExclusions.getLineKey(line, lineIndex);
+                            const lineSalesPrice = AftercalcCostExclusions.getLineSalesPrice(line);
+                            const isCostExcluded = excludedCostLineKeys.has(lineKey);
+                            const isSharedCostDeferred = Array.isArray(costExclusion.deferredKeys) && costExclusion.deferredKeys.includes(lineKey);
+                            const stableLineNo = Number(line.LnNo);
+                            const canPersistCostExclusion = Number.isInteger(stableLineNo) && stableLineNo > 0;
                             const linkedProductionTotal = Number(line.ProductionOrderTotalCost || 0);
                             const productionTotalByLineOrder = line.PurcNo
                                 ? Number((productionOrderByOrdNo.get(Number(line.PurcNo)) || {}).totalCost || 0)
@@ -10721,7 +11443,9 @@ app.get('/', (req, res) => {
                                 ? linkedProductionTotal
                                 : (productionTotalByLineOrder > 0
                                     ? productionTotalByLineOrder
-                                    : (singleProductionTotal > 0 ? singleProductionTotal : Number(line.LineCost || 0)));
+                                    : (singleProductionTotal > 0
+                                        ? singleProductionTotal
+                                        : Number((line.EffectiveLineCost ?? line.LineCost) || 0)));
                             const lineMarginValue = calculateLineMarginPercent(lineSalesPrice, lineCost);
                             const isExactlyHundred = Math.abs(lineMarginValue - 100) < 0.0001;
                             const lineMarginPercent = lineMarginValue.toFixed(2);
@@ -10733,10 +11457,14 @@ app.get('/', (req, res) => {
                                 ? getSalesLineCostBreakdown(line.PurcNo)
                                 : { operationTotal: 0, laserTotal: 0 };
                             // Rabat-badge fjernet: linjer med salgspris=0 (underlinjer af hovedprodukt) vises som N/A.
-                            const lineMarginBadge = (!includeForMargin || lineSalesPrice === 0 || isExactlyHundred)
+                            const lineMarginBadge = isCostExcluded
+                                ? (isSharedCostDeferred
+                                    ? '<span style="background:#a66200; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">Delt kost medtaget</span>'
+                                    : '<span style="background:#a66200; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">Kost udeladt</span>')
+                                : ((!includeForMargin || lineSalesPrice === 0 || isExactlyHundred)
                                 ? '<span style="background:#607d8b; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">N/A</span>'
-                                : getMarginBadge(lineMarginPercent);
-                            html += '<tr>';
+                                : getMarginBadge(lineMarginPercent));
+                            html += '<tr' + (isCostExcluded ? ' class="sales-line-excluded"' : '') + '>';
                             html += '<td>' + (hasProductionOrder
                                 ? ('<button type="button" onclick="toggleSalesLineBreakdown(\\'' + breakdownRowId + '\\', this)" title="Vis kost-opdeling" style="margin-right:6px; width:22px; height:22px; border:1px solid #90caf9; background:#e3f2fd; color:#0d47a1; border-radius:4px; cursor:pointer; font-weight:700;">+</button>')
                                 : '') + (line.LnNo || 0) + '</td>';
@@ -10763,7 +11491,7 @@ app.get('/', (req, res) => {
                                 : ((line.PurcNo && line.PurcNo !== 0)
                                 ? (lineQty > 0 ? (productionTotalCost / lineQty) : productionTotalCost)
                                 : (line.CCstPr || 0));
-                            html += '<td>' + formatNumber(displayKostpris) + '</td>';
+                            html += '<td><span class="sales-line-cost-value">' + formatNumber(displayKostpris) + '</span></td>';
                             // Kost 0 med kendt enhedspris: vis estimat i stedet for et vildledende 0,00
                             let samletKostCell = '<strong>' + formatNumber(lineCost) + '</strong>';
                             if (lineCost === 0 && displayKostpris > 0 && lineQty > 0) {
@@ -10779,7 +11507,8 @@ app.get('/', (req, res) => {
                                     (estMargin !== null ? ' · margin ~' + estMargin.toFixed(1) + '%' : '') +
                                     '</div>';
                             }
-                            html += '<td>' + samletKostCell + '</td>';
+                            html += '<td><span class="sales-line-cost-value">' + samletKostCell + '</span>' + (isCostExcluded ? '<div style="font-size:11px;font-weight:700;color:#9a5b00;">' + (isSharedCostDeferred ? 'Valgt, men delt kost er stadig med' : 'Udeladt fra total') + '</div>' : '') + '</td>';
+                            html += '<td><label class="sales-line-exclusion-label" title="Udelad kun denne linjes kost; salgsprisen forbliver medtaget"><input class="sales-line-exclusion-toggle" type="checkbox" data-ord-no="' + escapeHtml(detailOrdNo) + '" data-line-no="' + (canPersistCostExclusion ? stableLineNo : '') + '" onchange="toggleSalesLineCostExclusion(this)"' + (isCostExcluded ? ' checked' : '') + (canPersistCostExclusion ? '' : ' disabled') + '><span>Udelad</span></label></td>';
                             html += '<td>' + formatNumber(line.DPrice || 0) + '</td>';
                             html += '<td>' + formatNumber(lineSalesPrice) + '</td>';
                             html += '<td>' + lineMarginBadge + '</td>';
@@ -10805,6 +11534,10 @@ app.get('/', (req, res) => {
                                 html += '</td>';
                                 html += '</tr>';
                             }
+                        }
+
+                        if (costExclusion.excludedLineCount > 0) {
+                            html += '<tr class="summary-row"><td colspan="' + salesOrderColspan + '">Justeret ordrekost: <strong>' + formatNumber(effectiveTotalCost) + ' DKK</strong> (fratrukket kost: ' + formatNumber(costExclusion.excludedCost) + ' DKK). Salg: <strong>' + formatNumber(totalRevenue) + ' DKK</strong>.</td></tr>';
                         }
 
                         html += '</table></div>';

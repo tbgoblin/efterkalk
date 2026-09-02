@@ -39,8 +39,11 @@ In entrambi i moduli usare sempre prima `Opdater` per caricare dati aggiornati.
 1. KPI: `Omsætning (Mio)`, `Rækker`, `Perioder`
 2. grafico stacked: composizione per conto
 3. grafico trend: andamento totale mese per mese
-4. tabella soglie (`Månedstabel med tærskler`) se aperta
-5. dettagli (`Måned/Kunde detaljer`) se aperti
+4. tabella soglie (`Månedstabel med tærskler`): cliccare sul mese per aprire il pannello mensile a destra
+5. nel pannello mensile controllare importo contabilizzato, ordini collegati e `Ordreindgang` delle settimane relative al mese
+6. dettagli (`Måned/Kunde detaljer`) se aperti
+
+Gli importi del pannello mensile derivano dalle stesse registrazioni contabili `AcTr` del totale Omsætning. Il collegamento all’ordine usa il numero fattura presente in `Ord`, con `CustTr` come storico. Cliccando sul numero ordine si apre l’Efterkalkulation. La colonna conto non viene ripetuta nella tabella compatta, perché i conti sono già indicati dal filtro. Movimenti senza corrispondenza univoca rimangono visibili come controllo e non vengono eliminati dal totale. La riga `I alt` somma Ordreindgang e Tilbud delle sole settimane visualizzate. Una settimana a cavallo tra due mesi è mostrata interamente, per mantenere lo stesso valore del modulo `Ordreindgang`.
 
 ## 3.3 Modalità confronto clienti
 
@@ -65,7 +68,7 @@ Controlli minimi:
 ## 4.2 Cosa controllare
 
 1. KPI: `Total Ordre`, `Total Tilbud`, `Gns. Ordre`, `Tilbud → Ordre`
-2. grafico `Ugeudvikling`
+2. grafico `Ugeudvikling`: la linea orizzontale viola mostra lo stesso `Gns. Ordre` del KPI per tutto il periodo selezionato; la linea arancione resta invece la media mobile di 3 settimane
 3. `Ugetabel` (se aperta)
 4. `Topkunder` (se aperta)
 

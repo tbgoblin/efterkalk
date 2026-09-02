@@ -244,6 +244,37 @@ async function getAppState(key) {
     }
 }
 
+async function getAppStatesByPrefix(prefix) {
+    if (!isEnabled()) return null;
+    const pool = await getPool();
+    if (!pool) return null;
+    try {
+        const normalizedPrefix = String(prefix || '').slice(0, 100);
+        const result = await pool.request()
+            .input('prefix', sql.NVarChar(100), normalizedPrefix)
+            .query(`SELECT StateKey, Payload, UpdatedAt
+                    FROM dbo.AppState
+                    WHERE LEFT(StateKey, LEN(@prefix)) = @prefix
+                    ORDER BY StateKey`);
+        const rows = [];
+        for (const row of (result.recordset || [])) {
+            try {
+                rows.push({
+                    key: String(row.StateKey || ''),
+                    payload: JSON.parse(row.Payload),
+                    updatedAt: row.UpdatedAt
+                });
+            } catch (parseError) {
+                if (logEvent) logEvent('GOH APPSTATE JSON ERROR (' + String(row.StateKey || '?') + '): ' + parseError.message);
+            }
+        }
+        return rows;
+    } catch (err) {
+        markUnavailable(err);
+        return null;
+    }
+}
+
 async function setAppState(key, payload) {
     if (!isEnabled()) return false;
     const pool = await getPool();
@@ -263,4 +294,4 @@ async function setAppState(key, payload) {
     }
 }
 
-module.exports = { configure, isEnabled, recordAftercalcSnapshot, getOrderTrend, saveRawImport, getAppState, setAppState, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };
+module.exports = { configure, isEnabled, recordAftercalcSnapshot, getOrderTrend, saveRawImport, getAppState, getAppStatesByPrefix, setAppState, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };

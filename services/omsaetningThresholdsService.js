@@ -1,16 +1,24 @@
 /**
  * omsaetningThresholdsService.js
  * Persistent min/max threshold per customer for Omsaetning.
- * Stored in omsaetning_thresholds.json in a stable user-writable path
- * (GANTECH_NOTES_DIR or LOCALAPPDATA\Gantech Efterkalk) with legacy migration.
+ * GOH dbo.AppState is the primary store. omsaetning_thresholds.json in the
+ * user-writable path is a local read-only fallback/mirror with legacy migration.
  *
  * Schema: {
- *   "75101026": { "warnThreshold": 3, "goodThreshold": 5, "updatedAt": "ISO8601" }
+ *   "75101026": {
+ *     "warnThreshold": 3,
+ *     "goodThreshold": 5,
+ *     "useDailyBudget": false,
+ *     "dailyBreakEvenDkk": 208335,
+ *     "dailyBudgetDkk": 280851,
+ *     "updatedAt": "ISO8601"
+ *   }
  * }
  */
 const fs = require('fs');
 const path = require('path');
 const gohData = require('./gohDataService');
+const dailyThresholds = require('../assets/js/omsaetning-daily-thresholds');
 const STATE_KEY = 'omsaetning_thresholds';
 
 const DEFAULT_WARN_THRESHOLD = 3;
@@ -58,17 +66,22 @@ function migrateLegacyThresholdsIfNeeded(thresholdsFile) {
 }
 
 let _thresholds = null;
+let _hydratePromise = null;
 
-function normalizeThresholds(warnThreshold, goodThreshold) {
+function normalizeThresholds(warnThreshold, goodThreshold, dailyConfig) {
     const warn = Math.max(0, Number(warnThreshold));
     const baseWarn = Number.isFinite(warn) ? warn : DEFAULT_WARN_THRESHOLD;
 
     const good = Math.max(baseWarn, Number(goodThreshold));
     const baseGood = Number.isFinite(good) ? good : Math.max(baseWarn, DEFAULT_GOOD_THRESHOLD);
 
+    const normalizedDaily = dailyThresholds.sanitizeConfig(dailyConfig);
     return {
         warnThreshold: Number(baseWarn.toFixed(3)),
-        goodThreshold: Number(baseGood.toFixed(3))
+        goodThreshold: Number(baseGood.toFixed(3)),
+        useDailyBudget: normalizedDaily.useDailyBudget,
+        dailyBreakEvenDkk: normalizedDaily.dailyBreakEvenDkk,
+        dailyBudgetDkk: normalizedDaily.dailyBudgetDkk
     };
 }
 
@@ -95,7 +108,10 @@ function _load() {
     }
 }
 
-function _save() {
+async function _save() {
+    const savedToDb = await gohData.setAppState(STATE_KEY, _thresholds);
+    if (!savedToDb) return false;
+
     const thresholdsFile = resolveThresholdsFile();
     try {
         ensureThresholdsDir(thresholdsFile);
@@ -103,23 +119,28 @@ function _save() {
     } catch (err) {
         console.error('[omsaetning-thresholds] save error:', err.message);
     }
-    gohData.setAppState(STATE_KEY, _thresholds).catch(() => {});
-}
-
-// All'avvio il DB condiviso vince sul file locale (fail-soft se GOH è giù).
-async function hydrateFromDb() {
-    const state = await gohData.getAppState(STATE_KEY);
-    if (!state || !state.payload || typeof state.payload !== 'object') return false;
-    _thresholds = state.payload;
-    try {
-        const thresholdsFile = resolveThresholdsFile();
-        ensureThresholdsDir(thresholdsFile);
-        fs.writeFileSync(thresholdsFile, JSON.stringify(_thresholds, null, 2), 'utf8');
-    } catch { /* file locale è solo fallback */ }
     return true;
 }
 
-function getThreshold(custNo) {
+// All'avvio il DB condiviso vince sul file locale (fail-soft se GOH è giù).
+function hydrateFromDb() {
+    if (_hydratePromise) return _hydratePromise;
+    _hydratePromise = (async () => {
+        const state = await gohData.getAppState(STATE_KEY);
+        if (!state || !state.payload || typeof state.payload !== 'object') return false;
+        _thresholds = state.payload;
+        try {
+            const thresholdsFile = resolveThresholdsFile();
+            ensureThresholdsDir(thresholdsFile);
+            fs.writeFileSync(thresholdsFile, JSON.stringify(_thresholds, null, 2), 'utf8');
+        } catch { /* file locale è solo fallback */ }
+        return true;
+    })();
+    return _hydratePromise;
+}
+
+async function getThreshold(custNo) {
+    await hydrateFromDb();
     _load();
     const key = normalizeCustomerNo(custNo);
     if (!key) return null;
@@ -127,30 +148,51 @@ function getThreshold(custNo) {
     const existing = _thresholds[key];
     if (!existing) return null;
 
-    const normalized = normalizeThresholds(existing.warnThreshold, existing.goodThreshold);
+    const normalized = normalizeThresholds(existing.warnThreshold, existing.goodThreshold, existing);
     return {
         warnThreshold: normalized.warnThreshold,
         goodThreshold: normalized.goodThreshold,
+        useDailyBudget: normalized.useDailyBudget,
+        dailyBreakEvenDkk: normalized.dailyBreakEvenDkk,
+        dailyBudgetDkk: normalized.dailyBudgetDkk,
         updatedAt: existing.updatedAt || null
     };
 }
 
-function setThreshold(custNo, { warnThreshold, goodThreshold } = {}) {
+async function setThreshold(custNo, { warnThreshold, goodThreshold, useDailyBudget, dailyBreakEvenDkk, dailyBudgetDkk } = {}) {
     _load();
     const key = normalizeCustomerNo(custNo);
     if (!key) return null;
 
-    const normalized = normalizeThresholds(warnThreshold, goodThreshold);
+    const previous = _thresholds[key];
+    const normalized = normalizeThresholds(warnThreshold, goodThreshold, {
+        useDailyBudget,
+        dailyBreakEvenDkk,
+        dailyBudgetDkk
+    });
     _thresholds[key] = {
         warnThreshold: normalized.warnThreshold,
         goodThreshold: normalized.goodThreshold,
+        useDailyBudget: normalized.useDailyBudget,
+        dailyBreakEvenDkk: normalized.dailyBreakEvenDkk,
+        dailyBudgetDkk: normalized.dailyBudgetDkk,
         updatedAt: new Date().toISOString()
     };
 
-    _save();
+    const savedToDb = await _save();
+    if (!savedToDb) {
+        if (previous === undefined) delete _thresholds[key];
+        else _thresholds[key] = previous;
+        const error = new Error('Omsætningstærskler kunne ikke gemmes i GOH-databasen');
+        error.code = 'GOH_PERSIST_FAILED';
+        throw error;
+    }
     return {
         warnThreshold: normalized.warnThreshold,
         goodThreshold: normalized.goodThreshold,
+        useDailyBudget: normalized.useDailyBudget,
+        dailyBreakEvenDkk: normalized.dailyBreakEvenDkk,
+        dailyBudgetDkk: normalized.dailyBudgetDkk,
         updatedAt: _thresholds[key].updatedAt
     };
 }
@@ -159,13 +201,17 @@ function getStorageMeta() {
     return {
         filePath: resolveThresholdsFile(),
         defaultWarnThreshold: DEFAULT_WARN_THRESHOLD,
-        defaultGoodThreshold: DEFAULT_GOOD_THRESHOLD
+        defaultGoodThreshold: DEFAULT_GOOD_THRESHOLD,
+        defaultUseDailyBudget: false,
+        defaultDailyBreakEvenDkk: dailyThresholds.DEFAULT_DAILY_BREAK_EVEN_DKK,
+        defaultDailyBudgetDkk: dailyThresholds.DEFAULT_DAILY_BUDGET_DKK
     };
 }
 
 module.exports = {
     DEFAULT_WARN_THRESHOLD,
     DEFAULT_GOOD_THRESHOLD,
+    normalizeThresholds,
     getThreshold,
     setThreshold,
     getStorageMeta,

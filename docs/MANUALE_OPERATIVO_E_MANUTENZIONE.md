@@ -95,7 +95,7 @@ Nella parte alta sono disponibili:
 
 La pagina ha due viste:
 
-1. **Route di nesting attuali**: raggruppa le righe `TrTp=5/7` per `nestingordre + route`, mostra lastre, prodotti (compresi i casi speciali `L2/L3`), ordini di produzione ricavati da `TrInf2`, ordine vendita ricavato dalle fonti `R4/Salgsref` o dalla gerarchia `OrdBasNo`, REST effettivamente registrato e stato della route.
+1. **Route di nesting attuali**: raggruppa le righe `TrTp=5/7` per `nestingordre + route`, mostra lastre, prodotti (compresi i casi speciali `L2/L3`), ordini di produzione ricavati da `TrInf2`, ordine vendita ricavato dalle fonti `R4/Salgsref` o dalla gerarchia `OrdBasNo`, REST previsto, REST effettivamente registrato e stato della route.
 2. **Confronto tra periodi**: usa gli stessi snapshot e gli stessi valori FIFO di Lagerliste 1, cerca contropartite note e separa i trasferimenti abbinati dalle righe ancora da controllare.
 
 Per ridurre il numero di righe, la tabella route parte dal filtro `Ikke færdige`; le route concluse non vengono eliminate e restano disponibili scegliendo `Færdig` oppure `Alle`.
@@ -114,7 +114,11 @@ Regole conservative della Beta:
 - per il riferimento alla vendita viene usata la precedenza conservativa `OrdLn.R4` → ultimo `ProdTr.R4` della stessa riga e dello stesso prodotto → `Ord.R4` → catena `TrInf2/OrdBasNo`; la fonte scelta è visibile accanto al numero SO;
 - il filtro sullo stesso `ProdNo` è necessario perché una riga di nesting può essere riutilizzata: vecchie `ProdTr` della stessa `OrdLnNo` possono riferirsi a un prodotto e a una vendita precedenti;
 - un prodotto senza R4 e senza collegamento gerarchico viene marcato `🏭 Ingen R4`: è un candidato per produzione interna o ordine lager, non un errore automaticamente confermato;
-- il REST entra nel pareggio solo se è realmente registrato e collegabile senza ambiguità allo stesso nesting e alla stessa lastra;
+- la riga lastra negativa del nesting è mostrata come `↩ Forventet REST`: `NoOrg` rappresenta quantità e costo FIFO previsti; quando anche `NoFin` raggiunge `NoOrg`, il REST viene riconosciuto separatamente come `✓ REST færdigmeldt`;
+- la registrazione effettiva `FreeInf1` (`FrInfTp=120`, `Gr7=1`) è mostrata come `✓ REST Plader`. Il collegamento usa prima la chiave esatta `nesting + ProdNo + codice SCR` (`OrdLn.TrInf2 = FreeInf1.Txt1`); solo quando tale codice non risolve il caso viene usato il collegamento meno specifico `nesting + ProdNo`;
+- la færdigmelding del REST e la conclusione dei prodotti sono stati distinti: un REST può essere completamente færdigmeldt anche se un prodotto della stessa route è ancora parziale. In tal caso non viene mostrato un errore rosso; l'interfaccia segnala soltanto che la corrispondente riga non è ancora stata trovata nella lista REST `FreeInf1`. `⏳ REST ikke færdigmeldt endnu` è riservato alla riga REST il cui `NoFin` non ha ancora raggiunto `NoOrg`;
+- `Materialeafvigelse` controlla la conservazione fisica/costo (`Plade FIFO - prodotti - REST previsto FIFO`). `REST-nedskrivning` mostra invece la differenza tra il costo FIFO del REST previsto e il valore di recupero realmente registrato: non viene colorata come errore materiale. Le differenze di quadratura entro 1 DKK sono trattate come arrotondamento visivo, ma il valore resta esposto;
+- il REST entra nel pareggio tra periodi solo se è realmente registrato e collegabile senza ambiguità allo stesso nesting e alla stessa lastra;
 - una riga lastra `TrTp=5` il cui `OrdLn.TrInf1` inizia con `Søg` viene marcata `♻ Søg-rest`: indica una rimanenza fisica non registrata in `Pladelager`/`REST`. Un suo ingresso in `VIA Plader` è spiegato come valore aggiunto da fonte non registrata, non come prelievo inventato dal magazzino. Nel confronto fra periodi il controllo viene eseguito sull'esatto `nestingordre + route + ProdNo`, anche se la route non rientra più nella finestra delle route attuali. I normali codici REST registrati (per esempio suffissi `_SCR0`) non rientrano in questa regola;
 - i REST senza una sola route certa non vengono scartati: restano consultabili nella tabella espandibile `REST-rækker uden sikker routekobling`, con motivo e valore;
 - un valore non spiegato resta visibile come residuo: l’algoritmo non inventa scarti e non forza il totale a zero;
@@ -122,13 +126,18 @@ Regole conservative della Beta:
 - un aumento di `Pladelager` viene marcato `Indkøb → Pladelager` soltanto quando nel periodo esiste una corrispondente ricezione `ProdTr` con `TrTp=6`; l’entrata ha netto positivo;
 - se la lastra acquistata viene ricevuta e immediatamente prelevata dallo stesso periodo, il movimento può apparire direttamente come `Indkøb → Pladelager → VIA Plader`, ma soltanto quando ricezione `TrTp=6`, prelievo `TrTp=5`, prodotto e nesting coincidono;
 - una diminuzione di `Pladelager` viene collegata a `VIA Plader` soltanto quando `ProdTr` contiene un prelievo `TrTp=5` dello stesso prodotto nel periodo;
-- la scomparsa di un ordine da `Færdige SO` viene marcata `Færdige SO → Faktureret` soltanto se l’ordine possiede realmente `InvoNo`; è una legittima uscita con netto negativo;
+- le categorie `salgordreVia` e `finishedNotInvoiced` della Lagerliste storica possono contenere contemporaneamente lo stesso ordine. Lagerliste 2 non somma ciecamente entrambe: legge `NoPac` sulle righe prodotto principali (`ProdNo` che inizia per `1`) e ripartisce il costo tra VIA e `Færdige SO`. Quando `NoPac=NoFin`, `Færdige SO` diventa lo stato canonico e l'eventuale copia ancora presente in VIA viene esclusa; quando l'imballaggio è parziale, soltanto la quota non imballata resta in VIA. In questo modo il passaggio `VIA → Færdige SO` avviene una sola volta;
+- la quota `NoPac / NoFin` è ponderata con `CCstPr` per non attribuire lo stesso peso a prodotti con costi diversi; righe pallet/trasporto come `510/520/521` non determinano la quota quando esistono righe prodotto `1…`;
+- la scomparsa di un ordine da `Færdige SO` viene marcata `Færdige SO → Faktureret` soltanto se l’ordine possiede realmente `InvoNo`; se nello stesso intervallo l'ordine passa da VIA a completato e poi viene fatturato, viene mostrata la catena `VIA → Færdige SO → Faktureret` senza creare una contropartita positiva artificiale;
+- l'uscita di un `Opfølgningsvare` viene collegata a `Færdige SO` soltanto quando nel periodo esiste una transazione negativa `ProdTr` (`TrTp=1`) dello stesso prodotto e `ProdTr.R4`/`OrdNo` identifica esattamente l'ordine vendita. Il prefisso del prodotto o la distinta base, da soli, non autorizzano l'abbinamento. Quando esiste un solo ordine destinatario certo, `ProdTr` prova il legame ma il suo `StcCst` corrente non limita il valore dello snapshot storico, perché il costo può essere stato ricalcolato successivamente;
 - il residuo di una route `Plader VIA` completata viene collegato agli ordini di produzione/vendita risaliti da `TrInf2` e `OrdBasNo`, dopo avere prima sottratto l’eventuale REST registrato;
 - un REST non viene mai abbinato alla diminuzione di una lastra per il solo `ProdNo`: deve comparire lo stesso nesting anche nel movimento `Plader VIA` del periodo;
+- quando un REST registrato viene riutilizzato in un nesting successivo, l'ordine di origine e quello di consumo sono necessariamente diversi. Il trasferimento viene riconosciuto tramite il codice univoco `_SCR0` (`FreeInf1.Txt1` dell'origine = `OrdLn.TrInf1` della nuova lastra) e mostrato come `REST Plader → VIA Plader (genbrugt REST)` oppure `REST Plader → nesting` se la nuova route non è ancora iniziata;
+- il REST è conservato al prezzo di recupero, mentre nel nuovo nesting può essere valorizzato al FIFO corrente della lastra. L'eventuale incremento è esposto separatamente come `Genindvundet værdi ved REST-forbrug → VIA Plader`, con netto positivo, invece di lasciare due falsi errori rosso/verde;
 - un residuo di `Plader VIA` associato a una route non completata viene marcato `⏳ Åben route` invece di essere presentato come errore;
 - i legami per prodotto/REST sono ad alta certezza; i legami basati soltanto sullo stesso ordine vendita sono mostrati con certezza media quando la ripartizione tra più route può essere ambigua.
 
-La query route considera il mese corrente e i due mesi precedenti ed è mantenuta in cache per due minuti. Gli snapshot più vecchi possono non contenere `SalesOrdNo` o l’elenco `Products`; in quel caso la riconciliazione resta volutamente incompleta e conserva le righe per il controllo manuale.
+La query route considera il mese corrente e i due mesi precedenti ed è mantenuta in cache per due minuti. Se uno snapshot storico non contiene `SalesOrdNo`, Lagerliste 2 prova a integrare il riferimento soltanto quando l'esatta `nestingordre + route` attuale porta a un unico ordine vendita; non sceglie tra più SO. `NoPac` non è storicizzato negli snapshot esistenti: la ripartizione delle sovrapposizioni usa lo stato Visma disponibile al momento del confronto e viene quindi presentata come riconciliazione operativa, non come ricostruzione contabile storica certificata.
 
 `ShpBal` (`VareParti`) contiene informazioni utili sui lotti e sulle riserve, tra cui `RestBal`, `NoRsv`, `NoRsvInc`, `OrdNo`, costo e valore. Lagerliste 2 non usa ancora questi campi per pareggiare automaticamente gli ordini lager: `OrdNo` può rappresentare l'ordine di origine/ricezione del lotto e non dimostra da solo la successiva vendita destinataria. Finché il legame di prenotazione non è verificato, questi dati rimangono evidenza informativa e non una contropartita contabile.
 
@@ -248,6 +257,7 @@ Per ogni riga ordine vendita la UI mostra:
 | `Samlet kost` | `EffectiveLineCost` | è il costo effettivo finale |
 | `Salgspris/enhed` | `DPrice` | prezzo vendita unitario |
 | `Salgspris` | `DPrice × NoFin` | totale vendita della riga |
+| `Udelad kost` | checkbox UI persistita in GOH | se selezionata esclude il contributo costo della riga; `Salgspris` resta sempre incluso |
 | `Margin (%)` | dipende dalla modalità margine scelta in UI | vedi § 5.11 |
 | `Prod.ordre` | `PurcNo` | se presente, apre l’ordine di produzione collegato |
 
@@ -272,6 +282,15 @@ EffectiveLineCost = ProductionOrderTotalCost
 ```text
 NoOrg × CCstPr
 ```
+
+4. **Esclusione permanente del costo riga**
+   - la checkbox `Udelad kost` non cancella la riga e non modifica Visma
+   - il ricavo della riga (`DPrice × NoFin`) resta sempre incluso
+   - viene sottratto dal costo ordine il contributo effettivo della riga (`EffectiveLineCost`; per un ordine di produzione collegato, `ProductionOrderTotalCost`)
+   - ricavo, costo originale, costo escluso e costo rettificato restano visibili; vengono ricalcolati margine DKK, percentuale, lista ordini e `Rapport 2.0`
+   - la scelta è salvata in GOH `dbo.AppState` con una chiave distinta per `OrdNo + LnNo` e resta valida fino alla rimozione del flag
+   - se più righe condividono lo stesso ordine di produzione, il costo condiviso viene sottratto una volta sola e soltanto quando tutte quelle righe sono escluse; una selezione parziale resta segnalata senza creare un doppio storno
+   - il salvataggio è accettato dalla UI soltanto dopo la conferma di GOH; in caso di errore la checkbox torna allo stato precedente
 
 ### 5.5 Ordini di produzione e `Delsum`
 
@@ -457,16 +476,26 @@ productionTotalCost = somma totalCost degli ordini di produzione collegati a rig
 totalCost = salesNoPOTotalCost + productionTotalCost
 ```
 
+Con righe marcate `Udelad kost`:
+
+```text
+adjustedCost = totalCost - costo attribuibile alle righe escluse
+```
+
+Gli ordini di produzione condivisi vengono detratti una sola volta. Il fallback da minuti stykliste rimane separato e non viene nascosto implicitamente.
+
 #### Ricavo totale ordine
 
 ```text
-totalRevenue = Ord.InvoAm
+totalRevenue = Ord.InvoAm + Ord.DInvoIF
 ```
+
+`Udelad kost` non modifica mai questa formula.
 
 #### Margine in DKK
 
 ```text
-margin = totalRevenue - totalCost
+margin = totalRevenue - adjustedCost
 ```
 
 #### Percentuale margine
@@ -514,6 +543,8 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `services/drawingService.js` | ricerca PDF/disegni/immagini |
 | `services/pdfOpenService.js` | validazione destinazione PDF e apertura senza shell |
 | `services/authService.js` | utenti, sessioni bearer/cookie e guard di autenticazione |
+| `services/aftercalcCostExclusionsService.js` | flag permanenti GOH per esclusione costo delle righe vendita |
+| `services/omsaetningService.js` | riepilogo contabile Omsætning e dettaglio mensile fattura/ordine |
 | `services/bomService.js` | letture BOM e creazione transazionale prodotti, con blocco `readOnly` |
 | `utils/productRules.js` | regole dedicate ai prodotti |
 | `utils/logger.js` | log su file + console |
@@ -536,6 +567,9 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `GET /order-list-check-time` | verifica se la lista va aggiornata |
 | `GET /aftercalc/:ordno` | dettaglio completo aftercalc ordine |
 | `GET /order-margin/:ordno` | costo/ricavo per badge margine |
+| `GET /aftercalc-cost-exclusions/:ordno` | legge da GOH i flag costo permanenti dell’ordine |
+| `POST /aftercalc-cost-exclusions/:ordno/:lineno` | salva/rimuove in GOH il flag della singola riga autenticata |
+| `GET /omsaetning/month-detail` | dettaglio mensile AcTr, collegamenti fattura→ordine e settimane Ordreindgang |
 | `GET /production-summary/:ordno` | riepilogo ordine di produzione |
 | `GET /laser-route-metrics` | metriche laser/nesting |
 | `GET /nesting-detail/:ordno/:prodno` | dettaglio nesting per prodotto |

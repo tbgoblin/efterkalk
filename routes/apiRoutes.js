@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const orderNotesService = require('../services/orderNotesService');
+const aftercalcCostExclusionsService = require('../services/aftercalcCostExclusionsService');
 const lagerlisteReconciliationService = require('../services/lagerlisteReconciliationService');
 const phCrawler = require('../services/phCrawlerService');
 const { readQmsDataset, validateQmsDataset, writeQmsDataset } = require('../services/qmsService');
@@ -19,6 +20,7 @@ const {
 } = require('../services/belastningService');
 
 const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
+const omsaetningDailyThresholds = require('../assets/js/omsaetning-daily-thresholds');
 const { createAuthService } = require('../services/authService');
 const { fetchSalgordreViaRows } = require('../services/viaService');
 const { createLagerlisteService } = require('../services/lagerlisteService');
@@ -84,11 +86,12 @@ function createApiRouter({
     Promise.allSettled([
         hydrateUsersFromDb(),
         orderNotesService.hydrateFromDb(),
+        aftercalcCostExclusionsService.hydrateFromDb(),
         omsaetningThresholdsService.hydrateFromDb(),
         lagerlisteReconciliationService.hydrateFromDb()
     ]).then(results => {
         const hydrated = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
-        logEvent('GOH-STATE: ' + hydrated + '/4 delte tilstande hentet fra GOH (users/noter/graenser/afstemninger)');
+        logEvent('GOH-STATE: ' + hydrated + '/5 delte tilstande hentet fra GOH (users/noter/efterkalk-kost/graenser/afstemninger)');
     });
 
     const VIA_CACHE_KEY = 'salgordre_via_v32';
@@ -305,6 +308,99 @@ function createApiRouter({
             };
             const saved = await gohData.setAppState('ordreindgang_holiday_settings', settings);
             return res.json({ ok: saved, settings });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/omsaetning/working-days', async (req, res) => {
+        try {
+            const state = await gohData.getAppState('omsaetning_working_days');
+            const months = omsaetningDailyThresholds.normalizeWorkingDaysByMonth(state && state.payload && state.payload.months);
+            return res.json({ ok: true, months, updatedAt: state && state.payload ? state.payload.updatedAt || null : null });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/omsaetning/daily-budget-settings', async (req, res) => {
+        try {
+            const state = await gohData.getAppState('omsaetning_daily_budget_settings');
+            const settings = omsaetningDailyThresholds.sanitizeConfig(state && state.payload);
+            return res.json({
+                ok: true,
+                useDailyBudget: settings.useDailyBudget,
+                dailyBreakEvenDkk: settings.dailyBreakEvenDkk,
+                dailyBudgetDkk: settings.dailyBudgetDkk,
+                updatedAt: state && state.payload ? state.payload.updatedAt || null : null
+            });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/omsaetning/daily-budget-settings', express.json(), async (req, res) => {
+        const user = getSessionUser(req);
+        if (!user) return res.status(401).json({ ok: false, error: 'Login kræves' });
+        try {
+            const settings = omsaetningDailyThresholds.sanitizeConfig(req.body);
+            const payload = {
+                useDailyBudget: settings.useDailyBudget,
+                dailyBreakEvenDkk: settings.dailyBreakEvenDkk,
+                dailyBudgetDkk: settings.dailyBudgetDkk,
+                updatedAt: new Date().toISOString(),
+                updatedBy: String(user.username || '')
+            };
+            const saved = await gohData.setAppState('omsaetning_daily_budget_settings', payload);
+            if (!saved) return res.status(503).json({ ok: false, error: 'Dagsmål kunne ikke gemmes i GOH-databasen' });
+            return res.json({ ok: true, ...payload });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/admin/working-days', async (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        try {
+            const year = Number(req.query.year);
+            if (!Number.isInteger(year) || year < 2000 || year > 2200) {
+                return res.status(400).json({ ok: false, error: 'Ugyldigt år' });
+            }
+            const state = await gohData.getAppState('omsaetning_working_days');
+            const allMonths = omsaetningDailyThresholds.normalizeWorkingDaysByMonth(state && state.payload && state.payload.months);
+            const months = Object.fromEntries(Object.entries(allMonths).filter(([key]) => key.startsWith(String(year) + '-')));
+            return res.json({ ok: true, year, months, updatedAt: state && state.payload ? state.payload.updatedAt || null : null });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/admin/working-days', express.json(), async (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        try {
+            const year = Number(req.body && req.body.year);
+            if (!Number.isInteger(year) || year < 2000 || year > 2200) {
+                return res.status(400).json({ ok: false, error: 'Ugyldigt år' });
+            }
+            const submittedMonths = req.body && req.body.months && typeof req.body.months === 'object' ? req.body.months : {};
+            const yearPrefix = String(year) + '-';
+            const expectedKeys = Array.from({ length: 12 }, (_, index) => yearPrefix + String(index + 1).padStart(2, '0'));
+            const normalizedSubmitted = omsaetningDailyThresholds.normalizeWorkingDaysByMonth(submittedMonths);
+            const normalizedYear = Object.fromEntries(Object.entries(normalizedSubmitted).filter(([key]) => key.startsWith(yearPrefix)));
+            if (expectedKeys.some(key => !Object.prototype.hasOwnProperty.call(normalizedYear, key))) {
+                return res.status(400).json({ ok: false, error: 'Alle 12 måneder skal have 0-31 arbejdsdage' });
+            }
+
+            const state = await gohData.getAppState('omsaetning_working_days');
+            const months = omsaetningDailyThresholds.normalizeWorkingDaysByMonth(state && state.payload && state.payload.months);
+            for (const key of Object.keys(months)) {
+                if (key.startsWith(yearPrefix)) delete months[key];
+            }
+            Object.assign(months, normalizedYear);
+            const payload = { months, updatedAt: new Date().toISOString() };
+            const saved = await gohData.setAppState('omsaetning_working_days', payload);
+            if (!saved) return res.status(503).json({ ok: false, error: 'Arbejdsdage kunne ikke gemmes' });
+            return res.json({ ok: true, year, months: normalizedYear, updatedAt: payload.updatedAt });
         } catch (err) {
             return res.status(500).json({ ok: false, error: err.message });
         }
@@ -1477,6 +1573,46 @@ function createApiRouter({
         }
     });
 
+    router.get('/omsaetning/month-detail', async (req, res) => {
+        try {
+            const month = String(req.query.month || '').trim();
+            const accountCsv = String(req.query.accounts || '').trim();
+            const customerCsv = String(req.query.customers || '').trim();
+            const detail = await omsaetningService.getMonthDetail({ month, accountCsv, customerCsv });
+            const weekKeys = Array.isArray(detail.weekKeys) ? detail.weekKeys : [];
+            let weeklyRows = [];
+
+            if (weekKeys.length > 0) {
+                const summary = await ordreindgangService.getSummary({
+                    fraWeek: weekKeys[0],
+                    tilWeek: weekKeys[weekKeys.length - 1]
+                });
+                const allowedWeeks = new Set(weekKeys);
+                weeklyRows = (Array.isArray(summary.weeklyRows) ? summary.weeklyRows : [])
+                    .filter(row => allowedWeeks.has(String(row.weekKey || '')));
+            }
+
+            const totalOrdK = weeklyRows.reduce((sum, row) => sum + Number(row.totalOrd || 0), 0);
+            const totalTilbudK = weeklyRows.reduce((sum, row) => sum + Number(row.totalTilbud || 0), 0);
+            return res.json({
+                ok: true,
+                ...detail,
+                ordreindgang: {
+                    unit: 'thousand-dkk',
+                    totalOrdK,
+                    totalTilbudK,
+                    weeklyRows
+                }
+            });
+        } catch (err) {
+            if (err && err.statusCode) {
+                return res.status(err.statusCode).json({ ok: false, error: err.message || 'Ugyldig forespørgsel' });
+            }
+            logEvent('ERROR omsaetning/month-detail: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
     router.get('/ordreindgang/summary', async (req, res) => {
         try {
             const fraWeek = String(req.query.fraWeek || '').trim();
@@ -1652,58 +1788,82 @@ function createApiRouter({
         }
     });
 
-    router.get('/omsaetning/customer-threshold/:custno', (req, res) => {
+    router.get('/omsaetning/customer-threshold/:custno', async (req, res) => {
         const custNo = String(req.params.custno || '').trim();
         if (!/^\d{1,20}$/.test(custNo)) {
             return res.status(400).json({ ok: false, error: 'Ugyldigt kundenummer' });
         }
 
-        const threshold = omsaetningThresholdsService.getThreshold(custNo);
-        const meta = omsaetningThresholdsService.getStorageMeta();
-        if (!threshold) {
+        try {
+            const threshold = await omsaetningThresholdsService.getThreshold(custNo);
+            const meta = omsaetningThresholdsService.getStorageMeta();
+            if (!threshold) {
+                return res.json({
+                    ok: true,
+                    custNo,
+                    warnThreshold: meta.defaultWarnThreshold,
+                    goodThreshold: meta.defaultGoodThreshold,
+                    useDailyBudget: meta.defaultUseDailyBudget,
+                    dailyBreakEvenDkk: meta.defaultDailyBreakEvenDkk,
+                    dailyBudgetDkk: meta.defaultDailyBudgetDkk,
+                    updatedAt: null,
+                    exists: false,
+                    storageFile: meta.filePath
+                });
+            }
+
             return res.json({
                 ok: true,
                 custNo,
-                warnThreshold: meta.defaultWarnThreshold,
-                goodThreshold: meta.defaultGoodThreshold,
-                updatedAt: null,
-                exists: false,
+                warnThreshold: threshold.warnThreshold,
+                goodThreshold: threshold.goodThreshold,
+                useDailyBudget: threshold.useDailyBudget,
+                dailyBreakEvenDkk: threshold.dailyBreakEvenDkk,
+                dailyBudgetDkk: threshold.dailyBudgetDkk,
+                updatedAt: threshold.updatedAt,
+                exists: true,
                 storageFile: meta.filePath
             });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message || 'Tærskler kunne ikke hentes' });
         }
-
-        return res.json({
-            ok: true,
-            custNo,
-            warnThreshold: threshold.warnThreshold,
-            goodThreshold: threshold.goodThreshold,
-            updatedAt: threshold.updatedAt,
-            exists: true,
-            storageFile: meta.filePath
-        });
     });
 
-    router.post('/omsaetning/customer-threshold/:custno', express.json(), (req, res) => {
+    router.post('/omsaetning/customer-threshold/:custno', express.json(), async (req, res) => {
         const custNo = String(req.params.custno || '').trim();
         if (!/^\d{1,20}$/.test(custNo)) {
             return res.status(400).json({ ok: false, error: 'Ugyldigt kundenummer' });
         }
 
-        const { warnThreshold, goodThreshold } = req.body || {};
-        const saved = omsaetningThresholdsService.setThreshold(custNo, { warnThreshold, goodThreshold });
-        const meta = omsaetningThresholdsService.getStorageMeta();
-        if (!saved) {
-            return res.status(400).json({ ok: false, error: 'Ugyldige tærskelværdier' });
-        }
+        try {
+            const { warnThreshold, goodThreshold, useDailyBudget, dailyBreakEvenDkk, dailyBudgetDkk } = req.body || {};
+            const saved = await omsaetningThresholdsService.setThreshold(custNo, {
+                warnThreshold,
+                goodThreshold,
+                useDailyBudget,
+                dailyBreakEvenDkk,
+                dailyBudgetDkk
+            });
+            const meta = omsaetningThresholdsService.getStorageMeta();
+            if (!saved) {
+                return res.status(400).json({ ok: false, error: 'Ugyldige tærskelværdier' });
+            }
 
-        return res.json({
-            ok: true,
-            custNo,
-            warnThreshold: saved.warnThreshold,
-            goodThreshold: saved.goodThreshold,
-            updatedAt: saved.updatedAt,
-            storageFile: meta.filePath
-        });
+            return res.json({
+                ok: true,
+                custNo,
+                warnThreshold: saved.warnThreshold,
+                goodThreshold: saved.goodThreshold,
+                useDailyBudget: saved.useDailyBudget,
+                dailyBreakEvenDkk: saved.dailyBreakEvenDkk,
+                dailyBudgetDkk: saved.dailyBudgetDkk,
+                updatedAt: saved.updatedAt,
+                storageFile: meta.filePath
+            });
+        } catch (err) {
+            const status = err && err.code === 'GOH_PERSIST_FAILED' ? 503 : 500;
+            return res.status(status).json({ ok: false, error: err.message || 'Tærskler kunne ikke gemmes' });
+        }
     });
 
     router.get('/cache-status', (req, res) => {
@@ -2361,6 +2521,50 @@ function createApiRouter({
         res.json({ ok: true });
     });
 
+    // ── AFTERCALC COST EXCLUSIONS ────────────────────────────────────────────
+    router.get('/aftercalc-cost-exclusions/:ordno', requireAuthenticated, async (req, res) => {
+        try {
+            const ordNo = Number(req.params.ordno);
+            const result = await aftercalcCostExclusionsService.listForOrder(ordNo);
+            res.json({ ok: true, ordNo, ...result });
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ ok: false, error: error.message });
+        }
+    });
+
+    router.post('/aftercalc-cost-exclusions/:ordno/:lineno', express.json(), requireAuthenticated, async (req, res) => {
+        try {
+            const ordNo = Number(req.params.ordno);
+            const lineNo = Number(req.params.lineno);
+            if (!req.body || typeof req.body.excluded !== 'boolean') {
+                return res.status(400).json({ ok: false, error: 'Feltet excluded skal være true eller false' });
+            }
+            const orderData = await getOrComputeAftercalc(ordNo, { priority: 'high' });
+            if (!orderData || orderData.error) {
+                return res.status(404).json({ ok: false, error: (orderData && orderData.error) || 'Ordren blev ikke fundet' });
+            }
+            const lineExists = Array.isArray(orderData.salesOrderLines)
+                && orderData.salesOrderLines.some(line => Number(line && line.LnNo) === lineNo);
+            if (!lineExists) {
+                return res.status(404).json({ ok: false, error: 'Salgslinjen blev ikke fundet på ordren' });
+            }
+
+            const user = getSessionUser(req) || {};
+            const result = await aftercalcCostExclusionsService.setLine(
+                ordNo,
+                lineNo,
+                req.body.excluded,
+                user.displayName || user.username || ''
+            );
+            orderMarginCache.delete(ordNo);
+            orderMarginInFlight.delete(ordNo);
+            diskCache.del(ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo);
+            res.json(result);
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ ok: false, error: error.message });
+        }
+    });
+
     // ── Personalehåndbog search API ─────────────────────────────────────────
     router.get('/ph/status', (_req, res) => {
         res.json(phCrawler.getPhStatus());
@@ -2628,6 +2832,16 @@ function createApiRouter({
         } catch (err) {
             logEvent('ERROR lagerliste2/routes/current: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Lagerliste 2 rutefejl' });
+        }
+    });
+
+    router.get('/lagerliste2/reservations/current', requireModulePermission('lagerliste'), async (req, res) => {
+        try {
+            const forceRefresh = String(req.query && req.query.force || '') === '1';
+            return res.json({ ok: true, ...(await lagerliste2Service.getCurrentReservations({ forceRefresh })) });
+        } catch (err) {
+            logEvent('ERROR lagerliste2/reservations/current: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Lagerliste 2 reservationsfejl' });
         }
     });
 

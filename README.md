@@ -15,7 +15,7 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 - calcolo costi/ricavi/margine per ordine
 - dettaglio ordini di produzione collegati
 - apertura **tegning/PDF** con pulsante `Vis tegning`
-- **Lagerliste 2 (Beta/Shadow)** separata: riconcilia i movimenti tra periodi e mostra lo stato delle route di nesting senza cambiare Lagerliste 1
+- **Lagerliste 2 (Beta/Shadow)** separata: riconcilia i movimenti tra periodi, distingue REST previsto/registrato/svalutazione e usa `NoPac` per evitare doppioni VIA/Færdige senza cambiare Lagerliste 1
 - cache locale + warmup automatico per velocizzare l’avvio
 - pacchetto desktop Windows con aggiornamento automatico via GitHub Releases
 
@@ -136,7 +136,7 @@ Il progetto dispone di una prima suite automatica eseguibile con:
 npm test
 ```
 
-I test sono isolati e non si collegano a Visma: verificano sessioni bearer/cookie e logout, rifiuto delle scritture anonime, blocco BOM su profili `readOnly`, conservazione di anteprima/duplicati/transazione, apertura sicura dei PDF locali/UNC/HTTPS e le regole pure di Lagerliste 2. Per Lagerliste 2 sono coperti prodotti speciali `L2/L3`, REST registrato, route aperte/completate, priorità delle fonti R4, lastre non registrate marcate `Søg`, pareggio `plade → VIA + REST`, conservazione dei residui reali e passaggio `VIA Laser → Færdige SO`.
+I test sono isolati e non si collegano a Visma: verificano sessioni bearer/cookie e logout, rifiuto delle scritture anonime, blocco BOM su profili `readOnly`, conservazione di anteprima/duplicati/transazione, apertura sicura dei PDF locali/UNC/HTTPS e le regole pure di Lagerliste 2. Per Lagerliste 2 sono coperti prodotti speciali `L2/L3`, REST registrato, færdigmelding indipendente del REST, associazione esatta dei codici `_SCR0`, riuso del REST tra nesting diversi, separazione tra quadratura materiale e svalutazione/rivalutazione REST, route aperte/completate, priorità delle fonti R4, lastre non registrate marcate `Søg`, ripartizione `NoPac`, eliminazione dei doppioni VIA/Færdige, consumo `Opfølgningsvarer → Færdige SO` documentato da `ProdTr`, pareggio `plade → VIA + REST`, conservazione dei residui reali e passaggio `VIA Laser → Færdige SO`.
 
 Questa è una rete di sicurezza iniziale, non ancora una copertura completa. Prima di refactor importanti è consigliato introdurre test di caratterizzazione con casi anonimizzati e risultati attesi, in particolare per:
 
