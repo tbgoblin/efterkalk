@@ -89,7 +89,7 @@ global.__desktopOpenPath = target => shell.openPath(target);
 global.__desktopOpenExternal = target => shell.openExternal(target);
 
 function findBomCustomerFolder(customerCode) {
-    const root = String(process.env.BOM_CUSTOMER_ROOT || 'Y:\\Kunder').trim();
+    const root = String(process.env.BOM_CUSTOMER_ROOT || 'Y:\\').trim();
     const code = String(customerCode || '').trim();
     if (!code || !/^[A-Za-z0-9_-]{1,40}$/.test(code)) throw new Error('Kundens Gr-kode mangler eller er ugyldig');
     try {

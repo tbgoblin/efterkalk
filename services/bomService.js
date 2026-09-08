@@ -1,4 +1,5 @@
 const { readLaserParameters, readCompleteLaserTechnicalParameters } = require('./bomExcelImportService');
+const zlib = require('zlib');
 
 function selectBendingHandlingBand(bands, pieceWeightKg, longestSideMm) {
     return (Array.isArray(bands) ? bands : [])
@@ -1671,39 +1672,121 @@ function createBomService({ getConnection, sql, diskCache, gohData, logEvent, ge
     }
 
     function analyzePdf(buffer) {
-        // Best effort: udtræk tekst og find dimensioner som '123,5 x 456' eller '123.5x456'
-        const text = buffer.toString('latin1');
-        const chunks = [];
-        const streamRe = /\(([^)]{2,})\)\s*Tj/g;
-        let m;
-        while ((m = streamRe.exec(text)) !== null) chunks.push(m[1]);
-        const joined = chunks.join(' ');
+        const raw = buffer.toString('latin1');
+        const streams = [];
+        const streamRe = /stream(?:\r\n|\n|\r)/g;
+        let streamMatch;
+        while ((streamMatch = streamRe.exec(raw)) !== null) {
+            const start = streamMatch.index + streamMatch[0].length;
+            const end = raw.indexOf('endstream', start);
+            if (end < 0) break;
+            const dictionaryStart = raw.lastIndexOf('<<', streamMatch.index);
+            const dictionaryEnd = dictionaryStart >= 0 ? raw.indexOf('>>', dictionaryStart) : -1;
+            const dictionary = dictionaryEnd >= 0 && dictionaryEnd < streamMatch.index
+                ? raw.slice(dictionaryStart, dictionaryEnd + 2) : '';
+            let streamBuffer = buffer.subarray(start, end);
+            while (streamBuffer.length && (streamBuffer[streamBuffer.length - 1] === 10 || streamBuffer[streamBuffer.length - 1] === 13)) {
+                streamBuffer = streamBuffer.subarray(0, streamBuffer.length - 1);
+            }
+            try {
+                streams.push(/\/FlateDecode\b/.test(dictionary) ? zlib.inflateSync(streamBuffer).toString('latin1') : streamBuffer.toString('latin1'));
+            } catch (_) {}
+            streamRe.lastIndex = end + 9;
+        }
+
+        function decodeLiteral(value) {
+            return String(value || '').replace(/\\([0-7]{1,3}|[nrtbf()\\])/g, (_match, escape) => {
+                if (/^[0-7]/.test(escape)) return String.fromCharCode(parseInt(escape, 8));
+                return { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '(': '(', ')': ')', '\\': '\\' }[escape] || escape;
+            });
+        }
+
+        const textChunks = [];
+        [raw, ...streams].forEach(content => {
+            const literalRe = /\(((?:\\.|[^\\)])*)\)/g;
+            let match;
+            while ((match = literalRe.exec(content)) !== null) textChunks.push(decodeLiteral(match[1]));
+            const hexRe = /<([0-9A-Fa-f\s]{4,})>/g;
+            while ((match = hexRe.exec(content)) !== null) {
+                const hex = match[1].replace(/\s/g, '');
+                if (hex.length % 2 !== 0) continue;
+                const bytes = Buffer.from(hex, 'hex');
+                if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+                    let decoded = '';
+                    for (let index = 2; index + 1 < bytes.length; index += 2) decoded += String.fromCharCode(bytes.readUInt16BE(index));
+                    textChunks.push(decoded);
+                } else {
+                    textChunks.push(bytes.toString('latin1'));
+                }
+            }
+        });
+
+        const previewSegments = [];
+        streams.forEach(content => {
+            const tokens = content.match(/[-+]?(?:\d*\.\d+|\d+)|[A-Za-z][A-Za-z*']*/g) || [];
+            const operands = [];
+            let currentPoint = null;
+            let pathStart = null;
+            for (const token of tokens) {
+                const number = Number(token);
+                if (Number.isFinite(number)) {
+                    operands.push(number);
+                    if (operands.length > 12) operands.shift();
+                    continue;
+                }
+                if (token === 'm' && operands.length >= 2) {
+                    currentPoint = operands.slice(-2);
+                    pathStart = currentPoint;
+                } else if (token === 'l' && operands.length >= 2 && currentPoint) {
+                    const next = operands.slice(-2);
+                    previewSegments.push([currentPoint[0], currentPoint[1], next[0], next[1]]);
+                    currentPoint = next;
+                } else if (token === 'c' && operands.length >= 6 && currentPoint) {
+                    const next = operands.slice(-2);
+                    previewSegments.push([currentPoint[0], currentPoint[1], next[0], next[1]]);
+                    currentPoint = next;
+                } else if (token === 're' && operands.length >= 4) {
+                    const [x, y, width, height] = operands.slice(-4);
+                    previewSegments.push([x, y, x + width, y], [x + width, y, x + width, y + height],
+                        [x + width, y + height, x, y + height], [x, y + height, x, y]);
+                } else if (token === 'h' && currentPoint && pathStart) {
+                    previewSegments.push([currentPoint[0], currentPoint[1], pathStart[0], pathStart[1]]);
+                    currentPoint = pathStart;
+                }
+                operands.length = 0;
+                if (previewSegments.length >= 4000) break;
+            }
+        });
+
+        const joinedVariants = [textChunks.join(' '), textChunks.join('')];
         const dimRe = /(\d{1,5}(?:[.,]\d{1,2})?)\s*[xX×]\s*(\d{1,5}(?:[.,]\d{1,2})?)/g;
         const found = [];
-        while ((m = dimRe.exec(joined)) !== null) {
-            const a = Number(m[1].replace(',', '.'));
-            const b = Number(m[2].replace(',', '.'));
-            if (a > 1 && b > 1 && a < 20000 && b < 20000) found.push([a, b]);
-        }
-        if (found.length === 0) {
-            return {
-                format: 'pdf',
-                widthMm: null,
-                lengthMm: null,
-                cutLengthM: null,
-                piercingsEstimate: null,
-                note: 'Kunne ikke finde maal automatisk i PDF - indtast manuelt'
-            };
-        }
-        const biggest = found.sort((p, q) => (q[0] * q[1]) - (p[0] * p[1]))[0];
+        joinedVariants.forEach(joined => {
+            dimRe.lastIndex = 0;
+            let match;
+            while ((match = dimRe.exec(joined)) !== null) {
+                const a = Number(match[1].replace(',', '.'));
+                const b = Number(match[2].replace(',', '.'));
+                if (a > 1 && b > 1 && a < 20000 && b < 20000 && !found.some(row => row[0] === a && row[1] === b)) found.push([a, b]);
+            }
+        });
+        const mediaBox = raw.match(/\/MediaBox\s*\[\s*[-\d.]+\s+[-\d.]+\s+([-\d.]+)\s+([-\d.]+)\s*\]/);
+        const pageWidthMm = mediaBox ? Math.round(Math.abs(Number(mediaBox[1])) * 25.4 / 72 * 100) / 100 : null;
+        const pageHeightMm = mediaBox ? Math.round(Math.abs(Number(mediaBox[2])) * 25.4 / 72 * 100) / 100 : null;
+        const biggest = found.length ? found.sort((left, right) => (right[0] * right[1]) - (left[0] * left[1]))[0] : null;
         return {
             format: 'pdf',
-            widthMm: Math.min(biggest[0], biggest[1]),
-            lengthMm: Math.max(biggest[0], biggest[1]),
+            widthMm: biggest ? Math.min(biggest[0], biggest[1]) : null,
+            lengthMm: biggest ? Math.max(biggest[0], biggest[1]) : null,
+            pageWidthMm,
+            pageHeightMm,
             cutLengthM: null,
             piercingsEstimate: null,
+            previewSegments: previewSegments.filter(segment => segment.every(Number.isFinite)).slice(0, 4000),
             candidates: found.slice(0, 8),
-            note: 'Maal udtrukket fra PDF-tekst - kontroller altid mod tegning'
+            note: biggest
+                ? 'Maal udtrukket fra PDF-tekst - kontroller altid mod tegning'
+                : 'PDF indlaest, men emnemaal kunne ikke aflæses - indtast bredde og længde manuelt'
         };
     }
 

@@ -32,6 +32,31 @@ const calcWizardMeta = {
 let activeCalcWizardStep = '';
 const LASER_COLUMN_WIDTHS_KEY = 'bomLaserTechnologyColumnWidths';
 
+function drawPdfPreviewSegments(ctx, canvas, segments, options = {}) {
+    const rows = (Array.isArray(segments) ? segments : []).filter(segment =>
+        Array.isArray(segment) && segment.length === 4 && segment.every(Number.isFinite));
+    if (!rows.length) return false;
+    const xs = rows.flatMap(segment => [segment[0], segment[2]]);
+    const ys = rows.flatMap(segment => [segment[1], segment[3]]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const padding = Number(options.padding || 18);
+    const scale = Math.min((canvas.width - padding * 2) / width, (canvas.height - padding * 2) / height);
+    const offsetX = (canvas.width - width * scale) / 2;
+    const offsetY = (canvas.height - height * scale) / 2;
+    ctx.beginPath();
+    rows.forEach(segment => {
+        ctx.moveTo(offsetX + (segment[0] - minX) * scale, offsetY + (maxY - segment[1]) * scale);
+        ctx.lineTo(offsetX + (segment[2] - minX) * scale, offsetY + (maxY - segment[3]) * scale);
+    });
+    ctx.strokeStyle = options.strokeStyle || '#1565c0';
+    ctx.lineWidth = Number(options.lineWidth || 2);
+    ctx.stroke();
+    return true;
+}
+
 function renderPieceThumbnail() {
     const canvas = document.getElementById('pieceThumbnailCanvas');
     if (!canvas) return;
@@ -42,6 +67,8 @@ function renderPieceThumbnail() {
     const polygon = state.fileAnalysis && Array.isArray(state.fileAnalysis.polygon) && state.fileAnalysis.polygon.length >= 3
         ? state.fileAnalysis.polygon : null;
     if (!polygon) {
+        const pdfSegments = state.fileAnalysis && state.fileAnalysis.previewSegments;
+        if (drawPdfPreviewSegments(ctx, canvas, pdfSegments, { padding: 14, lineWidth: 2 })) return;
         ctx.strokeStyle = '#9ab2ca';
         ctx.lineWidth = 3;
         ctx.strokeRect(68, 42, 88, 68);
@@ -701,6 +728,8 @@ function applyDrawingAnalysis(filename, result) {
         ['Bredde (mm)', result.widthMm == null ? '-' : result.widthMm],
         ['Længde (mm)', result.lengthMm == null ? '-' : result.lengthMm],
         ['Tykkelse (mm)', result.thicknessMm == null ? '-' : result.thicknessMm],
+        ...(result.format === 'pdf' ? [['PDF-side (mm)', result.pageWidthMm && result.pageHeightMm
+            ? formatMoney(result.pageWidthMm) + ' × ' + formatMoney(result.pageHeightMm) : '-']] : []),
         ['Skærelængde (m)', result.cutLengthM == null ? '-' : result.cutLengthM],
         ['Piercings (estimat)', result.piercingsEstimate == null ? '-' : result.piercingsEstimate],
         ['Form til nesting', (result.polygon && result.polygon.length >= 3) ? 'fundet (' + result.polygon.length + ' punkter)' : 'nej — bruger rektangel']
@@ -883,6 +912,15 @@ function renderDxfViewer() {
         ? state.fileAnalysis.polygon
         : null;
     if (!polygon) {
+        const pdfSegments = state.fileAnalysis && state.fileAnalysis.previewSegments;
+        if (drawPdfPreviewSegments(ctx, canvas, pdfSegments, { padding: 24, strokeStyle: '#7db5f8', lineWidth: 1.4 })) {
+            meta.textContent = 'PDF-visning · ' + pdfSegments.length + ' vektorlinjer';
+            if (measureInfo) measureInfo.textContent = 'PDF-preview · mål og nesting kræver DXF-kontur';
+            dxfMeasureState.projection = null;
+            dxfMeasureState.hoverPoint = null;
+            dxfMeasureState.hoverKind = '';
+            return;
+        }
         meta.textContent = 'Ingen DXF-kontur klar';
         if (measureInfo) measureInfo.textContent = 'Klik på to punkter i konturen for at måle afstand (mm)';
         dxfMeasureState.projection = null;
