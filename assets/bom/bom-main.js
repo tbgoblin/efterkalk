@@ -242,6 +242,47 @@ document.addEventListener('keydown', evt => {
 });
 const drawingFileInput = document.getElementById('drawingFileInput');
 const chooseDrawingFileBtn = document.getElementById('chooseDrawingFileBtn');
+const drawingDropZone = document.getElementById('drawingDropZone');
+
+document.addEventListener('dragover', event => {
+    if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files')) event.preventDefault();
+});
+document.addEventListener('drop', event => {
+    if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files')) event.preventDefault();
+});
+
+async function handleDroppedDrawing(file) {
+    const extension = String(file && file.name || '').toLowerCase().split('.').pop();
+    if (!['dxf', 'step', 'stp', 'pdf'].includes(extension)) {
+        showToast('Brug en DXF-, STEP-, STP- eller PDF-fil.', 'err');
+        return;
+    }
+    if (file.size > 40 * 1024 * 1024) {
+        showToast('Filen må højst være 40 MB.', 'err');
+        return;
+    }
+    const analyzed = await analyzeDrawingFile(file);
+    if (analyzed) scheduleQuoteRecalc(220);
+}
+
+drawingDropZone.addEventListener('dragenter', event => {
+    event.preventDefault();
+    drawingDropZone.classList.add('drag-over');
+});
+drawingDropZone.addEventListener('dragover', event => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+});
+drawingDropZone.addEventListener('dragleave', event => {
+    if (!drawingDropZone.contains(event.relatedTarget)) drawingDropZone.classList.remove('drag-over');
+});
+drawingDropZone.addEventListener('drop', async event => {
+    event.preventDefault();
+    drawingDropZone.classList.remove('drag-over');
+    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    if (file) await handleDroppedDrawing(file);
+});
+
 chooseDrawingFileBtn.addEventListener('click', async () => {
     const customerCode = String(state.calcCustomer && (state.calcCustomer.Gr || state.calcCustomer['Varenr.']) || '').trim();
     if (!customerCode) {
@@ -276,8 +317,7 @@ chooseDrawingFileBtn.addEventListener('click', async () => {
 });
 drawingFileInput.addEventListener('change', async evt => {
     const file = evt.target.files && evt.target.files[0];
-    if (file) await analyzeDrawingFile(file);
-    scheduleQuoteRecalc(220);
+    if (file) await handleDroppedDrawing(file);
 });
 const useCustomSheetEl = document.getElementById('calcUseCustomSheet');
 const customSheetWEl = document.getElementById('calcCustomSheetW');

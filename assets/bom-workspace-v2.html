@@ -290,6 +290,16 @@
         .viewer-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-bottom: 8px; }
         .viewer-toolbar .field { min-width: 120px; flex: 0 0 auto; }
         .viewer-canvas { width: 100%; height: auto; border-radius: 8px; background: #0e1722; border: 1px solid #26374a; cursor: crosshair; }
+        .drawing-drop-zone {
+            min-height: 112px; display: grid; place-items: center; align-content: center; gap: 7px;
+            padding: 16px; border: 2px dashed #9bb9d8; border-radius: 8px;
+            background: #f5f9fe; color: var(--ink); text-align: center;
+            transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .drawing-drop-zone strong { font-size: 14px; }
+        .drawing-drop-zone span { color: var(--muted); font-size: 12px; }
+        .drawing-drop-zone.drag-over { border-color: var(--brand); background: #e7f2ff; box-shadow: inset 0 0 0 2px rgba(21, 101, 192, 0.12); }
+        .drawing-drop-zone button { min-width: 180px; }
         .live-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
         .live-row label { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); font-weight: 600; }
         .result-box { border: 1px solid var(--line-2); border-radius: 14px; background: #fbfdff; padding: 12px; }
@@ -622,7 +632,7 @@
                                 <div class="table-shell wizard-source-panel" id="calcStepDrawingPanel">
                                     <div class="subhead"><strong>3. Emne</strong><small>upload tegning eller indtast manuelt</small></div>
                                     <div class="detail-pad">
-                                        <div class="field"><label>Tegningsfil (DXF / STEP / PDF)</label><button type="button" id="chooseDrawingFileBtn">Vælg tegning</button><input type="file" id="drawingFileInput" accept=".dxf,.step,.stp,.pdf" hidden /></div>
+                                        <div class="field"><label>Tegningsfil (DXF / STEP / PDF)</label><div class="drawing-drop-zone" id="drawingDropZone"><strong>Træk tegningen hertil</strong><span>DXF, STEP, STP eller PDF · maks. 40 MB</span><button type="button" id="chooseDrawingFileBtn">Vælg tegning</button><input type="file" id="drawingFileInput" accept=".dxf,.step,.stp,.pdf" hidden /></div></div>
                                         <div class="muted" id="fileAnalysisStatus">Ingen fil — udfyld felterne manuelt.</div>
                                         <div class="kv-grid" id="fileAnalysisGrid"></div>
                                         <div class="calc-form" style="margin-top:10px;">
@@ -826,6 +836,6 @@
     <script src="/assets/bom/bom-core.js?v=1.1.49-7"></script>
     <script src="/assets/bom/bom-views.js?v=1.1.49-11"></script>
     <script src="/assets/bom/bom-beregner.js?v=1.1.49-22"></script>
-    <script src="/assets/bom/bom-main.js?v=1.1.49-14"></script>
+    <script src="/assets/bom/bom-main.js?v=1.1.49-15"></script>
 </body>
 </html>
