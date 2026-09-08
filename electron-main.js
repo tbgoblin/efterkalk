@@ -88,32 +88,29 @@ if (!process.env.GANTECH_DATA_DIR) {
 global.__desktopOpenPath = target => shell.openPath(target);
 global.__desktopOpenExternal = target => shell.openExternal(target);
 
-function findBomCustomerFolder(customerCode, customerName) {
+function findBomCustomerFolder(customerCode) {
     const root = String(process.env.BOM_CUSTOMER_ROOT || 'Y:\\Kunder').trim();
     const code = String(customerCode || '').trim();
-    if (!code || !/^[A-Za-z0-9_-]{1,40}$/.test(code)) return { root, folder: root };
-    const safeName = String(customerName || '').trim().replace(/[<>:"/\\|?*]/g, '').replace(/[. ]+$/g, '');
-    if (safeName) {
-        const folderName = new RegExp('(?:^|\\s)' + code + '$', 'i').test(safeName) ? safeName : safeName + ' ' + code;
-        return { root, folder: path.join(root, folderName) };
-    }
+    if (!code || !/^[A-Za-z0-9_-]{1,40}$/.test(code)) throw new Error('Kundens Gr-kode mangler eller er ugyldig');
     try {
         const suffix = new RegExp('(?:^|\\s)' + code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
-        const match = fs.readdirSync(root, { withFileTypes: true })
-            .filter(entry => entry.isDirectory() && suffix.test(entry.name.trim()))
-            .sort((left, right) => left.name.localeCompare(right.name, 'da-DK'))[0];
-        return { root, folder: match ? path.join(root, match.name) : root };
-    } catch (_) {
-        return { root, folder: root };
+        const match = fs.readdirSync(root)
+            .filter(name => suffix.test(String(name).trim()))
+            .sort((left, right) => left.localeCompare(right, 'da-DK'))[0];
+        if (!match) throw new Error('Ingen kundemappe slutter med Gr ' + code);
+        return { root, folder: path.join(root, match) };
+    } catch (err) {
+        if (String(err.message || '').startsWith('Ingen kundemappe')) throw err;
+        throw new Error('Kundedrevet kunne ikke læses: ' + root);
     }
 }
 
-global.__desktopSelectBomDrawing = async (customerCode, customerName) => {
+global.__desktopSelectBomDrawing = async customerCode => {
     if (!mainWindow) return { cancelled: true };
-    const location = findBomCustomerFolder(customerCode, customerName);
+    const location = findBomCustomerFolder(customerCode);
     const result = await dialog.showOpenDialog(mainWindow, {
         title: 'Vælg tegning for kunde ' + String(customerCode || ''),
-        defaultPath: location.folder,
+        defaultPath: location.folder + path.sep,
         properties: ['openFile'],
         filters: [
             { name: 'Tegninger', extensions: ['dxf', 'step', 'stp', 'pdf'] },

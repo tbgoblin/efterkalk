@@ -33,6 +33,15 @@
             padding: 22px 24px;
             box-shadow: 0 20px 48px rgba(15, 53, 96, 0.28);
         }
+        .hero-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .back-hub-btn {
+            display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto;
+            color: #fff; text-decoration: none; font-size: 13px; font-weight: 700;
+            border: 1px solid rgba(255, 255, 255, 0.42); border-radius: 8px;
+            padding: 9px 12px; background: rgba(255, 255, 255, 0.12);
+        }
+        .back-hub-btn:hover { background: rgba(255, 255, 255, 0.22); }
+        .back-hub-btn:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.65); outline-offset: 2px; }
         .hero h1 { margin: 0; font-size: 30px; }
         .hero p { margin: 10px 0 0 0; max-width: 920px; font-size: 14px; }
         .product-recap {
@@ -427,6 +436,7 @@
             .board-grid, .overview-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 980px) {
+            .hero-head { align-items: flex-start; flex-direction: column; }
             .workspace { grid-template-columns: 1fr; }
             .product-recap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .recap-cell.primary { grid-column: 1 / -1; }
@@ -439,7 +449,7 @@
 <body>
     <div class="wrap">
         <section class="hero">
-            <h1>BOMe+ <small style="font-size: 0.6em; color: #f2a33c; font-weight: bold;">Beta</small></h1>
+            <div class="hero-head"><h1>BOMe+ <small style="font-size: 0.6em; color: #f2a33c; font-weight: bold;">Beta</small></h1><a class="back-hub-btn" href="/" title="Tilbage til Gantech Operations Hub"><span aria-hidden="true">←</span> Gantech Operations Hub</a></div>
             <p>Tilbuds- og styklisteberegner på linje med BOM-regnearket: kunde-, produkt- og revisionsopslag, råvarer med lager, ressourcer og priskalkulation for laser, buk, svejs, flad og stykliste. Alt er læsning — der skrives aldrig til Visma.</p>
         </section>
 
@@ -816,6 +826,6 @@
     <script src="/assets/bom/bom-core.js?v=1.1.49-7"></script>
     <script src="/assets/bom/bom-views.js?v=1.1.49-11"></script>
     <script src="/assets/bom/bom-beregner.js?v=1.1.49-22"></script>
-    <script src="/assets/bom/bom-main.js?v=1.1.49-13"></script>
+    <script src="/assets/bom/bom-main.js?v=1.1.49-14"></script>
 </body>
 </html>

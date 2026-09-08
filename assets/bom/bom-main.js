@@ -244,7 +244,6 @@ const drawingFileInput = document.getElementById('drawingFileInput');
 const chooseDrawingFileBtn = document.getElementById('chooseDrawingFileBtn');
 chooseDrawingFileBtn.addEventListener('click', async () => {
     const customerCode = String(state.calcCustomer && (state.calcCustomer.Gr || state.calcCustomer['Varenr.']) || '').trim();
-    const customerName = String(state.calcCustomer && state.calcCustomer.Nm || '').trim();
     if (!customerCode) {
         showToast('Vælg først en kunde med Gr-kode.', 'err');
         openCalcStep('customer');
@@ -256,7 +255,7 @@ chooseDrawingFileBtn.addEventListener('click', async () => {
         const response = await fetch('/bom/select-drawing', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customerCode, customerName })
+            body: JSON.stringify({ customerCode })
         });
         if (response.status === 404 || response.status === 501) {
             throw new Error('Åbn eller genstart desktop-appen for automatisk kundemappe.');
