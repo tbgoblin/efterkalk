@@ -88,10 +88,15 @@ if (!process.env.GANTECH_DATA_DIR) {
 global.__desktopOpenPath = target => shell.openPath(target);
 global.__desktopOpenExternal = target => shell.openExternal(target);
 
-function findBomCustomerFolder(customerCode) {
+function findBomCustomerFolder(customerCode, customerName) {
     const root = String(process.env.BOM_CUSTOMER_ROOT || 'Y:\\Kunder').trim();
     const code = String(customerCode || '').trim();
     if (!code || !/^[A-Za-z0-9_-]{1,40}$/.test(code)) return { root, folder: root };
+    const safeName = String(customerName || '').trim().replace(/[<>:"/\\|?*]/g, '').replace(/[. ]+$/g, '');
+    if (safeName) {
+        const folderName = new RegExp('(?:^|\\s)' + code + '$', 'i').test(safeName) ? safeName : safeName + ' ' + code;
+        return { root, folder: path.join(root, folderName) };
+    }
     try {
         const suffix = new RegExp('(?:^|\\s)' + code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
         const match = fs.readdirSync(root, { withFileTypes: true })
@@ -103,9 +108,9 @@ function findBomCustomerFolder(customerCode) {
     }
 }
 
-global.__desktopSelectBomDrawing = async customerCode => {
+global.__desktopSelectBomDrawing = async (customerCode, customerName) => {
     if (!mainWindow) return { cancelled: true };
-    const location = findBomCustomerFolder(customerCode);
+    const location = findBomCustomerFolder(customerCode, customerName);
     const result = await dialog.showOpenDialog(mainWindow, {
         title: 'Vælg tegning for kunde ' + String(customerCode || ''),
         defaultPath: location.folder,

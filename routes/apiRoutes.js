@@ -2876,7 +2876,8 @@ function createApiRouter({
         try {
             const customerCode = String(req.body && req.body.customerCode || '').trim();
             if (!customerCode) return res.status(400).json({ error: 'Vælg en kunde med Gr-kode først' });
-            const selected = await selectDrawing(customerCode);
+            const customerName = String(req.body && req.body.customerName || '').trim();
+            const selected = await selectDrawing(customerCode, customerName);
             if (!selected || selected.cancelled) return res.json({ cancelled: true });
             const extension = path.extname(selected.filePath).toLowerCase();
             if (!['.dxf', '.step', '.stp', '.pdf'].includes(extension)) {
