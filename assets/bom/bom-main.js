@@ -5,6 +5,16 @@ document.getElementById('loadStyklisteBtn').addEventListener('click', async () =
 document.getElementById('loadResourcesBtn').addEventListener('click', loadResources);
 document.getElementById('loadMaterialsBtn').addEventListener('click', loadMaterials);
 document.getElementById('loadCalculatorsBtn').addEventListener('click', loadCalculators);
+document.getElementById('processFilterSelect').addEventListener('change', () => {
+    loadCalculators().catch(err => setStatus('Kunne ikke hente procesressourcer: ' + err.message));
+});
+document.getElementById('addLaserParameterBtn').addEventListener('click', addLaserParameter);
+const addLaserTechnicalBtn = document.getElementById('addLaserTechnicalBtn');
+if (addLaserTechnicalBtn) addLaserTechnicalBtn.addEventListener('click', addLaserTechnicalParameter);
+document.getElementById('saveLaserGasPricesBtn').addEventListener('click', saveLaserGasPrices);
+document.getElementById('importLaserExcelBtn').addEventListener('click', importLaserParametersFromExcel);
+document.getElementById('addBendingMachineBtn').addEventListener('click', addBendingMachine);
+document.getElementById('addBendingBandBtn').addEventListener('click', addBendingBand);
 document.getElementById('invalidateBtn').addEventListener('click', async () => { try { await invalidateActiveCache(); } catch (err) { setStatus('Kunne ikke rydde cache: ' + err.message); } });
 document.getElementById('openDraftProductBtn').addEventListener('click', openDraftModal);
 document.getElementById('closeDraftProductBtn').addEventListener('click', closeDraftModal);
@@ -75,9 +85,9 @@ document.getElementById('previewVismaBtn').addEventListener('click', async () =>
             }
         }
         if (createVismaBtn) {
-            createVismaBtn.style.display = 'inline-block';
-            createVismaBtn.disabled = conflicts.length > 0;
-            createVismaBtn.dataset.payload = JSON.stringify(body);
+            createVismaBtn.style.display = 'none';
+            createVismaBtn.disabled = true;
+            createVismaBtn.dataset.payload = '';
         }
     } catch (err) {
         setStatus('Fejl ved tjek: ' + err.message);
@@ -172,6 +182,19 @@ document.getElementById('addSublevelBtn').addEventListener('click', () => addSub
 document.getElementById('runQuoteBtn').addEventListener('click', runQuote);
 document.getElementById('resetQuoteBtn').addEventListener('click', resetBeregner);
 if (copyQuoteBtn) copyQuoteBtn.addEventListener('click', copyQuoteToClipboard);
+document.getElementById('vismaQueryPreviewBtn').addEventListener('click', openVismaQueryPreview);
+document.getElementById('closeVismaQueryBtn').addEventListener('click', closeVismaQueryPreview);
+document.getElementById('vismaQueryModal').addEventListener('click', evt => {
+    if (evt.target.id === 'vismaQueryModal') closeVismaQueryPreview();
+});
+document.getElementById('copyVismaQueryBtn').addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(document.getElementById('vismaQueryText').textContent || '');
+        showToast('Visma-query kopieret.', 'ok');
+    } catch (err) {
+        showToast('Kunne ikke kopiere query: ' + err.message, 'err');
+    }
+});
 
 // ── Tastaturgenveje: Alt+1..8 skifter område, "/" fokuserer søgning ──
 const viewSearchFocus = {
@@ -186,9 +209,10 @@ const viewSearchFocus = {
 document.addEventListener('keydown', evt => {
     if (evt.altKey && !evt.ctrlKey && !evt.shiftKey && !evt.metaKey) {
         const idx = Number(evt.key);
-        if (idx >= 1 && idx <= navItems.length) {
+        const allowedItems = visibleNavItems();
+        if (idx >= 1 && idx <= allowedItems.length) {
             evt.preventDefault();
-            switchView(navItems[idx - 1].key);
+            switchView(allowedItems[idx - 1].key);
         }
         return;
     }
@@ -216,9 +240,43 @@ document.addEventListener('keydown', evt => {
         }
     });
 });
-document.getElementById('drawingFileInput').addEventListener('change', evt => {
+const drawingFileInput = document.getElementById('drawingFileInput');
+const chooseDrawingFileBtn = document.getElementById('chooseDrawingFileBtn');
+chooseDrawingFileBtn.addEventListener('click', async () => {
+    const customerCode = String(state.calcCustomer && (state.calcCustomer.Gr || state.calcCustomer['Varenr.']) || '').trim();
+    if (!customerCode) {
+        showToast('Vælg først en kunde med Gr-kode.', 'err');
+        openCalcStep('customer');
+        return;
+    }
+    chooseDrawingFileBtn.disabled = true;
+    chooseDrawingFileBtn.textContent = 'Åbner kundemappe...';
+    try {
+        const response = await fetch('/bom/select-drawing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerCode })
+        });
+        if (response.status === 404 || response.status === 501) {
+            throw new Error('Åbn eller genstart desktop-appen for automatisk kundemappe.');
+        }
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Kunne ikke åbne kundemappen');
+        if (result.cancelled) return;
+        applyDrawingAnalysis(result.filename, result);
+        const folderName = String(result.customerFolder || '').split(/[\\/]/).filter(Boolean).pop();
+        if (folderName) fileAnalysisStatus.textContent += ' · Mappe: ' + folderName;
+        scheduleQuoteRecalc(220);
+    } catch (err) {
+        showToast(err.message, 'err');
+    } finally {
+        chooseDrawingFileBtn.disabled = false;
+        chooseDrawingFileBtn.textContent = 'Vælg tegning';
+    }
+});
+drawingFileInput.addEventListener('change', async evt => {
     const file = evt.target.files && evt.target.files[0];
-    if (file) analyzeDrawingFile(file);
+    if (file) await analyzeDrawingFile(file);
     scheduleQuoteRecalc(220);
 });
 const useCustomSheetEl = document.getElementById('calcUseCustomSheet');
@@ -287,8 +345,11 @@ attachPicker({
         }
         const lagerTxt = row.Bal == null ? 'lager ?' : 'lager ' + Number(row.Bal);
         calcMaterialChosen.textContent = 'Valgt: ' + materialOptionLabel(row) + ' · plade ' + (row.Bredde || '-') + 'x' + (row['Længde'] || '-') + ' m · tyk ' + (row.tykklese == null ? '-' : row.tykklese) + ' · ' + lagerTxt;
+        refreshLaserTechnologyOptions();
+        updateCalcWizard();
         renderDxfViewer();
         scheduleQuoteRecalc(180);
+        advanceCalcWizard('material');
     }
 });
 ['calcThicknessFilter', 'calcOnlyStock'].forEach(id => {
@@ -314,10 +375,32 @@ attachPicker({
         state.calcCustomer = row;
         document.getElementById('calcCustomerSearch').value = row.Nm || String(row.CustNo || '');
         applyCalcCustomerPref(row);
-        await refreshCalcCustomerMeta(row);
+        updateCalcWizard();
         scheduleQuoteRecalc(180);
+        advanceCalcWizard('customer');
+        await refreshCalcCustomerMeta(row);
     }
 });
+document.getElementById('closeCalcStepBtn').addEventListener('click', closeCalcStep);
+document.getElementById('calcStepModal').addEventListener('click', evt => {
+    if (evt.target === document.getElementById('calcStepModal')) closeCalcStep();
+});
+document.getElementById('calcStepBackBtn').addEventListener('click', () => {
+    const index = calcWizardSteps.indexOf(activeCalcWizardStep);
+    if (index > 0) openCalcStep(calcWizardSteps[index - 1]);
+});
+document.getElementById('calcStepNextBtn').addEventListener('click', async () => {
+    if (!calcWizardComplete(activeCalcWizardStep)) return;
+    if (activeCalcWizardStep === 'processes') {
+        state.calcWizardProcessesReady = true;
+        closeCalcStep();
+        await runQuote();
+        openCalcStep('result');
+        return;
+    }
+    advanceCalcWizard(activeCalcWizardStep);
+});
+document.getElementById('calcQty').addEventListener('input', updateProductRecap);
 ['calcPriceBasis', 'calcLaserOpstartChk', 'calcLaserOpstartMin', 'calcMinAmount', 'calcMinQty'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
         saveCalcCustomerPref();
@@ -381,17 +464,34 @@ customerSelect.addEventListener('change', () => {
 });
 
 // ── Opstart ──
-renderNav();
-switchView('overview');
 (async function boot() {
     try {
-        await loadCustomers();
-        await loadProducts();
-        loadCustomerNotes();
+        const access = await fetchJson('/bom/access');
+        state.permissions = access.permissions || {};
+        const allowedItems = visibleNavItems();
+        if (!allowedItems.length) {
+            navList.innerHTML = '<div class="empty">Du har ikke adgang til nogen BOM-områder.</div>';
+            document.querySelector('main.panel').innerHTML = '<div class="empty">Kontakt en administrator for at få adgang.</div>';
+            return;
+        }
+        if (!state.permissions.bomVismaPreview) {
+            ['vismaQueryPreviewBtn', 'previewVismaBtn', 'vismaQueryModal'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.remove();
+            });
+        }
+        renderNav();
+        switchView(allowedItems[0].key);
+        if (state.permissions.bomStykliste || state.permissions.bomCalculator) await loadCustomers();
+        if (state.permissions.bomStykliste) {
+            await loadProducts();
+            loadCustomerNotes();
+        }
         updateContext();
-        await primeOverviewCounts();
+        if (state.permissions.bomOverview) await primeOverviewCounts();
         setStatus('BOM-arbejdsområdet er klar');
     } catch (err) {
-        setStatus('Fejl ved opstart: ' + err.message);
+        navList.innerHTML = '<div class="empty">Login eller BOM-adgang kræves.</div>';
+        setStatus('Adgang afvist: ' + err.message);
     }
 })();

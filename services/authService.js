@@ -145,6 +145,16 @@ function createAuthService({ fs, usersFile }) {
         };
     }
 
+    function requireAnyModulePermission(permissions) {
+        const allowedPermissions = Array.isArray(permissions) ? permissions : [permissions];
+        return (req, res, next) => {
+            const user = getSessionUser(req);
+            const allowed = user && (user.role === 'superadmin' || allowedPermissions.some(permission => user.permissions && user.permissions[permission]));
+            if (!allowed) return res.status(403).json({ error: 'Adgang til BOM-området er ikke tilladt' });
+            return next();
+        };
+    }
+
     return {
         authSessions,
         readUsers,
@@ -156,6 +166,7 @@ function createAuthService({ fs, usersFile }) {
         requireAuthenticated,
         requireSuperadmin,
         requireModulePermission,
+        requireAnyModulePermission,
         revokeSession,
         buildSessionCookie,
         buildExpiredSessionCookie,

@@ -20,7 +20,7 @@ Map BOM Excel flows to explicit Portal services, endpoints, and cache keys.
 | Resource/routing data | Ressourcer + FreeInf tables | GET /bom/resources | bomResourceService | bom:v1:resources:list | No |
 | Material stock and pricing | råvarer + RV-beholdn | GET /bom/materials | bomMaterialService | bom:v1:materials:list:{filterHash} | No |
 | Laser parameters | skæreparametre / Laserberegner | GET /bom/calculators/laser-params | bomLaserParamService | bom:v1:laser:params | No |
-| Bending calculator data | Bukkeberegner query | GET /bom/calculators/bending-params | bomBendingParamService | bom:v1:bending:params | No |
+| Bending calculator data | Manuelle GOH-parametre | GET /bom/calculators/bending-params + POST bending-machines/handling-bands/actual-samples | bomService + gohDataService | Ingen cache | GOH only |
 | Start revision context | GåTil_NyRev | POST /bom/revision-sessions | bomRevisionSessionService | bom:v1:revision-session:{sessionId} | No |
 | Apply revision to product | Opd_Prod_vn (UPDATE Prod) | POST /bom/revisions/apply | bomRevisionCommandService | invalidate revision/product keys | Yes (controlled) |
 | PDF export | GemSomPDF | POST /bom/documents/revision-pdf | bomDocumentService | bom:v1:doc-template:{templateId} | File write |

@@ -3,13 +3,14 @@
 // parametre, leverandører og lokale produktkladder.
 
 function renderNav() {
-    navList.innerHTML = navItems.map((item, idx) => {
+    navList.innerHTML = visibleNavItems().map((item, idx) => {
         const active = item.key === state.view ? 'active' : '';
         return '<button class="nav-btn ' + active + '" data-view="' + item.key + '" title="Genvej: Alt+' + (idx + 1) + '"><kbd class="nav-kbd">Alt+' + (idx + 1) + '</kbd><strong>' + escapeHtml(item.title) + '</strong><span>' + escapeHtml(item.description) + '</span></button>';
     }).join('');
     navList.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.getAttribute('data-view'))));
 }
 function switchView(view) {
+    if (!visibleNavItems().some(item => item.key === view)) return;
     state.view = view;
     renderNav();
     Object.keys(viewMeta).forEach(key => {
@@ -116,10 +117,314 @@ function renderRevisions() {
 }
 function renderResources(rows) { renderSimpleTable(resourcesHead, resourcesBody, rows); }
 function renderMaterials() { renderSimpleTable(materialsHead, materialsBody, state.materials); }
-function renderCalculators(laserRows, processRows, processResourceRows) {
-    renderSimpleTable(laserHead, laserBody, laserRows);
+let editingLaserRow = null;
+let editingLaserTechnicalRow = null;
+let editingBendingMachineRow = null;
+let editingBendingBandRow = null;
+
+function parameterCell(row, field, editing, attributeName) {
+    const value = row[field[0]] == null ? '' : row[field[0]];
+    if (!editing) return '<td>' + escapeHtml(value === '' ? '-' : value) + '</td>';
+    return '<td><input ' + attributeName + '="' + field[0] + '" type="' + field[2] + '" step="any" value="' + escapeHtml(value) + '" /></td>';
+}
+
+function renderLaserParameters(rows) {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const fields = [
+        ['ProdNo', 'Varenr.', 'text'], ['Descr', 'Beskrivelse', 'text'], ['Tykkelse', 'Tykkelse', 'number'],
+        ['Maskine', 'Maskine', 'text'], ['Skærehast.', 'm/min', 'number'], ['Pircing', 'Piercing min.', 'number'],
+        ['Tillæg', 'Tillæg %', 'number'], ['Linse', 'Linse', 'text']
+    ];
+    laserHead.innerHTML = '<tr>' + fields.map(field => '<th>' + field[1] + '</th>').join('') + '<th>Kilde</th><th></th></tr>';
+    laserBody.innerHTML = safeRows.length ? safeRows.map((row, rowIndex) => {
+        const editing = editingLaserRow === rowIndex;
+        const cells = fields.map(field => parameterCell(row, field, editing, 'data-laser-field')).join('');
+        const actions = editing
+            ? '<button type="button" data-save-laser>Gem</button> <button type="button" class="alt" data-cancel-laser>Annuller</button>'
+            : '<button type="button" class="alt" data-edit-laser>Rediger</button>';
+        return '<tr data-laser-row="' + rowIndex + '">' + cells + '<td>' + escapeHtml(row.Source || '-') + '</td><td class="parameter-actions">' + actions + '</td></tr>';
+    }).join('') : '<tr><td colspan="10" class="empty">Ingen rækker fundet. Opret en ny laserparameter.</td></tr>';
+    laserBody.querySelectorAll('[data-save-laser]').forEach(button => button.addEventListener('click', () => saveLaserParameter(button)));
+    laserBody.querySelectorAll('[data-edit-laser]').forEach(button => button.addEventListener('click', () => {
+        editingLaserRow = Number(button.closest('tr').dataset.laserRow);
+        renderLaserParameters(state.laserParams);
+    }));
+    laserBody.querySelectorAll('[data-cancel-laser]').forEach(button => button.addEventListener('click', () => {
+        const index = Number(button.closest('tr').dataset.laserRow);
+        if (state.laserParams[index] && state.laserParams[index]._isNew) state.laserParams.splice(index, 1);
+        editingLaserRow = null;
+        renderLaserParameters(state.laserParams);
+    }));
+}
+
+function renderLaserTechnicalParameters(rows) {
+    const head = document.getElementById('laserTechnicalHead');
+    const body = document.getElementById('laserTechnicalBody');
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const fields = [
+        ['Technology', 'Teknologi', 'text'], ['Material', 'Materiale', 'text'], ['Thickness', 'mm', 'number'],
+        ['Lens', 'Linse', 'text'], ['PiercingMilliseconds', 'Piercing ms', 'number'],
+        ['VaporPowerW', 'Vapor W', 'number'], ['ReducedPowerW', 'Reduceret W', 'number'],
+        ['FeedrateLargeMmMin', 'Stor mm/min', 'number'], ['FeedrateMediumMmMin', 'Mellem mm/min', 'number'],
+        ['FeedrateSmallMmMin', 'Lille mm/min', 'number'], ['FeedrateEngravingMmMin', 'Gravering mm/min', 'number'],
+        ['GasPressureBar', 'Gastryk bar', 'number'], ['NozzleSizeMm', 'Dyse mm', 'number']
+    ];
+    head.innerHTML = '<tr>' + fields.map(field => '<th>' + field[1] + '</th>').join('') + '<th>Kilde</th><th></th></tr>';
+    body.innerHTML = safeRows.length ? safeRows.map((row, index) => {
+        const editing = editingLaserTechnicalRow === index;
+        const actions = editing
+            ? '<button type="button" data-save-laser-technical>Gem</button> <button type="button" class="alt" data-cancel-laser-technical>Annuller</button>'
+            : '<button type="button" class="alt" data-edit-laser-technical>Rediger</button>';
+        return '<tr data-laser-technical-row="' + index + '">'
+            + fields.map(field => parameterCell(row, field, editing, 'data-laser-technical-field')).join('')
+            + '<td>' + escapeHtml(row.Source || '-') + '</td><td class="parameter-actions">' + actions + '</td></tr>';
+    }).join('') : '<tr><td colspan="15" class="empty">Ingen laserteknologier konfigureret. Kør Excel-importen.</td></tr>';
+    body.querySelectorAll('[data-save-laser-technical]').forEach(button => button.addEventListener('click', () => saveLaserTechnicalParameter(button)));
+    body.querySelectorAll('[data-edit-laser-technical]').forEach(button => button.addEventListener('click', () => {
+        editingLaserTechnicalRow = Number(button.closest('tr').dataset.laserTechnicalRow);
+        renderLaserTechnicalParameters(state.laserTechnicalParams);
+    }));
+    body.querySelectorAll('[data-cancel-laser-technical]').forEach(button => button.addEventListener('click', () => {
+        const index = Number(button.closest('tr').dataset.laserTechnicalRow);
+        if (state.laserTechnicalParams[index] && state.laserTechnicalParams[index]._isNew) state.laserTechnicalParams.splice(index, 1);
+        editingLaserTechnicalRow = null;
+        renderLaserTechnicalParameters(state.laserTechnicalParams);
+    }));
+}
+function renderBendingMachines(rows) {
+    const head = document.getElementById('bendingMachineHead');
+    const body = document.getElementById('bendingMachineBody');
+    const fields = [
+        ['MachineCode', 'Maskine', 'text'], ['Description', 'Beskrivelse', 'text'],
+        ['MaxBendLengthMm', 'Maks. længde mm', 'number'], ['MaxForceKn', 'Maks. kN', 'number'],
+        ['BaseCycleSeconds', 'Basis sek./buk', 'number'], ['SecondsPerDegree', 'Sek./grad', 'number'],
+        ['BackGaugeSeconds', 'Bagstop sek.', 'number'], ['SetupMinutes', 'Opstart min.', 'number'],
+        ['SafetyFactor', 'Sikkerhed', 'number']
+    ];
+    head.innerHTML = '<tr>' + fields.map(field => '<th>' + field[1] + '</th>').join('') + '<th></th></tr>';
+    body.innerHTML = rows.length ? rows.map((row, index) => {
+        const editing = editingBendingMachineRow === index;
+        const actions = editing
+            ? '<button type="button" data-save-bending-machine>Gem</button> <button type="button" class="alt" data-cancel-bending-machine>Annuller</button>'
+            : '<button type="button" class="alt" data-edit-bending-machine>Rediger</button>';
+        return '<tr data-bending-machine-row="' + index + '">'
+            + fields.map(field => parameterCell(row, field, editing, 'data-bending-machine-field')).join('')
+            + '<td class="parameter-actions">' + actions + '</td></tr>';
+    }).join('')
+        : '<tr><td colspan="10" class="empty">Ingen buk-maskiner konfigureret.</td></tr>';
+    body.querySelectorAll('[data-save-bending-machine]').forEach(button => button.addEventListener('click', () => saveBendingMachine(button)));
+    body.querySelectorAll('[data-edit-bending-machine]').forEach(button => button.addEventListener('click', () => {
+        editingBendingMachineRow = Number(button.closest('tr').dataset.bendingMachineRow);
+        renderBendingMachines(state.bendingMachines);
+    }));
+    body.querySelectorAll('[data-cancel-bending-machine]').forEach(button => button.addEventListener('click', () => {
+        const index = Number(button.closest('tr').dataset.bendingMachineRow);
+        if (state.bendingMachines[index] && state.bendingMachines[index]._isNew) state.bendingMachines.splice(index, 1);
+        editingBendingMachineRow = null;
+        renderBendingMachines(state.bendingMachines);
+    }));
+}
+
+function renderBendingBands(rows) {
+    const head = document.getElementById('bendingBandHead');
+    const body = document.getElementById('bendingBandBody');
+    const fields = [
+        ['BandName', 'Klasse', 'text'], ['MinWeightKg', 'Min. kg', 'number'], ['MaxWeightKg', 'Maks. kg', 'number'],
+        ['MinLongestSideMm', 'Min. side mm', 'number'], ['MaxLongestSideMm', 'Maks. side mm', 'number'],
+        ['LoadSeconds', 'Læg på sek.', 'number'], ['UnloadSeconds', 'Tag af sek.', 'number'],
+        ['Rotate90Seconds', 'Rotér 90° sek.', 'number'], ['FlipSeconds', 'Vend sek.', 'number']
+    ];
+    head.innerHTML = '<tr>' + fields.map(field => '<th>' + field[1] + '</th>').join('') + '<th></th></tr>';
+    body.innerHTML = rows.length ? rows.map((row, index) => {
+        const editing = editingBendingBandRow === index;
+        const actions = editing
+            ? '<button type="button" data-save-bending-band>Gem</button> <button type="button" class="alt" data-cancel-bending-band>Annuller</button>'
+            : '<button type="button" class="alt" data-edit-bending-band>Rediger</button>';
+        return '<tr data-bending-band-row="' + index + '" data-band-id="' + escapeHtml(row.HandlingBandId || '') + '">'
+            + fields.map(field => parameterCell(row, field, editing, 'data-bending-band-field')).join('')
+            + '<td class="parameter-actions">' + actions + '</td></tr>';
+    }).join('')
+        : '<tr><td colspan="10" class="empty">Ingen håndteringsklasser konfigureret.</td></tr>';
+    body.querySelectorAll('[data-save-bending-band]').forEach(button => button.addEventListener('click', () => saveBendingBand(button)));
+    body.querySelectorAll('[data-edit-bending-band]').forEach(button => button.addEventListener('click', () => {
+        editingBendingBandRow = Number(button.closest('tr').dataset.bendingBandRow);
+        renderBendingBands(state.bendingHandlingBands);
+    }));
+    body.querySelectorAll('[data-cancel-bending-band]').forEach(button => button.addEventListener('click', () => {
+        const index = Number(button.closest('tr').dataset.bendingBandRow);
+        if (state.bendingHandlingBands[index] && state.bendingHandlingBands[index]._isNew) state.bendingHandlingBands.splice(index, 1);
+        editingBendingBandRow = null;
+        renderBendingBands(state.bendingHandlingBands);
+    }));
+}
+
+function renderCalculators(laserRows, laserTechnicalRows, gasPrices, bendingData, processRows, processResourceRows) {
+    editingLaserRow = null;
+    editingLaserTechnicalRow = null;
+    editingBendingMachineRow = null;
+    editingBendingBandRow = null;
+    state.laserParams = laserRows;
+    state.laserTechnicalParams = laserTechnicalRows;
+    state.laserGasPrices = gasPrices || { nitrogenPricePerKg: 0, oxygenPricePerKg: 0,
+        nitrogenSpecificVolumeM3Kg: 0.862, oxygenSpecificVolumeM3Kg: 0.7, mixLineOxygenPercent: 22 };
+    document.getElementById('nitrogenPriceInput').value = state.laserGasPrices.nitrogenPricePerKg || 0;
+    document.getElementById('oxygenPriceInput').value = state.laserGasPrices.oxygenPricePerKg || 0;
+    document.getElementById('nitrogenSpecificVolumeInput').value = state.laserGasPrices.nitrogenSpecificVolumeM3Kg || 0.862;
+    document.getElementById('oxygenSpecificVolumeInput').value = state.laserGasPrices.oxygenSpecificVolumeM3Kg || 0.7;
+    document.getElementById('mixLineOxygenPercentInput').value = state.laserGasPrices.mixLineOxygenPercent == null ? 22 : state.laserGasPrices.mixLineOxygenPercent;
+    state.bendingMachines = bendingData.machines || [];
+    state.bendingHandlingBands = bendingData.handlingBands || [];
+    renderLaserParameters(laserRows);
+    renderLaserTechnicalParameters(laserTechnicalRows);
+    if (typeof refreshLaserTechnologyOptions === 'function') refreshLaserTechnologyOptions();
+    renderBendingMachines(state.bendingMachines);
+    renderBendingBands(state.bendingHandlingBands);
     renderSimpleTable(processHead, processBody, processRows);
     renderSimpleTable(processResourceHead, processResourceBody, processResourceRows);
+}
+
+async function saveLaserGasPrices() {
+    const button = document.getElementById('saveLaserGasPricesBtn');
+    button.disabled = true;
+    try {
+        const result = await fetchJson('/bom/calculators/laser-gas-prices', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nitrogenPricePerKg: document.getElementById('nitrogenPriceInput').value,
+                oxygenPricePerKg: document.getElementById('oxygenPriceInput').value,
+                nitrogenSpecificVolumeM3Kg: document.getElementById('nitrogenSpecificVolumeInput').value,
+                oxygenSpecificVolumeM3Kg: document.getElementById('oxygenSpecificVolumeInput').value,
+                mixLineOxygenPercent: document.getElementById('mixLineOxygenPercentInput').value
+            })
+        });
+        state.laserGasPrices = result.prices;
+        if (typeof refreshLaserTechnologyOptions === 'function') refreshLaserTechnologyOptions();
+        setStatus('Globale gaspriser gemt i GOH');
+        showToast('Gaspriser gemt', 'ok');
+    } finally { button.disabled = false; }
+}
+
+async function saveBendingMachine(button) {
+    const row = button.closest('tr');
+    const value = field => row.querySelector('[data-bending-machine-field="' + field + '"]').value.trim();
+    button.disabled = true;
+    try {
+        await fetchJson('/bom/calculators/bending-machines', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ machineCode: value('MachineCode'), description: value('Description'),
+                maxBendLengthMm: value('MaxBendLengthMm'), maxForceKn: value('MaxForceKn'), baseCycleSeconds: value('BaseCycleSeconds'),
+                secondsPerDegree: value('SecondsPerDegree'), backGaugeSeconds: value('BackGaugeSeconds'),
+                setupMinutes: value('SetupMinutes'), safetyFactor: value('SafetyFactor') })
+        });
+        setStatus('Buk-maskine gemt i GOH');
+        await loadCalculators();
+    } finally { button.disabled = false; }
+}
+
+async function saveBendingBand(button) {
+    const row = button.closest('tr');
+    const value = field => row.querySelector('[data-bending-band-field="' + field + '"]').value.trim();
+    button.disabled = true;
+    try {
+        await fetchJson('/bom/calculators/bending-handling-bands', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handlingBandId: row.dataset.bandId || 0, bandName: value('BandName'),
+                minWeightKg: value('MinWeightKg'), maxWeightKg: value('MaxWeightKg'),
+                minLongestSideMm: value('MinLongestSideMm'), maxLongestSideMm: value('MaxLongestSideMm'),
+                loadSeconds: value('LoadSeconds'), unloadSeconds: value('UnloadSeconds'),
+                rotate90Seconds: value('Rotate90Seconds'), flipSeconds: value('FlipSeconds') })
+        });
+        setStatus('Håndteringsklasse gemt i GOH');
+        await loadCalculators();
+    } finally { button.disabled = false; }
+}
+
+function addBendingMachine() {
+    state.bendingMachines.unshift({ MachineCode: '', Description: '', MaxBendLengthMm: '', MaxForceKn: '', BaseCycleSeconds: '', SecondsPerDegree: '0', BackGaugeSeconds: '0', SetupMinutes: '0', SafetyFactor: '0.8', _isNew: true });
+    editingBendingMachineRow = 0;
+    renderBendingMachines(state.bendingMachines);
+}
+
+function addBendingBand() {
+    state.bendingHandlingBands.unshift({ HandlingBandId: '', BandName: '', MinWeightKg: '0', MaxWeightKg: '', MinLongestSideMm: '0', MaxLongestSideMm: '', LoadSeconds: '', UnloadSeconds: '', Rotate90Seconds: '', FlipSeconds: '', _isNew: true });
+    editingBendingBandRow = 0;
+    renderBendingBands(state.bendingHandlingBands);
+}
+
+async function saveLaserParameter(button) {
+    const row = button.closest('tr');
+    const value = field => row.querySelector('[data-laser-field="' + field + '"]').value.trim();
+    button.disabled = true;
+    try {
+        await fetchJson('/bom/calculators/laser-params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prodNo: value('ProdNo'), description: value('Descr'), thickness: value('Tykkelse'), machine: value('Maskine'),
+                cutSpeedMPerMin: value('Skærehast.'), piercingMinutes: value('Pircing'), surchargePercent: value('Tillæg'), lens: value('Linse')
+            })
+        });
+        setStatus('Laserparameter gemt i GOH');
+        await loadCalculators();
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function saveLaserTechnicalParameter(button) {
+    const row = button.closest('tr');
+    const value = field => row.querySelector('[data-laser-technical-field="' + field + '"]').value.trim();
+    button.disabled = true;
+    try {
+        await fetchJson('/bom/calculators/laser-technical-params', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                technology: value('Technology'), material: value('Material'), thickness: value('Thickness'), lens: value('Lens'),
+                piercingMilliseconds: value('PiercingMilliseconds'), vaporPowerW: value('VaporPowerW'), reducedPowerW: value('ReducedPowerW'),
+                feedrateLargeMmMin: value('FeedrateLargeMmMin'), feedrateMediumMmMin: value('FeedrateMediumMmMin'),
+                feedrateSmallMmMin: value('FeedrateSmallMmMin'), feedrateEngravingMmMin: value('FeedrateEngravingMmMin'),
+                gasPressureBar: value('GasPressureBar'), nozzleSizeMm: value('NozzleSizeMm')
+            })
+        });
+        setStatus('Laserteknologi gemt i GOH');
+        await loadCalculators();
+    } finally { button.disabled = false; }
+}
+
+function addLaserParameter() {
+    state.laserParams.unshift({ ProdNo: '', Descr: '', Tykkelse: '', Maskine: document.getElementById('laserMachineInput').value || '', 'Skærehast.': '', Pircing: '0', 'Tillæg': '0', Linse: '', Source: 'ny', _isNew: true });
+    editingLaserRow = 0;
+    renderLaserParameters(state.laserParams);
+    const firstInput = laserBody.querySelector('input');
+    if (firstInput) firstInput.focus();
+}
+
+function addLaserTechnicalParameter() {
+    state.laserTechnicalParams.unshift({ Technology: '', Material: '', Thickness: '', Lens: '', PiercingMilliseconds: '0',
+        VaporPowerW: '0', ReducedPowerW: '0', FeedrateLargeMmMin: '0', FeedrateMediumMmMin: '0', FeedrateSmallMmMin: '0',
+        FeedrateEngravingMmMin: '0', GasPressureBar: '0', NozzleSizeMm: '0', Source: 'ny', _isNew: true });
+    editingLaserTechnicalRow = 0;
+    renderLaserTechnicalParameters(state.laserTechnicalParams);
+    const firstInput = document.getElementById('laserTechnicalBody').querySelector('input');
+    if (firstInput) firstInput.focus();
+}
+
+async function importLaserParametersFromExcel() {
+    const button = document.getElementById('importLaserExcelBtn');
+    button.disabled = true;
+    setStatus('Importerer laserparametre fra BOM.xlsm...');
+    try {
+        const result = await fetchJson('/bom/calculators/laser-params/import-excel', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ overwriteExisting: false })
+        });
+        const technical = result.technical || { inserted: 0, preserved: 0 };
+        setStatus('Excel-import: ' + result.inserted + ' artikelrækker og ' + technical.inserted + ' teknologier indsat');
+        showToast('Import færdig: ' + result.inserted + ' artikler, ' + technical.inserted + ' teknologier', 'ok');
+        await loadCalculators();
+    } catch (err) {
+        setStatus('Excel-import fejlede: ' + err.message);
+        showToast('Excel-import fejlede: ' + err.message, 'err');
+    } finally { button.disabled = false; }
 }
 function renderTreeNode(row, kindLabel, kindClass) {
     return '<div class="tree-node"><span class="tree-kind ' + kindClass + '">' + escapeHtml(kindLabel) + '</span><strong>' + escapeHtml(row.ProdNo || '-') + '</strong> ' + escapeHtml(row.Descr || '') + '<div class="muted">TgNo: ' + escapeHtml(row.TgNo || '-') + ' · Rev: ' + escapeHtml(row.RevNo || '-') + ' · Pos: ' + escapeHtml(row.PosNo || '-') + '</div></div>';
@@ -291,25 +596,34 @@ async function loadCalculators() {
     }
     const machine = encodeURIComponent(String(document.getElementById('laserMachineInput').value || '').trim());
     const family = String(document.getElementById('processFilterSelect').value || '').trim().toLowerCase();
-    const [laserData, processData, resourceData] = await Promise.all([
+    const familyCodes = {
+        laser: ['11', '12'],
+        buk: ['21'],
+        svejs: ['50', '50-1', '51', '56'],
+        flad: ['60', '61', '62', '63', '64']
+    };
+    const [laserData, bendingData, processData, resourceData] = await Promise.all([
         fetchJson('/bom/calculators/laser-params?machine=' + machine),
+        fetchJson('/bom/calculators/bending-params'),
         fetchJson('/bom/calculators/process-params'),
         fetchJson('/bom/resources')
     ]);
     const familyRows = (resourceData.rows || []).filter(row => {
-        if (!family) return ['laser', 'buk', 'svejs', 'flad'].some(term => String(row.Descr || '').toLowerCase().includes(term));
-        return String(row.Descr || '').toLowerCase().includes(family);
+        const resourceFamily = String(row.R7 || '').trim();
+        if (!family) return Object.values(familyCodes).some(codes => codes.includes(resourceFamily));
+        return (familyCodes[family] || []).includes(resourceFamily);
     });
-    renderCalculators(laserData.rows || [], processData.rows || [], familyRows);
-    setMetric('metricCalculators', formatNumber((laserData.rows || []).length + (processData.rows || []).length));
+    renderCalculators(laserData.rows || [], laserData.technicalRows || [], laserData.gasPrices || {}, bendingData, processData.rows || [], familyRows);
+    setMetric('metricCalculators', formatNumber((laserData.rows || []).length + (laserData.technicalRows || []).length + (bendingData.machines || []).length + (processData.rows || []).length));
     cachePill.textContent = 'Cache: parametre ' + ((laserData.cached && processData.cached) ? 'hit' : 'miss');
-    setStatus('Parametre indlæst', (laserData.rows || []).length + (processData.rows || []).length + familyRows.length);
+    const familyLabel = family ? document.getElementById('processFilterSelect').selectedOptions[0].textContent : 'Alle procesfamilier';
+    setStatus(familyLabel + ': ressourcer indlæst', familyRows.length);
 }
 async function primeOverviewCounts() {
-    try { const customers = await fetchJson('/bom/customers'); setMetric('metricCustomers', formatNumber(customers.count || 0)); } catch (_) {}
-    try { const resources = await fetchJson('/bom/resources'); state.resources = resources.rows || []; setMetric('metricResources', formatNumber(resources.count || 0)); } catch (_) {}
-    try { const materials = await fetchJson('/bom/materials'); state.materials = materials.rows || []; setMetric('metricMaterials', formatNumber(materials.count || 0)); } catch (_) {}
-    try {
+    if (state.permissions.bomStykliste || state.permissions.bomCalculator) try { const customers = await fetchJson('/bom/customers'); setMetric('metricCustomers', formatNumber(customers.count || 0)); } catch (_) {}
+    if (state.permissions.bomResources || state.permissions.bomParameters || state.permissions.bomCalculator) try { const resources = await fetchJson('/bom/resources'); state.resources = resources.rows || []; setMetric('metricResources', formatNumber(resources.count || 0)); } catch (_) {}
+    if (state.permissions.bomMaterials || state.permissions.bomCalculator) try { const materials = await fetchJson('/bom/materials'); state.materials = materials.rows || []; setMetric('metricMaterials', formatNumber(materials.count || 0)); } catch (_) {}
+    if (state.permissions.bomParameters || state.permissions.bomCalculator) try {
         const laser = await fetchJson('/bom/calculators/laser-params?machine=R1100');
         const process = await fetchJson('/bom/calculators/process-params');
         setMetric('metricCalculators', formatNumber((laser.count || 0) + (process.count || 0)));

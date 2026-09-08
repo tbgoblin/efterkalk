@@ -71,6 +71,52 @@ test('authentication middleware rejects anonymous writes with 401', () => {
     assert.deepEqual(response.body, { error: 'Login kræves' });
 });
 
+test('any-module middleware allows a user with one requested BOM permission', () => {
+    const service = createService();
+    service.authSessions.set('allowed', {
+        user: { username: 'operator', role: 'user', permissions: { bomCalculator: true } },
+        expiresAt: Date.now() + 60_000
+    });
+    let nextCalled = false;
+
+    service.requireAnyModulePermission(['bomMaterials', 'bomCalculator'])(
+        { headers: { authorization: 'Bearer allowed' } }, responseRecorder(), () => { nextCalled = true; }
+    );
+
+    assert.equal(nextCalled, true);
+});
+
+test('any-module middleware rejects a user without the requested BOM permission', () => {
+    const service = createService();
+    service.authSessions.set('denied', {
+        user: { username: 'operator', role: 'user', permissions: { bomMaterials: true } },
+        expiresAt: Date.now() + 60_000
+    });
+    const response = responseRecorder();
+
+    service.requireAnyModulePermission('bomVismaPreview')(
+        { headers: { authorization: 'Bearer denied' } }, response, () => assert.fail('next must not be called')
+    );
+
+    assert.equal(response.statusCode, 403);
+    assert.deepEqual(response.body, { error: 'Adgang til BOM-området er ikke tilladt' });
+});
+
+test('any-module middleware always allows superadmin', () => {
+    const service = createService();
+    service.authSessions.set('superadmin', {
+        user: { username: 'admin', role: 'superadmin', permissions: {} },
+        expiresAt: Date.now() + 60_000
+    });
+    let nextCalled = false;
+
+    service.requireAnyModulePermission('bomVismaPreview')(
+        { headers: { authorization: 'Bearer superadmin' } }, responseRecorder(), () => { nextCalled = true; }
+    );
+
+    assert.equal(nextCalled, true);
+});
+
 test('logout revokes bearer and cookie sessions and emits an expired cookie', () => {
     const service = createService();
     const session = { user: { username: 'operator' }, expiresAt: Date.now() + 60_000 };

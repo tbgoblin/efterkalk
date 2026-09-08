@@ -45,7 +45,16 @@
       "ordreoversigt": false,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": true
+      "lagerliste": true,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": true,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-20T10:10:23.563Z"
   },
@@ -64,7 +73,16 @@
       "ordreoversigt": false,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": false
+      "lagerliste": false,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": true,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-20T10:10:34.078Z"
   },

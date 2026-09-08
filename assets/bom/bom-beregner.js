@@ -22,6 +22,226 @@ const dxfMeasureState = {
     projection: null,
     eventsBound: false
 };
+const calcWizardSteps = ['customer', 'drawing', 'material', 'processes', 'result'];
+const calcWizardMeta = {
+    customer: ['Vælg kunde', 'Søg kunden og kontrollér prisindstillingerne.'],
+    drawing: ['Indlæs tegning', 'Upload DXF, STEP eller PDF og kontrollér emnemålene.'],
+    material: ['Vælg plade', 'Find den rigtige kvalitet, tykkelse og pladestørrelse.'],
+    processes: ['Vælg processer', 'Kontrollér laser, buk, svejs og øvrige operationer.']
+};
+let activeCalcWizardStep = '';
+const LASER_COLUMN_WIDTHS_KEY = 'bomLaserTechnologyColumnWidths';
+
+function renderPieceThumbnail() {
+    const canvas = document.getElementById('pieceThumbnailCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#eef5fc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const polygon = state.fileAnalysis && Array.isArray(state.fileAnalysis.polygon) && state.fileAnalysis.polygon.length >= 3
+        ? state.fileAnalysis.polygon : null;
+    if (!polygon) {
+        ctx.strokeStyle = '#9ab2ca';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(68, 42, 88, 68);
+        ctx.beginPath();
+        ctx.moveTo(82, 76);
+        ctx.lineTo(142, 76);
+        ctx.stroke();
+        return;
+    }
+    const xs = polygon.map(point => Number(point[0] || 0));
+    const ys = polygon.map(point => Number(point[1] || 0));
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const padding = 18;
+    const scale = Math.min((canvas.width - padding * 2) / width, (canvas.height - padding * 2) / height);
+    const offsetX = (canvas.width - width * scale) / 2;
+    const offsetY = (canvas.height - height * scale) / 2;
+    ctx.beginPath();
+    polygon.forEach((point, index) => {
+        const x = offsetX + (Number(point[0] || 0) - minX) * scale;
+        const y = offsetY + (Number(point[1] || 0) - minY) * scale;
+        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(21, 101, 192, 0.16)';
+    ctx.fill();
+    ctx.strokeStyle = '#1565c0';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+}
+
+function initLaserTechnologyColumnResize() {
+    const table = document.querySelector('.technology-comparison');
+    if (!table || table.dataset.resizable === '1') return;
+    const columns = [...table.querySelectorAll('col')];
+    const headers = [...table.querySelectorAll('thead th')];
+    let savedWidths = [];
+    try { savedWidths = JSON.parse(localStorage.getItem(LASER_COLUMN_WIDTHS_KEY) || '[]'); } catch (_) {}
+    function applyWidths(widths) {
+        columns.forEach((column, index) => {
+            const width = Math.max(64, Number(widths[index]) || parseFloat(column.style.width) || 100);
+            column.style.width = width + 'px';
+        });
+        table.style.width = columns.reduce((sum, column) => sum + parseFloat(column.style.width), 0) + 'px';
+    }
+    function saveWidths() {
+        const widths = columns.map(column => Math.round(parseFloat(column.style.width)));
+        try { localStorage.setItem(LASER_COLUMN_WIDTHS_KEY, JSON.stringify(widths)); } catch (_) {}
+    }
+    applyWidths(savedWidths);
+    headers.forEach((header, index) => {
+        const handle = document.createElement('span');
+        handle.className = 'column-resizer';
+        handle.tabIndex = 0;
+        handle.setAttribute('role', 'separator');
+        handle.setAttribute('aria-label', 'Tilpas kolonnebredde for ' + header.textContent.trim());
+        function resizeBy(delta) {
+            const widths = columns.map(column => parseFloat(column.style.width));
+            widths[index] = Math.max(64, widths[index] + delta);
+            applyWidths(widths);
+        }
+        handle.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            const startX = event.clientX;
+            const startWidth = parseFloat(columns[index].style.width);
+            handle.setPointerCapture(event.pointerId);
+            const onPointerMove = moveEvent => {
+                const widths = columns.map(column => parseFloat(column.style.width));
+                widths[index] = Math.max(64, startWidth + moveEvent.clientX - startX);
+                applyWidths(widths);
+            };
+            const onPointerUp = () => {
+                handle.removeEventListener('pointermove', onPointerMove);
+                handle.removeEventListener('pointerup', onPointerUp);
+                saveWidths();
+            };
+            handle.addEventListener('pointermove', onPointerMove);
+            handle.addEventListener('pointerup', onPointerUp);
+        });
+        handle.addEventListener('keydown', event => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            resizeBy(event.key === 'ArrowLeft' ? -10 : 10);
+            saveWidths();
+        });
+        header.appendChild(handle);
+    });
+    table.dataset.resizable = '1';
+}
+
+function calcWizardComplete(step) {
+    if (step === 'customer') return Boolean(state.calcCustomer);
+    if (step === 'drawing') return Boolean(state.fileAnalysis);
+    if (step === 'material') return Boolean(state.calcMaterial);
+    if (step === 'processes') return Boolean(state.calcWizardProcessesReady || state.lastQuote);
+    return Boolean(state.lastQuote);
+}
+
+function updateProductRecap() {
+    const customer = state.calcCustomer;
+    const material = state.calcMaterial;
+    const drawing = state.fileAnalysis;
+    const quote = state.lastQuote && state.lastQuote.result;
+    const qty = Math.max(1, Number((document.getElementById('calcQty') || {}).value || 1));
+    const activeProcesses = processCards ? [...processCards.querySelectorAll('.proc-card')]
+        .filter(card => card.querySelector('.proc-toggle') && card.querySelector('.proc-toggle').checked)
+        .map(card => (processDefs.find(def => def.key === card.dataset.proc) || {}).label || card.dataset.proc) : [];
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setText('recapProduct', drawing && drawing.filename ? drawing.filename : 'Ny beregning');
+    setText('recapDrawing', drawing ? (formatMoney(drawing.widthMm) + ' × ' + formatMoney(drawing.lengthMm) + ' mm') : 'Ingen tegning indlæst');
+    setText('recapCustomer', customer ? (customer.Nm || customer.CustNo || '-') : 'Ikke valgt');
+    setText('recapCustomerNo', customer ? ('Kundenr. ' + (customer.CustNo || '-')) : 'Standard prisliste');
+    setText('recapMaterial', material ? (material.ProdNo || '-') : 'Ikke valgt');
+    setText('recapMaterialMeta', material
+        ? ((material.beskrivelse || material.Descr || '') + ' · ' + formatMoney(material.tykklese) + ' mm')
+        : 'Materiale og tykkelse');
+    setText('recapQuantity', qty + ' stk');
+    setText('recapProcesses', activeProcesses.length ? activeProcesses.map(label => label.split(' ')[0]).join(' · ') : 'Ingen processer');
+    setText('recapPrice', quote ? (formatMoney(quote.perPiece.unitPrice) + ' DKK/stk') : '-');
+    setText('recapTotal', quote ? (formatMoney(quote.total.totalPrice) + ' DKK i alt') : 'Ikke beregnet');
+    renderPieceThumbnail();
+}
+
+function updateCalcWizard() {
+    const statuses = {
+        customer: state.calcCustomer ? (state.calcCustomer.Nm || state.calcCustomer.CustNo) : 'Vælg kunde',
+        drawing: state.fileAnalysis ? ((state.fileAnalysis.filename || 'Tegning') + ' indlæst') : 'Indlæs fil',
+        material: state.calcMaterial ? ((state.calcMaterial.ProdNo || '') + ' · ' + formatMoney(state.calcMaterial.tykklese) + ' mm') : 'Vælg materiale',
+        processes: calcWizardComplete('processes') ? 'Operationer kontrolleret' : 'Kontrollér operationer',
+        result: state.lastQuote ? (formatMoney(state.lastQuote.result.perPiece.unitPrice) + ' DKK/stk') : 'Afventer beregning'
+    };
+    document.querySelectorAll('[data-calc-step]').forEach(button => {
+        const step = button.dataset.calcStep;
+        button.classList.toggle('active', step === activeCalcWizardStep);
+        button.classList.toggle('complete', calcWizardComplete(step));
+        const status = document.getElementById('calcStep' + step.charAt(0).toUpperCase() + step.slice(1) + 'Status');
+        if (status) status.textContent = statuses[step];
+    });
+    updateProductRecap();
+}
+
+function closeCalcStep() {
+    const modal = document.getElementById('calcStepModal');
+    const body = document.getElementById('calcStepModalBody');
+    const store = document.getElementById('calcInputStore');
+    if (body && store && body.firstElementChild) store.appendChild(body.firstElementChild);
+    if (modal) modal.classList.remove('open');
+    activeCalcWizardStep = '';
+    updateCalcWizard();
+}
+
+function openCalcStep(step) {
+    if (step === 'result') {
+        closeCalcStep();
+        const result = document.getElementById('calcResultAnchor');
+        if (result) result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    const panel = document.getElementById('calcStep' + step.charAt(0).toUpperCase() + step.slice(1) + 'Panel');
+    const modal = document.getElementById('calcStepModal');
+    const body = document.getElementById('calcStepModalBody');
+    if (!panel || !modal || !body || !calcWizardMeta[step]) return;
+    closeCalcStep();
+    activeCalcWizardStep = step;
+    document.getElementById('calcStepModalTitle').textContent = calcWizardMeta[step][0];
+    document.getElementById('calcStepModalSubtitle').textContent = calcWizardMeta[step][1];
+    body.appendChild(panel);
+    const stepIndex = calcWizardSteps.indexOf(step);
+    const back = document.getElementById('calcStepBackBtn');
+    const next = document.getElementById('calcStepNextBtn');
+    back.hidden = stepIndex === 0;
+    next.textContent = step === 'processes' ? 'Beregn pris' : 'Næste';
+    next.disabled = step === 'processes' ? false : !calcWizardComplete(step);
+    modal.classList.add('open');
+    updateCalcWizard();
+    const firstInput = panel.querySelector('input:not([disabled]), select:not([disabled])');
+    if (firstInput) setTimeout(() => firstInput.focus(), 80);
+}
+
+function advanceCalcWizard(completedStep) {
+    updateCalcWizard();
+    if (!calcWizardComplete(completedStep)) return;
+    const nextStep = calcWizardSteps[calcWizardSteps.indexOf(completedStep) + 1];
+    setTimeout(() => openCalcStep(nextStep), 120);
+}
+
+function initCalcWizard() {
+    document.querySelectorAll('[data-calc-step]').forEach(button => {
+        if (button.dataset.wizardBound) return;
+        button.dataset.wizardBound = '1';
+        button.addEventListener('click', () => openCalcStep(button.dataset.calcStep));
+    });
+    if (!state.calcWizardStarted) {
+        state.calcWizardStarted = true;
+        setTimeout(() => openCalcStep('customer'), 100);
+    }
+    updateCalcWizard();
+}
 
 function rateFromResource(row) {
     // PrDcMat: CstPr = kostpris/min, SalePr = salgspris/min. Følger valgt pristype.
@@ -45,12 +265,6 @@ function findResource(prodNo) {
 }
 
 // ── Procesvise felter og automatiske tider ──
-function bukAutoMinutes(card) {
-    const antal = Number(card.querySelector('.buk-antal').value || 0);
-    const sek = Number(card.querySelector('.buk-sek').value || 0);
-    const haandt = Number(card.querySelector('.buk-haandt').value || 0);
-    return Math.round(((antal * sek + haandt) / 60) * 100) / 100;
-}
 function svejsAutoMinutes(card) {
     const lgd = Number(card.querySelector('.svejs-lgd').value || 0);       // mm
     const hast = Number(card.querySelector('.svejs-hast').value || 0);     // mm/min
@@ -71,6 +285,8 @@ function buildProcessCards() {
             card.innerHTML = '<label class="proc-head"><input type="checkbox" class="proc-toggle" checked /> ' + escapeHtml(def.label) + ' <span class="proc-res-label">tid beregnes ud fra skæreparametre — kan rettes</span></label>'
                 + '<div class="proc-body"><div class="proc-fields">'
                 + '<div class="field"><label>Maskine</label><input class="proc-machine" value="R1100" /></div>'
+                + '<div class="field"><label>Teknologi</label><select class="proc-technology"><option value="">Automatisk · billigste teknologi</option></select></div>'
+                + '<div class="field"><label>Globale gaspriser</label><div class="proc-gas-prices muted">Azot 0,00 · Oxygen 0,00 DKK/Nm³</div></div>'
                 + '<div class="field"><label>Minutsats (dkk/min)</label><input class="proc-rate" type="number" step="0.5" value="12" /></div>'
                 + '<div class="field"><label>Tid (min/emne) — tom = auto</label><input class="proc-time" type="number" step="0.01" min="0" placeholder="auto" /></div>'
                 + '<div class="field"><label>Afstand mellem emner (mm)</label><input class="laser-gap" type="number" step="1" min="0" value="5" /></div>'
@@ -90,7 +306,9 @@ function buildProcessCards() {
             card.innerHTML = '<label class="proc-head"><input type="checkbox" class="proc-toggle" /> ' + escapeHtml(def.label) + ' <span class="proc-res-label"></span></label>'
                 + '<div class="proc-body"><div class="proc-fields">'
                 + '<div class="field"><label>Type (R05 / R10 / R15 / R20 ...)</label><select class="flad-type"></select></div>'
-                + '<div class="field"><label>Minutter pr emne</label><input class="proc-min" type="number" step="0.1" value="2" /></div>'
+                + '<div class="field"><label>Hastighed</label><input class="flad-speed" type="number" step="0.1" min="0.01" value="1" /></div>'
+                + '<div class="field"><label>Faktor</label><input class="flad-factor" type="number" step="0.1" min="0.01" value="10" /></div>'
+                + '<div class="field"><label>Minutter pr emne (tom = auto)</label><input class="proc-min" type="number" step="0.000001" min="0" placeholder="auto" /></div>'
                 + '<div class="field"><label>Sats (dkk/min)</label><input class="proc-rate" type="number" step="0.1" value="9.38" /></div>'
                 + '<div class="field"><label>Opstart (min/ordre)</label><input class="proc-opstart" type="number" step="1" min="0" value="0" /></div>'
                 + '</div></div>';
@@ -100,11 +318,15 @@ function buildProcessCards() {
                 + '<div class="picker"><input class="proc-res-search" placeholder="søg buk-ressource..." autocomplete="off" /><div class="picker-list"></div></div>'
                 + '<div class="proc-fields">'
                 + '<div class="field"><label>Antal buk pr emne</label><input class="buk-antal" type="number" step="1" min="0" value="2" /></div>'
-                + '<div class="field"><label>Sekunder pr buk</label><input class="buk-sek" type="number" step="5" min="0" value="30" /></div>'
-                + '<div class="field"><label>Håndtering (sek/emne)</label><input class="buk-haandt" type="number" step="5" min="0" value="15" /></div>'
-                + '<div class="field"><label>Minutter pr emne (auto — kan rettes)</label><input class="proc-min" type="number" step="0.01" value="1.25" /></div>'
+                + '<div class="field"><label>Samlet bukkelængde (mm)</label><input class="buk-laengde" type="number" step="10" min="0" value="1000" /></div>'
+                + '<div class="field"><label>Gennemsnitlig vinkel</label><input class="buk-vinkel" type="number" step="1" min="1" max="180" value="90" /></div>'
+                + '<div class="field"><label>V-åbning (mm)</label><input class="buk-v-aabning" type="number" step="1" min="0.1" placeholder="auto: 8 × tykkelse" /></div>'
+                + '<div class="field"><label>Trækstyrke (MPa)</label><input class="buk-traekstyrke" type="number" step="10" min="1" value="450" /></div>'
+                + '<div class="field"><label>90° rotationer</label><input class="buk-rotationer" type="number" step="1" min="0" value="1" /></div>'
+                + '<div class="field"><label>Vendinger</label><input class="buk-vendinger" type="number" step="1" min="0" value="0" /></div>'
+                + '<div class="field"><label>Minutter pr emne (tom = auto)</label><input class="proc-min" type="number" step="0.01" min="0" placeholder="auto" /></div>'
                 + '<div class="field"><label>Sats (dkk/min)</label><input class="proc-rate" type="number" step="0.1" value="10.31" /></div>'
-                + '<div class="field"><label>Opstart (min/ordre)</label><input class="proc-opstart" type="number" step="1" min="0" value="10" /></div>'
+                + '<div class="field"><label>Opstart (tom = maskinparameter)</label><input class="proc-opstart" type="number" step="1" min="0" placeholder="auto" /></div>'
                 + '</div></div>';
         } else if (def.kind === 'svejs') {
             card.innerHTML = '<label class="proc-head"><input type="checkbox" class="proc-toggle" /> ' + escapeHtml(def.label) + ' <span class="proc-res-label"></span></label>'
@@ -207,14 +429,11 @@ function wireProcessCard(card, def) {
     const fladType = card.querySelector('.flad-type');
     if (fladType) {
         card.dataset.needsFladOptions = '1';
-        fladType.addEventListener('change', () => applyResource(findResource(fladType.value)));
-    }
-    // Buk: auto-beregn minutter
-    if (def.kind === 'buk') {
-        ['buk-antal', 'buk-sek', 'buk-haandt'].forEach(cls => {
-            card.querySelector('.' + cls).addEventListener('input', () => {
-                card.querySelector('.proc-min').value = bukAutoMinutes(card);
-            });
+        fladType.addEventListener('change', () => {
+            const resource = findResource(fladType.value);
+            applyResource(resource);
+            const typeMatch = String(resource && resource.Descr || '').toUpperCase().match(/\b(R05|R10|R15|R20|B05)\b/);
+            card.dataset.flatType = typeMatch ? typeMatch[1] : '';
         });
     }
     // Svejs: metode sætter hastighed, auto-beregn minutter
@@ -308,7 +527,8 @@ function populateProcessDefaults() {
         if (fladType && card.dataset.needsFladOptions && state.resources.length) {
             const rows = resourcesForDef(def);
             fladType.innerHTML = rows.map(r => '<option value="' + escapeHtml(r.ProdNo) + '">' + escapeHtml((r.ProdNo || '') + ' · ' + (r.Descr || '')) + '</option>').join('');
-            const preferred = rows.find(r => String(r.ProdNo) === def.defaultRes) || rows[0];
+            const preferred = rows.find(r => String(r.ProdNo) === def.defaultRes)
+                || rows.find(r => /\bR05\b/i.test(String(r.Descr || ''))) || rows[0];
             if (preferred) {
                 fladType.value = preferred.ProdNo;
                 fladType.dispatchEvent(new Event('change'));
@@ -339,14 +559,35 @@ function collectOperations() {
         let prodNo = card.dataset.prodNo || '';
         const fladType = card.querySelector('.flad-type');
         if (fladType) prodNo = fladType.value || prodNo;
-        ops.push({
+        const minutesInput = card.querySelector('.proc-min');
+        const opstartInput = card.querySelector('.proc-opstart');
+        const operation = {
             key: def.key,
             label: def.label.split('(')[0].trim(),
             prodNo,
-            minutes: Number(card.querySelector('.proc-min').value || 0),
+            minutes: Number(minutesInput.value || 0),
             rate: Number(card.querySelector('.proc-rate').value || 0),
-            opstartMinutes: Number(card.querySelector('.proc-opstart').value || 0)
-        });
+            opstartMinutes: String(opstartInput.value || '').trim() === '' ? null : Number(opstartInput.value)
+        };
+        if (def.kind === 'flad') {
+            const resource = findResource(prodNo);
+            const typeMatch = String(resource && resource.Descr || '').toUpperCase().match(/\b(R05|R10|R15|R20|B05)\b/);
+            operation.flatType = card.dataset.flatType || (typeMatch ? typeMatch[1] : '');
+            operation.speed = Number(card.querySelector('.flad-speed').value || 0);
+            operation.factor = Number(card.querySelector('.flad-factor').value || 0);
+            operation.minutesOverride = String(minutesInput.value || '').trim() === '' ? null : Number(minutesInput.value);
+        }
+        if (def.kind === 'buk') {
+            operation.minutesOverride = String(minutesInput.value || '').trim() === '' ? null : Number(minutesInput.value);
+            operation.bendCount = Number(card.querySelector('.buk-antal').value || 0);
+            operation.totalBendLengthMm = Number(card.querySelector('.buk-laengde').value || 0);
+            operation.averageAngleDeg = Number(card.querySelector('.buk-vinkel').value || 90);
+            operation.dieOpeningMm = String(card.querySelector('.buk-v-aabning').value || '').trim() === '' ? null : Number(card.querySelector('.buk-v-aabning').value);
+            operation.tensileStrengthMpa = Number(card.querySelector('.buk-traekstyrke').value || 450);
+            operation.rotate90Count = Number(card.querySelector('.buk-rotationer').value || 0);
+            operation.flipCount = Number(card.querySelector('.buk-vendinger').value || 0);
+        }
+        ops.push(operation);
     });
     return ops;
 }
@@ -357,22 +598,66 @@ function collectComponents() {
 }
 function laserCardState() {
     const card = processCards.querySelector('.proc-card[data-proc="laser"]');
-    if (!card) return { enabled: true, machine: 'R1100', rate: 12, timeOverride: null };
+    if (!card) return { enabled: true, machine: 'R1100', rate: 12, technology: '', timeOverride: null };
     const timeRaw = String(card.querySelector('.proc-time').value || '').trim();
     return {
         enabled: card.querySelector('.proc-toggle').checked,
         machine: String(card.querySelector('.proc-machine').value || 'R1100').trim(),
         rate: Number(card.querySelector('.proc-rate').value || 12),
+        geniusRate: rateFromResource(findResource('R1102') || {}) || Number(card.querySelector('.proc-rate').value || 12),
+        technology: String(card.querySelector('.proc-technology').value || '').trim(),
         timeOverride: timeRaw === '' ? null : Number(timeRaw)
     };
 }
+
+function detectLaserMaterialFamily(material) {
+    const prodNo = String(material && material.ProdNo || '').trim();
+    const description = String(material && (material.beskrivelse || material.Descr) || '').toLowerCase();
+    if (prodNo.startsWith('301')) return 'SORT';
+    if (prodNo.startsWith('311')) return 'RF';
+    if (prodNo.startsWith('321')) return 'AL';
+    if (prodNo.startsWith('331')) return 'GAL';
+    if (prodNo.startsWith('371')) return 'ME';
+    if (prodNo.startsWith('381')) return description.includes('kobber') ? 'CO' : description.includes('messing') ? 'ME' : null;
+    return null;
+}
+
+function refreshLaserTechnologyOptions() {
+    const select = processCards.querySelector('.proc-card[data-proc="laser"] .proc-technology');
+    if (!select) return;
+    const selected = select.value;
+    const materialFamily = detectLaserMaterialFamily(state.calcMaterial);
+    const thickness = Number(state.calcMaterial && (state.calcMaterial.tykklese != null
+        ? state.calcMaterial.tykklese : state.calcMaterial.Thickness));
+    const compatibleRows = materialFamily && Number.isFinite(thickness)
+        ? state.laserTechnicalParams.filter(row => String(row.Material || '').trim().toUpperCase() === materialFamily
+            && Math.abs(Number(row.Thickness) - thickness) < 0.001)
+        : [];
+    select.innerHTML = '<option value="">Automatisk · billigste teknologi</option>' + compatibleRows.map(row =>
+        '<option value="' + escapeHtml(row.Technology) + '">' + escapeHtml(row.Technology + ' · ' + row.Material + ' ' + row.Thickness + ' mm · ' + row.GasPressureBar + ' bar') + '</option>'
+    ).join('');
+    if (compatibleRows.some(row => row.Technology === selected)) select.value = selected;
+    const prices = processCards.querySelector('.proc-card[data-proc="laser"] .proc-gas-prices');
+    if (prices) prices.textContent = 'Azot ' + formatMoney(state.laserGasPrices.nitrogenPricePerKg)
+        + ' · Oxygen ' + formatMoney(state.laserGasPrices.oxygenPricePerKg) + ' DKK/kg'
+        + ' · MixLine ' + formatMoney(state.laserGasPrices.mixLineOxygenPercent) + '% O2';
+}
+
 async function primeBeregner() {
     buildProcessCards();
+    initLaserTechnologyColumnResize();
     try {
-        await Promise.all([ensureMaterials(), ensureResources(), ensureCustomers(), ensureComponents()]);
+        await Promise.all([ensureMaterials(), ensureResources(), ensureCustomers(), ensureComponents(), (async () => {
+            if (state.laserTechnicalParams.length) return;
+            const data = await fetchJson('/bom/calculators/laser-params');
+            state.laserTechnicalParams = data.technicalRows || [];
+            state.laserGasPrices = data.gasPrices || state.laserGasPrices;
+        })()]);
+        refreshLaserTechnologyOptions();
         populateProcessDefaults();
         initDxfViewerInteractions();
         renderDxfViewer();
+        initCalcWizard();
     } catch (err) {
         calcMaterialChosen.textContent = 'Fejl ved hentning: ' + err.message;
     }
@@ -397,29 +682,38 @@ async function analyzeDrawingFile(file) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: file.name, data })
         });
-        state.fileAnalysis = result;
-        resetDxfMeasure(true);
-        const kvs = [
-            ['Format', (result.format || '').toUpperCase()],
-            ['Bredde (mm)', result.widthMm == null ? '-' : result.widthMm],
-            ['Længde (mm)', result.lengthMm == null ? '-' : result.lengthMm],
-            ['Tykkelse (mm)', result.thicknessMm == null ? '-' : result.thicknessMm],
-            ['Skærelængde (m)', result.cutLengthM == null ? '-' : result.cutLengthM],
-            ['Piercings (estimat)', result.piercingsEstimate == null ? '-' : result.piercingsEstimate],
-            ['Form til nesting', (result.polygon && result.polygon.length >= 3) ? 'fundet (' + result.polygon.length + ' punkter)' : 'nej — bruger rektangel']
-        ];
-        fileAnalysisGrid.innerHTML = kvs.map(([label, value]) => '<div class="kv"><label>' + escapeHtml(label) + '</label><div>' + escapeHtml(value) + '</div></div>').join('');
-        fileAnalysisStatus.textContent = result.note || (file.name + ' analyseret — felterne er udfyldt nedenfor.');
-        if (result.widthMm) document.getElementById('calcPieceW').value = result.widthMm;
-        if (result.lengthMm) document.getElementById('calcPieceL').value = result.lengthMm;
-        if (result.cutLengthM) document.getElementById('calcCutLength').value = result.cutLengthM;
-        if (result.piercingsEstimate) document.getElementById('calcPiercings').value = result.piercingsEstimate;
-        renderDxfViewer();
+        applyDrawingAnalysis(file.name, result);
+        return true;
     } catch (err) {
         fileAnalysisStatus.textContent = 'Fejl: ' + err.message;
         resetDxfMeasure(true);
         renderDxfViewer();
+        updateCalcWizard();
+        return false;
     }
+}
+
+function applyDrawingAnalysis(filename, result) {
+    state.fileAnalysis = { ...result, filename };
+    resetDxfMeasure(true);
+    const kvs = [
+        ['Format', (result.format || '').toUpperCase()],
+        ['Bredde (mm)', result.widthMm == null ? '-' : result.widthMm],
+        ['Længde (mm)', result.lengthMm == null ? '-' : result.lengthMm],
+        ['Tykkelse (mm)', result.thicknessMm == null ? '-' : result.thicknessMm],
+        ['Skærelængde (m)', result.cutLengthM == null ? '-' : result.cutLengthM],
+        ['Piercings (estimat)', result.piercingsEstimate == null ? '-' : result.piercingsEstimate],
+        ['Form til nesting', (result.polygon && result.polygon.length >= 3) ? 'fundet (' + result.polygon.length + ' punkter)' : 'nej — bruger rektangel']
+    ];
+    fileAnalysisGrid.innerHTML = kvs.map(([label, value]) => '<div class="kv"><label>' + escapeHtml(label) + '</label><div>' + escapeHtml(value) + '</div></div>').join('');
+    fileAnalysisStatus.textContent = result.note || (filename + ' analyseret — felterne er udfyldt nedenfor.');
+    if (result.widthMm) document.getElementById('calcPieceW').value = result.widthMm;
+    if (result.lengthMm) document.getElementById('calcPieceL').value = result.lengthMm;
+    if (result.cutLengthM) document.getElementById('calcCutLength').value = result.cutLengthM;
+    if (result.piercingsEstimate) document.getElementById('calcPiercings').value = result.piercingsEstimate;
+    renderDxfViewer();
+    updateCalcWizard();
+    advanceCalcWizard('drawing');
 }
 
 function initDxfViewerInteractions() {
@@ -845,8 +1139,10 @@ function buildQuoteBody(qtyOverride) {
         cutLengthM: Number(document.getElementById('calcCutLength').value || 0),
         piercings: Number(document.getElementById('calcPiercings').value || 1),
         machine: laser.machine,
+        laserTechnology: laser.technology,
         laserEnabled: laser.enabled,
         laserRate: laser.rate,
+        laserGeniusRate: laser.geniusRate,
         laserMinutesOverride: laser.timeOverride,
         laserOpstartMinutes: laserOpstartOn ? Number(document.getElementById('calcLaserOpstartMin').value || 0) : 0,
         priceBasis: document.getElementById('calcPriceBasis').value,
@@ -888,6 +1184,8 @@ async function runQuote() {
         if (quotePriceTotal) quotePriceTotal.textContent = '-';
         const bd = document.getElementById('quoteBreakdown');
         if (bd) bd.hidden = true;
+        const comparison = document.getElementById('laserTechnologyComparison');
+        if (comparison) comparison.hidden = true;
         if (copyQuoteBtn) copyQuoteBtn.disabled = true;
         if (runQuote._lastErrToast !== err.message) {
             runQuote._lastErrToast = err.message;
@@ -929,6 +1227,36 @@ function renderCostBreakdown(result) {
         '<span class="legend-item"><span class="legend-dot" style="background:' + s.color + ';"></span>'
         + escapeHtml(s.label) + ' ' + ((s.value / sum) * 100).toFixed(0) + ' % · ' + formatMoney(s.value) + ' dkk</span>'
     ).join('');
+}
+
+function renderLaserTechnologyComparison(result) {
+    const wrap = document.getElementById('laserTechnologyComparison');
+    const body = document.getElementById('laserTechnologyComparisonBody');
+    const meta = document.getElementById('laserTechnologyComparisonMeta');
+    if (!wrap || !body || !meta) return;
+    const rows = result.laserTechnologyAlternatives || [];
+    wrap.hidden = rows.length === 0;
+    if (!rows.length) { body.innerHTML = ''; return; }
+    const material = rows[0].material || '-';
+    const thickness = rows[0].thickness;
+    const eligibleCount = rows.filter(row => row.eligibleForAutomatic).length;
+    meta.textContent = rows.length + ' kompatible · ' + eligibleCount + ' kan prisberegnes · '
+        + material + ' · ' + formatMoney(thickness) + ' mm';
+    body.innerHTML = rows.map(row => {
+        const gas = row.gasType === 'nitrogen' ? 'N2' : row.gasType === 'oxygen' ? 'O2'
+            : row.gasType === 'mixline' ? 'MixLine ' + formatMoney(row.mixLineOxygenPercent) + '% O2' : '-';
+        const process = (row.machineName || '-') + (row.technologyLine && row.technologyLine !== '-' ? ' ' + row.technologyLine : '') + ' · ' + gas;
+        const choice = row.selected ? '<span class="technology-choice"><span class="tag">Valgt</span></span>'
+            : row.eligibleForAutomatic ? 'Alternativ' : escapeHtml(row.unavailableReason || 'Ikke prissat');
+        return '<tr class="' + (row.selected ? 'selected' : '') + (!row.eligibleForAutomatic ? ' unavailable' : '') + '">'
+            + '<td>' + choice + '</td><td><strong>' + escapeHtml(row.technology) + '</strong></td>'
+            + '<td>' + escapeHtml(row.material) + '</td><td>' + formatMoney(row.thickness) + ' mm</td>'
+            + '<td>' + escapeHtml(process) + '</td><td>' + escapeHtml(row.lens || '-') + '</td>'
+            + '<td>' + formatNumber(row.feedrateMmMin) + ' mm/min</td><td>' + formatNumber(row.piercingMilliseconds) + ' ms</td>'
+            + '<td>' + formatMoney(row.gasPressureBar) + ' bar / ' + formatMoney(row.nozzleSizeMm) + ' mm</td>'
+            + '<td>' + (row.minutes == null ? '-' : formatMoney(row.minutes) + ' min') + '</td>'
+            + '<td>' + (row.cost == null ? '-' : formatMoney(row.cost) + ' dkk/stk') + '</td></tr>';
+    }).join('');
 }
 
 function buildQuoteClipboardText(result, body) {
@@ -981,9 +1309,181 @@ async function copyQuoteToClipboard() {
     }
 }
 
+function vismaSqlString(value) {
+    return "'" + String(value == null ? '' : value).replace(/'/g, "''") + "'";
+}
+
+function vismaSqlComment(value) {
+    return String(value == null ? '' : value).replace(/[\r\n]+/g, ' ');
+}
+
+function vismaStructInsert(row) {
+    return [
+        'INSERT INTO Struct',
+        '    (ProdNo, LnNo, SubProd, Descr, NoPerStr, Srt, ProdTp4,',
+        '     PrM1, PrM2, PrM3, PrM4, TrInf4, Inf, Inf2, R7)',
+        'VALUES',
+        '    (' + vismaSqlString(row.prodNo) + ', ' + row.lineNo + ', ' + vismaSqlString(row.subProd) + ', ' + vismaSqlString(row.descr || '') + ', '
+            + Number(row.quantity || 0) + ', 0, ' + row.prodType4 + ', '
+            + row.prM1 + ', ' + row.prM2 + ', ' + row.prM3 + ', ' + row.prM4 + ', '
+            + vismaSqlString(row.route || '0') + ', ' + vismaSqlString(row.inf || '0') + ', '
+            + vismaSqlString(row.inf2 || '') + ', ' + vismaSqlString(row.r7 || '') + ');'
+    ].join('\n');
+}
+
+function vismaOperationNo(resource) {
+    const prodNo = String(resource.ProdNo || '').trim().toUpperCase();
+    const exact = {
+        R1100: 10, R1201: 10, R2100: 30, R5300: 50, R5200: 80,
+        R5100: 10, R6104: 15, R6101: 70, R6106: 15, R6120: 14,
+        R6200: 80, R8100: 80, R8200: 10
+    };
+    if (exact[prodNo] != null) return exact[prodNo];
+    const family = String(resource.R7 || '').trim();
+    if (family === '11' || family === '12') return 10;
+    if (family === '21') return 30;
+    if (family === '61' || family === '63') return 15;
+    if (family === '82') return 10;
+    return 0;
+}
+
+function buildVismaQueryPreview() {
+    if (!state.lastQuote) return '';
+    const body = state.lastQuote.body || {};
+    const result = state.lastQuote.result || {};
+    const customer = state.calcCustomer || {};
+    const sameCustomer = state.selectedCustomer && customer.CustNo
+        && String(state.selectedCustomer.CustNo) === String(customer.CustNo);
+    const selectedProduct = sameCustomer ? state.selectedProduct : null;
+    const drawing = state.fileAnalysis || {};
+    const material = state.calcMaterial || {};
+    const perPiece = result.perPiece || {};
+    const total = result.total || {};
+    const technology = result.laserTechnology || {};
+    const prodNo = selectedProduct && selectedProduct.ProdNo ? selectedProduct.ProdNo : '<PRODUKTNR_MANGLER>';
+    const descr = selectedProduct && selectedProduct.Descr
+        ? selectedProduct.Descr : String(drawing.filename || 'BOMe+ beregning').replace(/\.[^.]+$/, '');
+    const tgNo = selectedProduct && selectedProduct.TgNo
+        ? selectedProduct.TgNo : String(drawing.filename || '').replace(/\.[^.]+$/, '');
+    const revision = selectedProduct && selectedProduct.RevNo ? selectedProduct.RevNo : '';
+    const customerCode = String(customer.Gr || customer.CustNo || '');
+    const thickness = Number(material.tykklese || material.thickness || (result.material || {}).thickness || 0);
+    const density = Number(material.density || material.DensU || (result.material || {}).density || 7.85);
+    const routeProdNo = 'V' + prodNo;
+    const laserProdNo = prodNo + 'L';
+    const laserResource = String(technology.machineCode || technology.resourceNo || body.machine || 'R1100');
+    const resourceInfo = resourceNo => state.resources.find(row => String(row.ProdNo || '') === String(resourceNo || '')) || {};
+    const operations = (result.operations || []).map(op =>
+        String(op.prodNo || op.label || op.key || '') + '=' + Number(op.minutes || 0).toFixed(6) + ' min'
+    ).join(', ') || 'ingen';
+    const structRows = [];
+    let mainLine = 1;
+    if (body.laserEnabled) {
+        structRows.push({ prodNo, lineNo: mainLine++, subProd: laserProdNo, quantity: 1, prodType4: 2,
+            prM1: 1073741824, prM2: 0, prM3: 256, prM4: 2097152 });
+    }
+    structRows.push({ prodNo, lineNo: mainLine++, subProd: routeProdNo, quantity: 1, prodType4: 5,
+        prM1: 0, prM2: 16384, prM3: 0, prM4: 1310720 });
+    (result.components || []).forEach(component => {
+        structRows.push({ prodNo, lineNo: mainLine++, subProd: component.prodNo, quantity: component.qty,
+            prodType4: 4, prM1: 1073741824, prM2: 0, prM3: 256, prM4: 2097152 });
+    });
+
+    let routeLine = 1;
+    const addRouteResource = (resourceNo, label, minutes, prodType4, infoText) => {
+        if (!resourceNo || Number(minutes || 0) <= 0) return;
+        const resource = resourceInfo(resourceNo);
+        structRows.push({ prodNo: routeProdNo, lineNo: routeLine++, subProd: resourceNo, descr: label,
+            quantity: minutes, prodType4, prM1: prodType4 === 3 ? 1107296256 : 1073741824,
+            prM2: 16384, prM3: 0, prM4: 2097153, route: vismaOperationNo(resource),
+            inf: resource.BasePrice || 0, inf2: infoText, r7: resource.R7 || '' });
+    };
+    if (body.laserEnabled) {
+        addRouteResource(laserResource, 'Opstart, Laserskæring', body.laserOpstartMinutes, 3,
+            'min:' + Number(body.laserOpstartMinutes || 0));
+    }
+    (result.operations || []).forEach(operation => {
+        const resource = resourceInfo(operation.prodNo);
+        addRouteResource(operation.prodNo, 'Opstart, ' + String(operation.label || resource.Descr || ''),
+            operation.opstartMinutes, 3, 'min:' + Number(operation.opstartMinutes || 0));
+        addRouteResource(operation.prodNo, String(operation.label || resource.Descr || ''),
+            operation.minutes, 1, 'min:' + Number(operation.minutes || 0));
+    });
+    if ((result.components || []).length) {
+        addRouteResource('R8200', 'Opstart, Stykliste', 2, 3, 'min:2');
+        addRouteResource('R8200', 'Stykliste', 1, 1, 'min:1');
+    }
+    if (body.laserEnabled) {
+        structRows.push({ prodNo: laserProdNo, lineNo: 1, subProd: body.materialProdNo, quantity: perPiece.weightKg,
+            prodType4: 2, prM1: 1140850688, prM2: 0, prM3: 768, prM4: 2097152, inf: 18 });
+        const laserResourceRow = resourceInfo(laserResource);
+        structRows.push({ prodNo: laserProdNo, lineNo: 2, subProd: laserResource, descr: 'Laserskæring',
+            quantity: perPiece.laserMinutes, prodType4: 1, prM1: 1073741824, prM2: 16384, prM3: 0, prM4: 2097153,
+            route: vismaOperationNo(laserResourceRow), inf: laserResourceRow.BasePrice || 0,
+            inf2: 'Min:' + Number(perPiece.laserMinutes || 0), r7: laserResourceRow.R7 || '' });
+    }
+    return [
+        '-- PREVIEW FRA BOMe+ - SENDES IKKE TIL VISMA',
+        '-- Produktnummer skal udfyldes, hvis det står som <PRODUKTNR_MANGLER>.',
+        '-- Materiale: ' + vismaSqlComment(body.materialProdNo || ''),
+        '-- Antal: ' + Number(body.qty || 0),
+        '-- Pris pr. stk: ' + Number(perPiece.unitPrice || 0).toFixed(2) + ' DKK',
+        '-- Pris i alt: ' + Number(total.totalPrice || 0).toFixed(2) + ' DKK',
+        '-- Laserteknologi: ' + vismaSqlComment(technology.technology || 'fravalgt'),
+        '-- Operationer: ' + vismaSqlComment(operations),
+        '',
+        'SET XACT_ABORT ON;',
+        'BEGIN TRANSACTION;',
+        '',
+        'DECLARE @ProdNo varchar(50) = ' + vismaSqlString(prodNo) + ';',
+        'DECLARE @Descr varchar(60) = ' + vismaSqlString(String(descr).slice(0, 60)) + ';',
+        'DECLARE @TgNo varchar(60) = ' + vismaSqlString(tgNo) + ';',
+        'DECLARE @CustomerCode varchar(60) = ' + vismaSqlString(customerCode) + ';',
+        'DECLARE @Revision varchar(20) = ' + vismaSqlString(revision) + ';',
+        '',
+        '-- 1) PRODUKTANAGRAFIK: hovedprodukt, rute og laserprodukt',
+        'INSERT INTO Prod',
+        '    (ProdNo, Descr, ProdGr, Inf2, Inf3, Inf7, Inf8,',
+        '     HgtU, LgtU, WdtU, DensU, Inf, Free2, StSaleUn,',
+        '     ProdPrGr, PrCatNo, Gr8, NWgtU, CreDt, Rsp)',
+        'VALUES',
+        '    (@ProdNo, @Descr, 1, @TgNo, @CustomerCode, @Revision, \'A4\',',
+        '     ' + thickness + ', ' + (Number(body.pieceLength || 0) / 1000) + ', ' + (Number(body.pieceWidth || 0) / 1000) + ', ' + density + ', 0, ' + Number(body.margin || 0) + ', 1,',
+        '     ' + Number(customer.CustPrGr || 0) + ', 1, 1, ' + Number(perPiece.weightKg || 0) + ', CONVERT(varchar(8), GETDATE(), 112), 0),',
+        '    (' + vismaSqlString(routeProdNo) + ', ' + vismaSqlString(('Rute for ' + descr).slice(0, 60)) + ', 1, \'0\', @CustomerCode, \'\', \'\',',
+        '     0, 0, 0, 0, 0, 0, 1, ' + Number(customer.CustPrGr || 0) + ', 1, 0, 0, CONVERT(varchar(8), GETDATE(), 112), 0)' + (body.laserEnabled ? ',' : ';'),
+        ...(body.laserEnabled ? [
+            '    (' + vismaSqlString(laserProdNo) + ', ' + vismaSqlString(('Laser ' + descr).slice(0, 60)) + ', 2, @TgNo, @CustomerCode, @Revision, @Revision,',
+            '     ' + thickness + ', ' + Number(body.pieceLength || 0) + ', ' + Number(body.pieceWidth || 0) + ', ' + density + ', 0, 0, 1,',
+            '     ' + Number(customer.CustPrGr || 0) + ', 1, 1, ' + Number(perPiece.weightKg || 0) + ', CONVERT(varchar(8), GETDATE(), 112), 0);'
+        ] : []),
+        '',
+        '-- 2) STRUKTUR: hovedvare -> laser/rute/komponenter; laser -> materiale/tid; rute -> opstart/processer',
+        ...structRows.flatMap((row, index) => [vismaStructInsert(row), index === structRows.length - 1 ? '' : '']),
+        '',
+        '-- SIKKERHED: previewen gemmer aldrig ændringer og kaldes ikke af et write-endpoint.',
+        'ROLLBACK TRANSACTION;'
+    ].join('\n');
+}
+
+function openVismaQueryPreview() {
+    if (!state.permissions.bomVismaPreview) return;
+    if (!state.lastQuote) {
+        showToast('Beregn en pris først.', 'err');
+        return;
+    }
+    document.getElementById('vismaQueryText').textContent = buildVismaQueryPreview();
+    document.getElementById('vismaQueryModal').classList.add('open');
+}
+
+function closeVismaQueryPreview() {
+    document.getElementById('vismaQueryModal').classList.remove('open');
+}
+
 function renderQuoteResult(result, body) {
     const fmt = formatMoney;
     state.lastQuote = { result, body };
+    updateCalcWizard();
     animateMoney(quotePriceBig, result.perPiece.unitPrice, ' dkk');
     if (quotePriceTotal) animateMoney(quotePriceTotal, result.total.totalPrice, ' dkk');
     [quotePriceBig, quotePriceTotal].forEach(el => {
@@ -993,10 +1493,25 @@ function renderQuoteResult(result, body) {
         el.classList.add('price-flash');
     });
     renderCostBreakdown(result);
+    renderLaserTechnologyComparison(result);
     if (copyQuoteBtn) copyQuoteBtn.disabled = false;
+    const vismaPreviewBtn = document.getElementById('vismaQueryPreviewBtn');
+    if (vismaPreviewBtn && state.permissions.bomVismaPreview) vismaPreviewBtn.disabled = false;
     const laserOn = body.laserEnabled;
+    const technology = result.laserTechnology;
+    const eligibleTechnologyCount = (result.laserTechnologyAlternatives || []).filter(row => row.eligibleForAutomatic).length;
+    const automaticChoiceLabel = eligibleTechnologyCount > 1 ? 'billigst af ' + eligibleTechnologyCount : 'eneste beregnelige';
     quoteStatus.textContent = laserOn
-        ? (result.cutParam ? ('Skæredata: ' + (result.cutParam.maskine || '') + ' · ' + result.cutParam.skaerehast + ' m/min') : 'OBS: ingen skæreparametre fundet for materialet — laser-tid er 0.')
+        ? (technology ? ('Skæredata: ' + technology.technology
+            + (technology.selectionMode === 'automatic' ? ' (' + automaticChoiceLabel + ')' : ' (manuel)')
+            + ' · ' + (technology.machineName || '') + (technology.technologyLine && technology.technologyLine !== '-' ? ' ' + technology.technologyLine : '')
+            + ' · ' + (technology.gasType === 'nitrogen' ? 'N2' : technology.gasType === 'oxygen' ? 'O2'
+                : 'MixLine ' + formatMoney(technology.mixLineOxygenPercent) + '% O2')
+            + ' · ' + formatNumber(technology.feedrateMmMin) + ' mm/min'
+            + ' · ' + technology.gasPressureBar + ' bar · ' + formatMoney(technology.gasFlowNm3Hour) + ' m³/h'
+            + ' · ' + formatMoney(technology.gasConsumptionKgHour) + ' kg/h')
+            : result.cutParam ? ('Skæredata: ' + (result.cutParam.maskine || '') + ' · ' + result.cutParam.skaerehast + ' m/min')
+                : 'OBS: ingen skæreparametre fundet for materialet — laser-tid er 0.')
         : 'Laser fravalgt — kun materiale + processer.';
     if (result.nesting) {
         const n = result.nesting;
@@ -1042,8 +1557,16 @@ function renderQuoteResult(result, body) {
     const p = result.perPiece;
     const laserTimeInput = processCards.querySelector('.proc-card[data-proc="laser"] .proc-time');
     if (laserTimeInput) laserTimeInput.placeholder = 'auto: ' + p.autoLaserMinutes + ' min';
+    const bendingLine = (result.operations || []).find(op => op.key === 'buk' && op.bending);
+    const bendingTimeInput = processCards.querySelector('.proc-card[data-proc="buk"] .proc-min');
+    if (bendingTimeInput && bendingLine) bendingTimeInput.placeholder = 'auto: ' + bendingLine.minutes + ' min';
     quoteMeta.textContent = (result.material.descr || result.material.prodNo) + (state.calcCustomer ? ' · ' + (state.calcCustomer.Nm || '') : '');
-    const opLines = (result.operations || []).map(op => [op.label + (op.prodNo ? ' (' + op.prodNo + ')' : ''), op.minutes + ' min · ' + fmt(op.cost) + ' dkk' + (op.opstartMinutes ? ' · opstart ' + op.opstartMinutes + ' min' : '')]);
+    const opLines = (result.operations || []).map(op => {
+        const bendingText = op.bending ? ' · kraft ' + op.bending.requiredForceKn + '/' + op.bending.availableForceKn + ' kN'
+            + ' · cyklus ' + op.bending.cycleSeconds + ' sek. · håndtering ' + op.bending.handlingSeconds + ' sek. (' + op.bending.handlingBand + ')' : '';
+        return [op.label + (op.prodNo ? ' (' + op.prodNo + ')' : ''), op.minutes + ' min · ' + fmt(op.cost) + ' dkk'
+            + (op.opstartMinutes ? ' · opstart ' + op.opstartMinutes + ' min' : '') + bendingText];
+    });
     const compLines = (result.components || []).map(c => ['Komponent ' + c.prodNo, c.qty + ' stk × ' + fmt(c.unitPrice) + ' = ' + fmt(c.lineCost) + ' dkk']);
     const isCost = result.material.priceBasis === 'cost';
     const perOrder = result.perOrder || {};
@@ -1119,6 +1642,7 @@ function resetBeregner() {
     state.calcCustomer = null;
     state.fileAnalysis = null;
     state.calcComponents = [];
+    state.calcWizardProcessesReady = false;
     document.getElementById('calcCustomerSearch').value = '';
     document.getElementById('calcCustomerChosen').textContent = 'Ingen kunde valgt — standard prisliste';
     document.getElementById('calcCustomerPriceInfo').textContent = 'Kundens prisliste: -';
@@ -1157,6 +1681,7 @@ function resetBeregner() {
     delete processCards.dataset.built;
     buildProcessCards();
     populateProcessDefaults();
+    refreshLaserTechnologyOptions();
     syncSpacingFromGlobalToLaserCard();
     // ryd resultater
     state.lastQuote = null;
@@ -1168,7 +1693,11 @@ function resetBeregner() {
     }
     const bd = document.getElementById('quoteBreakdown');
     if (bd) bd.hidden = true;
+    const comparison = document.getElementById('laserTechnologyComparison');
+    if (comparison) comparison.hidden = true;
     if (copyQuoteBtn) copyQuoteBtn.disabled = true;
+    const vismaPreviewBtn = document.getElementById('vismaQueryPreviewBtn');
+    if (vismaPreviewBtn) vismaPreviewBtn.disabled = true;
     quoteStatus.textContent = 'Følg trin 1-4 og tryk Beregn pris.';
     quoteGrid.innerHTML = '';
     quoteMeta.textContent = '-';
@@ -1176,6 +1705,8 @@ function resetBeregner() {
     nestingMeta.textContent = '-';
     drawNesting(null);
     renderDxfViewer();
+    updateCalcWizard();
+    setTimeout(() => openCalcStep('customer'), 100);
     document.getElementById('matrixBody').innerHTML = '';
     document.getElementById('matrixMeta').textContent = '-';
 }

@@ -1937,7 +1937,7 @@ app.get('/', (req, res) => {
                             <button type="button" data-module-key="ordreindgang" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
                             <button type="button" disabled>Faktura - Kommer snart</button>
                             <button type="button" data-module-key="ordreoversigt" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
-                            <button type="button" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
+                            <button type="button" data-module-key="bom" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
                             <button type="button" data-module-key="lagerliste" onclick="window.location.href='/assets/lagerliste2.html'">🧪 Lagerliste 2 (Beta)</button>
                             <button type="button" disabled>APV - Kommer snart</button>
                             <button type="button" data-module-key="belastning" onclick="openModule('belastning')">Belastning</button>
@@ -2537,9 +2537,9 @@ app.get('/', (req, res) => {
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-compare">
                         <label for="lagerlisteCompareA">Periode A</label>
                         <select id="lagerlisteCompareA" class="filter-select"><option value="">Vælg periode...</option></select>
-                        <label for="lagerlisteCompareB">Periode B</label>
+                        <label for="lagerlisteCompareB">Periode B (valgfri)</label>
                         <select id="lagerlisteCompareB" class="filter-select"><option value="">Vælg periode...</option></select>
-                        <button type="button" onclick="lagerlisteComparePeriods()">Sammenlign</button>
+                        <button type="button" onclick="lagerlisteComparePeriods()">Vis / sammenlign</button>
                     </div>
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-history">
                         <label for="lagerlisteSnapshotSelect">Historik</label>
@@ -3875,6 +3875,7 @@ app.get('/', (req, res) => {
 
             function canAccessModule(moduleKey) {
                 if (loggedUserRole === 'superadmin') return true;
+                if (moduleKey === 'bom') return Object.keys(loggedUserPermissions).some(key => key.startsWith('bom') && loggedUserPermissions[key] === true);
                 const permissionKey = MODULE_PERMISSION_KEYS[moduleKey];
                 return !permissionKey || loggedUserPermissions[permissionKey] === true;
             }
@@ -5674,6 +5675,7 @@ app.get('/', (req, res) => {
                     const single = omsaetningThresholdsByCustomer.get(selectedCustomers[0]);
                     if (single) {
                         applyOmsaetningThresholdInputs(single);
+                        scheduleOmsaetningAutoReload();
                     }
                 }
 
@@ -8724,7 +8726,16 @@ app.get('/', (req, res) => {
                 ['ordreoversigt', 'Ordreoversigt'],
                 ['belastning', 'Belastning'],
                 ['personalehandbog', 'Personalehåndbog']
-                ,['lagerliste', 'Lagerliste']
+                ,['lagerliste', 'Lagerliste'],
+                ['bomOverview', 'BOM · Oversigt'],
+                ['bomStykliste', 'BOM · Stykliste'],
+                ['bomComponents', 'BOM · Komponenter'],
+                ['bomResources', 'BOM · Ressourcer'],
+                ['bomMaterials', 'BOM · Materialer'],
+                ['bomParameters', 'BOM · Parametre'],
+                ['bomCalculator', 'BOM · Beregner'],
+                ['bomSuppliers', 'BOM · Leverandører'],
+                ['bomVismaPreview', 'BOM · Visma-preview/query']
             ];
 
             function adminHeaders() {

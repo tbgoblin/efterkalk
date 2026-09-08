@@ -4,6 +4,7 @@
 
 const state = {
     view: 'overview',
+    permissions: {},
     customers: [],
     products: [],
     revisions: [],
@@ -11,6 +12,11 @@ const state = {
     materials: [],
     components: [],
     laserParams: [],
+    laserTechnicalParams: [],
+    laserGasPrices: { nitrogenPricePerKg: 0, oxygenPricePerKg: 0,
+        nitrogenSpecificVolumeM3Kg: 0.862, oxygenSpecificVolumeM3Kg: 0.7, mixLineOxygenPercent: 22 },
+    bendingMachines: [],
+    bendingHandlingBands: [],
     processParams: [],
     selectedCustomer: null,
     selectedProduct: null,
@@ -22,21 +28,27 @@ const state = {
     calcCustomer: null,
     calcCustomerMetaCache: {},
     calcComponents: [],
+    calcWizardStarted: false,
+    calcWizardProcessesReady: false,
     lastQuote: null,
     draftMaterial: null,
     draftResources: []
 };
 
 const navItems = [
-    { key: 'overview', title: 'Oversigt', description: 'Status og arbejdsgang' },
-    { key: 'stykliste', title: 'Stykliste', description: 'Kunde → produkt → TgNo → revision' },
-    { key: 'komponenter', title: 'Komponenter', description: 'Komp-katalog (Gr5 2/3/6/10/11)' },
-    { key: 'resources', title: 'Ressourcer', description: 'Ressource- og rutekatalog' },
-    { key: 'materials', title: 'Materialer', description: 'Råvarer med lagerstatus' },
-    { key: 'calculators', title: 'Parametre', description: 'Skæreparametre og procesmatrix' },
-    { key: 'beregner', title: 'Beregner', description: 'Fil-analyse, nesting og pris' },
-    { key: 'leverandorer', title: 'Leverandører', description: 'Leverandørkatalog fra Actor' }
+    { key: 'overview', permission: 'bomOverview', title: 'Oversigt', description: 'Status og arbejdsgang' },
+    { key: 'stykliste', permission: 'bomStykliste', title: 'Stykliste', description: 'Kunde → produkt → TgNo → revision' },
+    { key: 'komponenter', permission: 'bomComponents', title: 'Komponenter', description: 'Komp-katalog (Gr5 2/3/6/10/11)' },
+    { key: 'resources', permission: 'bomResources', title: 'Ressourcer', description: 'Ressource- og rutekatalog' },
+    { key: 'materials', permission: 'bomMaterials', title: 'Materialer', description: 'Råvarer med lagerstatus' },
+    { key: 'calculators', permission: 'bomParameters', title: 'Parametre', description: 'Skæreparametre og procesmatrix' },
+    { key: 'beregner', permission: 'bomCalculator', title: 'Beregner', description: 'Fil-analyse, nesting og pris' },
+    { key: 'leverandorer', permission: 'bomSuppliers', title: 'Leverandører', description: 'Leverandørkatalog fra Actor' }
 ];
+
+function visibleNavItems() {
+    return navItems.filter(item => state.permissions[item.permission] === true);
+}
 
 const viewMeta = {
     overview: { title: 'Oversigt', subtitle: 'Status og arbejdsgang' },

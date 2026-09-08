@@ -76,6 +76,7 @@ function createApiRouter({
         requireAuthenticated,
         requireSuperadmin,
         requireModulePermission,
+        requireAnyModulePermission,
         revokeSession,
         buildSessionCookie,
         buildExpiredSessionCookie,
@@ -210,6 +211,7 @@ function createApiRouter({
         getConnection,
         sql,
         diskCache,
+        gohData,
         logEvent,
         getActiveProfile: settingsService.getActiveProfile
     });
@@ -2589,7 +2591,21 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/customers', async (req, res) => {
+    const BOM_PERMISSION_KEYS = ['bomOverview', 'bomStykliste', 'bomComponents', 'bomResources', 'bomMaterials', 'bomParameters', 'bomCalculator', 'bomSuppliers', 'bomVismaPreview'];
+    const bomAccess = permissions => requireAnyModulePermission(permissions);
+    const superadminOnly = (req, res, next) => {
+        if (!requireSuperadmin(req, res)) return;
+        return next();
+    };
+
+    router.get('/bom/access', requireAuthenticated, (req, res) => {
+        const user = getSessionUser(req);
+        const permissions = {};
+        BOM_PERMISSION_KEYS.forEach(key => { permissions[key] = user.role === 'superadmin' || Boolean(user.permissions && user.permissions[key]); });
+        return res.json({ permissions });
+    });
+
+    router.get('/bom/customers', bomAccess(['bomStykliste', 'bomCalculator']), async (req, res) => {
         try {
             const q = String(req.query.q || '').trim();
             const limit = req.query.limit === undefined ? undefined : Number(req.query.limit);
@@ -2601,7 +2617,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/products', async (req, res) => {
+    router.get('/bom/products', bomAccess('bomStykliste'), async (req, res) => {
         try {
             const customerNo = String(req.query.customerNo || req.query.cust || '').trim();
             const customerCode = String(req.query.customerCode || req.query.gr || '').trim();
@@ -2617,7 +2633,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/revisions/by-drawing', async (req, res) => {
+    router.get('/bom/revisions/by-drawing', bomAccess('bomStykliste'), async (req, res) => {
         try {
             const tgn = String(req.query.tgn || '').trim();
             const customerNo = String(req.query.customerNo || req.query.cust || '').trim();
@@ -2633,7 +2649,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/resources', async (_req, res) => {
+    router.get('/bom/resources', bomAccess(['bomResources', 'bomParameters', 'bomCalculator', 'bomStykliste']), async (_req, res) => {
         try {
             const payload = await bomService.fetchResources();
             res.json(payload);
@@ -2643,7 +2659,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/materials', async (req, res) => {
+    router.get('/bom/materials', bomAccess(['bomMaterials', 'bomCalculator', 'bomStykliste']), async (req, res) => {
         try {
             const q = String(req.query.q || '').trim();
             const limit = Number(req.query.limit || 2500);
@@ -2655,7 +2671,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/calculators/laser-params', async (req, res) => {
+    router.get('/bom/calculators/laser-params', bomAccess(['bomParameters', 'bomCalculator']), async (req, res) => {
         try {
             const machine = String(req.query.machine || '').trim();
             const payload = await bomService.fetchLaserParameters({ machine });
@@ -2666,7 +2682,94 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/calculators/process-params', async (_req, res) => {
+    router.post('/bom/calculators/laser-params', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        try {
+            const row = await bomService.saveLaserParameter(req.body || {}, user.username);
+            if (!row) return res.status(400).json({ error: 'Kontroller varenr., maskine og numeriske værdier' });
+            return res.json({ ok: true, row });
+        } catch (err) {
+            logEvent('ERROR bom/calculators/laser-params POST: ' + err.message);
+            return res.status(500).json({ error: err.message || 'BOM laser parameter kunne ikke gemmes' });
+        }
+    });
+
+    router.post('/bom/calculators/laser-technical-params', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        try {
+            const row = await bomService.saveLaserTechnicalParameter(req.body || {}, user.username);
+            return row ? res.json({ ok: true }) : res.status(400).json({ error: 'Kontroller teknologi og numeriske værdier' });
+        } catch (err) {
+            logEvent('ERROR bom/calculators/laser-technical-params POST: ' + err.message);
+            return res.status(500).json({ error: err.message || 'Laser-teknologi kunne ikke gemmes' });
+        }
+    });
+
+    router.post('/bom/calculators/laser-gas-prices', express.json(), async (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        try {
+            const prices = await bomService.saveLaserGasPrices(req.body || {});
+            return prices ? res.json({ ok: true, prices }) : res.status(400).json({ error: 'Kontroller gaspriserne' });
+        } catch (err) {
+            logEvent('ERROR bom/calculators/laser-gas-prices POST: ' + err.message);
+            return res.status(500).json({ error: err.message || 'Gaspriser kunne ikke gemmes' });
+        }
+    });
+
+    router.post('/bom/calculators/laser-params/import-excel', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        try {
+            const workbookPath = path.join(__dirname, '..', 'BOM.xlsm');
+            const result = await bomService.importLaserParametersFromExcel(workbookPath, user.username, req.body && req.body.overwriteExisting === true);
+            logEvent('BOM LASER EXCEL IMPORT: source=' + result.sourceRows + ' inserted=' + result.inserted + ' updated=' + result.updated + ' preserved=' + result.preserved
+                + ' technical-source=' + result.technical.sourceRows + ' technical-inserted=' + result.technical.inserted
+                + ' technical-updated=' + result.technical.updated + ' technical-preserved=' + result.technical.preserved);
+            return res.json({ ok: true, ...result });
+        } catch (err) {
+            logEvent('ERROR bom/calculators/laser-params/import-excel: ' + err.message);
+            return res.status(500).json({ error: err.message || 'Excel-import fejlede' });
+        }
+    });
+
+    router.get('/bom/calculators/bending-params', bomAccess(['bomParameters', 'bomCalculator']), async (_req, res) => {
+        try {
+            return res.json(await bomService.fetchBendingParameters());
+        } catch (err) {
+            logEvent('ERROR bom/calculators/bending-params: ' + err.message);
+            return res.status(500).json({ error: err.message || 'BOM buk-parametre fejl' });
+        }
+    });
+
+    router.get('/bom/goh-status', (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        return res.json({ server: gohData.serverLabel, ...gohData.getStatus() });
+    });
+
+    router.post('/bom/calculators/bending-machines', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        const ok = await bomService.saveBendingMachine(req.body || {}, user.username);
+        return ok ? res.json({ ok: true }) : res.status(400).json({ error: 'Kontroller maskinens buk-parametre' });
+    });
+
+    router.post('/bom/calculators/bending-handling-bands', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        const ok = await bomService.saveBendingHandlingBand(req.body || {}, user.username);
+        return ok ? res.json({ ok: true }) : res.status(400).json({ error: 'Kontroller håndteringsklassen' });
+    });
+
+    router.post('/bom/calculators/bending-actual-samples', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        const ok = await bomService.saveBendingActualSample(req.body || {}, user.username);
+        return ok ? res.json({ ok: true }) : res.status(400).json({ error: 'Kontroller den faktiske buk-måling' });
+    });
+
+    router.get('/bom/calculators/process-params', bomAccess(['bomParameters', 'bomCalculator']), async (_req, res) => {
         try {
             const payload = await bomService.fetchProcessParameters();
             res.json(payload);
@@ -2676,7 +2779,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/components', async (req, res) => {
+    router.get('/bom/components', bomAccess(['bomComponents', 'bomCalculator']), async (req, res) => {
         try {
             const q = String(req.query.q || '').trim();
             const limit = req.query.limit === undefined ? undefined : Number(req.query.limit);
@@ -2688,7 +2791,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/customer-notes', async (req, res) => {
+    router.get('/bom/customer-notes', bomAccess('bomStykliste'), async (req, res) => {
         try {
             const customerCode = String(req.query.customerCode || req.query.gr || '').trim();
             if (!customerCode) {
@@ -2702,7 +2805,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/suppliers', async (req, res) => {
+    router.get('/bom/suppliers', bomAccess('bomSuppliers'), async (req, res) => {
         try {
             const q = String(req.query.q || '').trim();
             const payload = await bomService.fetchSuppliers({ q });
@@ -2713,7 +2816,7 @@ function createApiRouter({
         }
     });
 
-    router.get('/bom/product-tree', async (req, res) => {
+    router.get('/bom/product-tree', bomAccess('bomStykliste'), async (req, res) => {
         try {
             const prodNo = String(req.query.prodNo || '').trim();
             if (!prodNo) {
@@ -2727,7 +2830,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/bom/calc/nesting', express.json(), (req, res) => {
+    router.post('/bom/calc/nesting', express.json(), bomAccess('bomCalculator'), (req, res) => {
         try {
             const result = bomService.computeNesting(req.body || {});
             res.json(result);
@@ -2736,7 +2839,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/bom/calc/quote', express.json(), async (req, res) => {
+    router.post('/bom/calc/quote', express.json(), bomAccess('bomCalculator'), async (req, res) => {
         try {
             const result = await bomService.computeQuote(req.body || {});
             res.json(result);
@@ -2746,7 +2849,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/bom/analyze-file', express.json({ limit: '40mb' }), (req, res) => {
+    router.post('/bom/analyze-file', express.json({ limit: '40mb' }), bomAccess('bomCalculator'), (req, res) => {
         try {
             const filename = String((req.body && req.body.filename) || '').trim();
             const dataBase64 = (req.body && req.body.data) || '';
@@ -2765,7 +2868,32 @@ function createApiRouter({
         }
     });
 
-    router.post('/bom/cache/invalidate', (req, res) => {
+    router.post('/bom/select-drawing', express.json(), bomAccess('bomCalculator'), async (req, res) => {
+        const selectDrawing = global.__desktopSelectBomDrawing;
+        if (typeof selectDrawing !== 'function') {
+            return res.status(501).json({ error: 'Native filevalg er kun tilgængeligt i desktop-appen' });
+        }
+        try {
+            const customerCode = String(req.body && req.body.customerCode || '').trim();
+            if (!customerCode) return res.status(400).json({ error: 'Vælg en kunde med Gr-kode først' });
+            const selected = await selectDrawing(customerCode);
+            if (!selected || selected.cancelled) return res.json({ cancelled: true });
+            const extension = path.extname(selected.filePath).toLowerCase();
+            if (!['.dxf', '.step', '.stp', '.pdf'].includes(extension)) {
+                return res.status(400).json({ error: 'Vælg en DXF-, STEP- eller PDF-fil' });
+            }
+            const buffer = fs.readFileSync(selected.filePath);
+            if (buffer.length > 40 * 1024 * 1024) return res.status(413).json({ error: 'Filen må højst være 40 MB' });
+            const filename = path.basename(selected.filePath);
+            const result = bomService.analyzeDrawingFile(filename, buffer);
+            return res.json({ cancelled: false, filename, sizeBytes: buffer.length, customerFolder: selected.customerFolder, ...result });
+        } catch (err) {
+            logEvent('ERROR bom/select-drawing: ' + err.message);
+            return res.status(400).json({ error: err.message || 'Kunne ikke vælge tegning' });
+        }
+    });
+
+    router.post('/bom/cache/invalidate', bomAccess(BOM_PERMISSION_KEYS), (req, res) => {
         try {
             const scope = String((req.body && req.body.scope) || req.query.scope || 'all');
             const result = bomService.invalidate(scope);
@@ -2777,7 +2905,7 @@ function createApiRouter({
     });
 
     // ── BOM: Opret produkter i Visma ────────────────────────────────────────
-    router.post('/bom/create-products/preview', express.json(), async (req, res) => {
+    router.post('/bom/create-products/preview', express.json(), bomAccess('bomVismaPreview'), async (req, res) => {
         try {
             const result = await bomService.previewCreateProducts(req.body || {});
             res.json({ ok: true, ...result });
@@ -2788,7 +2916,7 @@ function createApiRouter({
         }
     });
 
-    router.post('/bom/create-products/execute', express.json(), requireAuthenticated, async (req, res) => {
+    router.post('/bom/create-products/execute', express.json(), superadminOnly, async (req, res) => {
         try {
             const result = await bomService.createProductsInVisma(req.body || {});
             logEvent('BOM CREATE: ' + (result.created || []).map(r => r.ProdNo).join(', '));

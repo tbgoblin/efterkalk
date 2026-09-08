@@ -88,6 +88,40 @@ if (!process.env.GANTECH_DATA_DIR) {
 global.__desktopOpenPath = target => shell.openPath(target);
 global.__desktopOpenExternal = target => shell.openExternal(target);
 
+function findBomCustomerFolder(customerCode) {
+    const root = String(process.env.BOM_CUSTOMER_ROOT || 'Y:\\Kunder').trim();
+    const code = String(customerCode || '').trim();
+    if (!code || !/^[A-Za-z0-9_-]{1,40}$/.test(code)) return { root, folder: root };
+    try {
+        const suffix = new RegExp('(?:^|\\s)' + code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+        const match = fs.readdirSync(root, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && suffix.test(entry.name.trim()))
+            .sort((left, right) => left.name.localeCompare(right.name, 'da-DK'))[0];
+        return { root, folder: match ? path.join(root, match.name) : root };
+    } catch (_) {
+        return { root, folder: root };
+    }
+}
+
+global.__desktopSelectBomDrawing = async customerCode => {
+    if (!mainWindow) return { cancelled: true };
+    const location = findBomCustomerFolder(customerCode);
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Vælg tegning for kunde ' + String(customerCode || ''),
+        defaultPath: location.folder,
+        properties: ['openFile'],
+        filters: [
+            { name: 'Tegninger', extensions: ['dxf', 'step', 'stp', 'pdf'] },
+            { name: 'Alle filer', extensions: ['*'] }
+        ]
+    });
+    return {
+        cancelled: result.canceled || !result.filePaths[0],
+        filePath: result.filePaths[0] || '',
+        customerFolder: location.folder
+    };
+};
+
 const { ensureServerStarted } = require('./server');
 
 const APP_URL = 'http://localhost:' + USER_PORT;
@@ -553,6 +587,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    delete global.__desktopSelectBomDrawing;
     delete global.__desktopManualUpdateCheck;
     delete global.__desktopManualUpdateStatus;
     delete global.__desktopManualUpdateInstall;

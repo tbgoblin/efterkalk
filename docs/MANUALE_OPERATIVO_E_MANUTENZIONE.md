@@ -12,7 +12,7 @@
 
 Nel suo stato attuale l'app va considerata un **hub operativo interno**, non soltanto un calcolatore di margini. Riunisce informazioni commerciali e produttive di Visma/SQL Server e include anche moduli per BOM/preventivazione, magazzino, QMS, carico produttivo, fatturato e VIA.
 
-**Versione applicativa documentata:** `1.1.47` (la fonte autorevole è il campo `version` di `package.json`).
+**Versione applicativa documentata:** `1.1.49` (la fonte autorevole è il campo `version` di `package.json`).
 
 L’interfaccia utente usa testi prevalentemente **danesi**, adatti al contesto operativo di fabbrica.
 
@@ -88,6 +88,38 @@ Nella parte alta sono disponibili:
 - `Ryd cache` → cancella la cache persistente
 - filtro `Alle brugere`
 - campo `Søg kunde i listen...`
+
+### Lagerliste: aprire e stampare un singolo mese
+
+La zona `Periode A / Periode B` serve sia per visualizzare un periodo sia per confrontarne due. Per aprire, per esempio, agosto 2026:
+
+1. scegliere `Måned 2026-08` in `Periode A`;
+2. lasciare vuota `Periode B (valgfri)`;
+3. premere `Vis / sammenlign`;
+4. verificare che l'intestazione del riepilogo mostri `Periode: Måned 2026-08`;
+5. premere `PDF` e scegliere la stampante oppure `Salva come PDF` nella finestra di stampa.
+
+Il PDF usa i dati effettivamente visualizzati, indica il periodo nel titolo ed espande automaticamente le sezioni di dettaglio. Se si seleziona anche `Periode B`, lo stesso pulsante produce invece il confronto tra A e B. Un mese compare nell'elenco solo se esiste la relativa chiusura mensile; uno snapshot giornaliero si apre dalla zona `Historik`.
+
+L'app conserva separatamente il dataset live e quello storico visualizzato: aprire agosto non trasforma quindi agosto nel valore `Aktuel` dei confronti successivi.
+
+### Omsætning: soglie mensili e budget giornaliero
+
+Nella sezione `Tærskler` sono disponibili due modalità:
+
+- checkbox disattivata: si usano direttamente `0-punkt (Mio)` e `Mål (Mio)` per ogni mese;
+- checkbox `Brug dagsmål × arbejdsdage` attivata: ogni mese usa `0-punkt / dag × giorni lavorativi` e `Budget / dag × giorni lavorativi`.
+
+I valori iniziali giornalieri sono 208.335 DKK per il punto zero e 280.851 DKK per il budget, entrambi modificabili. La configurazione giornaliera viene salvata in GOH e resta attiva fino a una nuova modifica. Per le soglie specifiche di un cliente continuano a valere i salvataggi per cliente già previsti dal modulo.
+
+Il numero mensile di giorni lavorativi segue questa precedenza:
+
+1. valore salvato dal Superadmin per l'esatto mese;
+2. in assenza di valore amministrativo, giorni lunedì-venerdì meno festività pubbliche danesi e, se attivate, settimane aziendali `Ferieuger`.
+
+### Amministrazione: giorni lavorativi per mese
+
+Il pannello `Administration → Arbejdsdage pr. måned` è visibile al Superadmin. Selezionare l'anno, correggere i 12 valori e premere `Gem arbejdsdage`. `Brug kalenderforslag` reinserisce i conteggi automatici nell'interfaccia; per renderli permanenti occorre poi salvarli. I valori ammessi sono interi da 0 a 31 e vengono conservati centralmente in GOH, così tutti gli utenti vedono le stesse soglie Omsætning.
 
 ### 4.3 Lagerliste 2 (Beta/Shadow)
 
@@ -545,6 +577,7 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `services/authService.js` | utenti, sessioni bearer/cookie e guard di autenticazione |
 | `services/aftercalcCostExclusionsService.js` | flag permanenti GOH per esclusione costo delle righe vendita |
 | `services/omsaetningService.js` | riepilogo contabile Omsætning e dettaglio mensile fattura/ordine |
+| `assets/js/omsaetning-daily-thresholds.js` | calendario lavorativo danese e conversione dei target giornalieri in soglie mensili |
 | `services/bomService.js` | letture BOM e creazione transazionale prodotti, con blocco `readOnly` |
 | `utils/productRules.js` | regole dedicate ai prodotti |
 | `utils/logger.js` | log su file + console |
@@ -570,6 +603,11 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `GET /aftercalc-cost-exclusions/:ordno` | legge da GOH i flag costo permanenti dell’ordine |
 | `POST /aftercalc-cost-exclusions/:ordno/:lineno` | salva/rimuove in GOH il flag della singola riga autenticata |
 | `GET /omsaetning/month-detail` | dettaglio mensile AcTr, collegamenti fattura→ordine e settimane Ordreindgang |
+| `GET /omsaetning/working-days` | giorni lavorativi mensili condivisi salvati in GOH |
+| `GET /omsaetning/daily-budget-settings` | configurazione condivisa punto zero/budget giornaliero |
+| `POST /omsaetning/daily-budget-settings` | salva in GOH la configurazione giornaliera per un utente autenticato |
+| `GET /admin/working-days?year=YYYY` | legge i 12 valori dell'anno; solo Superadmin |
+| `POST /admin/working-days` | salva i 12 valori dell'anno in GOH; solo Superadmin |
 | `GET /production-summary/:ordno` | riepilogo ordine di produzione |
 | `GET /laser-route-metrics` | metriche laser/nesting |
 | `GET /nesting-detail/:ordno/:prodno` | dettaglio nesting per prodotto |

@@ -1,6 +1,18 @@
 # CODEMAP-base — Gantech Operations Hub
 
-Opdateret: 2026-08-25 (v1.1.41). Basiskort over kodebasen: filer, moduler, endpoints og Visma-tabeller.
+Opdateret: 2026-09-04 (v1.1.49). Basiskort over kodebasen: filer, moduler, endpoints og Visma-tabeller.
+
+## Indeks
+
+1. [Arkitektur](#arkitektur)
+2. [Moduler](#moduler-dashboard-kategorier)
+3. [Omsætning](#omsætning)
+4. [BOM laserparametre](#bom-laserparametre)
+5. [BOM bukberegning](#bom-bukberegning)
+6. [Lagerliste](#lagerliste-serviceslagerlisteservicejs)
+7. [Salgsordre VIA](#salgsordre-via-servicesviaservicejs)
+8. [Visma-tabeller](#visma-tabeller-verificeret-mod-live-db)
+9. [Konventioner](#konventioner)
 
 ## Arkitektur
 
@@ -31,6 +43,37 @@ Electron (electron-main.js)
 | Produktion | Belastning | inline | services/belastningService.js |
 | Produktion | BOM/Beregner | assets/bom/bom-{core,views,beregner,main}.js | services/bomService.js |
 | HR | Personalehåndbog/QMS | assets/js/qms-ph.js | services/phCrawlerService.js, qmsService.js |
+
+## BOM laserparametre
+
+- Parametrene vedligeholdes manuelt i GOH-tabellen `dbo.BomLaserParameters`; de kommer ikke fra Visma `FreeInf2`.
+- Tabellen oprettes idempotent af `services/gohDataService.js` ved første brug. Unik nøgle: `(ProdNo, Machine)`.
+- BOM → Parametre læser og skriver tabellen uden cache. Skrivning via programmet kræver superadmin.
+- Endpoint: `GET/POST /bom/calculators/laser-params`. Beregneren kræver en aktiv, eksakt række for varenr. og maskine, medmindre lasertiden er overstyret manuelt.
+- Superadmin kan køre en eksplicit engangsimport fra `BOM.xlsm`/`skæreparametre` via `POST /bom/calculators/laser-params/import-excel` eller knappen i Parametre. Importen indsætter som standard kun manglende `(ProdNo, Machine)` og bevarer eksisterende GOH-værdier.
+- Eventuelle rækker fra den tidligere fejlagtige kilde med `Source = 'visma-seed'` ignoreres.
+
+## BOM bukberegning
+
+- GOH-tabeller: `dbo.BomBendingMachines`, `dbo.BomBendingHandlingBands` og `dbo.BomBendingActualSamples`; de oprettes idempotent af `services/gohDataService.js`.
+- Hvis appens Windows-login ikke har DDL-rettigheder, køres `docs/sql/2026-09-04-bom-calculator-parameters.sql` én gang af en databaseadministrator. Appen skal ikke tildeles permanent `CREATE TABLE`.
+- Maskine og håndteringsklasser redigeres i BOM → Parametre eller direkte i GOH. Programskrivning kræver superadmin; læsning sker uden cache.
+- Automatisk tid pr. emne = maskincyklus pr. buk + bagstop/vinkelkorrektion + pålæg/aflæg + rotationer/vendinger. Opstart holdes separat pr. ordre.
+- Maskinkontrol bruger gennemsnitlig bukkelængde og estimeret luftbukkekraft. Beregningen afvises ved overskredet længde eller sikker kraftkapacitet.
+- Buk-input: antal, samlet bukkelængde, gennemsnitsvinkel, V-åbning, trækstyrke, rotationer og vendinger. Minutter og opstart kan overstyres manuelt.
+- Endpoints: `GET /bom/calculators/bending-params`; superadmin `POST /bom/calculators/bending-machines`, `/bending-handling-bands`, `/bending-actual-samples`.
+- Test: `test/bomBendingCalculation.test.js` dækker klassevalg, tidsberegning og kapacitetsafvisning.
+
+## Omsætning
+
+- UI og beregning ligger inline i `server.js`; kalenderlogik ligger i `assets/js/omsaetning-daily-thresholds.js`; omsætningsdata hentes via `services/omsaetningService.js`.
+- Administration (kun superadmin) har en årsvælger og 12 redigerbare arbejdsdage. Kalenderforslaget udelader weekender, danske helligdage og registrerede virksomhedsferieuger. Manuelle værdier er heltal `0-31` pr. `YYYY-MM`.
+- Dagsmål: `0-punkt / dag (DKK)` og `Budget / dag (DKK)`. Månedens grænser beregnes som `dagsværdi × arbejdsdage / 1.000.000`.
+- Periodeoversigten summerer kun måneder med bogført omsætning. Den viser samlet omsætning, 0-punkt, budget samt forskel i Mio/% til både 0-punkt og budget.
+- GOH `dbo.AppState` er primær lagring. `omsaetning_working_days` gemmer `{ months, updatedAt }`; `omsaetning_daily_budget_settings` gemmer `{ useDailyBudget, dailyBreakEvenDkk, dailyBudgetDkk, updatedAt, updatedBy }`; `omsaetning_thresholds` gemmer kundeoverride for manuelle/daglige tærskler.
+- Kundegrænser er database-first i `services/omsaetningThresholdsService.js`: API svarer først succes efter GOH `MERGE`; lokal `omsaetning_thresholds.json` er kun mirror/fallback efter en vellykket DB-skrivning.
+- Endpoints: `GET /omsaetning/working-days`, `GET|POST /omsaetning/daily-budget-settings`, `GET|POST /omsaetning/customer-threshold/:custno`, `GET|POST /admin/working-days` (admin-endpoints kræver superadmin).
+- Test: `test/omsaetningDailyThresholds.test.js` dækker danske helligdage, ferieuger, månedlige override, normalisering og beregnede månedsmål.
 
 ## Lagerliste (services/lagerlisteService.js)
 

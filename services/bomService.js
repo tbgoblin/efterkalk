@@ -1,4 +1,172 @@
-function createBomService({ getConnection, sql, diskCache, logEvent, getActiveProfile }) {
+const { readLaserParameters, readCompleteLaserTechnicalParameters } = require('./bomExcelImportService');
+
+function selectBendingHandlingBand(bands, pieceWeightKg, longestSideMm) {
+    return (Array.isArray(bands) ? bands : [])
+        .filter(band => Number(pieceWeightKg) >= Number(band.MinWeightKg || 0)
+            && (band.MaxWeightKg == null || Number(pieceWeightKg) <= Number(band.MaxWeightKg))
+            && Number(longestSideMm) >= Number(band.MinLongestSideMm || 0)
+            && (band.MaxLongestSideMm == null || Number(longestSideMm) <= Number(band.MaxLongestSideMm)))
+        .sort((a, b) => (Number(b.MinWeightKg || 0) + Number(b.MinLongestSideMm || 0))
+            - (Number(a.MinWeightKg || 0) + Number(a.MinLongestSideMm || 0)))[0] || null;
+}
+
+function calculateBendingOperation(input = {}, machine, handlingBands) {
+    if (!machine) throw new Error('Buk-maskinen er ikke konfigureret i GOH');
+    const bendCount = Math.max(0, Math.floor(Number(input.bendCount || 0)));
+    const totalBendLengthMm = Math.max(0, Number(input.totalBendLengthMm || 0));
+    const averageBendLengthMm = bendCount > 0 ? totalBendLengthMm / bendCount : 0;
+    const averageAngleDeg = Math.min(180, Math.max(1, Number(input.averageAngleDeg || 90)));
+    const thicknessMm = Math.max(0, Number(input.thicknessMm || 0));
+    const dieOpeningMm = Math.max(0.1, Number(input.dieOpeningMm || thicknessMm * 8 || 8));
+    const tensileStrengthMpa = Math.max(1, Number(input.tensileStrengthMpa || 450));
+    const safetyFactor = Number(machine.SafetyFactor || 0.8);
+    const requiredForceKn = bendCount > 0
+        ? 1.42 * tensileStrengthMpa * averageBendLengthMm * thicknessMm * thicknessMm / dieOpeningMm / 1000
+        : 0;
+    const availableForceKn = Number(machine.MaxForceKn || 0) * safetyFactor;
+    if (averageBendLengthMm > Number(machine.MaxBendLengthMm || 0)) {
+        throw new Error('Buk-længde ' + Math.round(averageBendLengthMm) + ' mm overstiger kapaciteten på ' + machine.MachineCode);
+    }
+    if (requiredForceKn > availableForceKn) {
+        throw new Error('Krævet bukkekraft ' + Math.round(requiredForceKn) + ' kN overstiger sikker kapacitet på ' + machine.MachineCode);
+    }
+    const band = selectBendingHandlingBand(handlingBands, Number(input.pieceWeightKg || 0), Number(input.longestSideMm || 0));
+    if (!band) throw new Error('Ingen håndteringsklasse i GOH passer til emnet');
+    const formingDegrees = Math.abs(180 - averageAngleDeg);
+    const cycleSeconds = bendCount * (Number(machine.BaseCycleSeconds || 0)
+        + Number(machine.BackGaugeSeconds || 0)
+        + formingDegrees * Number(machine.SecondsPerDegree || 0));
+    const handlingSeconds = Number(band.LoadSeconds || 0) + Number(band.UnloadSeconds || 0)
+        + Math.max(0, Number(input.rotate90Count || 0)) * Number(band.Rotate90Seconds || 0)
+        + Math.max(0, Number(input.flipCount || 0)) * Number(band.FlipSeconds || 0);
+    return {
+        minutes: Math.round(((cycleSeconds + handlingSeconds) / 60) * 100) / 100,
+        setupMinutes: Math.max(0, Number(machine.SetupMinutes || 0)),
+        requiredForceKn: Math.round(requiredForceKn * 10) / 10,
+        availableForceKn: Math.round(availableForceKn * 10) / 10,
+        averageBendLengthMm: Math.round(averageBendLengthMm * 10) / 10,
+        cycleSeconds: Math.round(cycleSeconds * 10) / 10,
+        handlingSeconds: Math.round(handlingSeconds * 10) / 10,
+        handlingBand: band.BandName || ''
+    };
+}
+
+const LASER_GAS_PRICES_STATE_KEY = 'bom:laser:gas-prices';
+const LASER_COMPLEXITY_FACTOR = 1.225;
+
+function detectLaserGasType(technologyValue) {
+    const technology = String(technologyValue || '').toUpperCase();
+    if (/(^|-)N2(-|$)/.test(technology)) return 'nitrogen';
+    if (/(^|-)O2(-|$)/.test(technology)) return 'oxygen';
+    if (/(^|-)MIX(-|$)/.test(technology)) return 'mixline';
+    return null;
+}
+
+function detectLaserMachine(technologyValue) {
+    const technology = String(technologyValue || '').trim().toUpperCase();
+    if (/-G$/.test(technology)) return { code: 'R1102', name: 'Laser Genius', line: 'Genius' };
+    if (/-S0$/.test(technology)) return { code: 'R1100', name: 'Eagle', line: 'Standard' };
+    if (/-C0$/.test(technology)) return { code: 'R1100', name: 'Eagle', line: 'CutLine' };
+    if (/-F0$/.test(technology)) return { code: 'R1100', name: 'Eagle', line: 'FastLine' };
+    if (/-X0$/.test(technology)) return { code: 'R1100', name: 'Eagle', line: '15 kW' };
+    return { code: 'R1100', name: 'Eagle', line: '-' };
+}
+
+function normalizeMixLineOxygenPercent(value) {
+    const percent = value == null || value === '' ? 22 : Number(value);
+    return Math.min(22, Math.max(0, Number.isFinite(percent) ? percent : 22));
+}
+
+function getGasSpecificVolumeM3Kg(gasType, mixLineOxygenPercent, nitrogenSpecificVolumeM3Kg = 0.862, oxygenSpecificVolumeM3Kg = 0.7) {
+    const nitrogenVolume = Math.max(0.001, Number(nitrogenSpecificVolumeM3Kg || 0.862));
+    const oxygenVolume = Math.max(0.001, Number(oxygenSpecificVolumeM3Kg || 0.7));
+    if (gasType === 'oxygen') return oxygenVolume;
+    if (gasType !== 'mixline') return nitrogenVolume;
+    const oxygenShare = normalizeMixLineOxygenPercent(mixLineOxygenPercent) / 100;
+    return nitrogenVolume * (1 - oxygenShare) + oxygenVolume * oxygenShare;
+}
+
+function calculateAssistGasFlowNm3Hour(gasPressureBarValue, nozzleSizeMmValue, gasType = 'nitrogen', mixLineOxygenPercent = 22,
+    nitrogenSpecificVolumeM3Kg = 0.862, oxygenSpecificVolumeM3Kg = 0.7) {
+    const gasPressureBar = Math.max(0, Number(gasPressureBarValue || 0));
+    const nozzleSizeMm = Math.max(0, Number(nozzleSizeMmValue || 0));
+    if (gasPressureBar <= 0 || nozzleSizeMm <= 0) return 0;
+    const specificVolumeM3Kg = getGasSpecificVolumeM3Kg(gasType, mixLineOxygenPercent,
+        nitrogenSpecificVolumeM3Kg, oxygenSpecificVolumeM3Kg);
+    const nozzleAreaMm2 = Math.PI * Math.pow(nozzleSizeMm / 2, 2);
+    return Math.round(nozzleAreaMm2 * gasPressureBar * specificVolumeM3Kg * 100) / 100;
+}
+
+function calculateNitrogenFlowNm3Hour(gasPressureBarValue, nozzleSizeMmValue) {
+    return calculateAssistGasFlowNm3Hour(gasPressureBarValue, nozzleSizeMmValue, 'nitrogen');
+}
+
+function detectLaserTechnicalMaterial(prodNoValue, descriptionValue) {
+    const prodNo = String(prodNoValue || '').trim();
+    const description = String(descriptionValue || '').toLowerCase();
+    if (prodNo.startsWith('301')) return 'SORT';
+    if (prodNo.startsWith('311')) return 'RF';
+    if (prodNo.startsWith('321')) return 'AL';
+    if (prodNo.startsWith('331')) return 'GAL';
+    if (prodNo.startsWith('371')) return 'ME';
+    if (prodNo.startsWith('381')) return description.includes('kobber') ? 'CO' : description.includes('messing') ? 'ME' : null;
+    return null;
+}
+
+function estimateLaserTechnology(technicalParam, options = {}) {
+    const gasType = detectLaserGasType(technicalParam && technicalParam.Technology);
+    const machine = detectLaserMachine(technicalParam && technicalParam.Technology);
+    const feedrateMmMin = Math.max(0, Number(technicalParam && technicalParam.FeedrateLargeMmMin || 0));
+    const gasPressureBar = Math.max(0, Number(technicalParam && technicalParam.GasPressureBar || 0));
+    const nozzleSizeMm = Math.max(0, Number(technicalParam && technicalParam.NozzleSizeMm || 0));
+    const requireCompleteGas = options.requireCompleteGas !== false;
+    if (feedrateMmMin <= 0 || (requireCompleteGas && (!gasType || gasPressureBar <= 0 || nozzleSizeMm <= 0))) return null;
+    const cuttingMinutes = Math.max(0, Number(options.cutLengthM || 0)) / (feedrateMmMin / 1000);
+    const piercingMinutes = Math.max(0, Number(options.piercings || 0))
+        * Math.max(0, Number(technicalParam.PiercingMilliseconds || 0)) / 60000;
+    const minutes = (cuttingMinutes + piercingMinutes) * LASER_COMPLEXITY_FACTOR;
+    const mixLineOxygenShare = normalizeMixLineOxygenPercent(options.mixLineOxygenPercent) / 100;
+    const gasPricePerKg = gasType === 'nitrogen'
+        ? Math.max(0, Number(options.nitrogenPricePerKg || 0))
+        : gasType === 'oxygen' ? Math.max(0, Number(options.oxygenPricePerKg || 0))
+            : Math.max(0, Number(options.nitrogenPricePerKg || 0)) * (1 - mixLineOxygenShare)
+                + Math.max(0, Number(options.oxygenPricePerKg || 0)) * mixLineOxygenShare;
+    const gasSpecificVolumeM3Kg = getGasSpecificVolumeM3Kg(gasType, options.mixLineOxygenPercent,
+        options.nitrogenSpecificVolumeM3Kg, options.oxygenSpecificVolumeM3Kg);
+    const gasFlowNm3Hour = gasType ? calculateAssistGasFlowNm3Hour(gasPressureBar, nozzleSizeMm, gasType,
+        options.mixLineOxygenPercent, options.nitrogenSpecificVolumeM3Kg, options.oxygenSpecificVolumeM3Kg) : 0;
+    const gasConsumptionKgHour = gasSpecificVolumeM3Kg > 0 ? gasFlowNm3Hour / gasSpecificVolumeM3Kg : 0;
+    const gasCostPerMinute = gasConsumptionKgHour / 60 * gasPricePerKg;
+    const machineRate = Math.max(0, Number(machine.code === 'R1102'
+        ? options.geniusMachineRate || options.machineRate || 0 : options.machineRate || 0));
+    return { row: technicalParam, machine, machineRate, gasType, feedrateMmMin, minutes, gasFlowNm3Hour,
+        gasConsumptionKgHour, gasSpecificVolumeM3Kg, gasPricePerKg,
+        gasCostPerMinute, cost: minutes * (machineRate + gasCostPerMinute) };
+}
+
+function selectCheapestLaserTechnology(rows, options = {}) {
+    const alternatives = (Array.isArray(rows) ? rows : [])
+        .map(row => estimateLaserTechnology(row, options))
+        .filter(Boolean)
+        .sort((left, right) => left.cost - right.cost || left.minutes - right.minutes
+            || String(left.row.Technology).localeCompare(String(right.row.Technology)));
+    return { selected: alternatives[0] || null, alternatives };
+}
+
+function calculateFlatOperationMinutes(input = {}) {
+    const widthMm = Math.max(0, Number(input.widthMm || 0));
+    const lengthMm = Math.max(0, Number(input.lengthMm || 0));
+    const speed = Math.max(0, Number(input.speed || 0));
+    const factor = Math.max(0, Number(input.factor || 0));
+    const type = String(input.type || '').trim().toUpperCase();
+    if (!widthMm || !lengthMm || !speed || !factor) return 0;
+    const multipliers = { R05: 1, R10: 1.33, R15: 1.66, R20: 2, B05: 1 / 1.7 };
+    if (!multipliers[type]) return 0;
+    const minutes = Math.sqrt(widthMm * lengthMm) / 2000 / speed * factor * multipliers[type];
+    return Math.trunc(minutes * 1000000) / 1000000;
+}
+
+function createBomService({ getConnection, sql, diskCache, gohData, logEvent, getActiveProfile }) {
     const memoryCache = new Map();
 
     const TTL = {
@@ -9,6 +177,13 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
         materials: 15 * 60 * 60 * 1000,
         calculators: 8 * 60 * 60 * 1000
     };
+
+    function gohError(message) {
+        const status = typeof gohData.getStatus === 'function' ? gohData.getStatus() : null;
+        const detail = status && status.lastError ? ': ' + status.lastError : '';
+        const retry = status && status.disabledUntil && !status.enabled ? ' (nyt forsøg efter ' + status.disabledUntil + ')' : '';
+        return new Error(message + detail + retry);
+    }
 
     function nowMs() {
         return Date.now();
@@ -240,6 +415,7 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
                 PrDcMat.SalePr,
                 Prod.ProdGr,
                 Prod.DensU,
+                Prod.Inf AS BasePrice,
                 BgtLn.R7,
                 Prod.Gr4,
                 Prod.Inf3 AS CustomerNo
@@ -347,40 +523,95 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
     }
 
     async function fetchLaserParameters(options = {}) {
-        const machine = String(options.machine || '').trim().toLowerCase();
-        const key = makeKey('laser_params', machine || 'all');
-        const cached = getCached(key);
-        if (cached) return cached;
-
-        const pool = await getConnection();
-        const result = await pool.request().query(`
-            SELECT
-                FreeInf2.ProdNo,
-                Prod.Descr,
-                Prod.HgtU AS Tykkelse,
-                FreeInf2.Txt1 AS Maskine,
-                FreeInf2.Val1 AS [Skærehast.],
-                FreeInf2.Val2 AS Pircing,
-                FreeInf2.Val3 AS [Tillæg],
-                FreeInf2.Txt2 AS Linse
-            FROM FreeInf2 WITH(NOLOCK), Prod WITH(NOLOCK)
-            WHERE FreeInf2.ProdNo = Prod.ProdNo
-              AND FreeInf2.FrInfTp = 100
-        `);
-
-        let rows = Array.isArray(result.recordset) ? result.recordset : [];
-        if (machine) {
-            rows = rows.filter(row => String(row.Maskine || '').toLowerCase().includes(machine));
-        }
+        const [rows, technicalRows, gasPriceState] = await Promise.all([
+            gohData.getBomLaserParameters(String(options.machine || '').trim()),
+            gohData.getBomLaserTechnicalParameters(),
+            gohData.getAppState(LASER_GAS_PRICES_STATE_KEY)
+        ]);
+        if (rows === null || technicalRows === null) throw gohError('GOH laserparametre er ikke tilgængelige');
 
         const payload = {
             rows,
+            technicalRows,
+            gasPrices: {
+                nitrogenPricePerKg: Math.max(0, Number(gasPriceState && gasPriceState.payload
+                    && (gasPriceState.payload.nitrogenPricePerKg ?? gasPriceState.payload.nitrogenPricePerNm3) || 0)),
+                oxygenPricePerKg: Math.max(0, Number(gasPriceState && gasPriceState.payload
+                    && (gasPriceState.payload.oxygenPricePerKg ?? gasPriceState.payload.oxygenPricePerNm3) || 0)),
+                nitrogenSpecificVolumeM3Kg: Math.max(0.001, Number(gasPriceState && gasPriceState.payload
+                    && gasPriceState.payload.nitrogenSpecificVolumeM3Kg || 0.862)),
+                oxygenSpecificVolumeM3Kg: Math.max(0.001, Number(gasPriceState && gasPriceState.payload
+                    && gasPriceState.payload.oxygenSpecificVolumeM3Kg || 0.7)),
+                mixLineOxygenPercent: normalizeMixLineOxygenPercent(gasPriceState && gasPriceState.payload
+                    ? gasPriceState.payload.mixLineOxygenPercent : null)
+            },
             count: rows.length,
-            cached: true,
-            source: 'db'
+            cached: false,
+            source: 'goh-manual'
         };
-        setCached(key, TTL.calculators, payload);
         return payload;
+    }
+
+    async function saveLaserParameter(input, updatedBy) {
+        const row = await gohData.upsertBomLaserParameter(input, updatedBy);
+        if (row) invalidate('calculators');
+        return row;
+    }
+
+    async function saveLaserTechnicalParameter(input, updatedBy) {
+        const row = await gohData.upsertBomLaserTechnicalParameter(input, updatedBy);
+        if (row) invalidate('calculators');
+        return row;
+    }
+
+    async function saveLaserGasPrices(input) {
+        const nitrogenPricePerKg = Number(input && input.nitrogenPricePerKg);
+        const oxygenPricePerKg = Number(input && input.oxygenPricePerKg);
+        const nitrogenSpecificVolumeM3Kg = Number(input && input.nitrogenSpecificVolumeM3Kg);
+        const oxygenSpecificVolumeM3Kg = Number(input && input.oxygenSpecificVolumeM3Kg);
+        const rawMixLineOxygenPercent = input && input.mixLineOxygenPercent;
+        const parsedMixLineOxygenPercent = rawMixLineOxygenPercent == null || rawMixLineOxygenPercent === ''
+            ? 22 : Number(rawMixLineOxygenPercent);
+        if (!Number.isFinite(nitrogenPricePerKg) || nitrogenPricePerKg < 0
+            || !Number.isFinite(oxygenPricePerKg) || oxygenPricePerKg < 0
+            || !Number.isFinite(nitrogenSpecificVolumeM3Kg) || nitrogenSpecificVolumeM3Kg <= 0
+            || !Number.isFinite(oxygenSpecificVolumeM3Kg) || oxygenSpecificVolumeM3Kg <= 0
+            || !Number.isFinite(parsedMixLineOxygenPercent)
+            || parsedMixLineOxygenPercent < 0 || parsedMixLineOxygenPercent > 22) return null;
+        const mixLineOxygenPercent = normalizeMixLineOxygenPercent(parsedMixLineOxygenPercent);
+        const prices = { nitrogenPricePerKg, oxygenPricePerKg, nitrogenSpecificVolumeM3Kg,
+            oxygenSpecificVolumeM3Kg, mixLineOxygenPercent };
+        return await gohData.setAppState(LASER_GAS_PRICES_STATE_KEY, prices) ? prices : null;
+    }
+
+    async function importLaserParametersFromExcel(workbookPath, updatedBy, overwriteExisting = false) {
+        const rows = readLaserParameters(workbookPath);
+        const technicalRows = await readCompleteLaserTechnicalParameters(workbookPath);
+        const [result, technicalResult] = await Promise.all([
+            gohData.importBomLaserParameters(rows, updatedBy, overwriteExisting),
+            gohData.importBomLaserTechnicalParameters(technicalRows, updatedBy, overwriteExisting)
+        ]);
+        if (!result || !technicalResult) throw gohError('Laserparametre kunne ikke importeres til GOH');
+        invalidate('calculators');
+        return { ...result, technical: technicalResult };
+    }
+
+    async function fetchBendingParameters() {
+        const payload = await gohData.getBomBendingParameters();
+        if (!payload) throw gohError('GOH buk-parametre er ikke tilgængelige');
+        return { ...payload, source: 'goh-manual', cached: false };
+    }
+
+    async function saveBendingMachine(input, updatedBy) {
+        return gohData.upsertBomBendingMachine(input, updatedBy);
+    }
+
+    async function saveBendingHandlingBand(input, updatedBy) {
+        return gohData.upsertBomBendingHandlingBand(input, updatedBy);
+    }
+
+    async function saveBendingActualSample(input, updatedBy) {
+        return gohData.addBomBendingActualSample(input, updatedBy);
     }
 
     async function fetchProcessParameters() {
@@ -744,6 +975,7 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
         const machine = String(input.machine || 'R1100').trim();
         const laserEnabled = input.laserEnabled !== false;
         const laserOpstartMinutes = Math.max(0, Number(input.laserOpstartMinutes || 0)); // opstart pr ordre
+        const requestedLaserTechnology = String(input.laserTechnology || '').trim();
         const laserMinutesOverride = (input.laserMinutesOverride == null || input.laserMinutesOverride === '')
             ? null : Math.max(0, Number(input.laserMinutesOverride)); // sælger kan rette laser-tiden
         const priceBasis = String(input.priceBasis || 'sale').toLowerCase() === 'cost' ? 'cost' : 'sale'; // kundens pristype
@@ -790,17 +1022,39 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
         const priceKg = Number(String(mat.PrisKg || '0').replace(',', '.')) || 0;
         const avancePct = Number(mat.Avance || 0);
 
-        // 2) skæreparametre for materiale+maskine (FreeInf2 FrInfTp=100)
-        const cutResult = await pool.request()
-            .input('prodNo', sql.VarChar, materialProdNo)
-            .query(`
-                SELECT FreeInf2.Txt1 AS Maskine, FreeInf2.Val1 AS Skaerehast,
-                       FreeInf2.Val2 AS Piercing, FreeInf2.Val3 AS Tillaeg, FreeInf2.Txt2 AS Linse
-                FROM FreeInf2 WITH(NOLOCK)
-                WHERE FreeInf2.ProdNo = @prodNo AND FreeInf2.FrInfTp = 100
-            `);
-        const cutRows = Array.isArray(cutResult.recordset) ? cutResult.recordset : [];
-        const cutParam = cutRows.find(r => String(r.Maskine || '').toLowerCase().includes(machine.toLowerCase())) || cutRows[0] || null;
+        // 2) manuelt vedligeholdte skæreparametre fra GOH
+        const cutParam = await gohData.getBomLaserParameter(materialProdNo, machine);
+        const technicalMaterial = detectLaserTechnicalMaterial(mat.ProdNo, mat.Descr);
+        const [requestedTechnicalParam, compatibleTechnicalParams, gasPriceState] = await Promise.all([
+            requestedLaserTechnology ? gohData.getBomLaserTechnicalParameter(requestedLaserTechnology) : Promise.resolve(null),
+            technicalMaterial ? gohData.getBomLaserTechnicalParametersForMaterial(technicalMaterial, thickness) : Promise.resolve([]),
+            gohData.getAppState(LASER_GAS_PRICES_STATE_KEY)
+        ]);
+        const storedGasPrices = gasPriceState && gasPriceState.payload ? gasPriceState.payload : {};
+        const gasPrices = {
+            nitrogenPricePerKg: Math.max(0, Number(storedGasPrices.nitrogenPricePerKg ?? storedGasPrices.nitrogenPricePerNm3 ?? 0)),
+            oxygenPricePerKg: Math.max(0, Number(storedGasPrices.oxygenPricePerKg ?? storedGasPrices.oxygenPricePerNm3 ?? 0)),
+            nitrogenSpecificVolumeM3Kg: Math.max(0.001, Number(storedGasPrices.nitrogenSpecificVolumeM3Kg || 0.862)),
+            oxygenSpecificVolumeM3Kg: Math.max(0.001, Number(storedGasPrices.oxygenSpecificVolumeM3Kg || 0.7)),
+            mixLineOxygenPercent: normalizeMixLineOxygenPercent(storedGasPrices.mixLineOxygenPercent)
+        };
+        const technologySelection = requestedLaserTechnology ? null : selectCheapestLaserTechnology(compatibleTechnicalParams, {
+            cutLengthM, piercings, machineRate: Number(input.laserRate || 12),
+            geniusMachineRate: Number(input.laserGeniusRate || input.laserRate || 12),
+            nitrogenPricePerKg: gasPrices.nitrogenPricePerKg,
+            oxygenPricePerKg: gasPrices.oxygenPricePerKg,
+            nitrogenSpecificVolumeM3Kg: gasPrices.nitrogenSpecificVolumeM3Kg,
+            oxygenSpecificVolumeM3Kg: gasPrices.oxygenSpecificVolumeM3Kg,
+            mixLineOxygenPercent: gasPrices.mixLineOxygenPercent
+        });
+        const technicalParam = requestedTechnicalParam || (technologySelection.selected && technologySelection.selected.row) || null;
+        if (!cutParam && typeof gohData.getStatus === 'function' && !gohData.getStatus().enabled) {
+            throw gohError('GOH laserparametre er ikke tilgængelige');
+        }
+        if (laserEnabled && laserMinutesOverride == null && !cutParam && !technicalParam) {
+            throw new Error('Ingen manuel laserparameter i GOH for ' + materialProdNo + ' / ' + machine);
+        }
+        if (requestedLaserTechnology && !technicalParam) throw new Error('Laserteknologi ' + requestedLaserTechnology + ' findes ikke i GOH');
 
         // 3) nesting: ægte form-nesting hvis DXF-kontur er givet, ellers rektangulær
         const shapePolygon = Array.isArray(input.shapePolygon) && input.shapePolygon.length >= 3 ? input.shapePolygon : null;
@@ -835,35 +1089,92 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
         const materialPrice = priceBasis === 'cost' ? materialCost : materialCost * (1 + avancePct / 100);
 
         // 5) laser-tid: skærelængde / hastighed + piercing
-        // Enheder fra Visma: Skaerehast = m/min, Piercing = minutter pr piercing
+        // Enheder: Skaerehast = m/min, Piercing = minutter pr piercing
         const cutSpeed = cutParam ? Number(cutParam.Skaerehast || 0) : 0;           // m/min
         const piercingMin = cutParam ? Number(cutParam.Piercing || 0) : 0;         // min pr piercing
         const tillaegPct = cutParam ? Number(cutParam.Tillaeg || 0) : 0;
+        const configuredEagleLaserRate = Number(input.laserRate || 12);
+        const technicalEstimate = technicalParam ? estimateLaserTechnology(technicalParam, {
+            cutLengthM, piercings, machineRate: configuredEagleLaserRate,
+            geniusMachineRate: Number(input.laserGeniusRate || input.laserRate || 12),
+            nitrogenPricePerKg: gasPrices.nitrogenPricePerKg,
+            oxygenPricePerKg: gasPrices.oxygenPricePerKg,
+            nitrogenSpecificVolumeM3Kg: gasPrices.nitrogenSpecificVolumeM3Kg,
+            oxygenSpecificVolumeM3Kg: gasPrices.oxygenSpecificVolumeM3Kg,
+            mixLineOxygenPercent: gasPrices.mixLineOxygenPercent,
+            requireCompleteGas: !requestedLaserTechnology
+        }) : null;
         const cutMinutes = cutSpeed > 0 ? cutLengthM / cutSpeed : 0;
         const pierceMinutes = piercings * piercingMin;
-        const autoLaserMinutes = (cutMinutes + pierceMinutes) * (1 + tillaegPct / 100);
+        const autoLaserMinutes = technicalEstimate ? technicalEstimate.minutes
+            : (cutMinutes + pierceMinutes) * (1 + tillaegPct / 100);
         const laserMinutes = laserEnabled ? (laserMinutesOverride != null ? laserMinutesOverride : autoLaserMinutes) : 0;
 
         // 6) laser minutsats (FreeInf1 61/62 matrix har maskinsatser; fallback 12 dkk/min)
-        const laserRate = Number(input.laserRate || 12);
-        const laserCost = laserMinutes * laserRate;
+        const laserRate = technicalEstimate ? technicalEstimate.machineRate : configuredEagleLaserRate;
+        const laserMachineCost = laserMinutes * laserRate;
+        const gasType = technicalParam ? detectLaserGasType(technicalParam.Technology) : null;
+        const mixLineOxygenShare = gasPrices.mixLineOxygenPercent / 100;
+        const gasPricePerKg = gasType === 'nitrogen' ? gasPrices.nitrogenPricePerKg
+            : gasType === 'oxygen' ? gasPrices.oxygenPricePerKg
+                : gasPrices.nitrogenPricePerKg * (1 - mixLineOxygenShare) + gasPrices.oxygenPricePerKg * mixLineOxygenShare;
+        const gasSpecificVolumeM3Kg = getGasSpecificVolumeM3Kg(gasType, gasPrices.mixLineOxygenPercent,
+            gasPrices.nitrogenSpecificVolumeM3Kg, gasPrices.oxygenSpecificVolumeM3Kg);
+        const gasFlowNm3Hour = technicalParam && gasType
+            ? calculateAssistGasFlowNm3Hour(technicalParam.GasPressureBar, technicalParam.NozzleSizeMm, gasType,
+                gasPrices.mixLineOxygenPercent, gasPrices.nitrogenSpecificVolumeM3Kg, gasPrices.oxygenSpecificVolumeM3Kg) : 0;
+        const gasConsumptionKgHour = gasSpecificVolumeM3Kg > 0 ? gasFlowNm3Hour / gasSpecificVolumeM3Kg : 0;
+        const gasCostPerMinute = gasConsumptionKgHour / 60 * gasPricePerKg;
+        const gasCost = laserMinutes * gasCostPerMinute;
+        const laserCost = laserMachineCost + gasCost;
 
         // 7) aktive processer (Buk, Svejs, Flad, Montage ...)
         const round2 = v => Math.round(v * 100) / 100;
+        const hasAutomaticBending = operations.some(op => String(op && op.key || '').trim() === 'buk'
+            && (op.minutesOverride == null || op.minutesOverride === ''));
+        const bendingParams = hasAutomaticBending ? await gohData.getBomBendingParameters() : null;
+        if (hasAutomaticBending && !bendingParams) throw gohError('GOH buk-parametre er ikke tilgængelige');
         const operationLines = operations
             .map(op => {
-                const minutes = Number(op.minutes || 0);
+                const key = String(op.key || '').trim();
                 const rate = Number(op.rate || 0);
-                const opstartMinutes = Math.max(0, Number(op.opstartMinutes || 0));
+                let bending = null;
+                let minutes = Number(op.minutes || 0);
+                let opstartMinutes = Math.max(0, Number(op.opstartMinutes || 0));
+                if (key === 'buk' && (op.minutesOverride == null || op.minutesOverride === '')) {
+                    const machineRow = (bendingParams.machines || []).find(row => String(row.MachineCode || '').toLowerCase() === String(op.prodNo || '').trim().toLowerCase());
+                    bending = calculateBendingOperation({
+                        ...op,
+                        thicknessMm: thickness,
+                        pieceWeightKg,
+                        longestSideMm: Math.max(pieceW, pieceL)
+                    }, machineRow, bendingParams.handlingBands || []);
+                    minutes = bending.minutes;
+                    opstartMinutes = op.opstartMinutes == null || op.opstartMinutes === '' ? bending.setupMinutes : Math.max(0, Number(op.opstartMinutes));
+                } else if (key === 'buk') {
+                    minutes = Math.max(0, Number(op.minutesOverride));
+                } else if (key === 'flad' && (op.minutesOverride == null || op.minutesOverride === '')) {
+                    minutes = calculateFlatOperationMinutes({
+                        widthMm: pieceW,
+                        lengthMm: pieceL,
+                        speed: op.speed,
+                        factor: op.factor,
+                        type: op.flatType
+                    });
+                } else if (key === 'flad') {
+                    minutes = Math.max(0, Number(op.minutesOverride));
+                }
                 return {
-                    key: String(op.key || '').trim(),
+                    key,
                     label: String(op.label || op.key || 'Operation').trim(),
                     prodNo: String(op.prodNo || '').trim(),
                     minutes,
                     rate,
                     cost: round2(minutes * rate),
                     opstartMinutes,
-                    opstartCost: round2(opstartMinutes * rate)
+                    opstartCost: round2(opstartMinutes * rate),
+                    bending,
+                    flat: key === 'flad' ? { type: op.flatType, speed: Number(op.speed || 0), factor: Number(op.factor || 0) } : null
                 };
             })
             .filter(op => (op.minutes > 0 || op.opstartMinutes > 0) && op.rate >= 0);
@@ -917,6 +1228,51 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
             cutParam: cutParam ? {
                 maskine: cutParam.Maskine, skaerehast: cutSpeed, piercingMin, tillaegPct, linse: cutParam.Linse
             } : null,
+            laserTechnology: technicalParam ? {
+                technology: technicalParam.Technology, material: technicalParam.Material, thickness: Number(technicalParam.Thickness),
+                lens: technicalParam.Lens, gasPressureBar: Number(technicalParam.GasPressureBar),
+                nozzleSizeMm: Number(technicalParam.NozzleSizeMm), gasType, gasFlowNm3Hour,
+                gasConsumptionKgHour, gasPricePerKg, gasCostPerMinute: round2(gasCostPerMinute),
+                mixLineOxygenPercent: gasType === 'mixline' ? normalizeMixLineOxygenPercent(gasPrices.mixLineOxygenPercent) : null,
+                machineCode: technicalEstimate ? technicalEstimate.machine.code : detectLaserMachine(technicalParam.Technology).code,
+                machineName: technicalEstimate ? technicalEstimate.machine.name : detectLaserMachine(technicalParam.Technology).name,
+                technologyLine: technicalEstimate ? technicalEstimate.machine.line : detectLaserMachine(technicalParam.Technology).line,
+                machineRate: laserRate,
+                feedrateMmMin: technicalEstimate ? technicalEstimate.feedrateMmMin : 0,
+                selectionMode: requestedLaserTechnology ? 'manual' : 'automatic'
+            } : null,
+            laserTechnologyAlternatives: (compatibleTechnicalParams || []).map(row => {
+                const estimate = estimateLaserTechnology(row, {
+                    cutLengthM, piercings, machineRate: configuredEagleLaserRate,
+                    geniusMachineRate: Number(input.laserGeniusRate || input.laserRate || 12),
+                    nitrogenPricePerKg: gasPrices.nitrogenPricePerKg,
+                    oxygenPricePerKg: gasPrices.oxygenPricePerKg,
+                    nitrogenSpecificVolumeM3Kg: gasPrices.nitrogenSpecificVolumeM3Kg,
+                    oxygenSpecificVolumeM3Kg: gasPrices.oxygenSpecificVolumeM3Kg,
+                    mixLineOxygenPercent: gasPrices.mixLineOxygenPercent
+                });
+                const gasType = detectLaserGasType(row.Technology);
+                let unavailableReason = '';
+                if (!gasType) unavailableReason = 'Gastype mangler';
+                else if (Number(row.FeedrateLargeMmMin || 0) <= 0) unavailableReason = 'Skærehastighed mangler';
+                else if (Number(row.GasPressureBar || 0) <= 0 || Number(row.NozzleSizeMm || 0) <= 0) unavailableReason = 'Gasdata mangler';
+                return {
+                    technology: row.Technology, material: row.Material, thickness: Number(row.Thickness), lens: row.Lens,
+                    machineCode: estimate ? estimate.machine.code : detectLaserMachine(row.Technology).code,
+                    machineName: estimate ? estimate.machine.name : detectLaserMachine(row.Technology).name,
+                    technologyLine: estimate ? estimate.machine.line : detectLaserMachine(row.Technology).line,
+                    machineRate: estimate ? estimate.machineRate : null,
+                    gasType, gasPressureBar: Number(row.GasPressureBar), nozzleSizeMm: Number(row.NozzleSizeMm),
+                    mixLineOxygenPercent: gasType === 'mixline' ? Number(gasPrices.mixLineOxygenPercent == null ? 22 : gasPrices.mixLineOxygenPercent) : null,
+                    feedrateMmMin: Number(row.FeedrateLargeMmMin), piercingMilliseconds: Number(row.PiercingMilliseconds),
+                    minutes: estimate ? round2(estimate.minutes) : null, cost: estimate ? round2(estimate.cost) : null,
+                    selected: technicalParam && row.Technology === technicalParam.Technology,
+                    eligibleForAutomatic: Boolean(estimate), unavailableReason
+                };
+            }).sort((left, right) => Number(right.selected) - Number(left.selected)
+                || Number(right.eligibleForAutomatic) - Number(left.eligibleForAutomatic)
+                || (left.cost == null ? Number.MAX_VALUE : left.cost) - (right.cost == null ? Number.MAX_VALUE : right.cost)
+                || left.technology.localeCompare(right.technology)),
             nesting,
             operations: operationLines,
             components: componentLines,
@@ -928,6 +1284,8 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
                 autoLaserMinutes: round2(autoLaserMinutes),
                 laserMinutesOverridden: laserMinutesOverride != null,
                 laserCost: round2(laserCost),
+                laserMachineCost: round2(laserMachineCost),
+                gasCost: round2(gasCost),
                 resourceMinutes: round2(resourceMinutes),
                 resourceCost: round2(resourceCost),
                 componentsCost: round2(componentsCost),
@@ -1547,6 +1905,14 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
         fetchResources,
         fetchMaterials,
         fetchLaserParameters,
+        saveLaserParameter,
+        saveLaserTechnicalParameter,
+        saveLaserGasPrices,
+        importLaserParametersFromExcel,
+        fetchBendingParameters,
+        saveBendingMachine,
+        saveBendingHandlingBand,
+        saveBendingActualSample,
         fetchProcessParameters,
         fetchComponents,
         fetchCustomerNotes,
@@ -1562,6 +1928,4 @@ function createBomService({ getConnection, sql, diskCache, logEvent, getActivePr
     };
 }
 
-module.exports = {
-    createBomService
-};
+module.exports = { createBomService, selectBendingHandlingBand, calculateBendingOperation, calculateFlatOperationMinutes, calculateNitrogenFlowNm3Hour, calculateAssistGasFlowNm3Hour, detectLaserGasType, detectLaserMachine, detectLaserTechnicalMaterial, estimateLaserTechnology, selectCheapestLaserTechnology };

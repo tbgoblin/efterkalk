@@ -1,5 +1,7 @@
 // ── Lagerliste · client ─────────────────────────────────────────────────────
 let lagerlisteCurrent = null;
+let lagerlisteLiveCurrent = null;
+let lagerlisteDisplayedLabel = 'Aktuel';
 let lagerlisteSnapshotRows = [];
 let lagerlistePreviousMonth = null;
 let lagerlistePreviousMonthLabel = '';
@@ -178,7 +180,7 @@ function lagerlisteComparisonCell(value, previousValue, isChange = false) {
     return '<span class="' + cls + '">' + lagerlisteEscape(lagerlisteFormat(difference)) + '</span>';
 }
 
-function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = null }) {
+function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = null, displayLabel = 'Aktuel' }) {
     const previousTotals = comparison && comparison.totals ? comparison.totals : null;
     const viaRows = Array.isArray(categories && categories.salgordreVia) ? categories.salgordreVia : [];
     const previousViaRows = Array.isArray(comparison && comparison.categories && comparison.categories.salgordreVia)
@@ -233,8 +235,8 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
     ];
     const previousCell = value => value === null || value === undefined ? '-' : lagerlisteFormat(value);
     return '<section class="lagerliste-summary-board">'
-        + '<div class="lagerliste-summary-head"><h4>Oversigt</h4><span class="lagerliste-generated-at">Aktuel: ' + lagerlisteEscape(generatedAt) + (comparison ? ' · Forrige måned: ' + lagerlisteEscape(comparison.label) : '') + '</span></div>'
-        + '<div class="lagerliste-summary-table-wrap"><table class="lagerliste-sheet-table lagerliste-overview-table"><thead><tr><th>Post</th><th>Aktuel</th><th>Forrige måned</th><th>Ændring</th><th>Info</th></tr></thead><tbody>'
+        + '<div class="lagerliste-summary-head"><h4>Oversigt</h4><span class="lagerliste-generated-at">Periode: ' + lagerlisteEscape(displayLabel) + ' · Beregnet: ' + lagerlisteEscape(generatedAt) + (comparison ? ' · Sammenlignet med: ' + lagerlisteEscape(comparison.label) : '') + '</span></div>'
+        + '<div class="lagerliste-summary-table-wrap"><table class="lagerliste-sheet-table lagerliste-overview-table"><thead><tr><th>Post</th><th>' + lagerlisteEscape(displayLabel) + '</th><th>' + lagerlisteEscape(comparison ? comparison.label : 'Sammenligning') + '</th><th>Ændring</th><th>Info</th></tr></thead><tbody>'
         + rows.map(row => '<tr class="' + (row[4] || (row[0] === 'TOTAL' ? 'lagerliste-sheet-grand' : (row[0] === 'Varelager' ? 'lagerliste-sheet-total' : ''))) + '"><td>'
             + (row[3] ? '<button type="button" class="lagerliste-sheet-link" onclick="lagerlisteOpenSection(\'' + row[3] + '\')">' + lagerlisteEscape(row[0]) + '</button>' : lagerlisteEscape(row[0]))
             + '</td><td>' + lagerlisteEscape(lagerlisteFormat(row[1])) + '</td><td>' + lagerlisteEscape(previousCell(row[2])) + '</td><td>' + (comparison ? lagerlisteComparisonCell(row[1], row[2], true) : '-') + '</td><td class="lagerliste-explanation"><span class="lagerliste-info-icon" title="' + lagerlisteEscape(row[5]) + '" aria-label="' + lagerlisteEscape(row[5]) + '" role="img">i</span></td></tr>').join('')
@@ -610,10 +612,11 @@ function lagerlisteCollapsibleSection(title, content, targetId, value = null) {
         + '</section>';
 }
 
-function lagerlisteRender(payload, comparison = lagerlistePreviousMonth) {
+function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, displayLabel = 'Aktuel') {
     const root = document.getElementById('lagerlisteResults');
     if (!root) return;
     lagerlisteCurrent = payload;
+    lagerlisteDisplayedLabel = String(displayLabel || 'Aktuel');
     const categories = payload.categories || {};
     const totals = payload.totals || {};
     const plateGroups = categories.plateGroups || [];
@@ -625,7 +628,7 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth) {
     const viaRows = categories.salgordreVia || [];
     const sumRows = (rows, key = 'Value') => (Array.isArray(rows) ? rows : []).reduce((sum, row) => sum + Number(row[key] || 0), 0);
     const generatedAt = lagerlisteFormatDateTime(payload.generatedAt);
-    root.innerHTML = lagerlisteSummaryTable({ generatedAt, totals, categories, comparison })
+    root.innerHTML = lagerlisteSummaryTable({ generatedAt, totals, categories, comparison, displayLabel: lagerlisteDisplayedLabel })
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
         + lagerlisteCollapsibleSection('Rest Plader', lagerlisteRestGroupsTable(categories.restPlateGroups || []), 'lagerliste-rest-section', totals.restPlates)
         + lagerlisteCollapsibleSection('Stang materiale', lagerlisteStangTable(stangRows), 'lagerliste-stang-section', totals.stang)
@@ -647,7 +650,8 @@ async function loadLagerliste(forceAftercalc = false) {
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
         lagerlistePreviousMonth = null;
         lagerlistePreviousMonthLabel = '';
-        lagerlisteRender(data);
+        lagerlisteLiveCurrent = data;
+        lagerlisteRender(data, null, 'Aktuel');
     } catch (err) {
         if (root) root.innerHTML = '<div class="error">Kunne ikke hente Lagerliste: ' + lagerlisteEscape(err.message || err) + '</div>';
     }
@@ -1056,10 +1060,11 @@ async function lagerlisteResolvePeriod(key) {
     const value = String(key || '').trim();
     if (!value) throw new Error('Vælg to perioder');
     if (value === 'current') {
-        if (lagerlisteCurrent) return { label: 'Aktuel', payload: lagerlisteCurrent };
+        if (lagerlisteLiveCurrent) return { label: 'Aktuel', payload: lagerlisteLiveCurrent };
         const response = await fetch('/lagerliste/current', { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+        lagerlisteLiveCurrent = data;
         return { label: 'Aktuel', payload: data };
     }
     if (value.startsWith('month:')) {
@@ -1204,8 +1209,23 @@ async function lagerlisteComparePeriods() {
     const keyA = document.getElementById('lagerlisteCompareA') && document.getElementById('lagerlisteCompareA').value;
     const keyB = document.getElementById('lagerlisteCompareB') && document.getElementById('lagerlisteCompareB').value;
     if (!root) return;
-    if (!keyA || !keyB) {
-        root.innerHTML = '<div class="omsaetning-empty">Vælg to perioder for at sammenligne.</div>';
+    if (!keyA) {
+        root.innerHTML = '<div class="omsaetning-empty">Vælg periode A.</div>';
+        return;
+    }
+    if (!keyB) {
+        root.innerHTML = '<div class="loading">Henter periode...</div>';
+        try {
+            const periodA = await lagerlisteResolvePeriod(keyA);
+            lagerlistePreviousMonth = null;
+            lagerlistePreviousMonthLabel = '';
+            lagerlisteRender(periodA.payload, null, periodA.label);
+            root.innerHTML = '';
+            const status = document.getElementById('lagerlisteSnapshotStatus');
+            if (status) status.textContent = 'Viser ' + periodA.label + '. PDF udskriver denne periode.';
+        } catch (err) {
+            root.innerHTML = '<div class="error">Perioden kunne ikke åbnes: ' + lagerlisteEscape(err.message || err) + '</div>';
+        }
         return;
     }
     if (keyA === keyB) {
@@ -1407,12 +1427,14 @@ async function compareLagerlistePreviousMonth() {
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
         lagerlistePreviousMonth = { ...(data.current || {}), label: month };
         lagerlistePreviousMonthLabel = month;
-        lagerlisteRender(lagerlisteCurrent, lagerlistePreviousMonth);
+        const livePeriod = await lagerlisteResolvePeriod('current');
+        lagerlisteRender(livePeriod.payload, lagerlistePreviousMonth, livePeriod.label);
         if (status) status.textContent = 'Sammenligner med ' + month;
     } catch (err) {
         lagerlistePreviousMonth = null;
         lagerlistePreviousMonthLabel = '';
-        if (lagerlisteCurrent) lagerlisteRender(lagerlisteCurrent, null);
+        const livePayload = lagerlisteLiveCurrent;
+        if (livePayload) lagerlisteRender(livePayload, null, 'Aktuel');
         if (status) status.textContent = 'Ingen månedslukning for ' + month;
     }
 }
@@ -1460,6 +1482,7 @@ function exportLagerlisteJson() {
     const stamp = new Date().toISOString().replace(/[:]/g, '-').replace(/\..+$/, '');
     lagerlisteDownloadJson('lagerliste-' + stamp + '.json', {
         exportedAt: new Date().toISOString(),
+        period: lagerlisteDisplayedLabel,
         payload: lagerlisteCurrent
     });
 }
@@ -1480,9 +1503,10 @@ function exportLagerlistePdf() {
         detailRow.style.display = 'table-row';
     });
     printRoot.querySelectorAll('.lagerliste-table-tools').forEach(tool => tool.remove());
-    printWindow.document.write('<!DOCTYPE html><html><head><title>Lagerliste snapshot</title><meta charset="UTF-8">'
+    const reportLabel = String(lagerlisteDisplayedLabel || 'Aktuel');
+    printWindow.document.write('<!DOCTYPE html><html><head><title>Lagerliste - ' + lagerlisteEscape(reportLabel) + '</title><meta charset="UTF-8">'
         + '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:12px;color:#123} h2{margin:0 0 10px} table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #ccd;padding:6px;text-align:left} th{background:#eef5ff} .lagerliste-section{margin-bottom:12px} .lagerliste-section > div[id]{display:block!important} .lagerliste-plate-detail-row{display:table-row!important} .lagerliste-total-row{display:flex;gap:10px;flex-wrap:wrap;border:1px solid #ccd;padding:6px;margin-top:6px}</style>'
-        + '</head><body><h2>Lagerliste</h2>' + printRoot.innerHTML + '</body></html>');
+        + '</head><body><h2>Lagerliste · ' + lagerlisteEscape(reportLabel) + '</h2>' + printRoot.innerHTML + '</body></html>');
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => printWindow.print(), 150);
@@ -1555,7 +1579,9 @@ async function openSelectedLagerlisteSnapshot() {
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
         const payload = data.snapshot && data.snapshot.current;
         if (!payload) throw new Error('Snapshot indeholder ingen lagerdata');
-        lagerlisteRender(payload);
+        lagerlistePreviousMonth = null;
+        lagerlistePreviousMonthLabel = '';
+        lagerlisteRender(payload, null, 'Snapshot ' + snapshotId);
         if (status) status.textContent = 'Viser snapshot: ' + snapshotId;
     } catch (err) {
         if (status) status.textContent = 'Fejl: ' + String(err.message || err);

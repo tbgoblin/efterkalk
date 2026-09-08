@@ -35,22 +35,28 @@
         }
         .hero h1 { margin: 0; font-size: 30px; }
         .hero p { margin: 10px 0 0 0; max-width: 920px; font-size: 14px; }
-        .metrics {
+        .product-recap {
             margin-top: 14px;
             display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .metric-card {
-            background: var(--card);
+            grid-template-columns: minmax(220px, 1.35fr) repeat(4, minmax(130px, 1fr));
+            gap: 1px;
+            overflow: hidden;
             border: 1px solid var(--line);
             border-radius: 16px;
-            padding: 14px;
+            background: var(--line);
             box-shadow: var(--shadow);
         }
-        .metric-label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
-        .metric-value { margin-top: 8px; font-size: 28px; font-weight: 800; }
-        .metric-meta { margin-top: 4px; font-size: 12px; color: var(--muted); }
+        .recap-cell {
+            background: var(--card);
+            padding: 14px;
+        }
+        .recap-cell.primary { background: #f7fbff; }
+        .recap-primary-layout { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 12px; align-items: center; }
+        .piece-thumbnail { width: 112px; height: 76px; border: 1px solid #c7d8ea; border-radius: 6px; background: #eef5fc; }
+        .recap-label { font-size: 10px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+        .recap-value { margin-top: 5px; font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+        .recap-cell.primary .recap-value { font-size: 17px; color: var(--brand-2); }
+        .recap-meta { margin-top: 3px; font-size: 11px; color: var(--muted); }
         .workspace {
             margin-top: 14px;
             display: grid;
@@ -170,6 +176,9 @@
             background: #edf4ff; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
         }
         tbody td { padding: 8px 10px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+        td.parameter-actions { min-width: 150px; }
+        td.parameter-actions button { padding: 6px 9px; font-size: 11px; }
+        tbody td input { min-width: 90px; max-width: 220px; padding: 6px 8px; border-radius: 6px; }
         .overview-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 14px; }
         .stack { display: grid; gap: 14px; }
         .flow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -240,7 +249,29 @@
         .sub-row input { padding: 7px 9px; font-size: 12px; }
         .sub-row .laser-check { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
         .sub-row button { padding: 6px 10px; font-size: 12px; }
-        .calc-grid { display: grid; grid-template-columns: minmax(520px, 1fr) minmax(560px, 1fr); gap: 18px; align-items: start; }
+        .calc-grid { display: block; }
+        .calc-input-store { display: none; }
+        .calc-stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+        .calc-step {
+            min-height: 82px; padding: 12px; text-align: left; color: var(--ink);
+            border: 1px solid var(--line); background: #fff; border-radius: 8px;
+            display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; align-content: center;
+        }
+        .calc-step:hover:not(:disabled) { border-color: #7cadde; background: #f7fbff; }
+        .calc-step.active { color: #fff; border-color: var(--brand); background: var(--brand); }
+        .calc-step.complete { border-color: #93c7a4; background: #f0faf3; }
+        .calc-step-no { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #e7f0fa; color: var(--brand-2); font-weight: 800; }
+        .calc-step.active .calc-step-no { background: #fff; color: var(--brand); }
+        .calc-step.complete .calc-step-no { background: var(--green); color: #fff; }
+        .calc-step strong, .calc-step small { display: block; }
+        .calc-step small { margin-top: 3px; color: var(--muted); font-weight: 500; line-height: 1.25; }
+        .calc-step.active small { color: rgba(255,255,255,0.78); }
+        .calc-workbench { display: grid; grid-template-columns: minmax(440px, 0.85fr) minmax(560px, 1.15fr); gap: 16px; align-items: start; }
+        .calc-step-modal { width: min(820px, 96vw); max-height: min(820px, 92vh); display: flex; flex-direction: column; }
+        .calc-step-modal .modal-body { overflow: auto; padding: 16px; }
+        .calc-step-modal .wizard-source-panel { display: block; border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+        .calc-step-modal .wizard-source-panel > .subhead { display: none; }
+        .calc-step-modal .modal-actions { padding: 12px 16px; border-top: 1px solid var(--line-2); }
         #view-beregner .stack { gap: 16px; }
         #view-beregner .table-shell { border-radius: 14px; }
         #view-beregner .detail-pad { gap: 14px; }
@@ -259,6 +290,19 @@
         .result-hero h4 { margin: 0; color: rgba(255, 255, 255, 0.9); }
         .result-hero .muted { color: rgba(233, 242, 252, 0.78); }
         .result-head-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .result-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .query-preview {
+            margin: 0;
+            padding: 14px;
+            max-height: min(62vh, 620px);
+            overflow: auto;
+            border: 1px solid #c7d6e6;
+            border-radius: 6px;
+            background: #101820;
+            color: #e7edf3;
+            font: 12px/1.55 Consolas, "Courier New", monospace;
+            white-space: pre;
+        }
         .copy-quote-btn { background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.4); color: #fff; padding: 7px 12px; font-size: 12px; border-radius: 10px; font-weight: 700; }
         .copy-quote-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.26); }
         .copy-quote-btn:disabled { opacity: 0.45; cursor: default; }
@@ -273,6 +317,19 @@
         .breakdown-legend { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 8px; font-size: 11px; }
         .legend-item { display: inline-flex; align-items: center; gap: 5px; color: #eaf3ff; font-weight: 600; white-space: nowrap; }
         .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+        .technology-comparison tbody tr.selected { background: #e9f9ef; }
+        .technology-comparison tbody tr.unavailable { color: var(--muted); }
+        .technology-comparison { width: 1305px; table-layout: fixed; }
+        .technology-comparison th { position: sticky; overflow: visible; }
+        .technology-comparison td { overflow: hidden; text-overflow: ellipsis; }
+        .column-resizer {
+            position: absolute; top: 0; right: -4px; z-index: 3;
+            width: 9px; height: 100%; cursor: col-resize; touch-action: none;
+        }
+        .column-resizer::after { content: ""; position: absolute; top: 20%; bottom: 20%; left: 4px; width: 1px; background: #a9bfd8; }
+        .column-resizer:hover::after, .column-resizer:focus-visible::after { width: 2px; background: var(--brand); }
+        .technology-choice { display: inline-flex; align-items: center; gap: 6px; }
+        .technology-choice .tag { background: #d8f2e2; border-color: #9fd3b3; color: #176638; }
         .toast-stack { position: fixed; top: 16px; right: 16px; z-index: 400; display: grid; gap: 8px; }
         .toast { min-width: 220px; max-width: 360px; background: #11375b; color: #fff; padding: 11px 14px; border-radius: 12px; box-shadow: 0 14px 34px rgba(9, 30, 56, 0.35); font-size: 13px; font-weight: 600; animation: toastIn 0.25s ease; }
         .toast.ok { background: linear-gradient(135deg, #1d7a44, #2e9e5b); }
@@ -363,15 +420,18 @@
             *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
         }
         @media (max-width: 1300px) {
-            .calc-grid { grid-template-columns: 1fr; }
+            .calc-workbench { grid-template-columns: 1fr; }
         }
         @media (max-width: 1300px) {
-            .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .product-recap { grid-template-columns: repeat(3, minmax(0, 1fr)); }
             .board-grid, .overview-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 980px) {
             .workspace { grid-template-columns: 1fr; }
-            .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .product-recap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .recap-cell.primary { grid-column: 1 / -1; }
+            .calc-stepper { grid-template-columns: 1fr; }
+            .calc-step { min-height: 60px; }
             .kv-grid, .flow-grid { grid-template-columns: 1fr; }
         }
     </style>
@@ -383,13 +443,12 @@
             <p>Tilbuds- og styklisteberegner på linje med BOM-regnearket: kunde-, produkt- og revisionsopslag, råvarer med lager, ressourcer og priskalkulation for laser, buk, svejs, flad og stykliste. Alt er læsning — der skrives aldrig til Visma.</p>
         </section>
 
-        <section class="metrics">
-            <div class="metric-card"><div class="metric-label">Kunder</div><div class="metric-value" id="metricCustomers">-</div><div class="metric-meta">Actor-katalog</div></div>
-            <div class="metric-card"><div class="metric-label">Produkter</div><div class="metric-value" id="metricProducts">-</div><div class="metric-meta">For valgt kunde</div></div>
-            <div class="metric-card"><div class="metric-label">Revisioner</div><div class="metric-value" id="metricRevisions">-</div><div class="metric-meta">TgNo-opslag</div></div>
-            <div class="metric-card"><div class="metric-label">Ressourcer</div><div class="metric-value" id="metricResources">-</div><div class="metric-meta">Maskiner og processer</div></div>
-            <div class="metric-card"><div class="metric-label">Materialer</div><div class="metric-value" id="metricMaterials">-</div><div class="metric-meta">Råvarer</div></div>
-            <div class="metric-card"><div class="metric-label">Parametre</div><div class="metric-value" id="metricCalculators">-</div><div class="metric-meta">Laser/Buk/Svejs/Flad</div></div>
+        <section class="product-recap" aria-label="Produktoversigt">
+            <div class="recap-cell primary"><div class="recap-primary-layout"><div><div class="recap-label">Aktuelt emne</div><div class="recap-value" id="recapProduct">Ny beregning</div><div class="recap-meta" id="recapDrawing">Ingen tegning indlæst</div></div><canvas id="pieceThumbnailCanvas" class="piece-thumbnail" width="224" height="152" aria-label="Forhåndsvisning af aktuelt emne"></canvas></div></div>
+            <div class="recap-cell"><div class="recap-label">Kunde</div><div class="recap-value" id="recapCustomer">Ikke valgt</div><div class="recap-meta" id="recapCustomerNo">Standard prisliste</div></div>
+            <div class="recap-cell"><div class="recap-label">Plade</div><div class="recap-value" id="recapMaterial">Ikke valgt</div><div class="recap-meta" id="recapMaterialMeta">Materiale og tykkelse</div></div>
+            <div class="recap-cell"><div class="recap-label">Antal</div><div class="recap-value" id="recapQuantity">1 stk</div><div class="recap-meta" id="recapProcesses">Laser</div></div>
+            <div class="recap-cell"><div class="recap-label">Pris</div><div class="recap-value" id="recapPrice">-</div><div class="recap-meta" id="recapTotal">Ikke beregnet</div></div>
         </section>
 
         <section class="workspace">
@@ -486,20 +545,46 @@
                     <section class="view" id="view-calculators">
                         <div class="toolbar">
                             <div class="field"><label>Lasermaskine</label><input id="laserMachineInput" value="R1100" placeholder="R1100, R1103..." /></div>
-                            <div class="field"><label>Procesfamilie</label><select id="processFilterSelect"><option value="">Alle</option><option value="laser">Laser</option><option value="buk">Buk</option><option value="svejs">Svejs</option><option value="flad">Flad</option></select></div>
+                            <div class="field"><label>Vis ressourcer for</label><select id="processFilterSelect"><option value="">Alle</option><option value="laser">Laser</option><option value="buk">Buk</option><option value="svejs">Svejs</option><option value="flad">Flad</option></select></div>
                             <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="loadCalculatorsBtn">Hent parametre</button></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="addLaserParameterBtn">Ny laserparameter</button></div>
+                            <div class="field" style="flex:0 0 190px;"><label>&nbsp;</label><button type="button" id="addLaserTechnicalBtn">Ny laserteknologi</button></div>
+                            <div class="field" style="flex:0 0 210px;"><label>&nbsp;</label><button type="button" id="importLaserExcelBtn">Importér laser fra Excel</button></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="addBendingMachineBtn">Ny buk-maskine</button></div>
+                            <div class="field" style="flex:0 0 180px;"><label>&nbsp;</label><button type="button" id="addBendingBandBtn">Ny håndteringsklasse</button></div>
                         </div>
                         <div class="stack">
-                            <div class="table-shell"><div class="subhead"><strong>Laser parametre</strong><small>FreeInf2 FrInfTp=100</small></div><div class="table-wrap"><table><thead id="laserHead"></thead><tbody id="laserBody"></tbody></table></div></div>
+                            <div class="table-shell">
+                                <div class="subhead"><strong>Globale gaspriser</strong><small>GOH SQL · bruges på tværs af alle laserteknologier</small></div>
+                                <div class="toolbar">
+                                    <div class="field"><label>Azotpris (DKK/kg)</label><input id="nitrogenPriceInput" type="number" step="0.01" min="0" /></div>
+                                    <div class="field"><label>Oxygenpris (DKK/kg)</label><input id="oxygenPriceInput" type="number" step="0.01" min="0" /></div>
+                                    <div class="field"><label>Azot faktor (m³/kg)</label><input id="nitrogenSpecificVolumeInput" type="number" step="0.001" min="0.001" value="0.862" /></div>
+                                    <div class="field"><label>Oxygen faktor (m³/kg)</label><input id="oxygenSpecificVolumeInput" type="number" step="0.001" min="0.001" value="0.700" /></div>
+                                    <div class="field"><label>MixLine O2-andel (%)</label><input id="mixLineOxygenPercentInput" type="number" step="0.1" min="0" max="22" /></div>
+                                    <div class="field" style="flex:0 0 160px;"><label>&nbsp;</label><button type="button" id="saveLaserGasPricesBtn">Gem gaspriser</button></div>
+                                </div>
+                            </div>
+                            <div class="table-shell"><div class="subhead"><strong>Laser parametre</strong><small>GOH SQL · ændringer bruges direkte i BOM-beregneren</small></div><div class="table-wrap"><table><thead id="laserHead"></thead><tbody id="laserBody"></tbody></table></div></div>
+                            <div class="table-shell"><div class="subhead"><strong>Laser teknologi</strong><small>GOH SQL · linse, effekt, hastighed, gastryk og dysestørrelse fra Laserberegner2</small></div><div class="table-wrap"><table><thead id="laserTechnicalHead"></thead><tbody id="laserTechnicalBody"></tbody></table></div></div>
+                            <div class="table-shell"><div class="subhead"><strong>Buk-maskiner</strong><small>GOH SQL · kapacitet, cyklustid og opstart</small></div><div class="table-wrap"><table><thead id="bendingMachineHead"></thead><tbody id="bendingMachineBody"></tbody></table></div></div>
+                            <div class="table-shell"><div class="subhead"><strong>Buk håndteringsklasser</strong><small>GOH SQL · vægt/størrelse og håndteringstid</small></div><div class="table-wrap"><table><thead id="bendingBandHead"></thead><tbody id="bendingBandBody"></tbody></table></div></div>
                             <div class="table-shell"><div class="subhead"><strong>Process matrix</strong><small>FreeInf1 FrInfTp 61/62</small></div><div class="table-wrap"><table><thead id="processHead"></thead><tbody id="processBody"></tbody></table></div></div>
                             <div class="table-shell"><div class="subhead"><strong>Process resources</strong><small>Laser / Buk / Svejs / Flad fra resource catalog</small></div><div class="table-wrap"><table><thead id="processResourceHead"></thead><tbody id="processResourceBody"></tbody></table></div></div>
                         </div>
                     </section>
 
                     <section class="view" id="view-beregner">
+                        <div class="calc-stepper" id="calcStepper" aria-label="Beregningstrin">
+                            <button type="button" class="calc-step" data-calc-step="customer"><span class="calc-step-no">1</span><span><strong>Kunde</strong><small id="calcStepCustomerStatus">Vælg kunde</small></span></button>
+                            <button type="button" class="calc-step" data-calc-step="drawing"><span class="calc-step-no">2</span><span><strong>DXF / tegning</strong><small id="calcStepDrawingStatus">Indlæs fil</small></span></button>
+                            <button type="button" class="calc-step" data-calc-step="material"><span class="calc-step-no">3</span><span><strong>Plade</strong><small id="calcStepMaterialStatus">Vælg materiale</small></span></button>
+                            <button type="button" class="calc-step" data-calc-step="processes"><span class="calc-step-no">4</span><span><strong>Processer</strong><small id="calcStepProcessesStatus">Kontrollér operationer</small></span></button>
+                            <button type="button" class="calc-step" data-calc-step="result"><span class="calc-step-no">5</span><span><strong>Resultat</strong><small id="calcStepResultStatus">Afventer beregning</small></span></button>
+                        </div>
                         <div class="calc-grid">
-                            <div class="stack">
-                                <div class="table-shell">
+                            <div class="stack calc-input-store" id="calcInputStore">
+                                <div class="table-shell wizard-source-panel" id="calcStepCustomerPanel">
                                     <div class="subhead"><strong>1. Kunde &amp; pristype</strong><small>valgfrit — indstilling huskes pr kunde</small></div>
                                     <div class="detail-pad">
                                         <div class="calc-form">
@@ -511,7 +596,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="table-shell">
+                                <div class="table-shell wizard-source-panel" id="calcStepMaterialPanel">
                                     <div class="subhead"><strong>2. Plade / materiale</strong><small>søg som i Excel — med lagerstatus</small></div>
                                     <div class="detail-pad">
                                         <div class="calc-form">
@@ -524,10 +609,10 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="table-shell">
+                                <div class="table-shell wizard-source-panel" id="calcStepDrawingPanel">
                                     <div class="subhead"><strong>3. Emne</strong><small>upload tegning eller indtast manuelt</small></div>
                                     <div class="detail-pad">
-                                        <div class="field"><label>Tegningsfil (DXF / STEP / PDF)</label><input type="file" id="drawingFileInput" accept=".dxf,.step,.stp,.pdf" /></div>
+                                        <div class="field"><label>Tegningsfil (DXF / STEP / PDF)</label><button type="button" id="chooseDrawingFileBtn">Vælg tegning</button><input type="file" id="drawingFileInput" accept=".dxf,.step,.stp,.pdf" hidden /></div>
                                         <div class="muted" id="fileAnalysisStatus">Ingen fil — udfyld felterne manuelt.</div>
                                         <div class="kv-grid" id="fileAnalysisGrid"></div>
                                         <div class="calc-form" style="margin-top:10px;">
@@ -541,7 +626,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="table-shell">
+                                <div class="table-shell wizard-source-panel" id="calcStepProcessesPanel">
                                     <div class="subhead"><strong>4. Processer</strong><small>aktivér som i Excel — tider, satser og opstart kan rettes</small></div>
                                     <div class="detail-pad">
                                         <div class="stack" id="processCards" style="gap:8px;"></div>
@@ -560,7 +645,8 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="stack">
+                            <div class="calc-workbench">
+                                <div class="stack">
                                 <div class="table-shell">
                                     <div class="subhead"><strong>DXF-visning</strong><small id="dxfViewerMeta">2D forhåndsvisning og måling</small></div>
                                     <div class="detail-pad">
@@ -573,10 +659,13 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="result-box result-hero">
+                                <div class="result-box result-hero" id="calcResultAnchor">
                                     <div class="result-head-row">
                                         <h4>Pris-resultat</h4>
-                                        <button type="button" class="copy-quote-btn" id="copyQuoteBtn" disabled title="Kopiér tilbudslinjer til udklipsholderen">Kopiér tilbud</button>
+                                        <div class="result-actions">
+                                            <button type="button" class="copy-quote-btn" id="vismaQueryPreviewBtn" disabled title="Vis den lokale SQL-preview uden at sende data">Vis Visma-query</button>
+                                            <button type="button" class="copy-quote-btn" id="copyQuoteBtn" disabled title="Kopiér tilbudslinjer til udklipsholderen">Kopiér tilbud</button>
+                                        </div>
                                     </div>
                                     <div class="price-duo">
                                         <div class="price-cell"><label>Pris pr stk</label><div class="price-big" id="quotePriceBig">-</div></div>
@@ -588,9 +677,20 @@
                                         <div class="breakdown-legend" id="breakdownLegend"></div>
                                     </div>
                                 </div>
+                                </div>
+                                <div class="stack">
+                                <div class="table-shell" id="laserTechnologyComparison" hidden>
+                                    <div class="subhead"><strong>Laserteknologier til emnet</strong><small id="laserTechnologyComparisonMeta">-</small></div>
+                                    <div class="table-wrap"><table class="technology-comparison">
+                                        <colgroup><col style="width:90px"><col style="width:190px"><col style="width:110px"><col style="width:90px"><col style="width:180px"><col style="width:100px"><col style="width:115px"><col style="width:100px"><col style="width:130px"><col style="width:90px"><col style="width:110px"></colgroup>
+                                        <thead><tr><th>Valg</th><th>Teknologi</th><th>Materiale</th><th>Tykkelse</th><th>Proces / gas</th><th>Linse</th><th>Hastighed</th><th>Piercing</th><th>Tryk / dyse</th><th>Tid</th><th>Laserpris</th></tr></thead>
+                                        <tbody id="laserTechnologyComparisonBody"></tbody>
+                                    </table></div>
+                                </div>
                                 <div class="table-shell"><div class="subhead"><strong>Nesting på pladen</strong><small id="nestingMeta">-</small></div><div class="detail-pad"><div class="calc-form"><div class="field"><label>Nesting-basis</label><select id="nestingQtyMode"><option value="order">Ordreantal</option><option value="full">Fuld plade</option><option value="custom">Tilpasset antal</option></select></div><div class="field"><label>Tilpasset antal</label><input id="nestingCustomQty" type="number" min="1" step="1" value="1" /></div></div><canvas id="nestingCanvas" width="640" height="360" style="width:100%; height:auto; border-radius:8px; display:none;"></canvas><div class="kv-grid" id="nestingGrid" style="margin-top:8px;"></div></div></div>
                                 <div class="table-shell"><div class="subhead"><strong>Prismatrix</strong><small id="matrixMeta">-</small></div><div class="table-wrap"><table><thead><tr><th>Antal</th><th>Pris pr stk</th><th>I alt</th><th>Note</th></tr></thead><tbody id="matrixBody"></tbody></table></div></div>
                                 <div class="table-shell"><div class="subhead"><strong>Prisopdeling pr emne</strong><small id="quoteMeta">-</small></div><div class="detail-pad"><div class="kv-grid" id="quoteGrid"></div></div></div>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -607,12 +707,44 @@
         </section>
     </div>
 
+    <div class="modal-backdrop" id="calcStepModal">
+        <div class="modal calc-step-modal" role="dialog" aria-modal="true" aria-labelledby="calcStepModalTitle">
+            <div class="modal-head">
+                <div><strong id="calcStepModalTitle">Beregning</strong><div class="muted" id="calcStepModalSubtitle"></div></div>
+                <button type="button" class="alt" id="closeCalcStepBtn">Luk</button>
+            </div>
+            <div class="modal-body" id="calcStepModalBody"></div>
+            <div class="modal-actions">
+                <button type="button" class="alt" id="calcStepBackBtn">Tilbage</button>
+                <button type="button" id="calcStepNextBtn">Næste</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="vismaQueryModal">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="vismaQueryTitle">
+            <div class="modal-head">
+                <div>
+                    <strong id="vismaQueryTitle">Visma-query preview</strong>
+                    <div class="muted">Lokal preview · ingen data sendes · transaktionen afsluttes med ROLLBACK</div>
+                </div>
+                <button type="button" class="alt" id="closeVismaQueryBtn">Luk</button>
+            </div>
+            <div class="modal-body">
+                <pre class="query-preview" id="vismaQueryText"></pre>
+                <div class="modal-actions">
+                    <button type="button" id="copyVismaQueryBtn">Kopiér query</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-backdrop" id="draftProductModal">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="draftTitle">
             <div class="modal-head">
                 <div>
                     <strong id="draftTitle">Nyt produkt</strong>
-                    <div class="muted" id="draftModalSubtitle">Gem lokalt eller opret direkte i Visma.</div>
+                    <div class="muted" id="draftModalSubtitle">Gem lokalt · direkte Visma-oprettelse er sat på pause, mens den komplette struktur valideres.</div>
                 </div>
                 <button type="button" class="alt" id="closeDraftProductBtn">Luk</button>
             </div>
@@ -681,9 +813,9 @@
         </div>
     </div>
 
-    <script src="/assets/bom/bom-core.js"></script>
-    <script src="/assets/bom/bom-views.js"></script>
-    <script src="/assets/bom/bom-beregner.js"></script>
-    <script src="/assets/bom/bom-main.js"></script>
+    <script src="/assets/bom/bom-core.js?v=1.1.49-7"></script>
+    <script src="/assets/bom/bom-views.js?v=1.1.49-11"></script>
+    <script src="/assets/bom/bom-beregner.js?v=1.1.49-22"></script>
+    <script src="/assets/bom/bom-main.js?v=1.1.49-12"></script>
 </body>
 </html>
