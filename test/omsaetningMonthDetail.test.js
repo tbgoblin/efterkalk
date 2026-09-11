@@ -27,7 +27,7 @@ test('monthly accounting rows are grouped by invoice without losing corrections'
             InvoNo: '1042048', VoNo: 1042048, VoDt: 20260827,
             CustNo: 20742710, CustomerName: 'ACJ Maskiner ApS',
             AcNo: 11012, AccountName: 'Salg', RevenueDkk: 555295,
-            MatchedOrdNo: 398383, OrderMatchCount: 1
+            MatchedOrdNo: 398383, OrderMatchCount: 1, OrderDate: 20260812
         },
         {
             InvoNo: '1042048', VoNo: 1042048, VoDt: 20260827,
@@ -44,6 +44,7 @@ test('monthly accounting rows are grouped by invoice without losing corrections'
 
     const order = result.rows.find(row => row.invoiceNo === '1042048');
     assert.equal(order.ordNo, 398383);
+    assert.equal(order.orderDate, 20260812);
     assert.equal(order.linkStatus, 'matched');
     assert.equal(order.revenueDkk, 301611);
     assert.equal(order.accounts.length, 2);

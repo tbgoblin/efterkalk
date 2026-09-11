@@ -2303,8 +2303,9 @@ function createApiRouter({
 
     router.get('/efterkalk/customer-invoices', async (req, res) => {
         try {
+            const allCustomers = String(req.query.scope || '').toLowerCase() === 'all';
             const custNo = parseInt(req.query.custno);
-            if (Number.isNaN(custNo) || custNo <= 0) {
+            if (!allCustomers && (Number.isNaN(custNo) || custNo <= 0)) {
                 return res.status(400).json({ ok: false, error: 'custno ugyldigt' });
             }
             // from/to as YYYY-MM-DD, stored in Visma as INT YYYYMMDD
@@ -2319,12 +2320,13 @@ function createApiRouter({
 
             const pool = await getConnection();
             const result = await pool.request()
-                .input('custNo',   sql.Int, custNo)
+                .input('custNo',   sql.Int, allCustomers ? null : custNo)
                 .input('fromDate', sql.Int, fromInt)
                 .input('toDate',   sql.Int, toInt)
                 .query(`
                     SELECT
                         O.OrdNo,
+                        O.CustNo,
                         O.LstInvDt,
                         O.InvoAm,
                         O.Gr4,
@@ -2338,7 +2340,7 @@ function createApiRouter({
                         SELECT TOP 1 A.Usr FROM Actor A
                         WHERE LTRIM(RTRIM(CONVERT(VARCHAR(50), A.EmpNo))) = LTRIM(RTRIM(CONVERT(VARCHAR(50), O.SelBuy)))
                     ) SU
-                    WHERE O.CustNo  = @custNo
+                    WHERE (@custNo IS NULL OR O.CustNo = @custNo)
                       AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
                       AND O.InvoAm  > 0
                       AND O.LstInvDt >= @fromDate
@@ -2347,6 +2349,7 @@ function createApiRouter({
                 `);
             const rows = (result.recordset || []).map(r => ({
                 OrdNo:        r.OrdNo,
+                CustNo:       r.CustNo,
                 LstInvDt:     r.LstInvDt,
                 InvoAm:       Number(r.InvoAm || 0),
                 Gr4:          r.Gr4,
@@ -2356,7 +2359,7 @@ function createApiRouter({
                 SellerUsr:    r.SellerUsr
             }));
             const totalInvoAm = rows.reduce((s, r) => s + r.InvoAm, 0);
-            res.json({ ok: true, rows, count: rows.length, totalInvoAm, custNo, fromInt, toInt });
+            res.json({ ok: true, rows, count: rows.length, totalInvoAm, custNo: allCustomers ? null : custNo, allCustomers, fromInt, toInt });
         } catch (err) {
             logEvent('ERROR efterkalk/customer-invoices: ' + err.message);
             res.status(500).json({ ok: false, error: err.message });

@@ -25,6 +25,7 @@ function groupMonthDetailRows(rawRows) {
         const invoiceNo = String(rawRow.InvoNo || '').trim();
         const voucherNo = Number(rawRow.VoNo || 0);
         const invoiceDate = Number(rawRow.VoDt || 0);
+        const orderDate = Number(rawRow.OrderDate || 0);
         const custNo = Number(rawRow.CustNo || 0);
         const matchCount = Number(rawRow.OrderMatchCount || 0);
         const matchedOrdNo = matchCount === 1 ? Number(rawRow.MatchedOrdNo || 0) : null;
@@ -37,6 +38,7 @@ function groupMonthDetailRows(rawRows) {
                 invoiceNo,
                 voucherNo,
                 invoiceDate,
+                orderDate: orderDate > 0 ? orderDate : null,
                 custNo: custNo > 0 ? custNo : null,
                 customerName: String(rawRow.CustomerName || '').trim(),
                 ordNo: matchedOrdNo && matchedOrdNo > 0 ? matchedOrdNo : null,
@@ -304,7 +306,8 @@ function createOmsaetningService({ getConnection, sql }) {
             SELECT
                 revenue.*,
                 orderMatch.OrdNo AS MatchedOrdNo,
-                orderMatch.MatchCount AS OrderMatchCount
+                orderMatch.MatchCount AS OrderMatchCount,
+                matchedOrder.OrdDt AS OrderDate
             FROM FilteredRevenue revenue
             OUTER APPLY (
                 SELECT
@@ -324,7 +327,10 @@ function createOmsaetningService({ getConnection, sql }) {
                       AND revenue.InvoNo <> ''
                       AND customerTransaction.InvoNo = revenue.InvoNo
                 ) candidate
-            ) orderMatch;
+            ) orderMatch
+            LEFT JOIN Ord matchedOrder
+              ON orderMatch.MatchCount = 1
+             AND matchedOrder.OrdNo = orderMatch.OrdNo;
 
             SELECT DISTINCT CONVERT(int, Val8) AS WeekKey
             FROM FreeInf2
