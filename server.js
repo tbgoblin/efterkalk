@@ -4630,7 +4630,7 @@ app.get('/', (req, res) => {
                     const response = await fetch('/efterkalk/month-snapshot?month=' + encodeURIComponent(month));
                     if (!response.ok) return false;
                     const payload = await response.json();
-                    if (!payload.ok || !payload.found) return false;
+                    if (!payload.ok || !payload.found || !Array.isArray(payload.rows) || payload.rows.length === 0) return false;
                     const intFromDate = value => Number(String(value || '').slice(0, 10).replace(/-/g, '')) || 0;
                     _kfInvoiceRows = (payload.rows || []).map(row => ({
                         OrdNo:Number(row.OrdNo), OrdDt:intFromDate(row.OrderDate), CustNo:row.CustNo,
