@@ -55,9 +55,9 @@ const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match ba
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v27_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v28_';
 const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v26_';
-const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
+const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v27_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
 // Parser JSON globale 256kb, ma /bom/analyze-file ha il proprio parser 40mb a livello di route
@@ -11856,6 +11856,7 @@ app.get('/', (req, res) => {
                     updateOrderMarginCell(detailOrdNo);
                     const _invoAm = Number(data.orderHeader.InvoAm || 0);
                     const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
+                    const _lastInvoice = String(data.orderHeader.LstInvo || '').trim();
                     let invoiceStatusBadge, invoiceStatusSub = '';
                     if (_invoAm === 0) {
                         invoiceStatusBadge = '<span class="invoice-status-badge status-in-production">🔧 I produktion</span>';
@@ -11938,6 +11939,7 @@ app.get('/', (req, res) => {
                         html += '<div class="order-header-item"><div class="order-header-label">Margin (' + getMarginModeLabel() + ')</div><div class="order-header-value">' + getMarginBadge(orderMarginPercent) + '</div></div>';
                     }
                     html += '<div class="order-header-item"><div class="order-header-label">Fakturastatus</div><div class="order-header-value">' + invoiceStatusBadge + invoiceStatusSub + '</div></div>';
+                    html += '<div class="order-header-item"><div class="order-header-label">Seneste faktura</div><div class="order-header-value">' + escapeHtml(_lastInvoice || '—') + '</div></div>';
                     html += '</div>';
                     if (costExclusion.excludedLineCount > 0) {
                         html += '<div class="sales-line-exclusion-help active"><strong>Permanent GOH-justering:</strong> kost fra ' + formatCount(costExclusion.excludedLineCount) + ' linje(r) er markeret som udeladt. Fratrukket kost: ' + formatNumber(costExclusion.excludedCost) + ' DKK; kost før justering: ' + formatNumber(costExclusion.originalCost) + ' DKK. Salgsprisen er uændret.' + (costExclusion.deferredSharedLineCount > 0 ? '<div style="margin-top:4px;"><strong>Bemærk:</strong> ' + formatCount(costExclusion.deferredSharedLineCount) + ' valgt(e) linje(r) deler produktionsordre med en linje, der stadig er medtaget; den fælles kost er derfor ikke trukket fra endnu.</div>' : '') + '</div>';
