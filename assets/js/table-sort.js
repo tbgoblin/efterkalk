@@ -6,6 +6,7 @@
     const ASC_CLASS = 'universal-sort-asc';
     const DESC_CLASS = 'universal-sort-desc';
     const TABLE_CLASS = 'universal-table-behavior';
+    const COLUMN_RESIZER_CLASS = 'universal-column-resizer';
     const RESIZABLE_CLASS = 'universal-resizable-window';
     const MODAL_SELECTOR = '.kf-modal,.settings-modal,.modal-box,.oversigt-modal-shell,.order-detail-modal-shell,.modal-backdrop > .modal';
     const OVERLAY_SELECTOR = '.kf-modal-overlay,.settings-modal-overlay,.modal-overlay,.oversigt-modal-overlay,.order-detail-modal-overlay,.modal-backdrop';
@@ -20,6 +21,11 @@
             'th.' + SORTABLE_CLASS + '{cursor:pointer;user-select:none;}' +
             'table thead th.' + STICKY_CLASS + '{position:sticky!important;top:0!important;z-index:6;}' +
             'table.' + TABLE_CLASS + '>thead{position:sticky!important;top:0!important;z-index:6;}' +
+            'th.' + SORTABLE_CLASS + '{position:relative;}' +
+            '.' + COLUMN_RESIZER_CLASS + '{position:absolute;top:0;right:-4px;width:9px;height:100%;z-index:10;cursor:col-resize;touch-action:none;}' +
+            '.' + COLUMN_RESIZER_CLASS + '::before{content:"";position:absolute;top:20%;bottom:20%;left:4px;border-left:1px solid transparent;}' +
+            'th:hover>.' + COLUMN_RESIZER_CLASS + '::before,.' + COLUMN_RESIZER_CLASS + ':focus-visible::before{border-left-color:rgba(255,255,255,.85);}' +
+            'body.universal-column-resizing,body.universal-column-resizing *{cursor:col-resize!important;user-select:none!important;}' +
             '.' + RESIZABLE_CLASS + '{resize:both!important;min-width:min(360px,90vw);min-height:min(240px,70vh);max-width:calc(100vw - 24px)!important;max-height:calc(100vh - 24px)!important;}' +
             'th.' + SORTABLE_CLASS + '::after{content:" ↕";opacity:.55;font-size:.85em;}' +
             'th.' + ASC_CLASS + '::after{content:" ▲";opacity:1;}' +
@@ -36,6 +42,64 @@
             Boolean(th.querySelector('button,a,input,select,[onmousedown],.via-col-resizer'));
     }
 
+    function ensureColumnGroup(table, columnCount) {
+        let colgroup = table.querySelector(':scope > colgroup[data-universal-columns]');
+        if (!colgroup) {
+            colgroup = document.createElement('colgroup');
+            colgroup.dataset.universalColumns = 'true';
+            table.insertBefore(colgroup, table.firstChild);
+        }
+        while (colgroup.children.length < columnCount) colgroup.appendChild(document.createElement('col'));
+        return colgroup;
+    }
+
+    function addColumnResizer(table, th, columnCount) {
+        if (th.querySelector('.' + COLUMN_RESIZER_CLASS)) return;
+        const handle = document.createElement('span');
+        handle.className = COLUMN_RESIZER_CLASS;
+        handle.tabIndex = 0;
+        handle.title = 'Træk for at ændre kolonnens bredde';
+        handle.setAttribute('aria-label', 'Ændr kolonnebredde');
+        handle.addEventListener('pointerdown', event => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const colgroup = ensureColumnGroup(table, columnCount);
+            const columns = Array.from(colgroup.children);
+            const headers = Array.from(table.tHead.rows[0].cells);
+            const initialWidths = headers.map(header => Math.max(48, Math.round(header.getBoundingClientRect().width)));
+            initialWidths.forEach((width, index) => {
+                if (columns[index]) columns[index].style.width = width + 'px';
+            });
+            const startX = event.clientX;
+            const startWidth = initialWidths[th.cellIndex];
+            const startTableWidth = Math.max(table.scrollWidth, initialWidths.reduce((sum, width) => sum + width, 0));
+            table.style.tableLayout = 'fixed';
+            table.style.width = startTableWidth + 'px';
+            table.style.minWidth = startTableWidth + 'px';
+            document.body.classList.add('universal-column-resizing');
+            handle.setPointerCapture(event.pointerId);
+
+            const move = moveEvent => {
+                const nextWidth = Math.max(48, Math.round(startWidth + moveEvent.clientX - startX));
+                columns[th.cellIndex].style.width = nextWidth + 'px';
+                const nextTableWidth = Math.max(1, startTableWidth + nextWidth - startWidth);
+                table.style.width = nextTableWidth + 'px';
+                table.style.minWidth = nextTableWidth + 'px';
+            };
+            const finish = () => {
+                document.body.classList.remove('universal-column-resizing');
+                handle.removeEventListener('pointermove', move);
+                handle.removeEventListener('pointerup', finish);
+                handle.removeEventListener('pointercancel', finish);
+            };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', finish);
+            handle.addEventListener('pointercancel', finish);
+        });
+        th.appendChild(handle);
+    }
+
     function decorateTable(table) {
         if (!table || table.nodeName !== 'TABLE' || table.dataset.universalSort === 'off') return;
         const tbody = table.tBodies && table.tBodies[0];
@@ -44,12 +108,18 @@
         if (!hasFixedSections) table.classList.add(TABLE_CLASS);
         const headers = table.tHead ? Array.from(table.tHead.querySelectorAll('th')) : [];
         if (!headers.length) return;
+        const firstRowHeaders = table.tHead && table.tHead.rows.length === 1
+            ? Array.from(table.tHead.rows[0].cells)
+            : [];
+        const canResizeColumns = !hasFixedSections && firstRowHeaders.length > 1 &&
+            firstRowHeaders.every(header => header.colSpan === 1 && header.rowSpan === 1);
         headers.forEach(th => {
             if (!hasFixedSections) th.classList.add(STICKY_CLASS);
             if (isSpecialHeader(th)) return;
             th.classList.add(SORTABLE_CLASS);
             th.tabIndex = th.tabIndex >= 0 ? th.tabIndex : 0;
             if (!th.title) th.title = 'Klik for at sortere kolonnen';
+            if (canResizeColumns) addColumnResizer(table, th, firstRowHeaders.length);
         });
     }
 
@@ -144,7 +214,7 @@
         const th = event.target.closest && event.target.closest('th');
         const table = th && th.closest('table');
         if (!th || !table || table.dataset.universalSort === 'off' || isSpecialHeader(th) ||
-            event.target.closest('button,a,input,select,[onmousedown],.via-col-resizer')) return;
+            event.target.closest('button,a,input,select,[onmousedown],.via-col-resizer,.' + COLUMN_RESIZER_CLASS)) return;
         th.classList.add(SORTABLE_CLASS);
         if (!table.classList.contains('kf-customer-summary-table')) th.classList.add(STICKY_CLASS);
         sortByHeader(th);

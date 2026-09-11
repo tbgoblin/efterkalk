@@ -1583,18 +1583,7 @@ function createApiRouter({
             const accountCsv = String(req.query.accounts || '').trim();
             const customerCsv = String(req.query.customers || '').trim();
             const detail = await omsaetningService.getMonthDetail({ month, accountCsv, customerCsv });
-            const weekKeys = Array.isArray(detail.weekKeys) ? detail.weekKeys : [];
-            let weeklyRows = [];
-
-            if (weekKeys.length > 0) {
-                const summary = await ordreindgangService.getSummary({
-                    fraWeek: weekKeys[0],
-                    tilWeek: weekKeys[weekKeys.length - 1]
-                });
-                const allowedWeeks = new Set(weekKeys);
-                weeklyRows = (Array.isArray(summary.weeklyRows) ? summary.weeklyRows : [])
-                    .filter(row => allowedWeeks.has(String(row.weekKey || '')));
-            }
+            const weeklyRows = Array.isArray(detail.weeklyOrderRows) ? detail.weeklyOrderRows : [];
 
             const totalOrdK = weeklyRows.reduce((sum, row) => sum + Number(row.totalOrd || 0), 0);
             const totalTilbudK = weeklyRows.reduce((sum, row) => sum + Number(row.totalTilbud || 0), 0);

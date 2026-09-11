@@ -1759,20 +1759,35 @@ app.get('/', (req, res) => {
             .omsaetning-threshold-table td:nth-child(1), .omsaetning-threshold-table td:nth-child(2) { white-space:nowrap; }
             .omsaetning-threshold-table .omsaetning-gauge-wrap { min-width:0; }
             .omsaetning-threshold-table .omsaetning-gauge-delta { overflow-wrap:anywhere; }
-            .omsaetning-compact-table-wrap { overflow-x:hidden; }
+            .omsaetning-compact-table-wrap { overflow-x:auto; }
             .omsaetning-month-orders-table, .omsaetning-month-weeks-table { min-width:0; width:100%; table-layout:fixed; }
-            .omsaetning-month-orders-table th:nth-child(1) { width:18%; }
-            .omsaetning-month-orders-table th:nth-child(2) { width:30%; }
-            .omsaetning-month-orders-table th:nth-child(3) { width:27%; }
+            .omsaetning-month-orders-table th:nth-child(1) { width:12%; }
+            .omsaetning-month-orders-table th:nth-child(2) { width:21%; }
+            .omsaetning-month-orders-table th:nth-child(3) { width:25%; }
             .omsaetning-month-orders-table th:nth-child(4) { width:25%; }
+            .omsaetning-month-orders-table th:nth-child(5) { width:17%; }
             .omsaetning-month-orders-table th, .omsaetning-month-orders-table td,
             .omsaetning-month-weeks-table th, .omsaetning-month-weeks-table td { padding:6px 8px; }
             .omsaetning-month-orders-table td { overflow-wrap:anywhere; }
             .omsaetning-month-orders-table td:first-child, .omsaetning-month-orders-table td:last-child { white-space:nowrap; }
-            .omsaetning-month-weeks-table th:nth-child(1) { width:25%; }
-            .omsaetning-month-weeks-table th:nth-child(2), .omsaetning-month-weeks-table th:nth-child(3) { width:37.5%; }
+            .omsaetning-month-weeks-table th:nth-child(1) { width:15%; }
+            .omsaetning-month-weeks-table th:nth-child(2) { width:25%; }
+            .omsaetning-month-weeks-table th:nth-child(3) { width:34%; }
+            .omsaetning-month-weeks-table th:nth-child(4) { width:26%; }
+            .omsaetning-month-weeks-table th { font-size:11px; white-space:normal; line-height:1.2; }
             .omsaetning-month-weeks-table td { white-space:nowrap; }
             .omsaetning-month-weeks-table tfoot td { background:#eaf3ff; color:#0f3560; border-top:2px solid #b9d3f1; border-bottom:none; font-weight:800; }
+            .omsaetning-booked-orders-wrap, .omsaetning-received-orders-wrap { overflow-x:auto; }
+            .omsaetning-received-orders-table { width:100%; min-width:1280px; table-layout:fixed; }
+            .omsaetning-received-orders-table th:nth-child(1) { width:9%; }
+            .omsaetning-received-orders-table th:nth-child(2) { width:11%; }
+            .omsaetning-received-orders-table th:nth-child(3) { width:18%; }
+            .omsaetning-received-orders-table th:nth-child(4) { width:14%; }
+            .omsaetning-received-orders-table th:nth-child(5) { width:13%; }
+            .omsaetning-received-orders-table th:nth-child(n+6) { width:7%; }
+            .omsaetning-received-orders-table th, .omsaetning-received-orders-table td { white-space:normal; overflow-wrap:normal; word-break:normal; }
+            .omsaetning-received-orders-table td:nth-child(1), .omsaetning-received-orders-table td:nth-child(2),
+            .omsaetning-received-orders-table td:nth-child(n+5) { white-space:nowrap; }
             .omsaetning-empty { margin-top:10px; padding:10px; border:1px dashed #c7daef; border-radius:8px; color:#4f6d8c; background:#f8fbff; }
             .ordreindgang-budget-panel { margin-top:10px; border:1px solid #dbe8f9; border-radius:10px; background:linear-gradient(180deg,#f7fbff 0%,#eef6ff 100%); padding:10px; }
             .ordreindgang-budget-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -5410,6 +5425,8 @@ app.get('/', (req, res) => {
                 const month = String(payload && payload.month || omsaetningSelectedMonthKey || '').trim();
                 const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
                 const ordreindgang = payload && payload.ordreindgang ? payload.ordreindgang : {};
+                const receivedOrders = Array.isArray(payload && payload.receivedOrders) ? payload.receivedOrders : [];
+                const receivedSummary = payload && payload.receivedSummary ? payload.receivedSummary : {};
                 const weeklyRows = Array.isArray(ordreindgang.weeklyRows) ? ordreindgang.weeklyRows : [];
                 const totalRevenueDkk = Number(payload && payload.totalRevenueDkk || 0);
                 const linkedRevenueDkk = Number(payload && payload.linkedRevenueDkk || 0);
@@ -5418,13 +5435,24 @@ app.get('/', (req, res) => {
                 const unresolvedCount = Number(payload && payload.unresolvedCount || 0);
                 const totalOrdDkk = Number(ordreindgang.totalOrdK || 0) * 1000;
                 const displayedWeeklyOrdDkk = weeklyRows.reduce((sum, row) => sum + (Number(row && row.totalOrd || 0) * 1000), 0);
-                const displayedWeeklyTilbudDkk = weeklyRows.reduce((sum, row) => sum + (Number(row && row.totalTilbud || 0) * 1000), 0);
+                const remainingByWeek = new Map();
+                const currentRemainingByWeek = new Map();
+                receivedOrders.forEach(row => {
+                    const weekKey = String(row && row.weekKey || '');
+                    remainingByWeek.set(weekKey, (remainingByWeek.get(weekKey) || 0) + Number(row && row.historicalRemainingDkk || 0));
+                    currentRemainingByWeek.set(weekKey, (currentRemainingByWeek.get(weekKey) || 0) + Math.max(0, Number(row && row.remainingDkk || 0)));
+                });
+                const displayedWeeklyRemainingDkk = weeklyRows.reduce((sum, row) => sum + Number(remainingByWeek.get(String(row && row.weekKey || '')) || 0), 0);
+                const displayedWeeklyCurrentRemainingDkk = weeklyRows.reduce((sum, row) => sum + Number(currentRemainingByWeek.get(String(row && row.weekKey || '')) || 0), 0);
 
                 title.textContent = formatMonthDa(month + '-01') + ' · bogførte ordrer og Ordreindgang';
                 let html = '<div class="omsaetning-month-detail-kpis">' +
                     '<div class="omsaetning-month-detail-kpi"><span>Bogført omsætning</span><strong>' + escapeHtmlFE(formatDkkDa(totalRevenueDkk)) + ' DKK</strong></div>' +
                     '<div class="omsaetning-month-detail-kpi"><span>Koblede ordrer</span><strong>' + escapeHtmlFE(formatCount(linkedCount)) + ' · ' + escapeHtmlFE(formatDkkDa(linkedRevenueDkk)) + ' DKK</strong></div>' +
                     '<div class="omsaetning-month-detail-kpi"><span>Ordreindgang, månedens uger</span><strong>' + escapeHtmlFE(formatDkkDa(totalOrdDkk)) + ' DKK</strong></div>' +
+                    '<div class="omsaetning-month-detail-kpi"><span>Ordreindgang, valgte uger</span><strong>' + escapeHtmlFE(formatCount(Number(receivedSummary.receivedCount || 0))) + ' ordrer · ' + escapeHtmlFE(formatDkkDa(Number(receivedSummary.receivedValueDkk || 0))) + ' DKK</strong></div>' +
+                    '<div class="omsaetning-month-detail-kpi"><span>Heraf faktureret i måneden</span><strong>' + escapeHtmlFE(formatCount(Number(receivedSummary.invoicedThisMonthCount || 0))) + ' ordrer · ' + escapeHtmlFE(formatDkkDa(Number(receivedSummary.invoicedThisMonthDkk || 0))) + ' DKK</strong></div>' +
+                    '<div class="omsaetning-month-detail-kpi"><span>Ikke afsluttet</span><strong>' + escapeHtmlFE(formatCount(Number(receivedSummary.openCount || 0))) + ' ordrer · mangler ' + escapeHtmlFE(formatDkkDa(Number(receivedSummary.remainingDkk || 0))) + ' DKK</strong></div>' +
                     '</div>';
 
                 html += '<section class="omsaetning-month-detail-section"><h4>Efterkalkulationsordrer fra bogføringen</h4>';
@@ -5432,7 +5460,7 @@ app.get('/', (req, res) => {
                     html += '<div class="omsaetning-month-detail-empty">Ingen bogførte omsætningsbevægelser med de valgte konto- og kundefiltre i denne måned.</div>';
                 } else {
                     html += '<div class="omsaetning-table-wrap omsaetning-compact-table-wrap" style="margin:0;border-radius:8px;max-height:390px;">' +
-                        '<table class="omsaetning-table omsaetning-month-orders-table"><thead><tr><th>Ordre</th><th>Ordredato</th><th>Kunde</th><th>Faktura / dato</th><th class="omsaetning-cell-right">Bogført beløb</th></tr></thead><tbody>';
+                        '<table class="omsaetning-table omsaetning-month-orders-table"><thead><tr><th>Ordre</th><th>Ordredato</th><th>Kunde</th><th>Faktura / dato</th><th class="omsaetning-cell-right">Faktureret ordre</th></tr></thead><tbody>';
                     for (const row of rows) {
                         const ordNo = Number(row && row.ordNo || 0);
                         const linkStatus = String(row && row.linkStatus || 'unmatched');
@@ -5461,22 +5489,52 @@ app.get('/', (req, res) => {
                 }
                 html += '</section>';
 
+                html += '<section class="omsaetning-month-detail-section"><h4>Ordrer modtaget i måneden — fakturering og rest</h4>';
+                if (!receivedOrders.length) {
+                    html += '<div class="omsaetning-month-detail-empty">Ingen salgsordrer med ordredato i den valgte måned og de valgte kundefiltre.</div>';
+                } else {
+                    html += '<div class="omsaetning-table-wrap omsaetning-compact-table-wrap" style="margin:0;border-radius:8px;max-height:390px;">' +
+                        '<table class="omsaetning-table omsaetning-received-orders-table"><thead><tr>' +
+                        '<th>Ordre</th><th>Ordredato</th><th>Kunde</th><th>Status</th><th>Faktura / dato</th>' +
+                        '<th class="omsaetning-cell-right">Ordreværdi</th><th class="omsaetning-cell-right">Faktureret i måneden</th><th class="omsaetning-cell-right">Faktureret i alt</th><th class="omsaetning-cell-right">Rest ved månedens udgang</th><th class="omsaetning-cell-right">Rest i dag</th>' +
+                        '</tr></thead><tbody>';
+                    for (const row of receivedOrders) {
+                        const status = row.completedAfterMonth ? 'Faktureret senere' : (row.complete ? 'Afsluttet' : (row.invoicedDkk > 0 ? 'Delvist faktureret' : 'Ikke faktureret'));
+                        const invoice = String(row.invoiceNo || '').trim() || '—';
+                        html += '<tr><td><button type="button" class="omsaetning-month-order-link" onclick="searchOrderByNo(' + Number(row.ordNo || 0) + ')">' + escapeHtmlFE(String(row.ordNo || '—')) + '</button></td>' +
+                            '<td>' + escapeHtmlFE(formatOmsaetningVismaDate(row.orderDate)) + '</td>' +
+                            '<td>' + escapeHtmlFE(String(row.customerName || row.custNo || '—')) + '</td>' +
+                            '<td>' + escapeHtmlFE(status) + (row.invoicedThisMonth ? '<div class="omsaetning-month-detail-note">Faktureret samme måned</div>' : '') + '</td>' +
+                            '<td>' + escapeHtmlFE(invoice) + '<div class="omsaetning-month-detail-note">' + escapeHtmlFE(formatOmsaetningVismaDate(row.invoiceDate)) + '</div></td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(row.orderValueDkk)) + '</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(row.invoicedInMonthDkk)) + '</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(row.invoicedDkk)) + '</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(row.historicalRemainingDkk)) + '</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Math.max(0, Number(row.remainingDkk || 0)))) + '</td></tr>';
+                    }
+                    html += '</tbody></table></div>';
+                    html += '<p class="omsaetning-month-detail-note">Status og rest vises ved udgangen af den valgte måned ud fra finansposteringerne i AcTr til og med månedens sidste dag. Seneste fakturadato bruges også til at markere ordrer, der blev faktureret senere.</p>';
+                }
+                html += '</section>';
+
                 html += '<section class="omsaetning-month-detail-section"><h4>Ordreindgang for uger knyttet til måneden</h4>';
                 if (weeklyRows.length === 0) {
                     html += '<div class="omsaetning-month-detail-empty">Ingen Ordreindgang-uger blev fundet for måneden.</div>';
                 } else {
                     html += '<div class="omsaetning-table-wrap omsaetning-compact-table-wrap" style="margin:0;border-radius:8px;">' +
-                        '<table class="omsaetning-table omsaetning-month-weeks-table"><thead><tr><th>Uge</th><th class="omsaetning-cell-right">Ordreindgang</th><th class="omsaetning-cell-right">Tilbud</th></tr></thead><tbody>';
+                        '<table class="omsaetning-table omsaetning-month-weeks-table"><thead><tr><th>Uge</th><th class="omsaetning-cell-right">Ordreindgang</th><th class="omsaetning-cell-right">Rest ved månedens udgang</th><th class="omsaetning-cell-right">Rest i dag</th></tr></thead><tbody>';
                     for (const weekRow of weeklyRows) {
                         html += '<tr><td>' + escapeHtmlFE(formatWeekLabel(weekRow.weekKey)) + '</td>' +
                             '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Number(weekRow.totalOrd || 0) * 1000)) + ' DKK</td>' +
-                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Number(weekRow.totalTilbud || 0) * 1000)) + ' DKK</td></tr>';
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Number(remainingByWeek.get(String(weekRow.weekKey || '')) || 0))) + ' DKK</td>' +
+                            '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(Number(currentRemainingByWeek.get(String(weekRow.weekKey || '')) || 0))) + ' DKK</td></tr>';
                     }
                     html += '</tbody><tfoot><tr><td>I alt</td>' +
                         '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(displayedWeeklyOrdDkk)) + ' DKK</td>' +
-                        '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(displayedWeeklyTilbudDkk)) + ' DKK</td>' +
+                        '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(displayedWeeklyRemainingDkk)) + ' DKK</td>' +
+                        '<td class="omsaetning-cell-right">' + escapeHtmlFE(formatDkkDa(displayedWeeklyCurrentRemainingDkk)) + ' DKK</td>' +
                         '</tr></tfoot></table></div>';
-                    html += '<p class="omsaetning-month-detail-note">En uge med dage i to måneder vises som en hel uge, så værdien er identisk med modulet Ordreindgang og ikke opdeles kunstigt.</p>';
+                    html += '<p class="omsaetning-month-detail-note">For uger på tværs af to måneder medregnes kun ordrer med ordredato i den valgte måned. Det forhindrer, at samme ordrebeløb tælles i begge måneder.</p>';
                 }
                 html += '</section>';
 

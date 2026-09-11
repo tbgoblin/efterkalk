@@ -84,7 +84,17 @@ test('month detail query uses the same filters and returns exact related week ke
                         AccountName: 'Salg', RevenueDkk: 500,
                         MatchedOrdNo: 400100, OrderMatchCount: 1
                     }],
-                    [{ WeekKey: 202632 }, { WeekKey: 202633 }]
+                    [{ WeekKey: 202632 }, { WeekKey: 202633 }],
+                    [{
+                        OrdNo: 400100, OrderDate: 20260803, WeekKey: 202632, CustNo: 1,
+                        CustomerName: 'Kunde', InvoNo: '100', InvoiceDate: 20260810,
+                        InvoicedDkk: 500, RemainingDkk: 100, OrderValueDkk: 600
+                    }, {
+                        OrdNo: 400101, OrderDate: 20260820, WeekKey: 202633, CustNo: 1,
+                        CustomerName: 'Kunde', InvoNo: '101', InvoiceDate: 20260905,
+                        InvoicedDkk: 250, RemainingDkk: 0, OrderValueDkk: 250
+                    }],
+                    [{ OrdNo: 400100, InvoicedThroughMonthDkk: 500 }]
                 ]
             };
         }
@@ -114,6 +124,26 @@ test('month detail query uses the same filters and returns exact related week ke
     assert.match(sqlText, /t\.AcYrPr = @period/);
     assert.match(sqlText, /o\.InvoNo/);
     assert.match(sqlText, /CustTr customerTransaction/);
+    assert.match(sqlText, /o\.InvoSF/);
+    assert.match(sqlText, /o\.InvoIF/);
+    assert.match(sqlText, /orderCalendar\.Val8/);
     assert.deepEqual(result.weekKeys, ['202632', '202633']);
     assert.equal(result.rows[0].ordNo, 400100);
+    assert.equal(result.receivedSummary.receivedCount, 2);
+    assert.equal(result.receivedSummary.receivedValueDkk, 850);
+    assert.equal(result.receivedSummary.invoicedThisMonthCount, 1);
+    assert.equal(result.receivedSummary.invoicedThisMonthDkk, 500);
+    assert.equal(result.receivedOrders[0].invoicedInMonthDkk, 500);
+    assert.equal(result.receivedOrders[0].invoicedThroughMonthDkk, 500);
+    assert.equal(result.receivedOrders[0].historicalRemainingDkk, 100);
+    assert.equal(result.receivedOrders[0].weekKey, '202632');
+    assert.equal(result.receivedOrders[1].completedAfterMonth, true);
+    assert.equal(result.receivedOrders[1].complete, false);
+    assert.equal(result.receivedOrders[1].historicalRemainingDkk, 250);
+    assert.deepEqual(result.weeklyOrderRows, [
+        { weekKey: '202632', totalOrd: 0.6, totalTilbud: 0 },
+        { weekKey: '202633', totalOrd: 0.25, totalTilbud: 0 }
+    ]);
+    assert.equal(result.receivedSummary.openCount, 2);
+    assert.equal(result.receivedSummary.remainingDkk, 350);
 });
