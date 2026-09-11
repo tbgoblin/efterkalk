@@ -614,6 +614,7 @@ app.use(createApiRouter({
     spawn,
     diskCache,
     gohData,
+    gohCache,
     logEvent,
     getOrComputeAftercalc,
     getOrComputeOrderMargin,
@@ -932,6 +933,10 @@ app.get('/', (req, res) => {
             .kf-customer-summary { margin:0 0 14px; }
             .kf-customer-summary h3 { margin:0 0 7px; color:#0f3560; font-size:15px; }
             .kf-customer-summary .hint { margin:-3px 0 8px; color:#6d8299; font-size:11px; }
+            .kf-customer-summary-tools { display:flex; align-items:center; gap:10px; margin:0 0 8px; }
+            .kf-customer-summary-tools input { flex:1; min-width:180px; border:1px solid #c9dbf2; border-radius:7px; padding:7px 9px; font-size:12px; }
+            .kf-customer-summary-tools span { color:#5f7892; font-size:11px; font-weight:700; white-space:nowrap; }
+            .kf-customer-summary-table tfoot tr + tr td { border-top:1px solid #c0d8f5; }
             .kf-trend-panel { margin:0 0 14px; padding:12px; border:1px solid #bfd8f5; border-radius:10px; background:#f8fbff; }
             .kf-trend-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
             .kf-trend-head h3 { margin:0; color:#0f3560; font-size:15px; }
@@ -2835,6 +2840,10 @@ app.get('/', (req, res) => {
                     <div id="kfCustomerSummary" class="kf-customer-summary" style="display:none;">
                         <h3>Kunder — månedsanalyse</h3>
                         <div class="hint">Omsætningsandel viser kundens del af månedens samlede fakturering. Kost, DB og DG vises, når alle kundens ordrer er beregnet.</div>
+                        <div class="kf-customer-summary-tools">
+                            <input id="kfCustomerSummaryFilter" type="search" placeholder="Søg kunde eller kundenummer…" oninput="filterKfCustomerSummary()" />
+                            <span id="kfCustomerSummaryCount"></span>
+                        </div>
                         <div class="kf-table-wrap kf-customer-summary-scroll">
                             <table class="kf-table kf-customer-summary-table">
                                 <thead><tr>
@@ -4167,6 +4176,7 @@ app.get('/', (req, res) => {
             let _kfMarginAbort     = false;
             let _kfAllCustomers   = false;
             let _kfTrendRequestId = 0;
+            let _kfBackfillRequested = false;
 
             function openKundefakturaModal() {
                 _kfAllCustomers = false;
@@ -4311,9 +4321,11 @@ app.get('/', (req, res) => {
                 if (!_kfAllCustomers && !_kfSelectedCustNo) { kfSetStatus('Vælg en kunde først.'); return; }
                 let from = (document.getElementById('kfFromDate') || {}).value || '';
                 let to   = (document.getElementById('kfToDate')   || {}).value || '';
+                let selectedMonth = '';
                 if (_kfAllCustomers) {
                     const month = (document.getElementById('kfMonth') || {}).value || '';
                     if (month.length !== 7 || month.charAt(4) !== '-') { kfSetStatus('Vælg en måned.'); return; }
+                    selectedMonth = month;
                     const parts = month.split('-').map(Number);
                     from = month + '-01';
                     to = month + '-' + String(new Date(parts[0], parts[1], 0).getDate()).padStart(2, '0');
@@ -4328,6 +4340,7 @@ app.get('/', (req, res) => {
                 _resetKfKpis();
 
                 try {
+                    if (_kfAllCustomers && await _loadKfStoredMonth(selectedMonth)) return;
                     const url = '/efterkalk/customer-invoices?' + (_kfAllCustomers ? 'scope=all' : 'custno=' + _kfSelectedCustNo) +
                         '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to || new Date().toISOString().slice(0,10));
                     const r = await fetch(url);
@@ -4368,6 +4381,11 @@ app.get('/', (req, res) => {
                 if (pct > 20) return 'ok';
                 if (pct >= 5)  return 'warn';
                 return 'bad';
+            }
+
+            function _kfIsoDateFromInt(intDate) {
+                const s = String(intDate || '');
+                return s.length === 8 ? s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8) : null;
             }
 
             function _kfCalcMarginPct(rev, cost) {
@@ -4436,7 +4454,7 @@ app.get('/', (req, res) => {
                     const cls = _kfMarginClass(dg);
                     const customerLabel = escapeHtml(String(group.name)) + (group.custNo ? ' <span style="color:#789;font-size:11px;">(' + escapeHtml(String(group.custNo)) + ')</span>' : '');
                     const trendButton = group.custNo ? '<button class="kf-trend-btn" onclick="_loadKfCustomerTrend(' + Number(group.custNo) + ')">Vis trend</button>' : '';
-                    return '<tr>' +
+                    return '<tr data-kf-customer-row="1" data-kf-orders="' + group.orders + '" data-kf-invoice="' + group.invoice + '" data-kf-cost="' + group.cost + '" data-kf-loaded="' + group.loaded + '">' +
                         '<td><strong>' + customerLabel + '</strong>' + trendButton + '</td>' +
                         '<td class="r">' + group.orders + '</td>' +
                         '<td class="r">' + formatNumber(group.invoice) + '</td>' +
@@ -4447,17 +4465,56 @@ app.get('/', (req, res) => {
                         '<td class="r kf-margin-cell ' + (complete ? cls : 'na') + '">' + (dg !== null ? dg.toFixed(1) + '%' : pending) + '</td>' +
                         '</tr>';
                 }).join('');
-                tfoot.innerHTML = '<tr class="total-row">' +
-                    '<td><strong>TOTAL (' + rows.length + ' kunder)</strong></td>' +
-                    '<td class="r"><strong>' + _kfInvoiceRows.length + '</strong></td>' +
-                    '<td class="r"><strong>' + formatNumber(totalInvoice) + '</strong></td>' +
-                    '<td class="r"><strong>100,0%</strong></td>' +
-                    '<td class="r"><strong>' + (allComplete ? formatNumber(totalCost) : pending) + '</strong></td>' +
-                    '<td class="r"><strong>' + (allComplete && totalInvoice !== 0 ? ((totalCost / totalInvoice) * 100).toFixed(1) + '%' : pending) + '</strong></td>' +
-                    '<td class="r"><strong>' + (totalDb !== null ? formatNumber(totalDb) : pending) + '</strong></td>' +
-                    '<td class="r"><strong>' + (totalDg !== null ? totalDg.toFixed(1) + '%' : pending) + '</strong></td>' +
-                    '</tr>';
                 section.style.display = 'block';
+                filterKfCustomerSummary();
+            }
+
+            function _kfCustomerTotalRow(label, customerCount, orders, invoice, cost, complete, monthlyInvoice) {
+                const pending = '<span style="color:#8a9bad" title="Beregner kost…">…</span>';
+                const share = monthlyInvoice !== 0 ? (invoice / monthlyInvoice) * 100 : 0;
+                const db = complete ? invoice - cost : null;
+                const dg = complete && invoice !== 0 ? _kfCalcMarginPct(invoice, cost) : null;
+                const costPct = complete && invoice !== 0 ? (cost / invoice) * 100 : null;
+                return '<tr class="total-row">' +
+                    '<td><strong>' + label + ' (' + customerCount + ' kunder)</strong></td>' +
+                    '<td class="r"><strong>' + orders + '</strong></td>' +
+                    '<td class="r"><strong>' + formatNumber(invoice) + '</strong></td>' +
+                    '<td class="r"><strong>' + share.toFixed(1) + '%</strong></td>' +
+                    '<td class="r"><strong>' + (complete ? formatNumber(cost) : pending) + '</strong></td>' +
+                    '<td class="r"><strong>' + (costPct !== null ? costPct.toFixed(1) + '%' : (orders ? pending : '—')) + '</strong></td>' +
+                    '<td class="r"><strong>' + (db !== null ? formatNumber(db) : (orders ? pending : '—')) + '</strong></td>' +
+                    '<td class="r"><strong>' + (dg !== null ? dg.toFixed(1) + '%' : (orders ? pending : '—')) + '</strong></td>' +
+                    '</tr>';
+            }
+
+            function filterKfCustomerSummary() {
+                const tbody = document.getElementById('kfCustomerSummaryBody');
+                const tfoot = document.getElementById('kfCustomerSummaryFoot');
+                const input = document.getElementById('kfCustomerSummaryFilter');
+                const count = document.getElementById('kfCustomerSummaryCount');
+                if (!tbody || !tfoot) return;
+                const query = String(input ? input.value : '').trim().toLowerCase();
+                const tableRows = Array.from(tbody.querySelectorAll('tr[data-kf-customer-row]'));
+                const total = { customers:0, orders:0, invoice:0, cost:0, loaded:0 };
+                const visible = { customers:0, orders:0, invoice:0, cost:0, loaded:0 };
+                tableRows.forEach(row => {
+                    const values = {
+                        orders:Number(row.dataset.kfOrders || 0), invoice:Number(row.dataset.kfInvoice || 0),
+                        cost:Number(row.dataset.kfCost || 0), loaded:Number(row.dataset.kfLoaded || 0)
+                    };
+                    const matches = !query || String(row.cells[0] ? row.cells[0].textContent : '').toLowerCase().includes(query);
+                    row.style.display = matches ? '' : 'none';
+                    total.customers++; total.orders += values.orders; total.invoice += values.invoice; total.cost += values.cost; total.loaded += values.loaded;
+                    if (matches) {
+                        visible.customers++; visible.orders += values.orders; visible.invoice += values.invoice; visible.cost += values.cost; visible.loaded += values.loaded;
+                    }
+                });
+                const visibleComplete = visible.loaded === visible.orders;
+                const totalComplete = total.loaded === total.orders;
+                const visibleRow = _kfCustomerTotalRow('SYNLIG TOTAL', visible.customers, visible.orders, visible.invoice, visible.cost, visibleComplete, total.invoice);
+                const monthlyRow = _kfCustomerTotalRow('MÅNED TOTAL', total.customers, total.orders, total.invoice, total.cost, totalComplete, total.invoice);
+                tfoot.innerHTML = query ? visibleRow + monthlyRow : monthlyRow;
+                if (count) count.textContent = query ? visible.customers + ' af ' + total.customers + ' kunder' : total.customers + ' kunder';
             }
 
             function closeKfCustomerTrend() {
@@ -4500,6 +4557,18 @@ app.get('/', (req, res) => {
                 panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
 
                 try {
+                    const storedUrl = '/efterkalk/customer-trend-snapshots?custno=' + encodeURIComponent(customerNo)
+                        + '&from=' + dateText(startDate) + '&to=' + dateText(endDate);
+                    const storedResponse = await fetch(storedUrl);
+                    if (storedResponse.ok) {
+                        const storedPayload = await storedResponse.json();
+                        if (storedPayload.ok && Array.isArray(storedPayload.rows) && storedPayload.rows.length) {
+                            if (requestId !== _kfTrendRequestId) return;
+                            _renderKfStoredCustomerTrendRows(selectedMonth, storedPayload.rows);
+                            if (status) status.textContent = storedPayload.rows.length + ' gemte månedsværdier fra GOHCache.';
+                            return;
+                        }
+                    }
                     const url = '/efterkalk/customer-invoices?custno=' + customerNo + '&from=' + dateText(startDate) + '&to=' + dateText(endDate);
                     const response = await fetch(url);
                     const payload = await response.json();
@@ -4537,6 +4606,70 @@ app.get('/', (req, res) => {
                     if (status) status.textContent = 'Fejl: ' + err.message;
                     tbody.innerHTML = '<tr><td colspan="7">Kunne ikke hente udviklingen.</td></tr>';
                 }
+            }
+
+            async function _loadKfStoredMonth(month) {
+                try {
+                    const response = await fetch('/efterkalk/month-snapshot?month=' + encodeURIComponent(month));
+                    if (!response.ok) return false;
+                    const payload = await response.json();
+                    if (!payload.ok || !payload.found) return false;
+                    const intFromDate = value => Number(String(value || '').slice(0, 10).replace(/-/g, '')) || 0;
+                    _kfInvoiceRows = (payload.rows || []).map(row => ({
+                        OrdNo:Number(row.OrdNo), OrdDt:intFromDate(row.OrderDate), CustNo:row.CustNo,
+                        LstInvDt:intFromDate(row.InvoiceDate), InvoAm:Number(row.Revenue || 0), InvoNo:row.InvoiceNo,
+                        CustomerName:row.CustomerName, CustomerShrt:row.CustomerName, SellerUsr:row.Seller
+                    }));
+                    _kfMarginMap = {};
+                    (payload.rows || []).forEach(row => {
+                        if (row.CostComplete && row.Cost !== null && row.Cost !== undefined) {
+                            _kfMarginMap[String(row.OrdNo)] = { totalRevenue:Number(row.Revenue || 0), totalCost:Number(row.Cost || 0) };
+                        }
+                    });
+                    kfSetStatus(_kfInvoiceRows.length + ' fakturaordrer indlæst fra GOHCache · afstemmer med Visma i baggrunden');
+                    _renderKfTable();
+                    _updateKfKpis();
+                    _addKfTotalRow();
+                    _startKfSnapshotBackfill();
+                    return true;
+                } catch {
+                    return false;
+                }
+            }
+
+            function _renderKfStoredCustomerTrendRows(selectedMonth, storedRows) {
+                const tbody = document.getElementById('kfCustomerTrendBody');
+                if (!tbody) return;
+                const byMonth = new Map((storedRows || []).map(row => {
+                    const date = new Date(row.PeriodStart);
+                    const key = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+                    return [key, row];
+                }));
+                const selectedParts = selectedMonth.split('-').map(Number);
+                const months = [];
+                for (let offset = 11; offset >= 0; offset--) {
+                    const date = new Date(selectedParts[0], selectedParts[1] - 1 - offset, 1);
+                    months.push(date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0'));
+                }
+                let previousDg = null;
+                tbody.innerHTML = months.map(key => {
+                    const row = byMonth.get(key);
+                    const complete = !!(row && row.CostComplete);
+                    const dg = complete && row.MarginPct !== null ? Number(row.MarginPct) : null;
+                    const delta = dg !== null && previousDg !== null ? dg - previousDg : null;
+                    if (dg !== null) previousDg = dg;
+                    const deltaClass = delta === null ? '' : (delta >= 0 ? 'up' : 'down');
+                    const cls = _kfMarginClass(dg);
+                    return '<tr>' +
+                        '<td>' + escapeHtml(_kfMonthLabel(key)) + '</td>' +
+                        '<td class="r">' + (row ? Number(row.InvoiceOrderCount || 0) : 0) + '</td>' +
+                        '<td class="r">' + (row ? formatNumber(Number(row.Revenue || 0)) : '0,00') + '</td>' +
+                        '<td class="r">' + (complete ? formatNumber(Number(row.Cost || 0)) : '—') + '</td>' +
+                        '<td class="r kf-margin-cell ' + (complete ? cls : 'na') + '">' + (complete ? formatNumber(Number(row.ContributionMargin || 0)) : '—') + '</td>' +
+                        '<td class="r kf-margin-cell ' + (dg !== null ? cls : 'na') + '">' + (dg !== null ? dg.toFixed(1) + '%' : '—') + '</td>' +
+                        '<td class="r kf-trend-delta ' + deltaClass + '">' + (delta === null ? '—' : (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' pp') + '</td>' +
+                        '</tr>';
+                }).join('');
             }
 
             function _renderKfCustomerTrendRows(selectedMonth, invoiceRows, costs) {
@@ -4659,7 +4792,7 @@ app.get('/', (req, res) => {
 
             function _downloadKfCsv(lines, suffix) {
                 const month = ((document.getElementById('kfMonth') || {}).value || new Date().toISOString().slice(0, 7)).replace(/[^0-9-]/g, '');
-                const blob = new Blob(['\uFEFFsep=;\r\n' + lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
+                const blob = new Blob(['\uFEFFsep=;\\r\\n' + lines.join('\\r\\n')], { type:'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.download = 'maanedens-db_' + month + '_' + suffix + '.csv';
@@ -4758,6 +4891,43 @@ app.get('/', (req, res) => {
                 updateProgress();
                 _updateKfKpis();
                 _addKfTotalRow();
+                if (_kfAllCustomers && !_kfMarginAbort) await _saveKfMonthSnapshot();
+            }
+
+            async function _saveKfMonthSnapshot() {
+                const month = (document.getElementById('kfMonth') || {}).value || '';
+                if (!/^\\d{4}-\\d{2}$/.test(month) || !_kfInvoiceRows.length) return;
+                const parts = month.split('-').map(Number);
+                const periodEnd = month + '-' + String(new Date(parts[0], parts[1], 0).getDate()).padStart(2, '0');
+                const rows = _kfInvoiceRows.map(row => {
+                    const margin = _kfMarginMap[String(row.OrdNo)];
+                    return {
+                        OrdNo:Number(row.OrdNo), OrderDate:_kfIsoDateFromInt(row.OrdDt),
+                        InvoNo:String(row.InvoNo || ''), InvoiceDate:_kfIsoDateFromInt(row.LstInvDt),
+                        CustNo:String(row.CustNo || ''), CustomerName:row.CustomerName || row.CustomerShrt || '',
+                        SellerUsr:row.SellerUsr || '', InvoAm:Number(row.InvoAm || 0),
+                        Cost:margin ? Number(margin.totalCost || 0) : null, CostComplete:!!margin
+                    };
+                });
+                try {
+                    const response = await fetch('/efterkalk/month-snapshot', {
+                        method:'POST', headers:{ 'Content-Type':'application/json' },
+                        body:JSON.stringify({ periodStart:month + '-01', periodEnd, rows })
+                    });
+                    const result = await response.json();
+                    if (response.ok && result.ok) {
+                        kfSetStatus((document.getElementById('kfStatus').textContent || '') + ' · Gemt i GOHCache');
+                        _startKfSnapshotBackfill();
+                    }
+                } catch { /* GOHCache er fail-soft; visningen forbliver brugbar */ }
+            }
+
+            function _startKfSnapshotBackfill() {
+                if (_kfBackfillRequested) return;
+                _kfBackfillRequested = true;
+                fetch('/efterkalk/snapshot-backfill', { method:'POST' }).catch(() => {
+                    _kfBackfillRequested = false;
+                });
             }
 
             function _updateKfRowMargin(ordNo, m) {

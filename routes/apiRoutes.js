@@ -39,6 +39,7 @@ function createApiRouter({
     spawn,
     diskCache,
     gohData,
+    gohCache,
     logEvent,
     getOrComputeAftercalc,
     getOrComputeOrderMargin,
@@ -65,6 +66,7 @@ function createApiRouter({
     pkgVersion
 }) {
     const router = express.Router();
+    const efterkalkBackfill = { running:false, completed:0, total:12, current:null, error:null, startedAt:null, finishedAt:null };
     const {
         authSessions,
         readUsers,
@@ -2326,6 +2328,7 @@ function createApiRouter({
                 .query(`
                     SELECT
                         O.OrdNo,
+                        O.OrdDt,
                         O.CustNo,
                         O.LstInvDt,
                         O.InvoAm,
@@ -2349,6 +2352,7 @@ function createApiRouter({
                 `);
             const rows = (result.recordset || []).map(r => ({
                 OrdNo:        r.OrdNo,
+                OrdDt:        r.OrdDt,
                 CustNo:       r.CustNo,
                 LstInvDt:     r.LstInvDt,
                 InvoAm:       Number(r.InvoAm || 0),
@@ -2364,6 +2368,133 @@ function createApiRouter({
             logEvent('ERROR efterkalk/customer-invoices: ' + err.message);
             res.status(500).json({ ok: false, error: err.message });
         }
+    });
+
+    router.post('/efterkalk/month-snapshot', requireModulePermission('efterkalk'), async (req, res) => {
+        try {
+            const periodStart = String(req.body && req.body.periodStart || '');
+            const periodEnd = String(req.body && req.body.periodEnd || '');
+            const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : [];
+            if (!/^\d{4}-\d{2}-01$/.test(periodStart) || !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+                return res.status(400).json({ ok:false, error:'Ugyldig snapshot-periode' });
+            }
+            if (rows.length > 5000) return res.status(400).json({ ok:false, error:'For mange snapshot-rækker' });
+            const validRows = rows.every(row => Number.isFinite(Number(row && row.OrdNo))
+                && /^\d{4}-\d{2}-\d{2}$/.test(String(row && row.InvoiceDate || ''))
+                && String(row && row.CustNo || '').length > 0
+                && Number.isFinite(Number(row && row.InvoAm)));
+            if (!validRows) return res.status(400).json({ ok:false, error:'Ugyldige snapshot-data' });
+            const user = getSessionUser(req);
+            const result = await gohCache.saveEfterkalkMonth({
+                periodStart,
+                periodEnd,
+                rows,
+                updatedBy: user && (user.username || user.displayName),
+                calculationVersion: pkgVersion
+            });
+            if (!result || result.unavailable) return res.status(503).json({ ok:false, unavailable:true, error:'GOHCache er ikke tilgængelig' });
+            if (!result.ok) return res.status(500).json(result);
+            res.json(result);
+        } catch (err) {
+            logEvent('ERROR efterkalk/month-snapshot: ' + err.message);
+            res.status(500).json({ ok:false, error:err.message });
+        }
+    });
+
+    router.get('/efterkalk/month-snapshot', requireModulePermission('efterkalk'), async (req, res) => {
+        const month = String(req.query.month || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
+        const snapshot = await gohCache.getEfterkalkMonth(month + '-01');
+        if (snapshot === null) return res.status(503).json({ ok:false, unavailable:true, error:'GOHCache er ikke tilgængelig' });
+        res.json({ ok:true, ...snapshot });
+    });
+
+    router.get('/efterkalk/customer-trend-snapshots', requireModulePermission('efterkalk'), async (req, res) => {
+        const custNo = String(req.query.custno || '').trim();
+        const from = String(req.query.from || '').trim();
+        const to = String(req.query.to || '').trim();
+        if (!custNo || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+            return res.status(400).json({ ok:false, error:'Ugyldige parametre' });
+        }
+        const rows = await gohCache.getEfterkalkCustomerTrend(custNo, from, to);
+        if (rows === null) return res.status(503).json({ ok:false, unavailable:true, error:'GOHCache er ikke tilgængelig' });
+        res.json({ ok:true, rows });
+    });
+
+    router.get('/efterkalk/snapshot-backfill-status', requireModulePermission('efterkalk'), (req, res) => {
+        res.json({ ok:true, ...efterkalkBackfill });
+    });
+
+    router.post('/efterkalk/snapshot-backfill', requireModulePermission('efterkalk'), (req, res) => {
+        if (efterkalkBackfill.running) return res.json({ ok:true, started:false, ...efterkalkBackfill });
+        const user = getSessionUser(req);
+        const updatedBy = user && (user.username || user.displayName);
+        efterkalkBackfill.running = true;
+        efterkalkBackfill.completed = 0;
+        efterkalkBackfill.current = null;
+        efterkalkBackfill.error = null;
+        efterkalkBackfill.startedAt = Date.now();
+        efterkalkBackfill.finishedAt = null;
+        res.json({ ok:true, started:true });
+
+        (async () => {
+            const today = new Date();
+            for (let offset = 11; offset >= 0; offset--) {
+                const startDate = new Date(today.getFullYear(), today.getMonth() - offset, 1);
+                const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+                const iso = date => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+                const intDate = date => Number(iso(date).replace(/-/g, ''));
+                const periodStart = iso(startDate);
+                const periodEnd = iso(endDate);
+                efterkalkBackfill.current = periodStart.slice(0, 7);
+                const pool = await getConnection();
+                    const result = await pool.request()
+                        .input('fromDate', sql.Int, intDate(startDate))
+                        .input('toDate', sql.Int, intDate(endDate))
+                        .query(`SELECT O.OrdNo, O.OrdDt, O.CustNo, O.LstInvDt, O.InvoAm, O.InvoNo,
+                                       A.Nm CustomerName, A.Shrt CustomerShrt, SU.Usr SellerUsr
+                                FROM Ord O
+                                LEFT JOIN Actor A ON A.CustNo=O.CustNo
+                                OUTER APPLY (SELECT TOP 1 AX.Usr FROM Actor AX
+                                  WHERE LTRIM(RTRIM(CONVERT(VARCHAR(50),AX.EmpNo)))=LTRIM(RTRIM(CONVERT(VARCHAR(50),O.SelBuy)))) SU
+                                WHERE O.InvoNo IS NOT NULL AND O.InvoNo<>'' AND O.InvoAm>0
+                                  AND O.LstInvDt>=@fromDate AND O.LstInvDt<=@toDate`);
+                    const sourceRows = result.recordset || [];
+                    const snapshotRows = [];
+                    const batchSize = 3;
+                    for (let i = 0; i < sourceRows.length; i += batchSize) {
+                        const batch = sourceRows.slice(i, i + batchSize);
+                        const calculated = await Promise.all(batch.map(async row => {
+                            try {
+                                const margin = await getOrComputeOrderMargin(Number(row.OrdNo), { priority:'normal' });
+                                return { ...row, Cost:Number(margin.totalCost || 0), CostComplete:true };
+                            } catch {
+                                return { ...row, Cost:null, CostComplete:false };
+                            }
+                        }));
+                        snapshotRows.push(...calculated);
+                    }
+                    const dateFromInt = value => {
+                        const s = String(value || '');
+                        return s.length === 8 ? s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8) : null;
+                    };
+                    const saveResult = await gohCache.saveEfterkalkMonth({
+                        periodStart, periodEnd, updatedBy, calculationVersion:pkgVersion,
+                        rows:snapshotRows.map(row => ({
+                            ...row, OrderDate:dateFromInt(row.OrdDt), InvoiceDate:dateFromInt(row.LstInvDt)
+                        }))
+                    });
+                if (!saveResult || !saveResult.ok) throw new Error(saveResult && saveResult.error || 'Snapshot kunne ikke gemmes');
+                efterkalkBackfill.completed++;
+            }
+        })().catch(err => {
+            efterkalkBackfill.error = err.message;
+            logEvent('EFTERKALK SNAPSHOT BACKFILL ERROR: ' + err.message);
+        }).finally(() => {
+            efterkalkBackfill.running = false;
+            efterkalkBackfill.current = null;
+            efterkalkBackfill.finishedAt = Date.now();
+        });
     });
 
     router.get('/order-list-check-time', async (req, res) => {

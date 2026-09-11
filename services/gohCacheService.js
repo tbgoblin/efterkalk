@@ -205,4 +205,142 @@ async function purgeExpired() {
     }
 }
 
-module.exports = { configure, isEnabled, ping, get, getMany, getAllFresh, set, del, clearAll, purgeExpired, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };
+async function saveEfterkalkMonth({ periodStart, periodEnd, rows, updatedBy, calculationVersion }) {
+    const pool = await getPool();
+    if (!pool) return { ok: false, unavailable: true };
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const transaction = new sql.Transaction(pool);
+    try {
+        await transaction.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
+        const runResult = await new sql.Request(transaction)
+            .input('periodStart', sql.Date, periodStart)
+            .input('periodEnd', sql.Date, periodEnd)
+            .input('version', sql.NVarChar(50), String(calculationVersion || '').slice(0, 50))
+            .input('updatedBy', sql.NVarChar(100), String(updatedBy || '').slice(0, 100))
+            .query(`
+                DECLARE @snapshotId bigint;
+                SELECT @snapshotId = SnapshotId
+                FROM dbo.EfterkalkSnapshotRun WITH (UPDLOCK, HOLDLOCK)
+                WHERE PeriodStart = @periodStart AND IsCurrent = 1;
+
+                IF @snapshotId IS NULL
+                BEGIN
+                    INSERT dbo.EfterkalkSnapshotRun
+                        (PeriodStart, PeriodEnd, RevisionNo, SnapshotStatus, IsCurrent, CalculationVersion, UpdatedBy)
+                    SELECT @periodStart, @periodEnd,
+                           ISNULL(MAX(RevisionNo), 0) + 1, 'OPEN', 1, @version, @updatedBy
+                    FROM dbo.EfterkalkSnapshotRun
+                    WHERE PeriodStart = @periodStart;
+                    SET @snapshotId = SCOPE_IDENTITY();
+                END
+                ELSE
+                BEGIN
+                    UPDATE dbo.EfterkalkSnapshotRun
+                    SET PeriodEnd=@periodEnd, CalculationVersion=@version, UpdatedAt=SYSUTCDATETIME(), UpdatedBy=@updatedBy
+                    WHERE SnapshotId=@snapshotId;
+                END;
+
+                SELECT @snapshotId AS SnapshotId,
+                       (SELECT SnapshotStatus FROM dbo.EfterkalkSnapshotRun WHERE SnapshotId=@snapshotId) AS SnapshotStatus;
+            `);
+        const run = runResult.recordset && runResult.recordset[0];
+        if (!run || !run.SnapshotId) throw new Error('Snapshot run kunne ikke oprettes');
+        const snapshotId = Number(run.SnapshotId);
+
+        await new sql.Request(transaction)
+            .input('snapshotId', sql.BigInt, snapshotId)
+            .query('UPDATE dbo.EfterkalkOrderSnapshot SET IsActive=0, UpdatedAt=SYSUTCDATETIME() WHERE SnapshotId=@snapshotId');
+
+        for (const row of safeRows) {
+            await new sql.Request(transaction)
+                .input('snapshotId', sql.BigInt, snapshotId)
+                .input('ordNo', sql.BigInt, Number(row.OrdNo))
+                .input('orderDate', sql.Date, row.OrderDate || null)
+                .input('invoiceNo', sql.NVarChar(50), String(row.InvoNo || '').slice(0, 50))
+                .input('invoiceDate', sql.Date, row.InvoiceDate)
+                .input('custNo', sql.NVarChar(50), String(row.CustNo || '').slice(0, 50))
+                .input('customerName', sql.NVarChar(250), String(row.CustomerName || row.CustomerShrt || '').slice(0, 250))
+                .input('seller', sql.NVarChar(100), String(row.SellerUsr || '').slice(0, 100))
+                .input('revenue', sql.Decimal(19, 4), Number(row.InvoAm || 0))
+                .input('cost', sql.Decimal(19, 4), row.CostComplete ? Number(row.Cost || 0) : null)
+                .input('costComplete', sql.Bit, row.CostComplete ? 1 : 0)
+                .query(`MERGE dbo.EfterkalkOrderSnapshot WITH (HOLDLOCK) AS target
+                    USING (SELECT @snapshotId SnapshotId, @ordNo OrdNo, @invoiceNo InvoiceNo, @invoiceDate InvoiceDate) source
+                    ON target.SnapshotId=source.SnapshotId AND target.OrdNo=source.OrdNo
+                       AND target.InvoiceNo=source.InvoiceNo AND target.InvoiceDate=source.InvoiceDate
+                    WHEN MATCHED THEN UPDATE SET OrderDate=@orderDate, CustNo=@custNo, CustomerName=@customerName,
+                        Seller=@seller, Revenue=@revenue, Cost=@cost, CostComplete=@costComplete,
+                        IsActive=1, CalculatedAt=SYSUTCDATETIME(), UpdatedAt=SYSUTCDATETIME()
+                    WHEN NOT MATCHED THEN INSERT
+                        (SnapshotId, OrdNo, OrderDate, InvoiceNo, InvoiceDate, CustNo, CustomerName, Seller,
+                         Revenue, Cost, CostComplete, IsActive)
+                    VALUES (@snapshotId, @ordNo, @orderDate, @invoiceNo, @invoiceDate, @custNo, @customerName,
+                            @seller, @revenue, @cost, @costComplete, 1);`);
+        }
+
+        await new sql.Request(transaction)
+            .input('snapshotId', sql.BigInt, snapshotId)
+            .query(`UPDATE dbo.EfterkalkSnapshotRun
+                    SET CompletedAt=SYSUTCDATETIME(), UpdatedAt=SYSUTCDATETIME()
+                    WHERE SnapshotId=@snapshotId`);
+        await transaction.commit();
+        return { ok: true, snapshotId, rows: safeRows.length };
+    } catch (err) {
+        try { await transaction.rollback(); } catch { /* transaction not active */ }
+        markUnavailable(err);
+        return { ok: false, error: err.message };
+    }
+}
+
+async function getEfterkalkCustomerTrend(custNo, fromDate, toDate) {
+    const pool = await getPool();
+    if (!pool) return null;
+    try {
+        const result = await pool.request()
+            .input('custNo', sql.NVarChar(50), String(custNo || ''))
+            .input('fromDate', sql.Date, fromDate)
+            .input('toDate', sql.Date, toDate)
+            .query(`SELECT PeriodStart, PeriodEnd, RevisionNo, InvoiceOrderCount, Revenue, Cost,
+                           ContributionMargin, MarginPct, CostComplete
+                    FROM dbo.vw_EfterkalkCustomerCurrent WITH (NOLOCK)
+                    WHERE CustNo=@custNo AND PeriodStart>=@fromDate AND PeriodStart<=@toDate
+                    ORDER BY PeriodStart`);
+        return result.recordset || [];
+    } catch (err) {
+        markUnavailable(err);
+        return null;
+    }
+}
+
+async function getEfterkalkMonth(periodStart) {
+    const pool = await getPool();
+    if (!pool) return null;
+    try {
+        const result = await pool.request()
+            .input('periodStart', sql.Date, periodStart)
+            .query(`SELECT r.SnapshotId, r.SnapshotStatus, r.RevisionNo, r.CompletedAt,
+                           o.OrdNo, o.OrderDate, o.InvoiceNo, o.InvoiceDate, o.CustNo,
+                           o.CustomerName, o.Seller, o.Revenue, o.Cost, o.CostComplete
+                    FROM dbo.EfterkalkSnapshotRun r WITH (NOLOCK)
+                    LEFT JOIN dbo.EfterkalkOrderSnapshot o WITH (NOLOCK)
+                      ON o.SnapshotId=r.SnapshotId AND o.IsActive=1
+                    WHERE r.PeriodStart=@periodStart AND r.IsCurrent=1
+                    ORDER BY o.InvoiceDate DESC, o.OrdNo DESC`);
+        const records = result.recordset || [];
+        if (!records.length) return { found:false, rows:[] };
+        const head = records[0];
+        return {
+            found:true,
+            snapshotId:Number(head.SnapshotId),
+            status:String(head.SnapshotStatus || ''),
+            revision:Number(head.RevisionNo || 1),
+            completedAt:head.CompletedAt,
+            rows:records.filter(row => row.OrdNo !== null && row.OrdNo !== undefined)
+        };
+    } catch (err) {
+        markUnavailable(err);
+        return null;
+    }
+}
+
+module.exports = { configure, isEnabled, ping, get, getMany, getAllFresh, set, del, clearAll, purgeExpired, saveEfterkalkMonth, getEfterkalkCustomerTrend, getEfterkalkMonth, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };
