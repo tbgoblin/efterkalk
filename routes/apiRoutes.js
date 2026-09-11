@@ -242,7 +242,7 @@ function createApiRouter({
             const cachedOnly = String(req.query && req.query.cached || '') === '1';
             if (!cachedOnly) logEvent('SEARCH: OrdNo=' + ordNo);
             const forceRefresh = String(req.query && req.query.force || '') === '1';
-            const data = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh, cachedOnly });
+            const data = await getOrComputeAftercalc(ordNo, { priority: 'high', forceRefresh, cachedOnly, includeInvoiceNo: !cachedOnly });
             if (cachedOnly && !data) {
                 return res.json({ notCached: true });
             }

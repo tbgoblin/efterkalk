@@ -55,9 +55,9 @@ const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match ba
 const CACHE_TTL_PRODUCTION_SUMMARY_MS = 30 * 60 * 1000;  // 30 min
 const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
-const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v28_';
+const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v29_';
 const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v26_';
-const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v27_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
+const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v28_', 'aftercalc_v27_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
 // Parser JSON globale 256kb, ma /bom/analyze-file ha il proprio parser 40mb a livello di route
@@ -218,6 +218,22 @@ function getAftercalcCacheWithFallback(ordNo, promoteToCurrent = false) {
     return null;
 }
 
+async function enrichAftercalcInvoiceNo(cached, ordNo) {
+    if (!cached || !cached.orderHeader || Object.prototype.hasOwnProperty.call(cached.orderHeader, 'InvoNo')) return cached;
+    try {
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('ordNo', sql.Numeric, Number(ordNo))
+            .query('SELECT InvoNo FROM Ord WHERE OrdNo=@ordNo');
+        const row = result.recordset && result.recordset[0];
+        cached.orderHeader.InvoNo = row ? row.InvoNo : null;
+        diskCache.set(AFTERCALC_CACHE_KEY_PREFIX + Number(ordNo), cached, CACHE_TTL_AFTERCALC_MS);
+    } catch (err) {
+        logEvent('AFTERCALC INVOICE HEADER ERROR: ordNo=' + ordNo + ', ' + err.message);
+    }
+    return cached;
+}
+
 async function getOrComputeAftercalc(ordNo, options = {}) {
     const priority = options.priority || 'normal';
     const forceRefresh = Boolean(options.forceRefresh);
@@ -233,7 +249,7 @@ async function getOrComputeAftercalc(ordNo, options = {}) {
     const cached = getAftercalcCacheWithFallback(key, true);
     if (cached && !forceRefresh) {
         logEvent('AFTERCALC CACHE HIT: ordNo=' + key);
-        return cached;
+        return options.includeInvoiceNo ? enrichAftercalcInvoiceNo(cached, key) : cached;
     }
 
     // Solo lettura cache (locale → GOH): nessun calcolo Visma, null se assente
@@ -285,7 +301,8 @@ async function getOrComputeAftercalc(ordNo, options = {}) {
         afterCalcInFlight.set(key, computePromise);
     }
 
-    return computePromise;
+    const computed = await computePromise;
+    return options.includeInvoiceNo ? enrichAftercalcInvoiceNo(computed, key) : computed;
 }
 
 
@@ -11856,7 +11873,7 @@ app.get('/', (req, res) => {
                     updateOrderMarginCell(detailOrdNo);
                     const _invoAm = Number(data.orderHeader.InvoAm || 0);
                     const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
-                    const _lastInvoice = String(data.orderHeader.LstInvo || '').trim();
+                    const _lastInvoice = String(data.orderHeader.InvoNo || '').trim();
                     let invoiceStatusBadge, invoiceStatusSub = '';
                     if (_invoAm === 0) {
                         invoiceStatusBadge = '<span class="invoice-status-badge status-in-production">🔧 I produktion</span>';

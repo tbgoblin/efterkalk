@@ -534,7 +534,7 @@ function createAftercalcService({
                 pool.request()
                     .input('ordNo', sql.Numeric, ordNo)
                     .query(`
-                        SELECT O.OrdNo, O.TrTp, O.InvoAm, O.DInvoIF, O.Gr4, O.LstInvo, A.Nm as CustomerName
+                        SELECT O.OrdNo, O.TrTp, O.InvoAm, O.DInvoIF, O.Gr4, O.InvoNo, A.Nm as CustomerName
                         FROM Ord O
                         LEFT JOIN Actor A ON O.CustNo = A.CustNo
                         WHERE O.OrdNo = @ordNo

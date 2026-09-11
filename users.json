@@ -146,8 +146,8 @@
   {
     "username": "lh",
     "displayName": "Lena",
-    "passwordSalt": "3a690f30652e77aadf94261ee3f8bef3",
-    "passwordHash": "9bbe870eba57c991bc268833c869db0ca9c9bde479be43cdf61ffed8339d0311bf6d37aed3af615af59e6458731fd933b186cf2062f5f2646e0898faf40fc061",
+    "passwordSalt": "617610002e0647243a14828ab35c4021",
+    "passwordHash": "f20455de882e1a2a3a208073cd817b02d73f167e56dafc7cf77ab77f2b3b3bf57ec8b39c21d0aba3465326eb05623a03c2f0bd207ac09f7b5f87e641fd6351bf",
     "role": "user",
     "active": true,
     "permissions": {
@@ -158,7 +158,16 @@
       "ordreoversigt": true,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": true
+      "lagerliste": true,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-24T10:26:41.640Z"
   },
