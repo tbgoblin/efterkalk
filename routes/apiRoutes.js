@@ -217,7 +217,9 @@ function createApiRouter({
         logEvent,
         getActiveProfile: settingsService.getActiveProfile
     });
+    const diverseService = require('../services/lagerlisteDiverseService').createLagerlisteDiverseService({ gohData, getConnection });
     const lagerlisteService = createLagerlisteService({
+        getDiverse: diverseService.current,
         getConnection,
         sql,
         diskCache,
@@ -1878,6 +1880,19 @@ function createApiRouter({
         }
     });
 
+    router.get('/admin/lagerliste-diverse/:month', async (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        try { res.json({ ok: true, data: await diverseService.load(req.params.month) }); }
+        catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+    });
+    router.post('/admin/lagerliste-diverse/:month', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        try {
+            const data = await diverseService.save(req.params.month, req.body.rows, user.username);
+            res.json({ ok: true, data });
+        } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+    });
     router.post('/settings/rest-prices', express.json(), (req, res) => {
         try {
             if (!requireSuperadmin(req, res)) return;

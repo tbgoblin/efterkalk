@@ -234,10 +234,10 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
     const previousWorkInProgress = previousTotals
         ? Number(previousTotals.finishedNotInvoiced || 0) + previousViaTid + previousViaLaser + previousViaStang + previousViaIndkobt + previousViaPlader
         : null;
-    const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0) + lagerKomponenterValue;
+    const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0) + lagerKomponenterValue + Number(totals.diverse || 0);
     const warehouseWithRest = warehouseWithoutRest + Number(totals.restPlates || 0);
     const previousWarehouseWithoutRest = previousTotals
-        ? Number(previousTotals.plates || 0) + Number(previousTotals.opfolgningvare || 0) + Number(previousTotals.stang || 0) + previousLagerKomponenterValue
+        ? Number(previousTotals.plates || 0) + Number(previousTotals.opfolgningvare || 0) + Number(previousTotals.stang || 0) + previousLagerKomponenterValue + Number(previousTotals.diverse || 0)
         : null;
     const previousWarehouseWithRest = previousWarehouseWithoutRest === null
         ? null
@@ -245,10 +245,11 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
     const rows = [
         ['Pladelager', totals.plates, previousTotals && previousTotals.plates, 'lagerliste-plates-section', '', 'Plader på lager: beholdning × ' + (lagerlistePlatePriceMode === 'fifo' ? 'FIFO-pris (StcBal.PhCstPr).' : 'standardpris (Prod.Inf).')],
         ['Rest plader', totals.restPlates, previousTotals && previousTotals.restPlates, 'lagerliste-rest-section', '', 'Restplader: vægt × fast pris pr. kg.'],
+        ['Diverse', Number(totals.diverse || 0), previousTotals && Number(previousTotals.diverse || 0), 'lagerliste-diverse-section', '', 'Månedens manuelle værdier og Visma 44/45/46/63, lager 1. Stangmateriale er ikke inkluderet.'],
         ['Stang materiale', totals.stang, previousTotals && previousTotals.stang, 'lagerliste-stang-section', '', 'Stangmateriale: lagerbevægelse til og med i dag × pris/FIFO-pris.'],
         ['Opfølgningsvarer', totals.opfolgningvare, previousTotals && previousTotals.opfolgningvare, 'lagerliste-opfolgning-section', '', 'Opfølgningsvarer: (Bal + StcInc − ShpRsv) × FIFO-pris.'],
         ['Lager Komponenter (FIFO)', lagerKomponenterValue, previousLagerKomponenterValue, 'lagerliste-gr5-section', '', 'Komponenter med Prod.Gr5 = 11: beholdning × FIFO-pris.'],
-        ['Varelager uden rest', warehouseWithoutRest, previousWarehouseWithoutRest, null, '', 'Plader + stangmateriale + opfølgningsvarer + lagerkomponenter, uden restplader.'],
+        ['Varelager uden rest', warehouseWithoutRest, previousWarehouseWithoutRest, null, '', 'Plader + stangmateriale + opfølgningsvarer + lagerkomponenter + Diverse, uden restplader.'],
         ['Varelager', warehouseWithRest, previousWarehouseWithRest, null, '', 'Varelager uden rest + Rest plader.'],
         ['Færdige SO kostpris', totals.finishedNotInvoiced, previousTotals && previousTotals.finishedNotInvoiced, 'lagerliste-ready-invoice-section', '', 'Færdigmeldte salgsordrer, der endnu ikke er faktureret, beregnet med Efterkalk.'],
         ['VIA Tid', viaTid, previousViaRows.length ? previousViaTid : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registrerede minutter × operationspris.'],
@@ -668,8 +669,15 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
         + '<option value="standard"' + (lagerlistePlatePriceMode === 'standard' ? ' selected' : '') + '>Standardpris (Prod.Inf)</option>'
         + '<option value="fifo"' + (lagerlistePlatePriceMode === 'fifo' ? ' selected' : '') + '>FIFO (StcBal.PhCstPr)</option></select></label>'
         + '<small style="display:block">Gælder Pladelager, oversigt og PDF. Gemte lukninger ændres ikke. Begge priser vises i detaljerne.</small></div>'
+        + (payload.diverseStatus && !payload.diverseStatus.complete ? '<p role="alert" style="color:#b45309">FORELØBIG TOTAL: Diverse er ikke færdigudfyldt. Manglende beløb er ikke medregnet.</p>' : '')
         + lagerlisteSummaryTable({ generatedAt, totals, categories, comparison, displayLabel: lagerlisteDisplayedLabel })
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
+        + lagerlisteCollapsibleSection('Diverse' + (payload.diverseStatus && !payload.diverseStatus.complete ? ' – UFULDSTÆNDIG: udfyld administrationen' : ''), lagerlisteRowsTable(categories.diverse || [], [
+            { key: 'category', label: 'Kategori' }, { key: 'ProdNo', label: 'Varenr.' }, { key: 'TegnNr', label: 'TegnNr' },
+            { key: 'Descr', label: 'Beskrivelse' }, { key: 'quantity', label: 'Antal / paller', format: (value, row) => value ?? row.Quantity ?? '-' },
+            { key: 'kg', label: 'Kg/palle' }, { key: 'price', label: 'Pris', format: (value, row) => value ?? row.Price ?? '-' },
+            { key: 'Value', label: 'Værdi', format: (value, row) => row.complete === false ? 'Ikke udfyldt' : lagerlisteFormat(value) }
+        ]), 'lagerliste-diverse-section', totals.diverse || 0)
         + lagerlisteCollapsibleSection('Rest Plader', lagerlisteRestGroupsTable(categories.restPlateGroups || []), 'lagerliste-rest-section', totals.restPlates)
         + lagerlisteCollapsibleSection('Stang materiale', lagerlisteStangTable(stangRows), 'lagerliste-stang-section', totals.stang)
         + lagerlisteCollapsibleSection('Lager Komponenter', lagerlisteGr5Table(gr5Rows), 'lagerliste-gr5-section', sumRows(gr5Rows, 'FifoValue'))
@@ -832,11 +840,12 @@ function lagerlisteComputeFigures(payload) {
     const viaIndkobt = sumRows(viaRows, 'PurchasedPartCost');
     const viaPlader = (categories.nestingCutting || []).reduce((sum, row) => sum + lagerlisteNestingCountedValue(row), 0);
     const lagerKomponenter = sumRows(categories.gr5Items || [], 'FifoValue');
-    const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0) + lagerKomponenter;
+    const warehouseWithoutRest = Number(totals.plates || 0) + Number(totals.opfolgningvare || 0) + Number(totals.stang || 0) + lagerKomponenter + Number(totals.diverse || 0);
     const warehouseWithRest = warehouseWithoutRest + Number(totals.restPlates || 0);
     const workInProgress = Number(totals.finishedNotInvoiced || 0) + viaTid + viaLaser + viaStang + viaIndkobt + viaPlader;
     return [
         ['Pladelager', Number(totals.plates || 0), ''],
+        ['Diverse', Number(totals.diverse || 0), ''],
         ['Rest plader', Number(totals.restPlates || 0), ''],
         ['Stang materiale', Number(totals.stang || 0), ''],
         ['Opfølgningsvarer', Number(totals.opfolgningvare || 0), ''],
@@ -1652,7 +1661,9 @@ function exportLagerlistePdf(options = null) {
         + '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:12px;color:#123} h2{margin:0 0 10px} table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #ccd;padding:6px;text-align:left} th{background:#eef5ff} .lagerliste-section{margin-bottom:12px} .lagerliste-section > div[id]{display:block!important} .lagerliste-plate-detail-row{display:table-row!important} .lagerliste-total-row{display:flex;gap:10px;flex-wrap:wrap;border:1px solid #ccd;padding:6px;margin-top:6px}</style>'
         + '</head><body><h2>Lagerliste · ' + lagerlisteEscape(reportLabel) + '</h2><p>Pladelager – prisgrundlag: '
         + (lagerlistePlatePriceMode === 'fifo' ? 'FIFO (StcBal.PhCstPr)' : 'Standardpris (Prod.Inf)')
-        + '. Gemte lukninger ændres ikke.</p>' + printRoot.innerHTML + '</body></html>');
+        + '. Gemte lukninger ændres ikke.</p>'
+        + (typeof lagerlisteCurrent !== 'undefined' && lagerlisteCurrent && lagerlisteCurrent.diverseStatus && !lagerlisteCurrent.diverseStatus.complete ? '<p>FORELØBIG: Diverse er ikke færdigudfyldt.</p>' : '')
+        + printRoot.innerHTML + '</body></html>');
     printWindow.document.close();
 }
 

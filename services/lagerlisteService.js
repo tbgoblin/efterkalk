@@ -5,7 +5,7 @@ const path = require('path');
 const { buildOrderStates } = require('./lagerliste2Service');
 const { allocateSharedOrders, allocateComponentStock, validateValuation, validateClosure } = require('./lagerlisteAllocation');
 
-function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null }) {
+function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null, getDiverse = null }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
     const cacheKey = 'lagerliste_v31';
@@ -143,8 +143,8 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             const cached = diskCache.get(key);
             if (cached) {
                 validateValuation(cached);
-                currentMemoryCache = cached;
-                return cached;
+                currentMemoryCache = await withDiverse(cached);
+                return currentMemoryCache;
             }
         } else {
             diskCache.del(key);
@@ -611,17 +611,31 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         };
         payload.totals.total = round(Object.values(payload.totals).reduce((sum, value) => sum + toNumber(value), 0));
         validateValuation(payload);
-        currentMemoryCache = payload;
+        currentMemoryCache = await withDiverse(payload);
         diskCache.set(key, payload, 5 * 60 * 1000);
-        return payload;
+        return currentMemoryCache;
+    }
+
+    async function withDiverse(base) {
+        if (!getDiverse) return base;
+        const diverse = await getDiverse();
+        const existing = new Set(['plates', 'gr5Items', 'stang', 'opfolgningvare'].flatMap(key => (base.categories[key] || []).map(row => String(row.ProdNo).trim())));
+        if (diverse.rows.some(row => row.ProdNo && existing.has(String(row.ProdNo).trim()))) {
+            throw new Error('Diverse overlapper en anden lagerkategori. Kontrollér varenumrene før værdisætning.');
+        }
+        return { ...base, diverseStatus: { month: diverse.month, complete: diverse.complete, revision: diverse.revision },
+            categories: { ...base.categories, diverse: diverse.rows },
+            totals: { ...base.totals, diverse: diverse.total, total: Number(base.totals.total || 0) - Number(base.totals.diverse || 0) + diverse.total } };
     }
 
     async function saveMonthlySnapshot({ fs, month, diverse = [], currentOverride = null }) {
-        const current = currentOverride && typeof currentOverride === 'object'
+        let current = currentOverride && typeof currentOverride === 'object'
             ? currentOverride
             : currentMemoryCache;
         if (!current) throw new Error('Lagerliste cache er ikke klar. Tryk Opdater lagerliste først.');
         validateClosure(current, month);
+        current = await withDiverse(current);
+        if (current.diverseStatus && (!current.diverseStatus.complete || current.diverseStatus.month !== month)) throw new Error('Diverse er ikke færdigudfyldt for måneden. Udfyld administrationen før lukning.');
         if (readSnapshotFile(fs, month)) throw new Error('Månedslukningen findes allerede. Brug en særskilt revision.');
         const payload = { month, createdAt: new Date().toISOString(), current, diverse };
         const file = path.join(snapshotDir, String(month || '').replace(/[^0-9-]/g, '') + '.json');
@@ -641,7 +655,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             ? capturedAt
             : new Date();
         const snapshotId = buildSnapshotId(now);
-        const current = currentOverride && typeof currentOverride === 'object'
+        let current = currentOverride && typeof currentOverride === 'object'
             ? currentOverride
             : await (async () => {
                 const cached = currentMemoryCache;
@@ -649,6 +663,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 return cached;
             })();
         validateValuation(current);
+        if (!currentOverride) current = await withDiverse(current);
         const payload = {
             snapshotId,
             kind: 'point-in-time',

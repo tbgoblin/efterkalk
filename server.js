@@ -2635,6 +2635,19 @@ app.get('/', (req, res) => {
         <div class="container main-omsaetning" id="mainAdministration">
             <section class="omsaetning-shell">
                 <div class="omsaetning-head"><div><h3>Administration</h3><p>Brugere og modulrettigheder.</p></div></div>
+                <section class="admin-panel" style="margin-bottom:18px">
+                    <h4>Lagerliste – Diverse (månedlige værdier)</h4>
+                    <p>Stangmateriale er ikke med. PEM 44, bolte 45, nitter 46 og muffer 63 hentes automatisk fra Visma, lager 1, til standardpris. Tomme felter er ikke bekræftede nuller. Skrot: paller × kg/palle × kg-pris.</p>
+                    <input type="month" id="diverseAdminMonth" aria-label="Diverse måned">
+                    <button onclick="diverseAdminLoad()">Hent måned</button>
+                    <div id="diverseAdminRows" style="overflow:auto;max-height:55vh"></div>
+                    <select id="diverseAdminCategory" aria-label="Ny linjes kategori">
+                        <option>Div. bolte</option><option>Paller</option><option>Forbrugsmatl. Pakkeri</option><option>Gasser</option><option>Forbrugsmatl. Svejseafd.</option><option>Kølevæske</option><option>Skrot Alu</option><option>Skrot RF</option><option>Skrot Sort</option>
+                    </select>
+                    <button onclick="diverseAdminAdd()">Tilføj detaljelinje</button>
+                    <button onclick="diverseAdminSave()">Gem Diverse</button>
+                    <div id="diverseAdminStatus" role="status"></div>
+                </section>
                 <div class="admin-layout">
                     <section class="admin-panel">
                         <h4>Opret bruger</h4>
@@ -2982,6 +2995,7 @@ app.get('/', (req, res) => {
         <script src="/assets/js/via.js?v=${pkgVersion}"></script>
         <script src="/assets/js/qms-ph.js?v=${pkgVersion}"></script>
         <script src="/assets/js/lagerliste.js?v=${pkgVersion}"></script>
+        <script src="/assets/js/lagerliste-diverse.js?v=${pkgVersion}"></script>
         <script src="/assets/js/aftercalc-cost-exclusions.js?v=${pkgVersion}"></script>
         <script src="/assets/js/omsaetning-daily-thresholds.js?v=${pkgVersion}"></script>
         <script src="/assets/js/table-sort.js?v=${pkgVersion}-5"></script>
