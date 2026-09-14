@@ -600,6 +600,9 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             writeSnapshotFile(fs, month, payload)
                 .catch(err => console.warn('[lagerliste] monthly snapshot write failed:', err.message));
             if (gohData) gohData.saveRawImport('lagerliste_' + month, 'lagerliste_monthly', payload).catch(() => {});
+            if (gohData && typeof gohData.setAppState === 'function') {
+                gohData.setAppState('lagerliste_month_' + month, payload).catch(() => {});
+            }
         });
         return { ...payload, file };
     }
@@ -634,16 +637,100 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return { ...payload, file };
     }
 
-    function loadMonthlySnapshot({ fs, month }) {
-        return readSnapshotFile(fs, month);
+    async function loadMonthlySnapshot({ fs, month }) {
+        const normalizedMonth = String(month || '').replace(/[^0-9-]/g, '');
+        if (gohData && typeof gohData.getAppState === 'function') {
+            const shared = await gohData.getAppState('lagerliste_month_' + normalizedMonth);
+            if (shared && shared.payload) return shared.payload;
+        }
+        const local = readSnapshotFile(fs, normalizedMonth);
+        if (local && gohData && typeof gohData.setAppState === 'function') {
+            await gohData.setAppState('lagerliste_month_' + normalizedMonth, local);
+        }
+        return local;
     }
 
-    function listMonthlySnapshots(fsRef) {
-        if (!fsRef.existsSync(snapshotDir)) return [];
-        return fsRef.readdirSync(snapshotDir)
-            .filter(name => /^\d{4}-\d{2}\.json$/i.test(String(name)))
-            .map(name => String(name).replace(/\.json$/i, ''))
-            .sort((left, right) => right.localeCompare(left));
+    async function listMonthlySnapshots(fsRef) {
+        const localMonths = fsRef.existsSync(snapshotDir)
+            ? fsRef.readdirSync(snapshotDir)
+                .filter(name => /^\d{4}-\d{2}\.json$/i.test(String(name)))
+                .map(name => String(name).replace(/\.json$/i, ''))
+            : [];
+        let sharedRows = null;
+        if (gohData && typeof gohData.getAppStateKeysByPrefix === 'function') {
+            sharedRows = await gohData.getAppStateKeysByPrefix('lagerliste_month_');
+        } else if (gohData && typeof gohData.getAppStatesByPrefix === 'function') {
+            sharedRows = await gohData.getAppStatesByPrefix('lagerliste_month_');
+        }
+        const sharedMonths = Array.isArray(sharedRows)
+            ? sharedRows.map(row => String(row.key || '').replace(/^lagerliste_month_/, '')).filter(month => /^\d{4}-\d{2}$/.test(month))
+            : [];
+        const sharedSet = new Set(sharedMonths);
+        if (gohData && typeof gohData.setAppState === 'function') {
+            for (const month of localMonths) {
+                if (sharedSet.has(month)) continue;
+                const local = readSnapshotFile(fsRef, month);
+                if (local) await gohData.setAppState('lagerliste_month_' + month, local);
+            }
+        }
+        return Array.from(new Set(localMonths.concat(sharedMonths))).sort((left, right) => right.localeCompare(left));
+    }
+
+    async function migrateLocalMonthlySnapshotsToGoh(fsRef, { overwrite = false, migratedBy = '' } = {}) {
+        if (!gohData || typeof gohData.getAppState !== 'function' || typeof gohData.setAppState !== 'function') {
+            throw new Error('GOH-databasen er ikke tilgængelig');
+        }
+        const months = fsRef.existsSync(snapshotDir)
+            ? fsRef.readdirSync(snapshotDir)
+                .filter(name => /^\d{4}-\d{2}\.json$/i.test(String(name)))
+                .map(name => String(name).replace(/\.json$/i, ''))
+                .sort()
+            : [];
+        const result = { found: months.length, copied: 0, alreadyShared: 0, conflicts: [], failed: [] };
+        for (const month of months) {
+            try {
+                const local = readSnapshotFile(fsRef, month);
+                if (!local) {
+                    result.failed.push({ month, error: 'Lokal fil kunne ikke læses' });
+                    continue;
+                }
+                const stateKey = 'lagerliste_month_' + month;
+                const shared = await gohData.getAppState(stateKey);
+                if (shared && JSON.stringify(shared.payload) === JSON.stringify(local)) {
+                    result.alreadyShared++;
+                    continue;
+                }
+                if (shared && !overwrite) {
+                    result.conflicts.push(month);
+                    continue;
+                }
+                if (shared) {
+                    const backupKey = 'lagerliste_backup_' + month + '_' + Date.now();
+                    const backedUp = await gohData.setAppState(backupKey, {
+                        originalKey: stateKey,
+                        replacedAt: new Date().toISOString(),
+                        replacedBy: String(migratedBy || ''),
+                        payload: shared.payload
+                    });
+                    if (!backedUp) throw new Error('Eksisterende GOH-version kunne ikke sikkerhedskopieres');
+                }
+                const saved = await gohData.setAppState(stateKey, local);
+                if (!saved) throw new Error('GOH afviste skrivningen');
+                const verification = await gohData.getAppState(stateKey);
+                if (!verification || JSON.stringify(verification.payload) !== JSON.stringify(local)) {
+                    throw new Error('Kontrol efter skrivning mislykkedes');
+                }
+                if (typeof gohData.saveRawImport === 'function') {
+                    await gohData.saveRawImport('lagerliste_manual_' + month, 'lagerliste_monthly_migration', {
+                        migratedAt: new Date().toISOString(), migratedBy: String(migratedBy || ''), payload: local
+                    });
+                }
+                result.copied++;
+            } catch (err) {
+                result.failed.push({ month, error: err && err.message ? err.message : String(err) });
+            }
+        }
+        return result;
     }
 
     async function lookupProduct(prodNoRaw) {
@@ -771,7 +858,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
             if (tomorrow.getMonth() === now.getMonth()) return;
             const month = now.toISOString().slice(0, 7);
-            if (readSnapshotFile(fs, month)) return;
+            if (await loadMonthlySnapshot({ fs, month })) return;
             try {
                 await saveMonthlySnapshot({ fs, month, diverse: [] });
             } catch (err) {
@@ -787,6 +874,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         saveMonthlySnapshot,
         loadMonthlySnapshot,
         listMonthlySnapshots,
+        migrateLocalMonthlySnapshotsToGoh,
         savePointInTimeSnapshot,
         listPointInTimeSnapshots,
         loadPointInTimeSnapshot,

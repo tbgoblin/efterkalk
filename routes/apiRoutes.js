@@ -2456,9 +2456,14 @@ function createApiRouter({
                         const calculated = await Promise.all(batch.map(async row => {
                             try {
                                 const margin = await getOrComputeOrderMargin(Number(row.OrdNo), { priority:'normal' });
-                                return { ...row, Cost:Number(margin.totalCost || 0), CostComplete:true };
+                                return {
+                                    ...row,
+                                    Cost:Number(margin.totalCost || 0),
+                                    StyklisteFallbackCost:Number(margin.styklisteFallbackCost || 0),
+                                    CostComplete:true
+                                };
                             } catch {
-                                return { ...row, Cost:null, CostComplete:false };
+                                return { ...row, Cost:null, StyklisteFallbackCost:null, CostComplete:false };
                             }
                         }));
                         snapshotRows.push(...calculated);
@@ -3200,12 +3205,32 @@ function createApiRouter({
         }
     });
 
-    router.get('/lagerliste/snapshot-months', requireModulePermission('lagerliste'), (req, res) => {
+    router.get('/lagerliste/snapshot-months', requireModulePermission('lagerliste'), async (req, res) => {
         try {
-            return res.json({ ok: true, months: lagerlisteService.listMonthlySnapshots(fs) });
+            return res.json({ ok: true, months: await lagerlisteService.listMonthlySnapshots(fs) });
         } catch (err) {
             logEvent('ERROR lagerliste/snapshot-months: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Snapshot måneder fejl' });
+        }
+    });
+
+    router.post('/lagerliste/migrate-local-to-goh', (req, res, next) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        req.lagerlisteMigrationUser = user;
+        return next();
+    }, async (req, res) => {
+        try {
+            const result = await lagerlisteService.migrateLocalMonthlySnapshotsToGoh(fs, {
+                overwrite: req.body && req.body.overwrite === true,
+                migratedBy: req.lagerlisteMigrationUser && req.lagerlisteMigrationUser.username
+            });
+            logEvent('LAGERLISTE LOCAL->GOH: found=' + result.found + ' copied=' + result.copied
+                + ' already=' + result.alreadyShared + ' conflicts=' + result.conflicts.length + ' failed=' + result.failed.length);
+            return res.json({ ok: true, ...result });
+        } catch (err) {
+            logEvent('ERROR lagerliste local->GOH: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'Migrering til GOH mislykkedes' });
         }
     });
 
@@ -3239,9 +3264,9 @@ function createApiRouter({
         return res.json({ ok: true });
     });
 
-    router.get('/lagerliste/snapshot/:month', requireModulePermission('lagerliste'), (req, res) => {
+    router.get('/lagerliste/snapshot/:month', requireModulePermission('lagerliste'), async (req, res) => {
         try {
-            const snapshot = lagerlisteService.loadMonthlySnapshot({ fs, month: req.params.month });
+            const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: req.params.month });
             if (!snapshot) return res.status(404).json({ ok: false, error: 'Snapshot ikke fundet' });
             return res.json({ ok: true, ...snapshot });
         } catch (err) {

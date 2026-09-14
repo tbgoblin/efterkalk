@@ -1462,6 +1462,49 @@ async function saveLagerlisteSnapshot() {
     }
 }
 
+async function migrateLocalLagerlisteToGoh() {
+    const button = document.getElementById('lagerlisteMigrateLocalBtn');
+    const status = document.getElementById('lagerlisteSnapshotStatus');
+    if (!confirm('Kopiér alle lokale Lagerliste-månedslukninger til GOH? De lokale filer bliver bevaret.')) return;
+
+    const run = async overwrite => {
+        const response = await fetch('/lagerliste/migrate-local-to-goh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + String(authToken || '') },
+            body: JSON.stringify({ overwrite })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+        return data;
+    };
+
+    try {
+        if (button) button.disabled = true;
+        if (status) status.textContent = 'Kopierer lokale månedslukninger til GOH og kontrollerer dem...';
+        let result = await run(false);
+        if (result.conflicts && result.conflicts.length) {
+            const replace = confirm(
+                result.conflicts.length + ' måned(er) findes allerede i GOH med andre data: '
+                + result.conflicts.join(', ') + '.\n\nVil du erstatte dem med de lokale versioner? Den nuværende GOH-version sikkerhedskopieres først.'
+            );
+            if (replace) result = await run(true);
+        }
+        const message = 'GOH-kopi færdig: ' + Number(result.copied || 0) + ' kopieret, '
+            + Number(result.alreadyShared || 0) + ' allerede identiske, '
+            + Number((result.conflicts || []).length) + ' konflikter sprunget over, '
+            + Number((result.failed || []).length) + ' fejl.';
+        if (status) status.textContent = message;
+        await refreshLagerlisteCompareOptions();
+        alert(message + '\nDe lokale originalfiler er ikke blevet slettet.');
+    } catch (err) {
+        const message = 'Kopiering til GOH fejlede: ' + String(err.message || err);
+        if (status) status.textContent = message;
+        alert(message + '\nDe lokale filer er stadig urørte.');
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
 function lagerlisteDownloadJson(filename, data) {
     const blob = new Blob([JSON.stringify(data, null, 2) + '\n'], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);

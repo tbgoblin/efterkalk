@@ -205,12 +205,30 @@ async function purgeExpired() {
     }
 }
 
+let efterkalkFallbackSchemaPromise = null;
+async function ensureEfterkalkFallbackSchema(pool) {
+    if (!efterkalkFallbackSchemaPromise) {
+        efterkalkFallbackSchemaPromise = pool.request().query(`
+            IF COL_LENGTH('dbo.EfterkalkOrderSnapshot', 'StyklisteFallbackCost') IS NULL
+            BEGIN
+                ALTER TABLE dbo.EfterkalkOrderSnapshot
+                ADD StyklisteFallbackCost decimal(19,4) NULL;
+            END
+        `).catch(err => {
+            efterkalkFallbackSchemaPromise = null;
+            throw err;
+        });
+    }
+    return efterkalkFallbackSchemaPromise;
+}
+
 async function saveEfterkalkMonth({ periodStart, periodEnd, rows, updatedBy, calculationVersion }) {
     const pool = await getPool();
     if (!pool) return { ok: false, unavailable: true };
     const safeRows = Array.isArray(rows) ? rows : [];
     const transaction = new sql.Transaction(pool);
     try {
+        await ensureEfterkalkFallbackSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
         const runResult = await new sql.Request(transaction)
             .input('periodStart', sql.Date, periodStart)
@@ -263,19 +281,20 @@ async function saveEfterkalkMonth({ periodStart, periodEnd, rows, updatedBy, cal
                 .input('seller', sql.NVarChar(100), String(row.SellerUsr || '').slice(0, 100))
                 .input('revenue', sql.Decimal(19, 4), Number(row.InvoAm || 0))
                 .input('cost', sql.Decimal(19, 4), row.CostComplete ? Number(row.Cost || 0) : null)
+                .input('styklisteFallbackCost', sql.Decimal(19, 4), row.CostComplete ? Number(row.StyklisteFallbackCost || 0) : null)
                 .input('costComplete', sql.Bit, row.CostComplete ? 1 : 0)
                 .query(`MERGE dbo.EfterkalkOrderSnapshot WITH (HOLDLOCK) AS target
                     USING (SELECT @snapshotId SnapshotId, @ordNo OrdNo, @invoiceNo InvoiceNo, @invoiceDate InvoiceDate) source
                     ON target.SnapshotId=source.SnapshotId AND target.OrdNo=source.OrdNo
                        AND target.InvoiceNo=source.InvoiceNo AND target.InvoiceDate=source.InvoiceDate
                     WHEN MATCHED THEN UPDATE SET OrderDate=@orderDate, CustNo=@custNo, CustomerName=@customerName,
-                        Seller=@seller, Revenue=@revenue, Cost=@cost, CostComplete=@costComplete,
+                        Seller=@seller, Revenue=@revenue, Cost=@cost, StyklisteFallbackCost=@styklisteFallbackCost, CostComplete=@costComplete,
                         IsActive=1, CalculatedAt=SYSUTCDATETIME(), UpdatedAt=SYSUTCDATETIME()
                     WHEN NOT MATCHED THEN INSERT
                         (SnapshotId, OrdNo, OrderDate, InvoiceNo, InvoiceDate, CustNo, CustomerName, Seller,
-                         Revenue, Cost, CostComplete, IsActive)
+                         Revenue, Cost, StyklisteFallbackCost, CostComplete, IsActive)
                     VALUES (@snapshotId, @ordNo, @orderDate, @invoiceNo, @invoiceDate, @custNo, @customerName,
-                            @seller, @revenue, @cost, @costComplete, 1);`);
+                            @seller, @revenue, @cost, @styklisteFallbackCost, @costComplete, 1);`);
         }
 
         await new sql.Request(transaction)
@@ -296,15 +315,28 @@ async function getEfterkalkCustomerTrend(custNo, fromDate, toDate) {
     const pool = await getPool();
     if (!pool) return null;
     try {
+        await ensureEfterkalkFallbackSchema(pool);
         const result = await pool.request()
             .input('custNo', sql.NVarChar(50), String(custNo || ''))
             .input('fromDate', sql.Date, fromDate)
             .input('toDate', sql.Date, toDate)
-            .query(`SELECT PeriodStart, PeriodEnd, RevisionNo, InvoiceOrderCount, Revenue, Cost,
-                           ContributionMargin, MarginPct, CostComplete
-                    FROM dbo.vw_EfterkalkCustomerCurrent WITH (NOLOCK)
-                    WHERE CustNo=@custNo AND PeriodStart>=@fromDate AND PeriodStart<=@toDate
-                    ORDER BY PeriodStart`);
+            .query(`SELECT r.PeriodStart, r.PeriodEnd, r.RevisionNo,
+                           COUNT_BIG(*) AS InvoiceOrderCount, SUM(o.Revenue) AS Revenue,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN SUM(o.Cost) END AS Cost,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN SUM(ISNULL(o.StyklisteFallbackCost,0)) END AS StyklisteFallbackCost,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN SUM(o.Cost)+SUM(ISNULL(o.StyklisteFallbackCost,0)) END AS AdjustedCost,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN SUM(o.Revenue)-SUM(o.Cost) END AS ContributionMargin,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) AND SUM(o.Revenue)<>0 THEN ((SUM(o.Revenue)-SUM(o.Cost))*CONVERT(decimal(19,6),100))/SUM(o.Revenue) END AS MarginPct,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN SUM(o.Revenue)-SUM(o.Cost)-SUM(ISNULL(o.StyklisteFallbackCost,0)) END AS AdjustedContributionMargin,
+                           CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) AND SUM(o.Revenue)<>0 THEN ((SUM(o.Revenue)-SUM(o.Cost)-SUM(ISNULL(o.StyklisteFallbackCost,0)))*CONVERT(decimal(19,6),100))/SUM(o.Revenue) END AS AdjustedMarginPct,
+                           CONVERT(bit,CASE WHEN SUM(CASE WHEN o.CostComplete=1 THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete,
+                           CONVERT(bit,CASE WHEN SUM(CASE WHEN o.CostComplete=1 AND o.StyklisteFallbackCost IS NOT NULL THEN 1 ELSE 0 END)=COUNT_BIG(*) THEN 1 ELSE 0 END) AS FallbackComplete
+                    FROM dbo.EfterkalkSnapshotRun r WITH (NOLOCK)
+                    JOIN dbo.EfterkalkOrderSnapshot o WITH (NOLOCK) ON o.SnapshotId=r.SnapshotId
+                    WHERE r.IsCurrent=1 AND o.IsActive=1 AND o.CustNo=@custNo
+                      AND r.PeriodStart>=@fromDate AND r.PeriodStart<=@toDate
+                    GROUP BY r.PeriodStart,r.PeriodEnd,r.RevisionNo
+                    ORDER BY r.PeriodStart`);
         return result.recordset || [];
     } catch (err) {
         markUnavailable(err);
@@ -316,11 +348,12 @@ async function getEfterkalkMonth(periodStart) {
     const pool = await getPool();
     if (!pool) return null;
     try {
+        await ensureEfterkalkFallbackSchema(pool);
         const result = await pool.request()
             .input('periodStart', sql.Date, periodStart)
             .query(`SELECT r.SnapshotId, r.SnapshotStatus, r.RevisionNo, r.CompletedAt,
                            o.OrdNo, o.OrderDate, o.InvoiceNo, o.InvoiceDate, o.CustNo,
-                           o.CustomerName, o.Seller, o.Revenue, o.Cost, o.CostComplete
+                           o.CustomerName, o.Seller, o.Revenue, o.Cost, o.StyklisteFallbackCost, o.CostComplete
                     FROM dbo.EfterkalkSnapshotRun r WITH (NOLOCK)
                     LEFT JOIN dbo.EfterkalkOrderSnapshot o WITH (NOLOCK)
                       ON o.SnapshotId=r.SnapshotId AND o.IsActive=1

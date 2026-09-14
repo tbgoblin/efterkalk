@@ -2617,6 +2617,7 @@ app.get('/', (req, res) => {
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-export">
                         <button type="button" onclick="exportLagerlisteJson()">JSON</button>
                         <button type="button" onclick="exportLagerlistePdf()">PDF</button>
+                        <button id="lagerlisteMigrateLocalBtn" type="button" onclick="migrateLocalLagerlisteToGoh()" style="display:none;">Kopiér lokale måneder til GOH</button>
                     </div>
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-vareopslag">
                         <label for="lagerlisteVareopslagInput">Vareopslag</label>
@@ -2861,9 +2862,13 @@ app.get('/', (req, res) => {
                         <div class="kf-kpi"><div class="lbl">Dækningsgrad</div><div class="val" id="kfKpiMargin">—</div><div class="sub" id="kfKpiMarginSub">beregner dækningsbidrag…</div></div>
                     </div>
                     <div id="kfExportActions" class="kf-export-actions" style="display:none;">
+                        <span style="font-size:12px;font-weight:700;color:#31577d;align-self:center;">Kostvisning:</span>
+                        <button id="kfCostModeRegistered" class="kf-export-btn" type="button" onclick="setKfCostMode('registered')">Kun registreret</button>
+                        <button id="kfCostModeAdjusted" class="kf-export-btn" type="button" onclick="setKfCostMode('adjusted')" disabled>Inkl. manglende tid fra stykliste</button>
                         <button id="kfExportCustomersBtn" class="kf-export-btn" type="button" onclick="exportKfCustomersCsv()" disabled>Eksportér kunder CSV</button>
                         <button id="kfExportOrdersBtn" class="kf-export-btn" type="button" onclick="exportKfOrdersCsv()" disabled>Eksportér ordrer CSV</button>
                     </div>
+                    <div id="kfCostModeHint" class="hint" style="display:none;margin:6px 0 10px;"></div>
                     <div id="kfMarginProgress" class="kf-margin-progress" style="display:none;">
                         <span id="kfMarginProgressText">Henter marginer…</span>
                         <div class="kf-margin-track"><div id="kfMarginProgressFill" style="width:0%"></div></div>
@@ -2871,7 +2876,7 @@ app.get('/', (req, res) => {
                     </div>
                     <div id="kfCustomerSummary" class="kf-customer-summary" style="display:none;">
                         <h3>Kunder — månedsanalyse</h3>
-                        <div class="hint">Omsætningsandel viser kundens del af månedens samlede fakturering. Kost, DB og DG vises, når alle kundens ordrer er beregnet.</div>
+                        <div class="hint">Omsætningsandel viser kundens del af månedens samlede fakturering. Kost, DB og DG følger den valgte kostvisning ovenfor.</div>
                         <div class="kf-customer-summary-tools">
                             <input id="kfCustomerSummaryFilter" type="search" placeholder="Søg kunde eller kundenummer…" oninput="filterKfCustomerSummary()" />
                             <span id="kfCustomerSummaryCount"></span>
@@ -2883,7 +2888,7 @@ app.get('/', (req, res) => {
                                     <th class="r">Ordrer</th>
                                     <th class="r">Faktureret</th>
                                     <th class="r">Andel af oms.</th>
-                                    <th class="r">Kost</th>
+                                    <th class="r" id="kfCustomerCostHead">Kost</th>
                                     <th class="r">Kost %</th>
                                     <th class="r">DB DKK</th>
                                     <th class="r">DG %</th>
@@ -2923,7 +2928,7 @@ app.get('/', (req, res) => {
                                 <th>Kunde</th>
                                 <th>Sælger</th>
                                 <th class="r">Fakturabeløb</th>
-                                <th class="r">Kost</th>
+                                <th class="r" id="kfOrderCostHead">Kost</th>
                                 <th class="r">DB DKK</th>
                                 <th class="r">DG %</th>
                             </tr></thead>
@@ -4006,6 +4011,8 @@ app.get('/', (req, res) => {
                 document.querySelectorAll('[data-module-key]').forEach(element => {
                     element.style.display = canAccessModule(String(element.dataset.moduleKey || '')) ? '' : 'none';
                 });
+                const migrateButton = document.getElementById('lagerlisteMigrateLocalBtn');
+                if (migrateButton) migrateButton.style.display = loggedUserRole === 'superadmin' ? '' : 'none';
             }
 
             // ── Settings: database profiler ──────────────────────────────
@@ -4203,12 +4210,50 @@ app.get('/', (req, res) => {
             let _kfSelectedCustNo  = null;
             let _kfSelectedCustNm  = '';
             let _kfInvoiceRows     = [];
-            let _kfMarginMap       = {};    // OrdNo → { totalRevenue, totalCost }
+            let _kfMarginMap       = {};    // OrdNo → { totalRevenue, totalCost, styklisteFallbackCost }
+            let _kfCostMode        = 'adjusted';
             let _kfCustomerTimer   = null;
             let _kfMarginAbort     = false;
             let _kfAllCustomers   = false;
             let _kfTrendRequestId = 0;
             let _kfBackfillRequested = false;
+
+            function _kfCost(margin, mode) {
+                if (!margin) return null;
+                const registered = Number(margin.totalCost || 0);
+                const fallback = Number(margin.styklisteFallbackCost || 0);
+                return registered + ((mode || _kfCostMode) === 'adjusted' ? fallback : 0);
+            }
+
+            function setKfCostMode(mode) {
+                _kfCostMode = mode === 'registered' ? 'registered' : 'adjusted';
+                closeKfCustomerTrend();
+                _syncKfCostModeUi();
+                _renderKfTable();
+                _updateKfKpis();
+                _addKfTotalRow();
+            }
+
+            function _syncKfCostModeUi() {
+                const adjusted = _kfCostMode === 'adjusted';
+                const regButton = document.getElementById('kfCostModeRegistered');
+                const adjButton = document.getElementById('kfCostModeAdjusted');
+                if (regButton) regButton.disabled = !adjusted;
+                if (adjButton) adjButton.disabled = adjusted;
+                const costLabel = adjusted ? 'Kost inkl. stykliste' : 'Registreret kost';
+                const customerHead = document.getElementById('kfCustomerCostHead');
+                const orderHead = document.getElementById('kfOrderCostHead');
+                if (customerHead) customerHead.textContent = costLabel;
+                if (orderHead) orderHead.textContent = costLabel;
+                const hint = document.getElementById('kfCostModeHint');
+                if (hint) {
+                    hint.style.display = _kfInvoiceRows.length ? 'block' : 'none';
+                    const fallbackTotal = Object.values(_kfMarginMap).reduce((sum, margin) => sum + Number(margin.styklisteFallbackCost || 0), 0);
+                    hint.textContent = adjusted
+                        ? 'Korrigeret visning: lægger planlagt kost fra stykliste til, når en færdigmeldt operation mangler registreret tid. Tillæg: ' + formatNumber(fallbackTotal) + ' DKK.'
+                        : 'Registreret visning: viser kun de omkostninger, der faktisk er registreret på ordren.';
+                }
+            }
 
             function openKundefakturaModal() {
                 _kfAllCustomers = false;
@@ -4430,7 +4475,7 @@ app.get('/', (req, res) => {
             }
 
             function _resetKfKpis() {
-                const ids = ['kfKpis','kfExportActions','kfCustomerSummary','kfCustomerTrend','kfTableWrap','kfMarginProgress'];
+                const ids = ['kfKpis','kfExportActions','kfCostModeHint','kfCustomerSummary','kfCustomerTrend','kfTableWrap','kfMarginProgress'];
                 ids.forEach(id => { const el = document.getElementById(id); if(el) el.style.display='none'; });
             }
 
@@ -4465,7 +4510,7 @@ app.get('/', (req, res) => {
                     group.invoice += Number(row.InvoAm || 0);
                     const margin = _kfMarginMap[String(row.OrdNo)];
                     if (margin) {
-                        group.cost += Number(margin.totalCost || 0);
+                        group.cost += _kfCost(margin);
                         group.loaded++;
                     }
                 }
@@ -4616,13 +4661,13 @@ app.get('/', (req, res) => {
                         await Promise.all(batch.map(async row => {
                             const cached = _kfMarginMap[String(row.OrdNo)];
                             if (cached) {
-                                costs[String(row.OrdNo)] = Number(cached.totalCost || 0);
+                                costs[String(row.OrdNo)] = _kfCost(cached);
                             } else {
                                 try {
                                     const marginResponse = await fetch('/order-margin/' + row.OrdNo);
                                     if (marginResponse.ok) {
                                         const margin = await marginResponse.json();
-                                        if (margin && margin.totalCost !== null && margin.totalCost !== undefined) costs[String(row.OrdNo)] = Number(margin.totalCost || 0);
+                                        if (margin && margin.totalCost !== null && margin.totalCost !== undefined) costs[String(row.OrdNo)] = _kfCost(margin);
                                     }
                                 } catch { /* keep missing costs visible */ }
                             }
@@ -4646,6 +4691,9 @@ app.get('/', (req, res) => {
                     if (!response.ok) return false;
                     const payload = await response.json();
                     if (!payload.ok || !payload.found || !Array.isArray(payload.rows) || payload.rows.length === 0) return false;
+                    const missingFallback = payload.rows.some(row => row.CostComplete
+                        && (row.StyklisteFallbackCost === null || row.StyklisteFallbackCost === undefined));
+                    if (missingFallback) return false;
                     const intFromDate = value => Number(String(value || '').slice(0, 10).replace(/-/g, '')) || 0;
                     _kfInvoiceRows = (payload.rows || []).map(row => ({
                         OrdNo:Number(row.OrdNo), OrdDt:intFromDate(row.OrderDate), CustNo:row.CustNo,
@@ -4655,7 +4703,11 @@ app.get('/', (req, res) => {
                     _kfMarginMap = {};
                     (payload.rows || []).forEach(row => {
                         if (row.CostComplete && row.Cost !== null && row.Cost !== undefined) {
-                            _kfMarginMap[String(row.OrdNo)] = { totalRevenue:Number(row.Revenue || 0), totalCost:Number(row.Cost || 0) };
+                            _kfMarginMap[String(row.OrdNo)] = {
+                                totalRevenue:Number(row.Revenue || 0),
+                                totalCost:Number(row.Cost || 0),
+                                styklisteFallbackCost:Number(row.StyklisteFallbackCost || 0)
+                            };
                         }
                     });
                     kfSetStatus(_kfInvoiceRows.length + ' fakturaordrer indlæst fra GOHCache · afstemmer med Visma i baggrunden');
@@ -4686,8 +4738,11 @@ app.get('/', (req, res) => {
                 let previousDg = null;
                 tbody.innerHTML = months.map(key => {
                     const row = byMonth.get(key);
-                    const complete = !!(row && row.CostComplete);
-                    const dg = complete && row.MarginPct !== null ? Number(row.MarginPct) : null;
+                    const complete = !!(row && row.CostComplete && (_kfCostMode === 'registered' || row.FallbackComplete));
+                    const storedCost = complete
+                        ? Number(_kfCostMode === 'adjusted' ? row.AdjustedCost : row.Cost)
+                        : null;
+                    const dg = complete ? _kfCalcMarginPct(Number(row.Revenue || 0), storedCost) : null;
                     const delta = dg !== null && previousDg !== null ? dg - previousDg : null;
                     if (dg !== null) previousDg = dg;
                     const deltaClass = delta === null ? '' : (delta >= 0 ? 'up' : 'down');
@@ -4696,8 +4751,8 @@ app.get('/', (req, res) => {
                         '<td>' + escapeHtml(_kfMonthLabel(key)) + '</td>' +
                         '<td class="r">' + (row ? Number(row.InvoiceOrderCount || 0) : 0) + '</td>' +
                         '<td class="r">' + (row ? formatNumber(Number(row.Revenue || 0)) : '0,00') + '</td>' +
-                        '<td class="r">' + (complete ? formatNumber(Number(row.Cost || 0)) : '—') + '</td>' +
-                        '<td class="r kf-margin-cell ' + (complete ? cls : 'na') + '">' + (complete ? formatNumber(Number(row.ContributionMargin || 0)) : '—') + '</td>' +
+                        '<td class="r">' + (complete ? formatNumber(storedCost) : '—') + '</td>' +
+                        '<td class="r kf-margin-cell ' + (complete ? cls : 'na') + '">' + (complete ? formatNumber(Number(row.Revenue || 0) - storedCost) : '—') + '</td>' +
                         '<td class="r kf-margin-cell ' + (dg !== null ? cls : 'na') + '">' + (dg !== null ? dg.toFixed(1) + '%' : '—') + '</td>' +
                         '<td class="r kf-trend-delta ' + deltaClass + '">' + (delta === null ? '—' : (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' pp') + '</td>' +
                         '</tr>';
@@ -4755,7 +4810,7 @@ app.get('/', (req, res) => {
 
                 tbody.innerHTML = _kfInvoiceRows.map(row => {
                     const m = _kfMarginMap[String(row.OrdNo)];
-                    const cost     = m ? m.totalCost    : null;
+                    const cost     = _kfCost(m);
                     const rev      = Number(row.InvoAm || 0);
                     const margDkk  = (cost !== null && rev !== null) ? (rev - cost) : null;
                     const margPct  = _kfCalcMarginPct(rev, cost);
@@ -4785,7 +4840,7 @@ app.get('/', (req, res) => {
                 let totalCost = 0; let totalRev = 0; let countWithMargin = 0;
                 for (const row of _kfInvoiceRows) {
                     const m = _kfMarginMap[String(row.OrdNo)];
-                    if (m) { totalCost += m.totalCost || 0; totalRev += Number(row.InvoAm || 0); countWithMargin++; }
+                    if (m) { totalCost += _kfCost(m); totalRev += Number(row.InvoAm || 0); countWithMargin++; }
                 }
                 const hasCost  = countWithMargin > 0;
                 const margDkk  = hasCost ? (totalRev - totalCost) : null;
@@ -4803,6 +4858,9 @@ app.get('/', (req, res) => {
                 const exportOrders = document.getElementById('kfExportOrdersBtn');
                 const exportReady = _kfInvoiceRows.length > 0 && countWithMargin === _kfInvoiceRows.length;
                 if (exportActions) exportActions.style.display = _kfInvoiceRows.length ? 'flex' : 'none';
+                const hint = document.getElementById('kfCostModeHint');
+                if (hint) hint.style.display = _kfInvoiceRows.length ? 'block' : 'none';
+                _syncKfCostModeUi();
                 if (exportCustomers) {
                     exportCustomers.style.display = _kfAllCustomers ? '' : 'none';
                     exportCustomers.disabled = !exportReady;
@@ -4820,6 +4878,11 @@ app.get('/', (req, res) => {
             function _kfCsvNumber(value) {
                 const number = Number(value);
                 return Number.isFinite(number) ? number.toFixed(2).replace('.', ',') : '';
+            }
+
+            function _kfCsvPercent(value) {
+                const number = Number(value);
+                return Number.isFinite(number) ? number.toFixed(2).replace('.', ',') + '%' : '';
             }
 
             function _downloadKfCsv(lines, suffix) {
@@ -4840,21 +4903,26 @@ app.get('/', (req, res) => {
                 const groups = new Map();
                 for (const row of _kfInvoiceRows) {
                     const key = String(row.CustNo || row.CustomerName || row.CustomerShrt || 'ukendt');
-                    if (!groups.has(key)) groups.set(key, { custNo:row.CustNo || '', name:row.CustomerName || row.CustomerShrt || 'Ukendt kunde', orders:0, invoice:0, cost:0 });
+                    if (!groups.has(key)) groups.set(key, { custNo:row.CustNo || '', name:row.CustomerName || row.CustomerShrt || 'Ukendt kunde', orders:0, invoice:0, registeredCost:0, fallbackCost:0 });
                     const group = groups.get(key);
                     group.orders++;
                     group.invoice += Number(row.InvoAm || 0);
                     const margin = _kfMarginMap[String(row.OrdNo)];
-                    if (margin) group.cost += Number(margin.totalCost || 0);
+                    if (margin) {
+                        group.registeredCost += Number(margin.totalCost || 0);
+                        group.fallbackCost += Number(margin.styklisteFallbackCost || 0);
+                    }
                 }
-                const lines = ['Kundenr;Kunde;Ordrer;Faktureret DKK;Andel af månedsomsætning %;Kost DKK;Kost %;DB DKK;DG %'];
+                const lines = ['Kundenr;Kunde;Ordrer;Faktureret DKK;Andel af månedsomsætning %;Registreret kost DKK;Registreret DB DKK;Registreret DG %;Stykliste fallback DKK;Korrigeret kost DKK;Korrigeret DB DKK;Korrigeret DG %'];
                 Array.from(groups.values()).sort((a, b) => b.invoice - a.invoice).forEach(group => {
-                    const db = group.invoice - group.cost;
+                    const registeredDb = group.invoice - group.registeredCost;
+                    const adjustedCost = group.registeredCost + group.fallbackCost;
+                    const adjustedDb = group.invoice - adjustedCost;
                     lines.push([
                         _kfCsvText(group.custNo), _kfCsvText(group.name), group.orders,
-                        _kfCsvNumber(group.invoice), _kfCsvNumber(totalInvoice ? group.invoice / totalInvoice * 100 : 0),
-                        _kfCsvNumber(group.cost), _kfCsvNumber(group.invoice ? group.cost / group.invoice * 100 : 0),
-                        _kfCsvNumber(db), _kfCsvNumber(group.invoice ? db / group.invoice * 100 : 0)
+                        _kfCsvNumber(group.invoice), _kfCsvPercent(totalInvoice ? group.invoice / totalInvoice * 100 : 0),
+                        _kfCsvNumber(group.registeredCost), _kfCsvNumber(registeredDb), _kfCsvPercent(group.invoice ? registeredDb / group.invoice * 100 : 0),
+                        _kfCsvNumber(group.fallbackCost), _kfCsvNumber(adjustedCost), _kfCsvNumber(adjustedDb), _kfCsvPercent(group.invoice ? adjustedDb / group.invoice * 100 : 0)
                     ].join(';'));
                 });
                 _downloadKfCsv(lines, 'kunder');
@@ -4862,16 +4930,20 @@ app.get('/', (req, res) => {
 
             function exportKfOrdersCsv() {
                 if (!_kfInvoiceRows.length) return;
-                const lines = ['Ordrenr;Fakturadato;Fakturanr;Kundenr;Kunde;Sælger;Faktureret DKK;Kost DKK;DB DKK;DG %'];
+                const lines = ['Ordrenr;Fakturadato;Fakturanr;Kundenr;Kunde;Sælger;Faktureret DKK;Registreret kost DKK;Registreret DB DKK;Registreret DG %;Stykliste fallback DKK;Korrigeret kost DKK;Korrigeret DB DKK;Korrigeret DG %'];
                 for (const row of _kfInvoiceRows) {
                     const margin = _kfMarginMap[String(row.OrdNo)];
                     const invoice = Number(row.InvoAm || 0);
-                    const cost = margin ? Number(margin.totalCost || 0) : 0;
-                    const db = invoice - cost;
+                    const registeredCost = margin ? Number(margin.totalCost || 0) : 0;
+                    const fallbackCost = margin ? Number(margin.styklisteFallbackCost || 0) : 0;
+                    const registeredDb = invoice - registeredCost;
+                    const adjustedCost = registeredCost + fallbackCost;
+                    const adjustedDb = invoice - adjustedCost;
                     lines.push([
                         _kfCsvText(row.OrdNo), _kfCsvText(_fmtKfDateFromInt(row.LstInvDt)), _kfCsvText(row.InvoNo),
                         _kfCsvText(row.CustNo), _kfCsvText(row.CustomerName || row.CustomerShrt || ''), _kfCsvText(row.SellerUsr || ''),
-                        _kfCsvNumber(invoice), _kfCsvNumber(cost), _kfCsvNumber(db), _kfCsvNumber(invoice ? db / invoice * 100 : 0)
+                        _kfCsvNumber(invoice), _kfCsvNumber(registeredCost), _kfCsvNumber(registeredDb), _kfCsvPercent(invoice ? registeredDb / invoice * 100 : 0),
+                        _kfCsvNumber(fallbackCost), _kfCsvNumber(adjustedCost), _kfCsvNumber(adjustedDb), _kfCsvPercent(invoice ? adjustedDb / invoice * 100 : 0)
                     ].join(';'));
                 }
                 _downloadKfCsv(lines, 'ordrer');
@@ -4907,7 +4979,11 @@ app.get('/', (req, res) => {
                             if (r.ok) {
                                 const d = await r.json();
                                 if (d && d.totalCost !== null && d.totalCost !== undefined) {
-                                    marginData = { totalRevenue: Number(row.InvoAm || 0), totalCost: Number(d.totalCost||0) };
+                                    marginData = {
+                                        totalRevenue: Number(row.InvoAm || 0),
+                                        totalCost: Number(d.totalCost || 0),
+                                        styklisteFallbackCost: Number(d.styklisteFallbackCost || 0)
+                                    };
                                 }
                             }
                             if (marginData) {
@@ -4938,7 +5014,9 @@ app.get('/', (req, res) => {
                         InvoNo:String(row.InvoNo || ''), InvoiceDate:_kfIsoDateFromInt(row.LstInvDt),
                         CustNo:String(row.CustNo || ''), CustomerName:row.CustomerName || row.CustomerShrt || '',
                         SellerUsr:row.SellerUsr || '', InvoAm:Number(row.InvoAm || 0),
-                        Cost:margin ? Number(margin.totalCost || 0) : null, CostComplete:!!margin
+                        Cost:margin ? Number(margin.totalCost || 0) : null,
+                        StyklisteFallbackCost:margin ? Number(margin.styklisteFallbackCost || 0) : null,
+                        CostComplete:!!margin
                     };
                 });
                 try {
@@ -4963,7 +5041,7 @@ app.get('/', (req, res) => {
             }
 
             function _updateKfRowMargin(ordNo, m) {
-                const cost    = m.totalCost;
+                const cost    = _kfCost(m);
                 const row     = _kfInvoiceRows.find(item => Number(item.OrdNo) === Number(ordNo));
                 const rev     = Number((row && row.InvoAm) || 0);
                 const margDkk = rev - cost;
@@ -4991,7 +5069,7 @@ app.get('/', (req, res) => {
                 let totalCost = 0; let totalRev = 0; let n = 0;
                 for (const row of _kfInvoiceRows) {
                     const m = _kfMarginMap[String(row.OrdNo)];
-                    if (m) { totalCost += m.totalCost || 0; totalRev += Number(row.InvoAm || 0); n++; }
+                    if (m) { totalCost += _kfCost(m); totalRev += Number(row.InvoAm || 0); n++; }
                 }
                 const margDkk = n > 0 ? (totalRev - totalCost) : null;
                 const margPct = n > 0 ? _kfCalcMarginPct(totalRev, totalCost) : null;

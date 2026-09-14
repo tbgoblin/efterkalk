@@ -55,6 +55,7 @@ BEGIN
         Seller          nvarchar(100) NULL,
         Revenue         decimal(19,4) NOT NULL,
         Cost            decimal(19,4) NULL,
+        StyklisteFallbackCost decimal(19,4) NULL,
         ContributionMargin AS (
             CASE WHEN Cost IS NULL THEN NULL ELSE Revenue - Cost END
         ) PERSISTED,
@@ -90,6 +91,13 @@ BEGIN
         INCLUDE (SnapshotId, CustNo, Revenue, Cost, IsActive);
 END;
 
+IF OBJECT_ID(N'dbo.EfterkalkOrderSnapshot', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.EfterkalkOrderSnapshot', 'StyklisteFallbackCost') IS NULL
+BEGIN
+    ALTER TABLE dbo.EfterkalkOrderSnapshot
+    ADD StyklisteFallbackCost decimal(19,4) NULL;
+END;
+
 EXEC(N'
 CREATE OR ALTER VIEW dbo.vw_EfterkalkCustomerCurrent
 AS
@@ -105,11 +113,21 @@ AS
         CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
              THEN SUM(o.Cost) END AS Cost,
         CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(ISNULL(o.StyklisteFallbackCost, 0)) END AS StyklisteFallbackCost,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.Cost) + SUM(ISNULL(o.StyklisteFallbackCost, 0)) END AS AdjustedCost,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
              THEN SUM(o.Revenue) - SUM(o.Cost) END AS ContributionMargin,
         CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
                   AND SUM(o.Revenue) <> 0
              THEN ((SUM(o.Revenue) - SUM(o.Cost)) * CONVERT(decimal(19,6), 100)) / SUM(o.Revenue)
         END AS MarginPct,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.Revenue) - SUM(o.Cost) - SUM(ISNULL(o.StyklisteFallbackCost, 0)) END AS AdjustedContributionMargin,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+                  AND SUM(o.Revenue) <> 0
+             THEN ((SUM(o.Revenue) - SUM(o.Cost) - SUM(ISNULL(o.StyklisteFallbackCost, 0))) * CONVERT(decimal(19,6), 100)) / SUM(o.Revenue)
+        END AS AdjustedMarginPct,
         CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete
     FROM dbo.EfterkalkSnapshotRun r
     JOIN dbo.EfterkalkOrderSnapshot o ON o.SnapshotId = r.SnapshotId
@@ -131,11 +149,21 @@ AS
         CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
              THEN SUM(o.Cost) END AS Cost,
         CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(ISNULL(o.StyklisteFallbackCost, 0)) END AS StyklisteFallbackCost,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.Cost) + SUM(ISNULL(o.StyklisteFallbackCost, 0)) END AS AdjustedCost,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
              THEN SUM(o.Revenue) - SUM(o.Cost) END AS ContributionMargin,
         CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
                   AND SUM(o.Revenue) <> 0
              THEN ((SUM(o.Revenue) - SUM(o.Cost)) * CONVERT(decimal(19,6), 100)) / SUM(o.Revenue)
         END AS MarginPct,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.Revenue) - SUM(o.Cost) - SUM(ISNULL(o.StyklisteFallbackCost, 0)) END AS AdjustedContributionMargin,
+        CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+                  AND SUM(o.Revenue) <> 0
+             THEN ((SUM(o.Revenue) - SUM(o.Cost) - SUM(ISNULL(o.StyklisteFallbackCost, 0))) * CONVERT(decimal(19,6), 100)) / SUM(o.Revenue)
+        END AS AdjustedMarginPct,
         CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete
     FROM dbo.EfterkalkSnapshotRun r
     JOIN dbo.EfterkalkOrderSnapshot o ON o.SnapshotId = r.SnapshotId

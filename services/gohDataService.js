@@ -844,6 +844,28 @@ async function getAppStatesByPrefix(prefix) {
     }
 }
 
+async function getAppStateKeysByPrefix(prefix) {
+    if (!isEnabled()) return null;
+    const pool = await getPool();
+    if (!pool) return null;
+    try {
+        const normalizedPrefix = String(prefix || '').slice(0, 100);
+        const result = await pool.request()
+            .input('prefix', sql.NVarChar(100), normalizedPrefix)
+            .query(`SELECT StateKey, UpdatedAt
+                    FROM dbo.AppState
+                    WHERE LEFT(StateKey, LEN(@prefix)) = @prefix
+                    ORDER BY StateKey`);
+        return (result.recordset || []).map(row => ({
+            key: String(row.StateKey || ''),
+            updatedAt: row.UpdatedAt
+        }));
+    } catch (err) {
+        markUnavailable(err);
+        return null;
+    }
+}
+
 async function setAppState(key, payload) {
     if (!isEnabled()) return false;
     const pool = await getPool();
@@ -905,4 +927,4 @@ async function upsertBomLaserTechnicalParameter(input, updatedByValue) {
         return null;
     }
 }
-module.exports = { configure, isEnabled, getStatus, recordAftercalcSnapshot, getOrderTrend, saveRawImport, getAppState, getAppStatesByPrefix, setAppState, getBomLaserParameters, getBomLaserParameter, upsertBomLaserParameter, importBomLaserParameters, getBomLaserTechnicalParameters, getBomLaserTechnicalParameter, getBomLaserTechnicalParametersForMaterial, upsertBomLaserTechnicalParameter, importBomLaserTechnicalParameters, getBomBendingParameters, upsertBomBendingMachine, upsertBomBendingHandlingBand, addBomBendingActualSample, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };
+module.exports = { configure, isEnabled, getStatus, recordAftercalcSnapshot, getOrderTrend, saveRawImport, getAppState, getAppStatesByPrefix, getAppStateKeysByPrefix, setAppState, getBomLaserParameters, getBomLaserParameter, upsertBomLaserParameter, importBomLaserParameters, getBomLaserTechnicalParameters, getBomLaserTechnicalParameter, getBomLaserTechnicalParametersForMaterial, upsertBomLaserTechnicalParameter, importBomLaserTechnicalParameters, getBomBendingParameters, upsertBomBendingMachine, upsertBomBendingHandlingBand, addBomBendingActualSample, serverLabel: GOH_SERVER + '/' + GOH_DATABASE };
