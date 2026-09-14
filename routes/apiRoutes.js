@@ -1882,7 +1882,7 @@ function createApiRouter({
 
     router.get('/admin/lagerliste-diverse/:month', async (req, res) => {
         if (!requireSuperadmin(req, res)) return;
-        try { res.json({ ok: true, data: await diverseService.load(req.params.month) }); }
+        try { res.json({ ok: true, data: await diverseService.load(req.params.month), template: diverseService.defaultRows() }); }
         catch (err) { res.status(400).json({ ok: false, error: err.message }); }
     });
     router.post('/admin/lagerliste-diverse/:month', express.json(), async (req, res) => {
@@ -3283,7 +3283,8 @@ function createApiRouter({
         try {
             const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: req.params.month });
             if (!snapshot) return res.status(404).json({ ok: false, error: 'Snapshot ikke fundet' });
-            return res.json({ ok: true, ...snapshot });
+            const report = await diverseService.applyToSnapshot(snapshot, req.params.month);
+            return res.json({ ok: true, ...report });
         } catch (err) {
             logEvent('ERROR lagerliste/snapshot: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message || 'Snapshot fejl' });

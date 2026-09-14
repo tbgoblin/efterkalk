@@ -30,7 +30,15 @@ function calculateRows(rows) {
     });
 }
 function defaultRows() {
-    return calculateRows(names.map(category => ({ category, mode: 'amount' })));
+    const details = {
+        'Paller': ['Paller 1/1', 'Paller 1/2', 'Paller 1 1/2', 'Paller 2/1', 'Rammer 1/1', 'Rammer 1/2', 'Rammer 2/1'],
+        'Forbrugsmatl. Pakkeri': ['1/2 palle pap', '1/1 palle pap', 'Gantech tape', 'Grøn plastbånd', 'Plast folie', 'Stræk film hånd 480mm', 'Plast til maskin wrap', 'Foam skum', 'Emballage træ 75*19*800', 'Emballage træ 75*19*120', 'Strøer 1200*75*75', 'Tremmekasse 1900*2045', 'Strøer 2450*100*100', 'Fiberarmeret tape', 'Pap kasse 20644'],
+        'Forbrugsmatl. Svejseafd.': ['Flabskive', 'Fiberskive', 'Skæreskive', 'Svejsetråd 0,8 – 15 kg/stk.', 'Svejsetråd 1,0 – 15 kg/stk.', 'Svejsetråd 1,2 metal/rutil – 12,5 kg/stk.', 'Robot 1,0', 'Robot 1,2', 'Svejsetråd RF', 'Svejsetråd Alu – 14,5 kg/stk.', 'Handsker', 'Slibematr. Timesave/Cos'],
+        'Gasser': ['Secure8', 'Argon 4', 'Secure 18', 'Formier 50L', 'Robomix', 'Secure 2', 'Oxygen 10L', 'Oxygen 5L', '17 kg Propan', 'Oxygen bate', 'Nitrogen BU (kg)']
+    };
+    return calculateRows(names.flatMap(category => details[category]
+        ? details[category].map(Descr => ({ category, Descr, mode: 'quantity' }))
+        : [{ category, mode: 'amount' }]));
 }
 function createLagerlisteDiverseService({ gohData, getConnection }) {
     async function load(month) {
@@ -69,6 +77,27 @@ function createLagerlisteDiverseService({ gohData, getConnection }) {
         const rows = [...calculateRows(manual.rows), ...automatic];
         return { month: manual.month, revision: manual.revision || null, rows, complete: rows.every(row => row.complete), total: Math.round(rows.reduce((sum, row) => sum + row.Value, 0) * 100) / 100 };
     }
-    return { load, save, current };
+    async function applyToSnapshot(snapshot, month) {
+        const manual = await load(month);
+        if (!manual.saved || !snapshot || !snapshot.current) return snapshot;
+        const base = snapshot.current;
+        const storedRows = base.categories && base.categories.diverse || [];
+        // Historical stock prices must come from that snapshot, never today's Visma query.
+        const automatic = storedRows.filter(row => row.mode === 'visma');
+        const missingAutomatic = !base.diverseStatus;
+        const rows = [...calculateRows(manual.rows), ...automatic];
+        if (missingAutomatic) {
+            for (const category of ['PEM (44)', 'Sv. bolte (45)', 'POP nitter (46)', 'Muffer (63)']) {
+                if (!automatic.some(row => row.category === category)) rows.push({ category, Descr: 'Historisk Visma-værdi mangler', mode: 'visma', complete: false, Value: 0 });
+            }
+        }
+        const total = Math.round(rows.reduce((sum, row) => sum + Number(row.Value || 0), 0) * 100) / 100;
+        return { ...snapshot, current: { ...base,
+            categories: { ...base.categories, diverse: rows },
+            totals: { ...base.totals, diverse: total, total: Number(base.totals.total || 0) - Number(base.totals.diverse || 0) + total },
+            diverseStatus: { month, complete: rows.every(row => row.complete), revision: manual.revision, overlay: true, updatedAt: manual.updatedAt }
+        } };
+    }
+    return { load, save, current, applyToSnapshot, defaultRows };
 }
 module.exports = { createLagerlisteDiverseService, calculateRows, defaultRows, monthNow };

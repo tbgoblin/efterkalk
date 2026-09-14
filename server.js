@@ -2640,11 +2640,13 @@ app.get('/', (req, res) => {
                     <p>Stangmateriale er ikke med. PEM 44, bolte 45, nitter 46 og muffer 63 hentes automatisk fra Visma, lager 1, til standardpris. Tomme felter er ikke bekræftede nuller. Skrot: paller × kg/palle × kg-pris.</p>
                     <input type="month" id="diverseAdminMonth" aria-label="Diverse måned">
                     <button onclick="diverseAdminLoad()">Hent måned</button>
+                    <button onclick="diverseAdminCopyPrevious()">Kopiér forrige måned</button>
                     <div id="diverseAdminRows" style="overflow:auto;max-height:55vh"></div>
                     <select id="diverseAdminCategory" aria-label="Ny linjes kategori">
                         <option>Div. bolte</option><option>Paller</option><option>Forbrugsmatl. Pakkeri</option><option>Gasser</option><option>Forbrugsmatl. Svejseafd.</option><option>Kølevæske</option><option>Skrot Alu</option><option>Skrot RF</option><option>Skrot Sort</option>
                     </select>
                     <button onclick="diverseAdminAdd()">Tilføj detaljelinje</button>
+                    <button onclick="diverseAdminUseTemplate()">Brug skabelon for kategori</button>
                     <button onclick="diverseAdminSave()">Gem Diverse</button>
                     <div id="diverseAdminStatus" role="status"></div>
                 </section>

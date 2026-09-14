@@ -639,6 +639,22 @@ function lagerlisteCollapsibleSection(title, content, targetId, value = null) {
         + '</section>';
 }
 
+function lagerlisteDiverseSummary(rows) {
+    if (!(rows || []).length) return '';
+    const groups = new Map(['PEM (44)', 'Sv. bolte (45)', 'POP nitter (46)', 'Muffer (63)'].map(category => [category, { category, Value: 0, complete: true }]));
+    for (const row of rows) {
+        const group = groups.get(row.category) || { category: row.category, Value: 0, complete: true };
+        group.Value += Number(row.Value || 0);
+        group.complete = group.complete && row.complete !== false;
+        groups.set(row.category, group);
+    }
+    return lagerlisteRowsTable(Array.from(groups.values()), [
+        { key: 'category', label: 'Diverse – kategori' },
+        { key: 'Value', label: 'Sum', format: lagerlisteFormat },
+        { key: 'complete', label: 'Status', format: value => value ? 'Udfyldt' : 'Ufuldstændig – foreløbigt beløb' }
+    ]);
+}
+
 function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, displayLabel = 'Aktuel') {
     const root = document.getElementById('lagerlisteResults');
     if (!root) return;
@@ -670,6 +686,7 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
         + '<option value="fifo"' + (lagerlistePlatePriceMode === 'fifo' ? ' selected' : '') + '>FIFO (StcBal.PhCstPr)</option></select></label>'
         + '<small style="display:block">Gælder Pladelager, oversigt og PDF. Gemte lukninger ændres ikke. Begge priser vises i detaljerne.</small></div>'
         + (payload.diverseStatus && !payload.diverseStatus.complete ? '<p role="alert" style="color:#b45309">FORELØBIG TOTAL: Diverse er ikke færdigudfyldt. Manglende beløb er ikke medregnet.</p>' : '')
+        + (payload.diverseStatus && payload.diverseStatus.overlay ? '<p>Diverse: månedens administrative tillæg (' + lagerlisteEscape(payload.diverseStatus.month) + '). Original månedslukning er bevaret.</p>' : '')
         + lagerlisteSummaryTable({ generatedAt, totals, categories, comparison, displayLabel: lagerlisteDisplayedLabel })
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
         + lagerlisteCollapsibleSection('Diverse' + (payload.diverseStatus && !payload.diverseStatus.complete ? ' – UFULDSTÆNDIG: udfyld administrationen' : ''), lagerlisteRowsTable(categories.diverse || [], [
@@ -685,6 +702,8 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
         + lagerlisteCollapsibleSection('Opfølgningsvarer', lagerlisteOpfolgningTable(opfolgningRows), 'lagerliste-opfolgning-section', totals.opfolgningvare)
         + lagerlisteCollapsibleSection('Ordrer klar til fakturering', lagerlisteReadyToInvoiceTable(readyToInvoiceRows), 'lagerliste-ready-invoice-section', totals.finishedNotInvoiced)
         + lagerlisteCollapsibleSection('Salgsordre VIA', lagerlisteSalgordreViaTable(viaRows), 'lagerliste-salgordre-via-section', sumRows(viaRows));
+    const diverseBody = document.getElementById('lagerliste-diverse-section');
+    if (diverseBody) diverseBody.insertAdjacentHTML('afterbegin', lagerlisteDiverseSummary(categories.diverse));
     lagerlisteEnhanceTables();
 }
 
@@ -878,6 +897,7 @@ function lagerlisteMovementSpecs(payload) {
         { category: 'Rest plader', rows: flatRestDetails, keyOf: r => String(r.ProdNo || '') + (r.OrdNo ? '/' + String(r.OrdNo) : ''), labelOf: r => r.Txt2 || r.Descr, valueOf: r => Number(r.Value || 0), orderNoOf: r => Number(r.OrdNo || 0) },
         { category: 'Stang materiale', rows: categories.stang || [], keyOf: r => String(r.ProdNo || ''), labelOf: r => r.Descr, valueOf: r => Number(r.Value || 0), orderNoOf: () => 0 },
         { category: 'Lager Komponenter', rows: categories.gr5Items || [], keyOf: r => String(r.ProdNo || ''), labelOf: r => r.Descr, valueOf: r => Number(r.FifoValue || 0), orderNoOf: () => 0 },
+        { category: 'Diverse', rows: categories.diverse || [], keyOf: r => String(r.category || '') + '/' + String(r.ProdNo || r.Descr || ''), labelOf: r => r.Descr, valueOf: r => Number(r.Value || 0), orderNoOf: () => 0 },
         { category: 'Opfølgningsvarer', rows: categories.opfolgningvare || [], keyOf: r => String(r.ProdNo || ''), labelOf: r => r.Descr, valueOf: r => Number(r.Value || 0), orderNoOf: () => 0 },
         { category: 'Plader VIA', rows: categories.nestingCutting || [], keyOf: r => String(r.OrdNo || '') + '/' + String(r.ProdNo || ''), labelOf: r => (r.Products ? String(r.Products) + ' · ' : '') + 'Rute ' + String(r.Route || '-'), valueOf: r => lagerlisteNestingCountedValue(r), orderNoOf: r => Number(r.SalesOrdNo || r.OrdNo || 0) },
         { category: 'Færdige SO', rows: categories.finishedNotInvoiced || [], keyOf: r => String(r.OrdNo || ''), labelOf: r => r.CustomerName, valueOf: r => Number(r.Value || 0), orderNoOf: r => Number(r.OrdNo || 0) },
