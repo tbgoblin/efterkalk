@@ -6,8 +6,8 @@ function diverseAdminRender() {
     const input = (row, key, disabled = false) => '<input style="width:90px" type="number" min="0" step="any" data-field="' + key + '" value="' + (row[key] ?? '') + '"' + (disabled ? ' disabled' : '') + '>';
     root.innerHTML = '<table><thead><tr><th>Kategori / beskrivelse</th><th>Beregning</th><th>Beløb</th><th>Antal / paller</th><th>Kg/palle</th><th>Pris / kg-pris</th><th>Handling</th><th>Værdi</th></tr></thead><tbody>'
         + diverseAdminRows.map((row, index) => '<tr data-index="' + index + '"><td>' + lagerlisteEscape(row.category)
-            + '<br><input data-field="Descr" value="' + lagerlisteEscape(row.Descr) + '"></td><td><select data-field="mode"' + (row.category.startsWith('Skrot ') ? ' disabled' : '') + '>'
-            + ['amount', 'quantity', 'pallets'].filter(mode => mode !== 'pallets' || row.category.startsWith('Skrot ')).map(mode => '<option value="' + mode + '"' + (row.mode === mode ? ' selected' : '') + '>' + ({ amount: 'Direkte beløb', quantity: 'Antal × pris', pallets: 'Paller × kg × pris' })[mode] + '</option>').join('')
+            + '<br><input data-field="Descr" value="' + lagerlisteEscape(row.Descr) + '"></td><td><select data-field="mode">'
+            + (row.category.startsWith('Skrot ') ? ['amount', 'pallets'] : ['amount', 'quantity']).map(mode => '<option value="' + mode + '"' + (row.mode === mode ? ' selected' : '') + '>' + ({ amount: 'Direkte beløb', quantity: 'Antal × pris', pallets: 'Paller × kg × pris' })[mode] + '</option>').join('')
             + '</select></td><td>' + input(row, 'amount', row.mode !== 'amount') + '</td><td>' + input(row, 'quantity', row.mode === 'amount') + '</td><td>' + input(row, 'kg', row.mode !== 'pallets') + '</td><td>' + input(row, 'price', row.mode === 'amount') + '</td><td><button type="button" onclick="diverseAdminRemove(' + index + ')">Fjern</button></td></tr>').join('') + '</tbody></table>';
     root.querySelectorAll('[data-field="mode"]').forEach(select => select.onchange = () => { diverseAdminCollect(); diverseAdminRender(); });
     root.querySelectorAll('thead th').forEach(th => { th.style.position = 'sticky'; th.style.top = '0'; th.style.background = '#eaf2ff'; });
@@ -28,7 +28,8 @@ function diverseAdminPreview() {
         complete = complete && valid;
         tr.querySelector('[data-value]').textContent = valid ? lagerlisteFormat(value) : 'Ikke udfyldt';
     });
-    document.querySelector('#diverseAdminRows [data-manual-total]').textContent = 'Manuelle værdier: ' + lagerlisteFormat(total) + (complete ? '' : ' (foreløbigt – tomme felter mangler)') + '. Visma 44/45/46/63 tilføjes i Lagerliste.';
+    const manualStock = diverseAdminRows.some(row => row.category === 'PEM (44)');
+    document.querySelector('#diverseAdminRows [data-manual-total]').textContent = 'Manuelle værdier: ' + lagerlisteFormat(total) + (complete ? '' : ' (foreløbigt – tomme felter mangler)') + (manualStock ? '. Denne måned: 44/45/46/63 indtastes manuelt; Visma tilføjes IKKE.' : '. Visma 44/45/46/63 tilføjes i Lagerliste.');
 }
 function diverseAdminCollect() {
     document.querySelectorAll('#diverseAdminRows tr[data-index]').forEach(tr => {

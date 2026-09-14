@@ -18,6 +18,33 @@ test('Diverse disallows invalid amounts, stang and direct amount plus details do
     assert.throws(() => calculateRows([{ category: 'Gasser', mode: 'amount', amount: 20 }, { category: 'Gasser', mode: 'quantity', quantity: 1, price: 2 }]), /ikke begge/);
 });
 
+test('Skrot manual and pallet methods are alternatives, never added together', () => {
+    const input = { category: 'Skrot Sort', mode: 'amount', amount: 13600, quantity: 8, kg: 1000, price: 2 };
+    assert.equal(calculateRows([input])[0].Value, 13600);
+    assert.equal(calculateRows([{ ...input, mode: 'pallets' }])[0].Value, 16000);
+    assert.equal(calculateRows([{ ...input, amount: 0 }])[0].Value, 0);
+    assert.equal(calculateRows([{ ...input, amount: '' }])[0].complete, false);
+    assert.throws(() => calculateRows([input, { ...input, mode: 'pallets' }]), /ikke begge/);
+    assert.throws(() => calculateRows([input, input]), /ikke begge/);
+});
+
+test('Skrot method survives monthly save, reload and historical report', async () => {
+    const states = new Map();
+    const service = createLagerlisteDiverseService({ gohData: {
+        getAppState: async key => states.has(key) ? { payload: states.get(key) } : null,
+        setAppState: async (key, value) => { states.set(key, value); return true; }
+    } });
+    const rows = defaultRows();
+    Object.assign(rows.find(row => row.category === 'Skrot Sort'), { mode: 'amount', amount: 13600 });
+    await service.save('2026-08', rows, 'test');
+    const reloaded = await service.load('2026-08');
+    assert.equal(reloaded.rows.find(row => row.category === 'Skrot Sort').mode, 'amount');
+    assert.equal(reloaded.rows.find(row => row.category === 'Skrot Alu').mode, 'pallets');
+    const report = await service.applyToSnapshot({ current: { categories: {}, totals: { total: 100 } } }, '2026-08');
+    assert.equal(report.current.totals.diverse, 13600);
+    assert.equal(report.current.totals.total, 13700);
+});
+
 test('monthly save preserves older revisions and does not write closure keys', async () => {
     const states = new Map();
     const gohData = { getAppState: async key => states.has(key) ? { payload: states.get(key) } : null,
@@ -33,7 +60,7 @@ test('monthly save preserves older revisions and does not write closure keys', a
 });
 
 test('failed GOH save is an error, not a success', async () => {
-    const service = createLagerlisteDiverseService({ gohData: { setAppState: async () => false } });
+    const service = createLagerlisteDiverseService({ gohData: { getAppState: async () => null, setAppState: async () => false } });
     await assert.rejects(service.save('2026-08', defaultRows(), 'admin'), /GOH/);
 });
 
@@ -76,6 +103,25 @@ test('historical overlay retains saved Visma values, replacing only manual Diver
     const result = await service.applyToSnapshot(snapshot, '2026-08');
     assert.equal(result.current.totals.diverse, 45);
     assert.equal(result.current.totals.total, 145);
+});
+
+test('manual August replaces automatic stock values once and retains mode on save', async () => {
+    const states = new Map();
+    const manual = [...defaultRows(), ...['PEM (44)', 'Sv. bolte (45)', 'POP nitter (46)', 'Muffer (63)'].map(category => ({ category, mode: 'amount', amount: 10 }))];
+    states.set('lagerliste_diverse_2026-08', { saved: true, automaticSource: 'manual', rows: manual });
+    const service = createLagerlisteDiverseService({ gohData: {
+        getAppState: async key => states.has(key) ? { payload: states.get(key) } : null,
+        setAppState: async (key, value) => { states.set(key, value); return true; }
+    }, getConnection: async () => { throw new Error('No live Visma for August'); } });
+    const saved = await service.save('2026-08', manual, 'test');
+    assert.equal(saved.automaticSource, 'manual');
+    const snapshot = { current: { totals: { diverse: 999, total: 1099 }, categories: { diverse: [{ mode: 'visma', category: 'PEM (44)', Value: 999, complete: true }] } } };
+    const report = await service.applyToSnapshot(snapshot, '2026-08');
+    assert.equal(report.current.totals.diverse, 40);
+    assert.equal(report.current.totals.total, 140);
+    assert.ok(report.current.categories.diverse.every(row => row.mode !== 'visma'));
+    assert.equal(snapshot.current.totals.total, 1099);
+    await assert.rejects(service.save('2026-09', manual, 'test'), /kategori/);
 });
 
 test('unavailable GOH does not appear as an empty new month', async () => {

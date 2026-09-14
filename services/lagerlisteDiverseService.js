@@ -1,19 +1,21 @@
 const { randomUUID } = require('crypto');
 const names = ['Div. bolte', 'Paller', 'Forbrugsmatl. Pakkeri', 'Gasser', 'Forbrugsmatl. Svejseafd.', 'Kølevæske', 'Skrot Alu', 'Skrot RF', 'Skrot Sort'];
+const automaticNames = ['PEM (44)', 'Sv. bolte (45)', 'POP nitter (46)', 'Muffer (63)'];
 const monthNow = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit' }).format(new Date());
 function validateMonth(month) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Ugyldig måned');
     return month;
 }
-function calculateRows(rows) {
+function calculateRows(rows, { manualAutomatic = false } = {}) {
+    const allowedNames = manualAutomatic ? [...names, ...automaticNames] : names;
     if (!Array.isArray(rows) || rows.length > 300) throw new Error('Ugyldige Diverse-linjer');
-    for (const category of names) {
+    for (const category of allowedNames) {
         const group = rows.filter(row => row.category === category);
-        if (group.length > 1 && group.some(row => row.mode === 'amount') && !category.startsWith('Skrot ')) throw new Error(category + ': Brug enten ét direkte beløb eller detaljelinjer, ikke begge.');
+        if (group.length > 1 && group.some(row => row.mode === 'amount')) throw new Error(category + ': Brug enten ét direkte beløb eller detaljelinjer, ikke begge.');
     }
     return rows.map(row => {
-        if (!names.includes(row.category)) throw new Error('Ukendt kategori');
-        const mode = row.category.startsWith('Skrot ') ? 'pallets' : row.mode;
+        if (!allowedNames.includes(row.category)) throw new Error('Ukendt kategori');
+        const mode = row.mode || (row.category.startsWith('Skrot ') ? 'pallets' : row.mode);
         if (!['amount', 'quantity', 'pallets'].includes(mode)) throw new Error('Ugyldig beregning');
         const number = key => {
             if (row[key] === '' || row[key] == null) return null;
@@ -38,7 +40,7 @@ function defaultRows() {
     };
     return calculateRows(names.flatMap(category => details[category]
         ? details[category].map(Descr => ({ category, Descr, mode: 'quantity' }))
-        : [{ category, mode: 'amount' }]));
+        : [{ category, mode: category.startsWith('Skrot ') ? 'pallets' : 'amount' }]));
 }
 function createLagerlisteDiverseService({ gohData, getConnection }) {
     async function load(month) {
@@ -49,9 +51,11 @@ function createLagerlisteDiverseService({ gohData, getConnection }) {
     }
     async function save(month, rows, username) {
         validateMonth(month);
-        const validated = calculateRows(rows);
-        if (names.some(name => !validated.some(row => row.category === name))) throw new Error('Alle kategorier skal være med');
-        const payload = { month, rows: validated, saved: true, updatedAt: new Date().toISOString(), updatedBy: String(username || ''), revision: randomUUID() };
+        const previous = await load(month);
+        const manualAutomatic = previous.automaticSource === 'manual';
+        const validated = calculateRows(rows, { manualAutomatic });
+        if ([...names, ...(manualAutomatic ? automaticNames : [])].some(name => !validated.some(row => row.category === name))) throw new Error('Alle kategorier skal være med');
+        const payload = { month, rows: validated, saved: true, automaticSource: manualAutomatic ? 'manual' : 'visma', updatedAt: new Date().toISOString(), updatedBy: String(username || ''), revision: randomUUID() };
         if (!await gohData.setAppState('lagerliste_diverse_rev_' + payload.revision, payload, { createOnly: true })) throw new Error('GOH kunne ikke gemme revisionen');
         if (!await gohData.setAppState('lagerliste_diverse_' + month, payload)) throw new Error('GOH kunne ikke gemme månedens værdier');
         return payload;
@@ -83,9 +87,10 @@ function createLagerlisteDiverseService({ gohData, getConnection }) {
         const base = snapshot.current;
         const storedRows = base.categories && base.categories.diverse || [];
         // Historical stock prices must come from that snapshot, never today's Visma query.
-        const automatic = storedRows.filter(row => row.mode === 'visma');
-        const missingAutomatic = !base.diverseStatus;
-        const rows = [...calculateRows(manual.rows), ...automatic];
+        const manualAutomatic = manual.automaticSource === 'manual';
+        const automatic = manualAutomatic ? [] : storedRows.filter(row => row.mode === 'visma');
+        const missingAutomatic = !manualAutomatic && !base.diverseStatus;
+        const rows = [...calculateRows(manual.rows, { manualAutomatic }), ...automatic];
         if (missingAutomatic) {
             for (const category of ['PEM (44)', 'Sv. bolte (45)', 'POP nitter (46)', 'Muffer (63)']) {
                 if (!automatic.some(row => row.category === category)) rows.push({ category, Descr: 'Historisk Visma-værdi mangler', mode: 'visma', complete: false, Value: 0 });
@@ -95,7 +100,7 @@ function createLagerlisteDiverseService({ gohData, getConnection }) {
         return { ...snapshot, current: { ...base,
             categories: { ...base.categories, diverse: rows },
             totals: { ...base.totals, diverse: total, total: Number(base.totals.total || 0) - Number(base.totals.diverse || 0) + total },
-            diverseStatus: { month, complete: rows.every(row => row.complete), revision: manual.revision, overlay: true, updatedAt: manual.updatedAt }
+            diverseStatus: { month, complete: rows.every(row => row.complete), revision: manual.revision, overlay: true, automaticSource: manual.automaticSource || 'visma', updatedAt: manual.updatedAt }
         } };
     }
     return { load, save, current, applyToSnapshot, defaultRows };
