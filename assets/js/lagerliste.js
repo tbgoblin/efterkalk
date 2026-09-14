@@ -1533,11 +1533,16 @@ function exportLagerlisteJson() {
 function exportLagerlistePdf() {
     const root = document.getElementById('lagerlisteResults');
     if (!root) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        alert('Kunne ikke åbne print-vindue. Tillad popups og prøv igen.');
-        return;
-    }
+    // Print inside the app: Electron intentionally denies window.open().
+    const previousFrame = document.getElementById('lagerlistePrintFrame');
+    if (previousFrame) previousFrame.remove();
+    const printFrame = document.createElement('iframe');
+    printFrame.id = 'lagerlistePrintFrame';
+    printFrame.title = 'Lagerliste PDF';
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0;';
+    document.body.appendChild(printFrame);
+    const printWindow = printFrame.contentWindow;
     const printRoot = root.cloneNode(true);
     printRoot.querySelectorAll('.lagerliste-section > div[id]').forEach(sectionBody => {
         sectionBody.style.display = 'block';
@@ -1547,12 +1552,22 @@ function exportLagerlistePdf() {
     });
     printRoot.querySelectorAll('.lagerliste-table-tools').forEach(tool => tool.remove());
     const reportLabel = String(lagerlisteDisplayedLabel || 'Aktuel');
+    printFrame.onload = async () => {
+        try {
+            if (printWindow.document.fonts) await printWindow.document.fonts.ready;
+            printWindow.addEventListener('afterprint', () => printFrame.remove(), { once: true });
+            printWindow.focus();
+            printWindow.print();
+        } catch (err) {
+            printFrame.remove();
+            alert('Kunne ikke udskrive Lagerliste: ' + String(err.message || err));
+        }
+    };
+    printWindow.document.open();
     printWindow.document.write('<!DOCTYPE html><html><head><title>Lagerliste - ' + lagerlisteEscape(reportLabel) + '</title><meta charset="UTF-8">'
         + '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:12px;color:#123} h2{margin:0 0 10px} table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #ccd;padding:6px;text-align:left} th{background:#eef5ff} .lagerliste-section{margin-bottom:12px} .lagerliste-section > div[id]{display:block!important} .lagerliste-plate-detail-row{display:table-row!important} .lagerliste-total-row{display:flex;gap:10px;flex-wrap:wrap;border:1px solid #ccd;padding:6px;margin-top:6px}</style>'
         + '</head><body><h2>Lagerliste · ' + lagerlisteEscape(reportLabel) + '</h2>' + printRoot.innerHTML + '</body></html>');
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 150);
 }
 
 async function refreshLagerlisteSnapshotList() {
