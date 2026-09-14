@@ -866,19 +866,24 @@ async function getAppStateKeysByPrefix(prefix) {
     }
 }
 
-async function setAppState(key, payload) {
+async function setAppState(key, payload, { createOnly = false } = {}) {
     if (!isEnabled()) return false;
     const pool = await getPool();
     if (!pool) return false;
     try {
-        await pool.request()
+        const result = await pool.request()
             .input('key', sql.NVarChar(100), String(key))
             .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(payload))
-            .query(`MERGE dbo.AppState AS t
+            .input('createOnly', sql.Bit, createOnly)
+            .input('protectRevision', sql.Bit, /^lagerliste_month_\d{4}-\d{2}$/.test(String(key)))
+            .query(`MERGE dbo.AppState WITH (HOLDLOCK) AS t
                 USING (SELECT @key AS StateKey) AS s ON t.StateKey = s.StateKey
-                WHEN MATCHED THEN UPDATE SET Payload = @payload, UpdatedAt = SYSUTCDATETIME()
-                WHEN NOT MATCHED THEN INSERT (StateKey, Payload) VALUES (@key, @payload);`);
-        return true;
+                WHEN MATCHED AND @createOnly = 0
+                    AND (@protectRevision = 0 OR JSON_VALUE(CASE WHEN ISJSON(t.Payload) = 1 THEN t.Payload ELSE '{}' END, '$.revision.number') IS NULL)
+                    THEN UPDATE SET Payload = @payload, UpdatedAt = SYSUTCDATETIME()
+                WHEN NOT MATCHED THEN INSERT (StateKey, Payload) VALUES (@key, @payload)
+                OUTPUT $action AS Action;`);
+        return Boolean(result.recordset && result.recordset.length === 1);
     } catch (err) {
         markUnavailable(err);
         return false;

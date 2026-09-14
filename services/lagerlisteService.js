@@ -2,11 +2,13 @@
 // Read-only lager value by category. Monthly snapshots are intentionally kept
 // separate from live values so closing a month remains reproducible.
 const path = require('path');
+const { buildOrderStates } = require('./lagerliste2Service');
+const { allocateSharedOrders, allocateComponentStock, validateValuation, validateClosure } = require('./lagerlisteAllocation');
 
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v29';
+    const cacheKey = 'lagerliste_v31';
     const excludedOrderNumbers = new Set([61423, 75330, 131790, 140134, 331368]);
     let currentMemoryCache = null;
 
@@ -34,14 +36,14 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return JSON.parse(fsRef.readFileSync(file, 'utf8'));
     }
 
-    async function writeSnapshotFile(fsRef, month, payload) {
+    async function writeSnapshotFile(fsRef, month, payload, { exclusive = false } = {}) {
         fsRef.mkdirSync(snapshotDir, { recursive: true });
         const file = path.join(snapshotDir, String(month || '').replace(/[^0-9-]/g, '') + '.json');
         const content = JSON.stringify(payload) + '\n';
         if (fsRef.promises && typeof fsRef.promises.writeFile === 'function') {
-            await fsRef.promises.writeFile(file, content, 'utf8');
+            await fsRef.promises.writeFile(file, content, { encoding: 'utf8', flag: exclusive ? 'wx' : 'w' });
         } else {
-            fsRef.writeFileSync(file, content, 'utf8');
+            fsRef.writeFileSync(file, content, { encoding: 'utf8', flag: exclusive ? 'wx' : 'w' });
         }
         return file;
     }
@@ -140,6 +142,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         if (!forceRefresh) {
             const cached = diskCache.get(key);
             if (cached) {
+                validateValuation(cached);
                 currentMemoryCache = cached;
                 return cached;
             }
@@ -558,7 +561,30 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             SalesValue: round(row.SalesValue),
             Value: round(toNumber(row.MaterialCost) + toNumber(row.StangCost) + toNumber(row.PurchasedPartCost) + toNumber(row.TimeCost))
         }));
+        const stockAllocation = allocateComponentStock(gr5Items, opfolgningvare);
+        gr5Items.splice(0, gr5Items.length, ...stockAllocation.rows);
+        const viaOrderNos = new Set(salgordreVia.map(row => Number(row.OrdNo)));
+        const sharedOrderNos = finishedNotInvoiced.map(row => Number(row.OrdNo)).filter(ordNo => viaOrderNos.has(ordNo));
+        let packingStates = [];
+        if (sharedOrderNos.length) {
+            const packingRequest = pool.request().input('orderNos', sql.NVarChar(sql.MAX), sharedOrderNos.join(','));
+            const packingResult = await packingRequest.query(`
+                SELECT O.OrdNo, O.InvoNo, O.InvoAm, O.DInvoIF, O.FinDt, O.OrdPrSt,
+                       L.LnNo, L.ProdNo, L.TrTp AS LineTrTp, L.NoOrg, L.NoFin,
+                       L.NoPac, L.NoInvo, L.NoInvoAb, L.CCstPr
+                FROM Ord O
+                LEFT JOIN OrdLn L ON L.OrdNo = O.OrdNo
+                WHERE O.OrdNo IN (SELECT TRY_CAST(value AS int) FROM STRING_SPLIT(@orderNos, ','))
+            `);
+            packingStates = buildOrderStates(packingResult.recordset || []);
+        }
+        const allocation = allocateSharedOrders(finishedNotInvoiced, salgordreVia, packingStates);
+        finishedNotInvoiced.splice(0, finishedNotInvoiced.length, ...allocation.finished);
+        salgordreVia.splice(0, salgordreVia.length, ...allocation.via);
         const payload = {
+            valuationVersion: 31,
+            stockAllocations: stockAllocation.audit,
+            orderAllocations: allocation.audit,
             generatedAt: new Date().toISOString(),
             categories: {
                 plates,
@@ -584,6 +610,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             }
         };
         payload.totals.total = round(Object.values(payload.totals).reduce((sum, value) => sum + toNumber(value), 0));
+        validateValuation(payload);
         currentMemoryCache = payload;
         diskCache.set(key, payload, 5 * 60 * 1000);
         return payload;
@@ -594,16 +621,18 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             ? currentOverride
             : currentMemoryCache;
         if (!current) throw new Error('Lagerliste cache er ikke klar. Tryk Opdater lagerliste først.');
+        validateClosure(current, month);
+        if (readSnapshotFile(fs, month)) throw new Error('Månedslukningen findes allerede. Brug en særskilt revision.');
         const payload = { month, createdAt: new Date().toISOString(), current, diverse };
         const file = path.join(snapshotDir, String(month || '').replace(/[^0-9-]/g, '') + '.json');
-        setImmediate(() => {
-            writeSnapshotFile(fs, month, payload)
-                .catch(err => console.warn('[lagerliste] monthly snapshot write failed:', err.message));
-            if (gohData) gohData.saveRawImport('lagerliste_' + month, 'lagerliste_monthly', payload).catch(() => {});
-            if (gohData && typeof gohData.setAppState === 'function') {
-                gohData.setAppState('lagerliste_month_' + month, payload).catch(() => {});
-            }
-        });
+        if (gohData && typeof gohData.setAppState === 'function') {
+            const saved = await gohData.setAppState('lagerliste_month_' + month, payload, { createOnly: true });
+            if (!saved) throw new Error('Lukningen findes allerede, eller GOH kunne ikke gemme. Intet er overskrevet.');
+        }
+        await writeSnapshotFile(fs, month, payload, { exclusive: true });
+        if (gohData && typeof gohData.saveRawImport === 'function') {
+            await gohData.saveRawImport('lagerliste_' + month, 'lagerliste_monthly', payload);
+        }
         return { ...payload, file };
     }
 
@@ -619,6 +648,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 if (!cached) throw new Error('Lagerliste cache er ikke klar. Tryk Opdater lagerliste først.');
                 return cached;
             })();
+        validateValuation(current);
         const payload = {
             snapshotId,
             kind: 'point-in-time',
@@ -860,6 +890,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             const month = now.toISOString().slice(0, 7);
             if (await loadMonthlySnapshot({ fs, month })) return;
             try {
+                await getCurrent({ forceRefresh: true, forceAftercalc: true });
                 await saveMonthlySnapshot({ fs, month, diverse: [] });
             } catch (err) {
                 if (typeof onError === 'function') onError(err);

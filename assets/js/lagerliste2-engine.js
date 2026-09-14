@@ -71,6 +71,7 @@
         const viaOrders = new Set((categories.salgordreVia || []).map(row => number(row.OrdNo)).filter(Boolean));
         const finishedOrders = new Set((categories.finishedNotInvoiced || []).map(row => number(row.OrdNo)).filter(Boolean));
         const allocation = (row, category) => {
+            if (row.AllocationApplied) return 1;
             const orderNo = number(row.OrdNo);
             const state = orderStates.get(orderNo);
             if (!state) return 1;
