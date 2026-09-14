@@ -6,6 +6,32 @@ let lagerlisteSnapshotRows = [];
 let lagerlistePreviousMonth = null;
 let lagerlistePreviousMonthLabel = '';
 let lagerlisteReconciliationContext = null;
+let lagerlistePlatePriceMode = 'standard';
+let lagerlisteDisplayedComparison = null;
+
+function lagerlistePlateTotals(payload, mode = lagerlistePlatePriceMode) {
+    const totals = { ...(payload.totals || {}) };
+    if (mode !== 'fifo') return totals;
+    const categories = payload.categories || {};
+    const rows = Array.isArray(categories.plates) ? categories.plates : categories.plateGroups;
+    if (!Array.isArray(rows) || rows.some(row => row.FifoValue == null || !Number.isFinite(Number(row.FifoValue)))) {
+        throw new Error('FIFO-værdi mangler i denne periode. Vælg standardpris.');
+    }
+    totals.plates = Math.round(rows.reduce((sum, row) => sum + Number(row.FifoValue), 0) * 100) / 100;
+    return totals;
+}
+
+function lagerlisteSetPlatePrice(mode) {
+    const next = mode === 'fifo' ? 'fifo' : 'standard';
+    try {
+        lagerlistePlateTotals(lagerlisteCurrent, next);
+        if (lagerlisteDisplayedComparison) lagerlistePlateTotals(lagerlisteDisplayedComparison, next);
+        lagerlistePlatePriceMode = next;
+    } catch (err) {
+        alert(err.message);
+    }
+    lagerlisteRender(lagerlisteCurrent, lagerlisteDisplayedComparison, lagerlisteDisplayedLabel);
+}
 
 function lagerlisteFormat(value) {
     return new Intl.NumberFormat('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0)) + ' DKK';
@@ -181,7 +207,7 @@ function lagerlisteComparisonCell(value, previousValue, isChange = false) {
 }
 
 function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = null, displayLabel = 'Aktuel' }) {
-    const previousTotals = comparison && comparison.totals ? comparison.totals : null;
+    const previousTotals = comparison && comparison.totals ? lagerlistePlateTotals(comparison) : null;
     const viaRows = Array.isArray(categories && categories.salgordreVia) ? categories.salgordreVia : [];
     const previousViaRows = Array.isArray(comparison && comparison.categories && comparison.categories.salgordreVia)
         ? comparison.categories.salgordreVia
@@ -217,7 +243,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         ? null
         : previousWarehouseWithoutRest + Number(previousTotals.restPlates || 0);
     const rows = [
-        ['Pladelager', totals.plates, previousTotals && previousTotals.plates, 'lagerliste-plates-section', '', 'Plader på lager: beholdning × standardpris.'],
+        ['Pladelager', totals.plates, previousTotals && previousTotals.plates, 'lagerliste-plates-section', '', 'Plader på lager: beholdning × ' + (lagerlistePlatePriceMode === 'fifo' ? 'FIFO-pris (StcBal.PhCstPr).' : 'standardpris (Prod.Inf).')],
         ['Rest plader', totals.restPlates, previousTotals && previousTotals.restPlates, 'lagerliste-rest-section', '', 'Restplader: vægt × fast pris pr. kg.'],
         ['Stang materiale', totals.stang, previousTotals && previousTotals.stang, 'lagerliste-stang-section', '', 'Stangmateriale: lagerbevægelse til og med i dag × pris/FIFO-pris.'],
         ['Opfølgningsvarer', totals.opfolgningvare, previousTotals && previousTotals.opfolgningvare, 'lagerliste-opfolgning-section', '', 'Opfølgningsvarer: (Bal + StcInc − ShpRsv) × FIFO-pris.'],
@@ -616,9 +642,18 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
     const root = document.getElementById('lagerlisteResults');
     if (!root) return;
     lagerlisteCurrent = payload;
+    lagerlisteDisplayedComparison = comparison;
     lagerlisteDisplayedLabel = String(displayLabel || 'Aktuel');
     const categories = payload.categories || {};
-    const totals = payload.totals || {};
+    let totals;
+    try {
+        totals = lagerlistePlateTotals(payload);
+        if (comparison) lagerlistePlateTotals(comparison);
+    } catch (err) {
+        lagerlistePlatePriceMode = 'standard';
+        totals = lagerlistePlateTotals(payload);
+        alert(err.message);
+    }
     const plateGroups = categories.plateGroups || [];
     const stangRows = categories.stang || [];
     const gr5Rows = categories.gr5Items || [];
@@ -628,7 +663,12 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
     const viaRows = categories.salgordreVia || [];
     const sumRows = (rows, key = 'Value') => (Array.isArray(rows) ? rows : []).reduce((sum, row) => sum + Number(row[key] || 0), 0);
     const generatedAt = lagerlisteFormatDateTime(payload.generatedAt);
-    root.innerHTML = lagerlisteSummaryTable({ generatedAt, totals, categories, comparison, displayLabel: lagerlisteDisplayedLabel })
+    root.innerHTML = '<div class="lagerliste-price-controls" style="margin-bottom:12px"><label>Pladelager – prisgrundlag: '
+        + '<select onchange="lagerlisteSetPlatePrice(this.value)" aria-label="Pladelager prisgrundlag">'
+        + '<option value="standard"' + (lagerlistePlatePriceMode === 'standard' ? ' selected' : '') + '>Standardpris (Prod.Inf)</option>'
+        + '<option value="fifo"' + (lagerlistePlatePriceMode === 'fifo' ? ' selected' : '') + '>FIFO (StcBal.PhCstPr)</option></select></label>'
+        + '<small style="display:block">Gælder Pladelager, oversigt og PDF. Gemte lukninger ændres ikke. Begge priser vises i detaljerne.</small></div>'
+        + lagerlisteSummaryTable({ generatedAt, totals, categories, comparison, displayLabel: lagerlisteDisplayedLabel })
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
         + lagerlisteCollapsibleSection('Rest Plader', lagerlisteRestGroupsTable(categories.restPlateGroups || []), 'lagerliste-rest-section', totals.restPlates)
         + lagerlisteCollapsibleSection('Stang materiale', lagerlisteStangTable(stangRows), 'lagerliste-stang-section', totals.stang)
@@ -1530,9 +1570,46 @@ function exportLagerlisteJson() {
     });
 }
 
-function exportLagerlistePdf() {
+function lagerlisteChoosePdfSections(root) {
+    const existing = document.getElementById('lagerlistePdfOptions');
+    if (existing) existing.remove();
+    const dialog = document.createElement('dialog');
+    dialog.id = 'lagerlistePdfOptions';
+    dialog.style.cssText = 'max-width:520px;width:90%;max-height:85vh;overflow:auto;border:1px solid #ccd;border-radius:12px;padding:24px;color:#123;';
+    const sections = Array.from(root.querySelectorAll('.lagerliste-section')).map(section => ({
+        id: section.querySelector('div[id]').id,
+        title: section.querySelector('h4').textContent.replace(/^\+\s*/, '')
+    }));
+    dialog.innerHTML = '<h3>Vælg indhold til PDF</h3>'
+        + '<p>Eksporterer den viste periode. Oversigten viser hele rapportens totaler, også når kun enkelte detaljer vælges.</p>'
+        + '<label style="display:block;margin:12px 0"><input type="checkbox" data-summary checked> Samlet oversigt (alle kategorier)</label>'
+        + sections.map(section => '<label style="display:block;margin:12px 0"><input type="checkbox" data-section="'
+            + lagerlisteEscape(section.id) + '" checked> ' + lagerlisteEscape(section.title) + '</label>').join('')
+        + '<p data-error role="alert"></p><button type="button" data-cancel>Annuller</button> '
+        + '<button type="button" data-print>Udskriv / PDF</button>';
+    dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.querySelector('[data-print]').onclick = () => {
+        const sectionIds = Array.from(dialog.querySelectorAll('[data-section]:checked')).map(input => input.dataset.section);
+        const summary = dialog.querySelector('[data-summary]').checked;
+        if (!summary && !sectionIds.length) {
+            dialog.querySelector('[data-error]').textContent = 'Vælg mindst én sektion.';
+            return;
+        }
+        dialog.close();
+        exportLagerlistePdf({ sectionIds, summary });
+    };
+    document.body.appendChild(dialog);
+    dialog.showModal();
+}
+
+function exportLagerlistePdf(options = null) {
     const root = document.getElementById('lagerlisteResults');
     if (!root) return;
+    if (!options || !Array.isArray(options.sectionIds)) {
+        lagerlisteChoosePdfSections(root);
+        return;
+    }
     // Print inside the app: Electron intentionally denies window.open().
     const previousFrame = document.getElementById('lagerlistePrintFrame');
     if (previousFrame) previousFrame.remove();
@@ -1544,6 +1621,12 @@ function exportLagerlistePdf() {
     document.body.appendChild(printFrame);
     const printWindow = printFrame.contentWindow;
     const printRoot = root.cloneNode(true);
+    Array.from(printRoot.children).forEach(child => {
+        if (child.matches('.lagerliste-section')) {
+            const body = child.querySelector('div[id]');
+            if (!body || !options.sectionIds.includes(body.id)) child.remove();
+        } else if (!options.summary) child.remove();
+    });
     printRoot.querySelectorAll('.lagerliste-section > div[id]').forEach(sectionBody => {
         sectionBody.style.display = 'block';
     });
@@ -1551,6 +1634,7 @@ function exportLagerlistePdf() {
         detailRow.style.display = 'table-row';
     });
     printRoot.querySelectorAll('.lagerliste-table-tools').forEach(tool => tool.remove());
+    printRoot.querySelectorAll('.lagerliste-price-controls').forEach(control => control.remove());
     const reportLabel = String(lagerlisteDisplayedLabel || 'Aktuel');
     printFrame.onload = async () => {
         try {
@@ -1566,7 +1650,9 @@ function exportLagerlistePdf() {
     printWindow.document.open();
     printWindow.document.write('<!DOCTYPE html><html><head><title>Lagerliste - ' + lagerlisteEscape(reportLabel) + '</title><meta charset="UTF-8">'
         + '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:12px;color:#123} h2{margin:0 0 10px} table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #ccd;padding:6px;text-align:left} th{background:#eef5ff} .lagerliste-section{margin-bottom:12px} .lagerliste-section > div[id]{display:block!important} .lagerliste-plate-detail-row{display:table-row!important} .lagerliste-total-row{display:flex;gap:10px;flex-wrap:wrap;border:1px solid #ccd;padding:6px;margin-top:6px}</style>'
-        + '</head><body><h2>Lagerliste · ' + lagerlisteEscape(reportLabel) + '</h2>' + printRoot.innerHTML + '</body></html>');
+        + '</head><body><h2>Lagerliste · ' + lagerlisteEscape(reportLabel) + '</h2><p>Pladelager – prisgrundlag: '
+        + (lagerlistePlatePriceMode === 'fifo' ? 'FIFO (StcBal.PhCstPr)' : 'Standardpris (Prod.Inf)')
+        + '. Gemte lukninger ændres ikke.</p>' + printRoot.innerHTML + '</body></html>');
     printWindow.document.close();
 }
 

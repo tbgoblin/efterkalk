@@ -5,14 +5,19 @@ const vm = require('node:vm');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../assets/js/lagerliste.js'), 'utf8');
-const printSource = source.slice(source.indexOf('function exportLagerlistePdf()'), source.indexOf('async function refreshLagerlisteSnapshotList()'));
+const printSource = source.slice(source.indexOf('function exportLagerlistePdf('), source.indexOf('async function refreshLagerlisteSnapshotList()'));
 
-function setup(failPrint = false) {
+function setup(failPrint = false, summary = true) {
     const calls = [];
     let html = '';
     const section = { style: {} };
     const detail = { style: {} };
     const clone = {
+        children: [
+            { matches: () => false, remove: () => calls.push('summary removed') },
+            { matches: () => true, querySelector: () => ({ id: 'plates' }), remove: () => calls.push('plates removed') },
+            { matches: () => true, querySelector: () => ({ id: 'via' }), remove: () => calls.push('via removed') }
+        ],
         innerHTML: '<table><tr><td>August snapshot 123,45</td></tr></table>',
         querySelectorAll(selector) {
             if (selector.includes('section')) return [section];
@@ -37,9 +42,10 @@ function setup(failPrint = false) {
         },
         window: { open() { throw new Error('Popup must not be used'); } },
         lagerlisteDisplayedLabel: '2026-08', lagerlisteEscape: value => value,
+        lagerlistePlatePriceMode: 'standard',
         alert: message => calls.push(message)
     });
-    vm.runInContext(printSource + '\nexportLagerlistePdf();', context);
+    vm.runInContext(printSource + '\nexportLagerlistePdf({ sectionIds: ["plates"], summary: ' + summary + ' });', context);
     return { frame, calls, handlers, section, detail, html };
 }
 
@@ -61,4 +67,12 @@ test('Lagerliste cleans up and reports a print failure', async () => {
     await result.frame.onload();
     assert.ok(result.calls.includes('removed'));
     assert.match(result.calls.at(-1), /printer unavailable/);
+});
+
+test('PDF selection excludes unselected sections and optionally the overall summary', () => {
+    const selected = setup(false, false);
+    assert.ok(selected.calls.includes('via removed'));
+    assert.ok(selected.calls.includes('summary removed'));
+    assert.ok(!selected.calls.includes('plates removed'));
+    assert.ok(!setup().calls.includes('summary removed'));
 });
