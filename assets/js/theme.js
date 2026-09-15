@@ -28,7 +28,8 @@
             return brightness > 248 ? 'surface' : brightness > 232 ? 'raised' : 'hover';
         }
         if (brightness > 210) return null;
-        if (spread > 55 && high > 95) return family;
+        if (family === 'blue' && brightness < 85) return 'text';
+        if (spread > 55 && high > 70) return family;
         return brightness < 85 ? 'text' : 'muted';
     }
 
@@ -47,6 +48,7 @@
     const colorPattern = /url\([^)]*\)|var\([^)]*\)|#[\da-f]{3,8}\b|rgba?\([^)]*\)|\b(?:white|black|gray|grey|red|green|blue|navy|silver)\b/gi;
 
     function translate(value, kind) {
+        if (value.includes('url(')) return value;
         return value.replace(colorPattern, literal => {
             if (/^(url|var)\(/i.test(literal)) return literal;
             probe.color = '';

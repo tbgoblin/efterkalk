@@ -538,7 +538,7 @@
         }[kind] || '') + '</svg>';
     }
     function renderCustomerShares(shares, options) {
-        const colors = ['#167260', '#377fa3', '#c18a27', '#a45683', '#648541', '#c05a44', '#77827d'];
+        const colors = ['#167260', '#377fa3', '#c18a27', '#a45683', '#648541', '#c05a44', '#77827d'].map((color, index) => 'var(--goh-chart-' + (index + 1) + ', ' + color + ')');
         const unit = options.metric === 'orders' ? 'antal' : 'DKK';
         const metric = options.metric === 'orders' ? 'Fakturaordrer' : 'Omsætning';
         const selected = shares.segments.find(segment => segment.key === options.selected);

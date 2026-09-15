@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="da">
+<head>
+    <meta charset="utf-8">
+    <title>GOH theme verification</title>
+    <link rel="stylesheet" href="../assets/dashboard.css">
+    <link rel="stylesheet" href="../assets/order-flow.css">
+    <link rel="stylesheet" href="../assets/theme.css" data-goh-theme>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:24px; font-family:'Segoe UI',sans-serif; background:#edf3fb; color:#13253e; }
+        .header-banner-wrapper { display:flex; align-items:center; gap:24px; padding:16px 20px; background:#0f3560; color:#fff; margin-bottom:20px; }
+        .header-banner-wrapper img { width:40px; height:40px; object-fit:contain; padding:5px; background:#fff; border-radius:5px; }
+        h1 { font-size:22px; margin:0; flex:1; }
+        .layout { display:grid; grid-template-columns:260px minmax(0,1fr); gap:24px; }
+        .side-menu-section { padding:16px; border:1px solid #dbe8fa; background:#fff; align-self:start; }
+        .side-menu-section h4 { margin:0 0 12px; color:#0f3560; }
+        .side-menu-section p { color:#4d6680; font-size:12px; }
+        .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+        .goh-widget-body { min-height:0; padding:16px; }
+        .goh-kpis { padding:0; }
+        button,input,select { font:inherit; }
+        input,select { border:1px solid #c9dbf2; border-radius:5px; padding:9px; }
+        .legacy { width:100%; border-collapse:collapse; font-size:13px; }
+        .legacy th { text-align:left; background:#eef5ff; color:#0f3560; padding:12px; border-bottom:1px solid #d8e6f8; }
+        .legacy td { padding:12px; border-bottom:1px solid #e7eff9; }
+        .legacy tr:nth-child(even) { background:#f8fbff; }
+        .legacy tr:hover td { background:#edf5ff; }
+        .legacy .good { color:#1b5e20; background:#e8f5e9; }
+        .legacy .warning { color:#8d6e00; background:#fff8e1; }
+        .legacy .bad { color:#b71c1c; background:#ffebee; }
+        .legacy td:last-child { text-align:right; }
+        .controls { display:flex; gap:12px; margin:14px 0; }
+        .controls input { flex:1; min-width:0; }
+        #verification { display:block; padding:12px 0; font-size:12px; }
+        #dialogOpen { margin-top:16px; }
+    </style>
+    <script src="../assets/js/theme.js" defer></script>
+    <script src="../assets/js/dashboard.js" defer></script>
+</head>
+<body>
+    <header class="header-banner-wrapper"><img src="../assets/brand/logo-gantech.png" alt="Gantech"><h1>Gantech Operations Hub</h1><span>Testprofil</span></header>
+    <div class="layout">
+        <aside class="side-menu-section">
+            <h4>Farvetema</h4>
+            <fieldset class="goh-theme-options" aria-label="Farvetema">
+                <label><input type="radio" name="gohTheme" value="light"><span>Lyst</span></label>
+                <label><input type="radio" name="gohTheme" value="dark"><span>M&#248;rkt</span></label>
+                <label><input type="radio" name="gohTheme" value="system"><span>Automatisk</span></label>
+            </fieldset>
+            <p id="gohThemeStatus" role="status"></p>
+            <output id="verification">Kontrollerer...</output>
+            <button id="dialogOpen" type="button">Widgetindstillinger</button>
+        </aside>
+        <main id="mainDashboard">
+            <div class="grid goh-dashboard">
+                <section class="goh-widget"><header><h4>Oms&#230;tning i kvartalet</h4></header><div class="goh-widget-body"><dl class="goh-kpis"><div class="goh-kpi-main"><dt>3. kvartal 2026</dt><dd>11.800.000 DKK</dd></div><div><dt>Juli</dt><dd>4.000.000 DKK</dd></div><div><dt>August</dt><dd>4.800.000 DKK</dd></div><div><dt>September</dt><dd>3.000.000 DKK</dd></div></dl></div><footer>Bogf&#248;rt oms&#230;tning</footer></section>
+                <section class="goh-widget"><header><h4>Kapacitet og planlagte timer</h4></header><div class="goh-widget-body"><ul class="goh-bars"><li><div><span>Laser</span><strong>127 / 160 timer</strong></div><div class="goh-track"><span style="width:79%"></span></div></li><li><div><span>Buk</span><strong>92 / 120 timer</strong></div><div class="goh-track"><span style="width:77%"></span></div></li><li><div><span>Svejs</span><strong>180 / 160 timer</strong></div><div class="goh-track"><span class="goh-bar-negative" style="width:100%"></span></div></li></ul></div><footer>Seneste 20 dage</footer></section>
+                <section class="goh-widget" style="grid-column:1/-1"><header><h4>Ordreoversigt</h4></header><div class="goh-widget-body"><div class="controls"><input placeholder="Kunde eller ordre"><select aria-label="Status"><option>Alle ordrer</option><option>Afventer</option></select><button disabled>Opdaterer</button></div><table class="legacy"><thead><tr><th>Ordre</th><th>Kunde</th><th>Status</th><th>DB</th></tr></thead><tbody><tr><td>407940</td><td>Logi</td><td class="good">Klar</td><td class="good">15,85 %</td></tr><tr><td>407941</td><td>Nordic</td><td class="warning">Afventer</td><td>12,30 %</td></tr><tr><td>407942</td><td>Dansk Industri</td><td class="bad">Overskredet</td><td class="bad">-4,20 %</td></tr></tbody></table><p id="dynamicHost"></p></div></section>
+            </div>
+        </main>
+    </div>
+    <dialog class="goh-editor" id="settings"><form method="dialog"><header><h3>Widgetindstillinger</h3></header><div class="goh-editor-body"><label>Titel<input value="Kapacitet og planlagte timer"></label><label>Dage<input type="number" value="20"></label><label class="goh-setting-check"><input type="checkbox" checked>Medtag restarbejde</label></div><footer><button>Annuller</button><button class="goh-primary">Gem indstillinger</button></footer></form></dialog>
+    <script>
+        window.addEventListener('DOMContentLoaded', async () => {
+            const output = document.getElementById('verification');
+            try {
+                const check = (condition, message) => { if (!condition) throw Error(message); };
+                const { palette, colorRole } = GohTheme.model;
+                const luminance = hex => {
+                    const values = hex.slice(1).match(/../g).map(value => parseInt(value, 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+                    return values[0] * .2126 + values[1] * .7152 + values[2] * .0722;
+                };
+                let minimum = Infinity;
+                for (const foreground of ['text','muted','blue','green','red','amber','violet']) for (const background of ['surface','raised','hover','blueSurface','greenSurface','redSurface','amberSurface','violetSurface']) {
+                    const ratio = (luminance(palette[foreground]) + .05) / (luminance(palette[background]) + .05);
+                    minimum = Math.min(minimum, ratio);
+                    check(ratio >= 4.5, foreground + '/' + background + ': ' + ratio);
+                }
+                check(colorRole(27, 94, 32, 'text') === 'green', 'Status green');
+                const before = getComputedStyle(document.querySelector('.legacy .good')).color;
+                GohTheme.apply('dark');
+                check(getComputedStyle(document.querySelector('.legacy .good')).color === 'rgb(143, 213, 172)', 'Dark status color');
+                const dynamic = document.createElement('span');
+                dynamic.style.cssText = 'background:#fff;color:#b71c1c;padding:8px';
+                dynamic.textContent = 'Dynamisk status: afventer kontrol';
+                document.getElementById('dynamicHost').append(dynamic);
+                await new Promise(resolve => setTimeout(resolve, 40));
+                check(getComputedStyle(dynamic).backgroundColor === 'rgb(32, 35, 34)', 'Dynamic background');
+                GohTheme.apply('light');
+                check(getComputedStyle(document.querySelector('.legacy .good')).color === before, 'Light exact restoration');
+                const model = GohDashboard.model;
+                let loaded, saved;
+                const store = model.createPreferenceStore({ schemaVersion: 3, cache() {}, onConfig(value) { loaded = value; }, onStatus() {},
+                    load: async () => ({ schemaVersion: 3, version: 4, config: { theme: 'dark', boards: [{ id: 'custom-test', widgets: ['load-kpi'] }] } }),
+                    save: async (config, version) => { saved = config; return { version: version + 1 }; } });
+                await store.load();
+                await store.set({ ...loaded, theme: 'system' });
+                check(saved.theme === 'system' && saved.boards[0].id === 'custom-test', 'GOH preference preservation');
+                store.dispose();
+                GohTheme.bind('dark', value => GohTheme.bind(value, next => GohTheme.apply(next)));
+                document.getElementById('dialogOpen').onclick = () => document.getElementById('settings').showModal();
+                window.themeVerification = { passed:true, minimumContrast:minimum, pairs:56, dynamic:true, lightRestored:true, preferences:true };
+                output.textContent = 'PASS: contrast, dynamic rows, light restoration, GOH model';
+            } catch (error) { output.textContent = 'FAIL: ' + error.message; window.themeVerification = { passed:false, error:error.message }; }
+        });
+    </script>
+</body>
+</html>

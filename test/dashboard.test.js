@@ -13,6 +13,41 @@ test('personal themes are opt-in and survive preference normalization', () => {
     for (const theme of ['invalid', null, {}, true]) assert.equal(dashboard.normalizeConfig({ theme }).theme, 'light');
 });
 
+test('dark palette preserves status meaning with readable foregrounds', () => {
+    const { colorRole, palette } = require('../assets/js/theme');
+    assert.equal(colorRole(255, 255, 255, 'background'), 'surface');
+    assert.equal(colorRole(27, 94, 32, 'text'), 'green');
+    assert.equal(colorRole(139, 0, 0, 'text'), 'red');
+    assert.equal(colorRole(116, 73, 0, 'text'), 'amber');
+    assert.equal(colorRole(15, 53, 96, 'text'), 'text');
+    assert.equal(colorRole(21, 101, 192, 'background'), null);
+    const luminance = hex => {
+        const values = hex.slice(1).match(/../g).map(value => parseInt(value, 16) / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+        return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+    };
+    for (const foreground of ['text', 'muted', 'blue', 'green', 'red', 'amber', 'violet']) {
+        for (const background of ['surface', 'raised', 'hover', 'blueSurface', 'greenSurface', 'redSurface', 'amberSurface', 'violetSurface']) {
+            const ratio = (luminance(palette[foreground]) + 0.05) / (luminance(palette[background]) + 0.05);
+            assert.ok(ratio >= 4.5, foreground + '/' + background + ': ' + ratio);
+        }
+    }
+});
+
+test('personal theme uses the serialized GOH store without losing boards', async () => {
+    const writes = [];
+    let loaded;
+    const store = dashboard.createPreferenceStore({ schemaVersion: 3, cache() {}, onStatus() {}, onConfig(value) { loaded = value; },
+        load: async () => ({ schemaVersion: 3, version: 4, config: { theme: 'dark', active: 'custom-theme', boards: [{ id: 'custom-theme', widgets: ['load-kpi'] }] } }),
+        save: async (config, version) => { writes.push({ config, version }); return { version: version + 1 }; } });
+    await store.load();
+    assert.equal(loaded.theme, 'dark');
+    await store.set({ ...loaded, theme: 'system' });
+    assert.equal(writes[0].config.theme, 'system');
+    assert.equal(writes[0].config.boards[0].id, 'custom-theme');
+    assert.equal(writes[0].version, 4);
+    store.dispose();
+});
+
 test('fiscal invoice query restricts every scope and amount mode to sales transactions', async () => {
     const fs = require('node:fs');
     const path = require('node:path');
