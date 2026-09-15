@@ -143,9 +143,9 @@ function createApiRouter({
         return res.json({ ok: true });
     });
 
-    function dashboardPreferenceKey(req, res) {
+    function dashboardPreferenceKey(req, res, checkProfile = true) {
         const profile = settingsService.getActiveProfile();
-        if (String(req.query.profile || '') !== profile.id) {
+        if (checkProfile && String(req.query.profile || '') !== profile.id) {
             res.status(409).json({ ok: false, error: 'Databaseprofilen er ændret. Genindlæs siden.' });
             return null;
         }
@@ -154,6 +154,17 @@ function createApiRouter({
         return 'dashboard_v1_' + crypto.createHash('sha256').update(identity).digest('hex');
     }
 
+    router.get('/ui/theme', requireAuthenticated, async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try {
+            const state = await gohData.getAppState(dashboardPreferenceKey(req, res, false), { strict: true });
+            return res.json({ ok: true, theme: require('../assets/js/dashboard').normalizeConfig(state?.payload?.config).theme });
+        } catch (error) {
+            logEvent('THEME LOAD ERROR: ' + error.message);
+            return res.status(503).json({ ok: false, error: 'Tema kunne ikke hentes fra GOH.' });
+        }
+    });
+
     router.get('/dashboard/preferences', requireAuthenticated, async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
         const key = dashboardPreferenceKey(req, res);
@@ -161,7 +172,7 @@ function createApiRouter({
         try {
             const state = await gohData.getAppState(key, { strict: true });
             if (state && (!Number.isInteger(state.payload?.version) || state.payload.version < 1 || !state.payload.config)) throw new Error('Ugyldig dashboard-profil');
-            return res.json({ ok: true, schemaVersion: 2, version: state ? state.payload.version : 0, config: state ? require('../assets/js/dashboard').normalizeConfig(state.payload.config) : null });
+            return res.json({ ok: true, schemaVersion: 3, version: state ? state.payload.version : 0, config: state ? require('../assets/js/dashboard').normalizeConfig(state.payload.config) : null });
         } catch (error) {
             logEvent('DASHBOARD LOAD ERROR: ' + error.message);
             return res.status(503).json({ ok: false, error: 'Dashboard-profilen kunne ikke hentes fra GOH.' });
@@ -179,7 +190,7 @@ function createApiRouter({
             const config = require('../assets/js/dashboard').normalizeConfig(req.body.config);
             const saved = await gohData.setAppState(key, { version: version + 1, config }, { createOnly: version === 0, expectedVersion: version });
             if (!saved) return res.status(gohData.isEnabled() ? 409 : 503).json({ ok: false, error: gohData.isEnabled() ? 'Dashboardet er ændret på en anden postation. Genindlæs før du gemmer igen.' : 'Dashboard-profilen kunne ikke gemmes i GOH.' });
-            return res.json({ ok: true, schemaVersion: 2, version: version + 1 });
+            return res.json({ ok: true, schemaVersion: 3, version: version + 1 });
         } catch (error) {
             logEvent('DASHBOARD SAVE ERROR: ' + error.message);
             return res.status(503).json({ ok: false, error: 'Dashboard-profilen kunne ikke gemmes i GOH.' });

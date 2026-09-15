@@ -130,7 +130,9 @@ test('generated dashboard shell keeps the login and source bridge valid JavaScri
     assert.doesNotThrow(() => new Function(inline));
     assert.ok(inline.includes('function ensureDashboardSources('));
     assert.ok(inline.includes('async function submitAccessCode('));
-    assert.ok(html.includes('/assets/js/dashboard.js?v=test-12'));
+    assert.ok(html.includes('/assets/js/dashboard.js?v=test-13'));
+    assert.ok(html.includes('/assets/js/theme.js?v=test-1'));
+    assert.ok(html.includes('name="gohTheme" value="dark"'));
     assert.ok(html.includes('/assets/js/order-flow.js?v=test-4'));
     assert.ok(inline.includes("getOrderFlowRequest(month, [])"));
     assert.ok(inline.includes("scope: flowScope, month, today, fixedMonth: true"));

@@ -162,7 +162,7 @@
                 try {
                     const result = await options.load();
                     if (!active) return;
-                    if (options.schemaVersion && result.schemaVersion !== options.schemaVersion) throw new Error('Genstart GOH-serveren og genindlæs siden for at gemme widgetindstillinger.');
+                    if (options.schemaVersion && result.schemaVersion !== options.schemaVersion) throw new Error('Genstart GOH-serveren og genindlæs siden for at gemme personlige indstillinger.');
                     if (!Number.isInteger(result.version) || result.version < 0 || (result.version > 0 && !result.config)) throw new Error('Ugyldigt svar fra GOH');
                     if (!discard && pending && version !== result.version && !(version === null && result.version === 0)) {
                         options.onConfig(current);
@@ -482,6 +482,11 @@
         config.query = query;
         preferenceStore?.set(config);
     }
+    function saveTheme(value) {
+        if (!preferencesReady || !context?.authenticated) return;
+        config.theme = normalizeConfig({ theme: value }).theme;
+        persist();
+    }
     function flushPendingPreferences() {
         if (!preferencesReady || !preferenceStore || (!searchTimer && !flowSaveTimer)) return;
         if (searchTimer) query = text(byId('gohDashSearch')?.value).replace(/\s+/g, ' ').slice(0, 80);
@@ -492,6 +497,7 @@
     }
     function renderPreferenceStatus(value = preferenceStatus) {
         preferenceStatus = value;
+        root.GohTheme?.bind(config.theme, preferencesReady ? saveTheme : null, value);
         const status = byId('gohDashPersistence');
         if (!status) return;
         status.textContent = { loading: 'Henter GOH-profil...', saving: 'Gemmer i GOH...', saved: 'Gemt i GOH', error: 'Ikke gemt i GOH', conflict: 'GOH-profil ændret på en anden postation' }[value];
@@ -1037,7 +1043,7 @@
             try { legacy = JSON.parse(root.localStorage.getItem(key) || 'null'); cached = JSON.parse(root.localStorage.getItem(key + ':goh') || 'null'); } catch (_) { legacy = null; cached = null; }
             mount(host);
             preferenceStore = createPreferenceStore({
-                cached, legacy, schemaVersion: 2, initial: { active: allowedTemplates(next.canAccess)[0]?.id || 'production' },
+                cached, legacy, schemaVersion: 3, initial: { active: allowedTemplates(next.canAccess)[0]?.id || 'production' },
                 load: next.loadPreferences, save: next.savePreferences,
                 cache: value => {
                     try { root.localStorage.setItem(key + ':goh', JSON.stringify(value)); localRecoveryAvailable = true; }
@@ -1046,6 +1052,7 @@
                 onStatus: (value, error) => { renderPreferenceStatus(value); if (error?.message?.startsWith('Genstart GOH')) notify(error.message, true); renderControls(); },
                 onConfig: value => {
                     config = normalizeConfig(value); query = config.query; preferencesReady = true;
+                    root.GohTheme?.bind(config.theme, saveTheme, preferenceStatus);
                     byId('gohDashSearch').value = query;
                     byId('gohDashGrid').replaceChildren();
                     renderControls(); renderWidgets();
@@ -1069,6 +1076,7 @@
         preferenceStore = null;
         preferencesReady = false;
         preferenceStatus = 'loading';
+        root.GohTheme?.bind('light', null);
         localRecoveryAvailable = true;
         layoutDraft = null;
         if (pointerDrag) pointerDrag.stop();

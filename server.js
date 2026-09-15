@@ -2002,6 +2002,8 @@ app.get('/', (req, res) => {
         </style>
         <link rel="stylesheet" href="/assets/dashboard.css?v=${pkgVersion}-7" />
         <link rel="stylesheet" href="/assets/order-flow.css?v=${pkgVersion}-2" />
+        <link rel="stylesheet" href="/assets/theme.css?v=${pkgVersion}-1" data-goh-theme />
+        <script src="/assets/js/theme.js?v=${pkgVersion}-1" defer></script>
     </head>
     <body>
         <div id="accessGateOverlay" class="access-gate-overlay" style="display:flex;">
@@ -2072,6 +2074,12 @@ app.get('/', (req, res) => {
 
                     <section class="side-menu-section">
                         <h4>Session</h4>
+                        <fieldset class="goh-theme-options" aria-label="Farvetema">
+                            <label><input type="radio" name="gohTheme" value="light" checked disabled /><span>Lyst</span></label>
+                            <label><input type="radio" name="gohTheme" value="dark" disabled /><span>Mørkt</span></label>
+                            <label><input type="radio" name="gohTheme" value="system" disabled /><span>Automatisk</span></label>
+                        </fieldset>
+                        <p id="gohThemeStatus" role="status" aria-live="polite">Log ind for at vælge tema</p>
                         <div class="side-menu-actions">
                             <button id="sideMenuLogoutBtn" class="logout" type="button" onclick="logoutFromSideMenu()" disabled>Log ud</button>
                         </div>
@@ -2976,7 +2984,7 @@ app.get('/', (req, res) => {
         <script src="/assets/js/omsaetning-daily-thresholds.js?v=${pkgVersion}"></script>
         <script src="/assets/js/table-sort.js?v=${pkgVersion}-5"></script>
         <script src="/assets/js/order-flow.js?v=${pkgVersion}-4"></script>
-        <script src="/assets/js/dashboard.js?v=${pkgVersion}-12"></script>
+        <script src="/assets/js/dashboard.js?v=${pkgVersion}-13"></script>
         <script>
             function formatNumber(num) {
                 const fixed = parseFloat(num).toFixed(2);
