@@ -2,6 +2,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const dashboard = require('../assets/js/dashboard');
 
+test('personal themes are opt-in and survive preference normalization', () => {
+    assert.equal(dashboard.normalizeConfig({}).theme, 'light');
+    for (const theme of ['light', 'dark', 'system']) {
+        const config = dashboard.normalizeConfig({ theme, active: 'sales', boards: [{ id: 'custom-theme', widgets: ['invoice-kpi'] }] });
+        assert.equal(config.theme, theme);
+        assert.deepEqual(dashboard.normalizeConfig(config), config);
+        assert.equal(config.boards[0].widgets[0], 'invoice-kpi');
+    }
+    for (const theme of ['invalid', null, {}, true]) assert.equal(dashboard.normalizeConfig({ theme }).theme, 'light');
+});
+
 test('fiscal invoice query restricts every scope and amount mode to sales transactions', async () => {
     const fs = require('node:fs');
     const path = require('node:path');

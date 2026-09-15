@@ -73,6 +73,7 @@
             ? config.active : 'management';
         const flow = config.flow && typeof config.flow === 'object' ? config.flow : {};
         return { active, boards, period: ['all', 'month', 'quarter', 'year'].includes(config.period) ? config.period : 'all', limit: [5, 10].includes(config.limit) ? config.limit : 5,
+            theme: ['light', 'dark', 'system'].includes(config.theme) ? config.theme : 'light',
             query: text(config.query).replace(/\s+/g, ' ').slice(0, 80),
             flow: { month: /^\d{4}-(0[1-9]|1[0-2])$/.test(flow.month) ? flow.month : '', cohort: ['all', 'prior', 'new'].includes(flow.cohort) ? flow.cohort : 'all', metric: ['opening', 'incoming', 'invoiced', 'closing'].includes(flow.metric) ? flow.metric : 'closing', query: text(flow.query).slice(0, 120), page: Number.isInteger(flow.page) ? Math.max(0, Math.min(10000, flow.page)) : 0, completedOnly: flow.completedOnly === true } };
     }
