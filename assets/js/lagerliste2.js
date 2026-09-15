@@ -195,6 +195,7 @@
 
     function reservationStatusMeta(row) {
         if (row.status === 'finished') return { cls: 'done', text: '✓ Færdigmeldt' };
+        if (!row.valuationEligible) return { cls: 'error', text: '⚠ Ikke medregnet' };
         if (row.status === 'picked') return { cls: 'partial', text: '◐ Plukket' };
         if (row.status === 'mixed') return { cls: 'partial', text: '◐ Delvist plukket' };
         return { cls: 'open', text: '⏳ Reserveret' };
@@ -247,21 +248,25 @@
             const evidence = evidenceResult.status === 'fulfilled' ? evidenceResult.value : { orderStates: [] };
             state.reservations = Array.isArray(reservationData.rows) ? reservationData.rows : [];
             state.reservationSummary = reservationData.summary || {};
-            state.currentValuation = Lagerliste2Engine.canonicalValueSummary(current, { evidence });
+            state.currentValuation = Lagerliste2Engine.canonicalValueSummary(current, {
+                evidence: { ...evidence, reservations: state.reservations }
+            });
             byId('valuationV1').textContent = fmt(state.currentValuation.rawV1Total);
             byId('valuationV2').textContent = fmt(state.currentValuation.total);
             byId('valuationDedup').textContent = fmt(state.currentValuation.duplicateReduction);
-            byId('reservationActiveValue').textContent = fmt(state.reservationSummary.activeValue);
+            byId('reservationActiveValue').textContent = fmt(state.reservationSummary.valuedActiveValue);
             renderReservations();
             const linked = Number(state.reservationSummary.linkedRowCount || 0);
             const total = Number(state.reservationSummary.rowCount || 0);
             const active = Number(state.reservationSummary.activeRowCount || 0);
             const finished = Number(state.reservationSummary.finishedRowCount || 0);
+            const excluded = Number(state.reservationSummary.excludedActiveRowCount || 0);
             const warnings = [];
             if (reservationResult.status === 'rejected') warnings.push('Rsv kunne ikke læses: ' + authMessage(reservationResult.reason));
             if (evidenceResult.status === 'rejected') warnings.push('NoPac kunne ikke læses: ' + authMessage(evidenceResult.reason));
             byId('reservationStatus').textContent = active + ' åbne Rsv-linjer. ' + linked + ' af ' + total
-                + ' registreringer har sikker salgsordre; ' + finished + ' færdigmeldte Rsv-linjer vises kun som historik og tælles ikke igen.'
+                + ' registreringer har sikker salgsordre; ' + finished + ' færdigmeldte Rsv-linjer tælles ikke igen; '
+                + excluded + ' åbne linjer uden åbent ordrematch eller vareparti er ikke medregnet.'
                 + (warnings.length ? ' ' + warnings.join(' ') : '');
         } catch (error) {
             byId('reservationStatus').textContent = 'Lagerværdi/reservationer kunne ikke indlæses: ' + authMessage(error);

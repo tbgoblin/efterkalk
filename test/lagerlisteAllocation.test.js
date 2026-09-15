@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { allocateSharedOrders, allocateComponentStock, validateValuation, validateClosure } = require('../services/lagerlisteAllocation');
+const { allocateSharedOrders, allocateComponentStock, allocatePurchasedPartsFromFollowUpStock, validateValuation, validateClosure } = require('../services/lagerlisteAllocation');
 const { createLagerlisteService } = require('../services/lagerlisteService');
 const { canonicalValueSummary } = require('../assets/js/lagerliste2-engine');
 
@@ -21,11 +21,37 @@ test('partial availability removes only overlap; reserved physical stock is not 
     assert.equal(result.rows[0].FifoValue + 72, 120);
 });
 
+test('physical follow-up stock takes precedence over available quantity for valuation overlap', () => {
+    const result = allocateComponentStock([{ ProdNo: 'A', Quantity: 10, UnitCost: 1, FifoValue: 10 }],
+        [{ ProdNo: 'A', Beholdning: 4, PoPhStB: 10, Value: 10 }]);
+    assert.equal(result.rows.length, 0);
+    assert.equal(result.audit[0].overlapQty, 10);
+});
+
 test('absent or zero available follow-up quantity does not prove physical stock has been consumed', () => {
     const source = [{ ProdNo: 'A', Quantity: 10, UnitCost: 12, FifoValue: 120 }];
     assert.equal(allocateComponentStock(source, []).rows[0].FifoValue, 120);
     assert.equal(allocateComponentStock(source, [{ ProdNo: 'A', Beholdning: 0 }]).rows[0].FifoValue, 120);
     assert.equal(source[0].Quantity, 10);
+});
+
+test('received purchased parts move only reserved physical quantity from follow-up stock to VIA', () => {
+    const followUp = [{
+        ProdNo: 'A', PoPhStB: 10, Beholdning: 4, ShpRsv: 6, PhCstPr: 12,
+        PoPhStBValue: 120, ReservedValue: 72, RemainingReservedValue: 72,
+        BalanceDifferenceValue: 0, AvailableValue: 48, Value: 120, _preciseValue: 120, Diff: 72
+    }];
+    const viaRows = [{ PurchasedPartDetails: [{ prodNo: 'A', stockTransferQty: 8 }] }];
+    const result = allocatePurchasedPartsFromFollowUpStock(followUp, viaRows);
+
+    assert.equal(result.rows[0].PoPhStB, 10);
+    assert.equal(result.rows[0].TransferredToViaQty, 6);
+    assert.equal(result.rows[0].TransferredToViaValue, 72);
+    assert.equal(result.rows[0].RemainingReservedValue, 0);
+    assert.equal(result.rows[0].Value, 48);
+    assert.equal(result.rows[0].Diff, 0);
+    assert.equal(result.audit[0].transferredValue, 72);
+    assert.deepEqual(allocatePurchasedPartsFromFollowUpStock(result.rows, viaRows).rows, result.rows);
 });
 
 test('fully packed shared order keeps finished valuation and removes VIA overlap', () => {
@@ -52,6 +78,19 @@ test('partial packing splits costs once, including when opened in Lagerliste2', 
     assert.equal(canonicalValueSummary(payload, { evidence: { orderStates: [{ orderNo: 1, packedRatio: 1 }] } }).total, 850);
 });
 
+test('partial packing scales purchased part details with their VIA total', () => {
+    const purchasedVia = [{
+        OrdNo: 1, MaterialCost: 0, StangCost: 0, TimeCost: 0,
+        PurchasedPartCost: 100, Value: 100,
+        PurchasedPartDetails: [{ prodNo: 'A', countedValue: 100 }]
+    }];
+    const result = allocateSharedOrders(finished, purchasedVia, [{ orderNo: 1, packedRatio: 0.25 }]);
+
+    assert.equal(result.via[0].PurchasedPartCost, 75);
+    assert.equal(result.via[0].PurchasedPartDetails[0].countedValue, 75);
+    assert.equal(result.via[0].PurchasedPartDetails[0].originalCountedValue, 100);
+});
+
 test('orders in only one category retain their value; absent overlap evidence fails explicitly', () => {
     assert.equal(allocateSharedOrders(finished, [], []).finished[0].Value, 1000);
     assert.equal(allocateSharedOrders([], via, []).via[0].Value, 800);
@@ -60,7 +99,7 @@ test('orders in only one category retain their value; absent overlap evidence fa
 
 function validPayload(now = new Date()) {
     const allocation = allocateSharedOrders(finished, via, [{ orderNo: 1, packedRatio: 0.25 }]);
-    return { valuationVersion: 31, generatedAt: now.toISOString(),
+    return { valuationVersion: 35, generatedAt: now.toISOString(),
         categories: { gr5Items: [], opfolgningvare: [], finishedNotInvoiced: allocation.finished, salgordreVia: allocation.via },
         totals: { finishedNotInvoiced: 250, salgordreVia: 600 } };
 }
@@ -80,7 +119,7 @@ test('closing rejects legacy data, unmatched totals and raw duplicate categories
     const payload = validPayload();
     payload.totals.salgordreVia = 800;
     assert.throws(() => validateValuation(payload), /Total stemmer/);
-    const legacy = validPayload(); legacy.valuationVersion = 30;
+    const legacy = validPayload(); legacy.valuationVersion = 34;
     assert.throws(() => validateValuation(legacy), /ældre version/);
     const stock = validPayload();
     stock.categories.gr5Items = [{ ProdNo: 'A', Quantity: 10 }];

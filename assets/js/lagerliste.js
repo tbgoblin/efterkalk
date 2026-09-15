@@ -8,6 +8,8 @@ let lagerlistePreviousMonthLabel = '';
 let lagerlisteReconciliationContext = null;
 let lagerlistePlatePriceMode = 'standard';
 let lagerlisteDisplayedComparison = null;
+let lagerlisteReservations = [];
+let lagerlisteReservationsWarning = '';
 
 function lagerlistePlateTotals(payload, mode = lagerlistePlatePriceMode) {
     const totals = { ...(payload.totals || {}) };
@@ -247,7 +249,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         ['Rest plader', totals.restPlates, previousTotals && previousTotals.restPlates, 'lagerliste-rest-section', '', 'Restplader: vægt × fast pris pr. kg.'],
         ['Diverse', Number(totals.diverse || 0), previousTotals && Number(previousTotals.diverse || 0), 'lagerliste-diverse-section', '', 'Månedens manuelle værdier og Visma 44/45/46/63, lager 1. Stangmateriale er ikke inkluderet.'],
         ['Stang materiale', totals.stang, previousTotals && previousTotals.stang, 'lagerliste-stang-section', '', 'Stangmateriale: lagerbevægelse til og med i dag × pris/FIFO-pris.'],
-        ['Opfølgningsvarer', totals.opfolgningvare, previousTotals && previousTotals.opfolgningvare, 'lagerliste-opfolgning-section', '', 'Opfølgningsvarer: (Bal + StcInc − ShpRsv) × FIFO-pris.'],
+        ['Opfølgningsvarer', totals.opfolgningvare, previousTotals && previousTotals.opfolgningvare, 'lagerliste-opfolgning-section', '', 'Fysisk beholdning × FIFO minus modtagne, verificeret reserverede indkøbsdele, som er flyttet til VIA.'],
         ['Lager Komponenter (FIFO)', lagerKomponenterValue, previousLagerKomponenterValue, 'lagerliste-gr5-section', '', 'Komponenter med Prod.Gr5 = 11: beholdning × FIFO-pris.'],
         ['Varelager uden rest', warehouseWithoutRest, previousWarehouseWithoutRest, null, '', 'Plader + stangmateriale + opfølgningsvarer + lagerkomponenter + Diverse, uden restplader.'],
         ['Varelager', warehouseWithRest, previousWarehouseWithRest, null, '', 'Varelager uden rest + Rest plader.'],
@@ -255,9 +257,9 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         ['VIA Tid', viaTid, previousViaRows.length ? previousViaTid : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registrerede minutter × operationspris.'],
         ['VIA Laser', viaLaser, previousViaRows.length ? previousViaLaser : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registreret laser/materialeforbrug.'],
         ['VIA Stang', viaStang, previousViaRows.length ? previousViaStang : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registreret stangmateriale.'],
-        ['Indkøbt dele', viaIndkobt, previousViaRows.length ? previousViaIndkobt : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: købte dele fra den tilknyttede købsordre.'],
+        ['Indkøbte dele til ordre', viaIndkobt, previousViaRows.length ? previousViaIndkobt : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Forbrugt samt modtaget og verificeret reserveret mængde medregnes. En fysisk lagerandel flyttes samtidig ud af Opfølgningsvarer.'],
         ['VIA Plader (Værdi i skæring)', viaPlader, previousNestingCuttingRows.length ? previousViaPlader : null, 'lagerliste-nesting-cutting-section', 'lagerliste-summary-subrow', 'Plader i aktiv skæring: pladen er færdigmeldt, mens alle produkter på samme rute stadig ikke er færdigmeldt.'],
-        ['Vare i arbejde', workInProgress, previousWorkInProgress, null, '', 'Færdige SO kostpris + VIA Tid + VIA Laser + VIA Stang + Indkøbt dele + VIA Plader.'],
+        ['Vare i arbejde', workInProgress, previousWorkInProgress, null, '', 'Færdige SO kostpris + VIA Tid + VIA Laser + VIA Stang + indkøbte dele til ordre + VIA Plader.'],
         ['TOTAL', warehouseWithRest + workInProgress, previousWarehouseWithRest === null || previousWorkInProgress === null ? null : previousWarehouseWithRest + previousWorkInProgress, null, '', 'Varelager + Vare i arbejde.']
     ];
     const previousCell = value => value === null || value === undefined ? '-' : lagerlisteFormat(value);
@@ -542,21 +544,57 @@ function lagerlisteOpfolgningTable(rows) {
     const safeRows = Array.isArray(rows) ? rows : [];
     if (!safeRows.length) return '<div class="omsaetning-empty">Ingen opfølgningsvarer.</div>';
     const totalValue = safeRows.reduce((sum, row) => sum + Number(row.Value || 0), 0);
-    const totalPoPhStBValue = safeRows.reduce((sum, row) => sum + Number(row.PoPhStBValue || 0), 0);
-    const totalDiff = totalPoPhStBValue - totalValue;
+    const totalPhysicalValue = safeRows.reduce((sum, row) => sum + Number(row.PoPhStBValue ?? row.Value ?? 0), 0);
+    const totalTransferredValue = safeRows.reduce((sum, row) => sum + Number(row.TransferredToViaValue || 0), 0);
+    const totalAvailableValue = safeRows.reduce((sum, row) => sum + Number(row.AvailableValue || 0), 0);
+    const totalRemainingReservedValue = safeRows.reduce((sum, row) => sum + Number(row.RemainingReservedValue ?? row.ReservedValue ?? 0), 0);
+    const totalBalanceDifferenceValue = safeRows.reduce((sum, row) => sum + Number(row.BalanceDifferenceValue || 0), 0);
     const table = lagerlisteRowsTable(safeRows, [
         { key: 'ProdNo', label: 'Produkt' },
         { key: 'Descr', label: 'Beskrivelse' },
-        { key: 'PoPhStB', label: 'PoPhStB', format: value => Number(value || 0).toFixed(2) },
-        { key: 'Beholdning', label: 'Beholdning', format: value => Number(value || 0).toFixed(2) },
+        { key: 'PoPhStB', label: 'Fysisk beholdning', format: value => Number(value || 0).toFixed(2) },
+        { key: 'Beholdning', label: 'Disponibel', format: value => Number(value || 0).toFixed(2) },
         { key: 'PhCstPr', label: 'FIFO-pris', format: lagerlisteFormat },
-        { key: 'Value', label: 'Værdi (Beholdning)', format: lagerlisteFormat },
-        { key: 'PoPhStBValue', label: 'Værdi (PoPhStB)', format: lagerlisteFormat },
-        { key: 'Diff', label: 'Dif.', format: lagerlisteFormat }
+        { key: 'AvailableValue', label: 'Disponibel værdi', format: lagerlisteFormat },
+        { key: 'PoPhStBValue', label: 'Fysisk lagerværdi', format: lagerlisteFormat },
+        { key: 'TransferredToViaValue', label: 'Flyttet til VIA', format: lagerlisteFormat },
+        { key: 'Value', label: 'Lagerværdi efter VIA', format: lagerlisteFormat },
+        { key: 'RemainingReservedValue', label: 'ShpRsv efter VIA', format: lagerlisteFormat },
+        { key: 'BalanceDifferenceValue', label: 'PoPhStB-afvigelse', format: lagerlisteFormat }
     ]);
     return table
-        + '<div class="lagerliste-total-row"><strong>Sum Beholdning Værdi</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong><strong>Sum PoPhStB Værdi</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalPoPhStBValue)) + '</strong></div>'
-        + '<div class="lagerliste-total-row"><strong>Samlet difference</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalDiff)) + '</strong></div>';
+        + '<div class="lagerliste-total-row"><strong>Fysisk lagerværdi</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalPhysicalValue)) + '</strong><strong>Flyttet til VIA</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalTransferredValue)) + '</strong></div>'
+        + '<div class="lagerliste-total-row"><strong>Disponibel værdi</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalAvailableValue)) + '</strong><strong>ShpRsv efter VIA</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalRemainingReservedValue)) + '</strong></div>'
+        + '<div class="lagerliste-total-row"><strong>PoPhStB-afvigelse</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalBalanceDifferenceValue)) + '</strong><strong>Lagerværdi efter VIA</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong></div>';
+}
+
+function lagerlisteReservationsTable(rows, warning = '') {
+    const safeRows = (Array.isArray(rows) ? rows : [])
+        .filter(row => row.valuationEligible && Number(row.activeQty || 0) > 0.005)
+        .sort((left, right) => Number(left.salesOrderNo || 0) - Number(right.salesOrderNo || 0)
+            || String(left.prodNo || '').localeCompare(String(right.prodNo || ''), 'da-DK'));
+    const warningHtml = warning
+        ? '<p role="alert" style="color:#b45309">' + lagerlisteEscape(warning) + '</p>'
+        : '';
+    if (!safeRows.length) return warningHtml + '<div class="omsaetning-empty">Ingen verificerede åbne reservationer.</div>';
+    const totalValue = safeRows.reduce((sum, row) => sum + Number(row.activeValue || 0), 0);
+    const table = lagerlisteRowsTable(safeRows, [
+        { key: 'salesOrderNo', label: 'Salgsordre', allowHtml: true, format: lagerlisteOrderLinkCell },
+        { key: 'orderNo', label: 'Produktionsordre', allowHtml: true, format: lagerlisteOrderLinkCell },
+        { key: 'customerName', label: 'Kunde', format: value => String(value || '').trim() || '-' },
+        { key: 'prodNo', label: 'Produkt' },
+        { key: 'descr', label: 'Beskrivelse' },
+        { key: 'shipmentNo', label: 'Vareparti', format: value => String(value || '').trim() || '-' },
+        { key: 'reservedQty', label: 'Reserveret', format: value => Number(value || 0).toFixed(2) },
+        { key: 'pickedQty', label: 'Plukket', format: value => Number(value || 0).toFixed(2) },
+        { key: 'activeQty', label: 'Aktiv mængde', format: value => Number(value || 0).toFixed(2) },
+        { key: 'costPrice', label: 'Kostpris', format: lagerlisteFormat },
+        { key: 'activeValue', label: 'Lagerværdi', format: lagerlisteFormat }
+    ]);
+    return warningHtml + '<p>Informationsvisning: reservationer for modtagne indkøbsdele kan være flyttet fra Opfølgningsvarer til VIA. Tabellen lægges aldrig særskilt til totalen.</p>'
+        + table
+        + '<div class="lagerliste-total-row"><strong>Reserveret lagerværdi (inkluderet i lager)</strong><strong>'
+        + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong></div>';
 }
 
 function lagerlisteReadyToInvoiceTable(rows) {
@@ -599,6 +637,14 @@ function lagerlisteReadyToInvoiceTable(rows) {
 function lagerlisteSalgordreViaTable(rows) {
     const safeRows = Array.isArray(rows) ? rows : [];
     if (!safeRows.length) return '<div class="omsaetning-empty">Ingen salgsordrer med aktivt arbejde.</div>';
+    const purchasedDetails = safeRows.flatMap(row => (Array.isArray(row.PurchasedPartDetails) ? row.PurchasedPartDetails : []).map(detail => ({
+        ...detail,
+        salesOrderNo: row.OrdNo,
+        customerName: row.CustomerName,
+        status: Number(detail.consumedQty || 0) > 0
+            ? 'Forbrugt / VIA'
+            : (Number(detail.stockTransferQty || 0) > 0 ? 'Modtaget → VIA' : (Number(detail.receivedQty || 0) > 0 ? 'Modtaget, ikke allokeret' : 'Ikke modtaget'))
+    })));
     const totalTime = safeRows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
     const totalMaterial = safeRows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
     const totalStang = safeRows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
@@ -620,15 +666,32 @@ function lagerlisteSalgordreViaTable(rows) {
         { key: 'TimeCost', label: 'VIA Tid', format: lagerlisteFormat },
         { key: 'MaterialCost', label: 'VIA Laser', format: lagerlisteFormat },
         { key: 'StangCost', label: 'VIA Stang', format: lagerlisteFormat },
-        { key: 'PurchasedPartCost', label: 'Indkøbt dele', format: lagerlisteFormat },
+        { key: 'PurchasedPartCost', label: 'Indkøbte dele til ordre', format: lagerlisteFormat },
         { key: 'SalesValue', label: 'Salgsværdi', format: lagerlisteFormat },
         { key: 'Value', label: 'Vare i arbejde', format: lagerlisteFormat }
     ]);
+    const purchasedDetailsHtml = purchasedDetails.length
+        ? '<h5>Indkøbte dele til ordre</h5>' + lagerlisteRowsTable(purchasedDetails, [
+            { key: 'salesOrderNo', label: 'Salgsordre', allowHtml: true, format: lagerlisteOrderLinkCell },
+            { key: 'productionOrderNo', label: 'Produktionsordre', allowHtml: true, format: lagerlisteOrderLinkCell },
+            { key: 'purchaseOrderNo', label: 'Indkøbsordre', allowHtml: true, format: lagerlisteOrderLinkCell },
+            { key: 'prodNo', label: 'Produkt' },
+            { key: 'descr', label: 'Beskrivelse' },
+            { key: 'orderedQty', label: 'Bestilt', format: value => Number(value || 0).toFixed(2) },
+            { key: 'receivedQty', label: 'Modtaget', format: value => Number(value || 0).toFixed(2) },
+            { key: 'consumedQty', label: 'Forbrugt (NoFin)', format: value => Number(value || 0).toFixed(2) },
+            { key: 'countedQty', label: 'Medregnet antal', format: value => Number(value || 0).toFixed(2) },
+            { key: 'unitPrice', label: 'Enhedspris', format: lagerlisteFormat },
+            { key: 'countedValue', label: 'Medregnet VIA', format: lagerlisteFormat },
+            { key: 'status', label: 'Status' }
+        ])
+        : '<h5>Indkøbte dele til ordre</h5><div class="omsaetning-empty">Ingen tilknyttede indkøbsdele.</div>';
     return table + '<div class="lagerliste-total-row"><strong>VIA Tid</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalTime))
         + '</strong><strong>VIA Laser</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalMaterial))
         + '</strong><strong>VIA Stang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalStang))
-        + '</strong><strong>Indkøbt dele</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalPurchased))
-        + '</strong><strong>Vare i arbejde</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong></div>';
+        + '</strong><strong>Indkøbte dele til ordre</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalPurchased))
+        + '</strong><strong>Vare i arbejde</strong><strong>' + lagerlisteEscape(lagerlisteFormat(totalValue)) + '</strong></div>'
+        + purchasedDetailsHtml;
 }
 
 function lagerlisteCollapsibleSection(title, content, targetId, value = null) {
@@ -700,6 +763,9 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
         + lagerlisteCollapsibleSection('Lager Komponenter', lagerlisteGr5Table(gr5Rows), 'lagerliste-gr5-section', sumRows(gr5Rows, 'FifoValue'))
         + lagerlisteCollapsibleSection('Plader VIA', lagerlisteNestingCuttingTable(nestingCuttingRows), 'lagerliste-nesting-cutting-section', nestingCuttingRows.reduce((sum, row) => sum + lagerlisteNestingCountedValue(row), 0))
         + lagerlisteCollapsibleSection('Opfølgningsvarer', lagerlisteOpfolgningTable(opfolgningRows), 'lagerliste-opfolgning-section', totals.opfolgningvare)
+        + (lagerlisteDisplayedLabel === 'Aktuel'
+            ? lagerlisteCollapsibleSection('Reserveret til ordre · info', lagerlisteReservationsTable(lagerlisteReservations, lagerlisteReservationsWarning), 'lagerliste-reservations-section', null)
+            : '')
         + lagerlisteCollapsibleSection('Ordrer klar til fakturering', lagerlisteReadyToInvoiceTable(readyToInvoiceRows), 'lagerliste-ready-invoice-section', totals.finishedNotInvoiced)
         + lagerlisteCollapsibleSection('Salgsordre VIA', lagerlisteSalgordreViaTable(viaRows), 'lagerliste-salgordre-via-section', sumRows(viaRows));
     const diverseBody = document.getElementById('lagerliste-diverse-section');
@@ -712,9 +778,27 @@ async function loadLagerliste(forceAftercalc = false) {
     if (root) root.innerHTML = '<div class="loading">' + (forceAftercalc ? 'Genberegner Efterkalk og henter lagerdata...' : 'Henter lagerdata...') + '</div>';
     refreshLagerlisteSnapshotList().then(() => refreshLagerlisteCompareOptions()).catch(() => {});
     try {
-        const response = await fetch('/lagerliste/current?force=1' + (forceAftercalc ? '&aftercalc=1' : ''), { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
+        const headers = { Authorization: 'Bearer ' + String(authToken || '') };
+        const [lagerResponse, reservationResponse] = await Promise.allSettled([
+            fetch('/lagerliste/current?force=1' + (forceAftercalc ? '&aftercalc=1' : ''), { headers }),
+            fetch('/lagerliste2/reservations/current?force=1', { headers })
+        ]);
+        if (lagerResponse.status !== 'fulfilled') throw lagerResponse.reason;
+        const response = lagerResponse.value;
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+        lagerlisteReservations = [];
+        lagerlisteReservationsWarning = '';
+        if (reservationResponse.status === 'fulfilled') {
+            const reservationData = await reservationResponse.value.json();
+            if (reservationResponse.value.ok && !reservationData.error) {
+                lagerlisteReservations = Array.isArray(reservationData.rows) ? reservationData.rows : [];
+            } else {
+                lagerlisteReservationsWarning = reservationData.error || ('Reservationer kunne ikke hentes (HTTP ' + reservationResponse.value.status + ').');
+            }
+        } else {
+            lagerlisteReservationsWarning = 'Reservationer kunne ikke hentes: ' + String(reservationResponse.reason && reservationResponse.reason.message || reservationResponse.reason || 'ukendt fejl');
+        }
         lagerlistePreviousMonth = null;
         lagerlistePreviousMonthLabel = '';
         lagerlisteLiveCurrent = data;
@@ -875,7 +959,7 @@ function lagerlisteComputeFigures(payload) {
         ['VIA Tid', viaTid, 'lagerliste-summary-subrow'],
         ['VIA Laser', viaLaser, 'lagerliste-summary-subrow'],
         ['VIA Stang', viaStang, 'lagerliste-summary-subrow'],
-        ['Indkøbt dele', viaIndkobt, 'lagerliste-summary-subrow'],
+        ['Indkøbte dele til ordre', viaIndkobt, 'lagerliste-summary-subrow'],
         ['VIA Plader (Værdi i skæring)', viaPlader, 'lagerliste-summary-subrow'],
         ['Vare i arbejde', workInProgress, ''],
         ['TOTAL', warehouseWithRest + workInProgress, 'lagerliste-sheet-grand']
@@ -1466,7 +1550,7 @@ async function lagerlisteComparePeriods() {
             + materialRowsTable
             + '<h5>FIFO-konciliation</h5>'
             + '<div class="lagerliste-total-row"><strong>Afstemt</strong><strong>' + lagerlisteEscape(lagerlisteFormat(reconciliation.matched)) + '</strong><strong>Manglende modpost</strong><strong>' + lagerlisteEscape(lagerlisteFormat(reconciliation.unmatchedOut)) + '</strong><strong>Manglende lagerudgang</strong><strong>' + lagerlisteEscape(lagerlisteFormat(reconciliation.unmatchedIn)) + '</strong></div>'
-            + '<div class="lagerliste-material-note">Afstemmer kun samme varenummer. Ét FIFO-udtræk kan fordeles over flere VIA-rækker. VIA Laser/Stang/Indkøbt dele uden varenummer: ' + lagerlisteEscape(lagerlisteFormat(reconciliation.indirectVia)) + ' vises kun i Materialebalance og matches ikke automatisk.</div>'
+            + '<div class="lagerliste-material-note">Afstemmer kun samme varenummer. Ét FIFO-udtræk kan fordeles over flere VIA-rækker. VIA Laser/Stang/indkøbte dele til ordre uden varenummer: ' + lagerlisteEscape(lagerlisteFormat(reconciliation.indirectVia)) + ' vises kun i Materialebalance og matches ikke automatisk.</div>'
             + reconciliationTable
             + '<h5>Manuelle afstemninger (' + manualRows.length + ')</h5>'
             + '<div class="lagerliste-material-note">Manuelle afstemninger dokumenterer en kendt årsag, f.eks. materiale der allerede var nesting før første snapshot. De ændrer aldrig Visma eller Lagerliste-totaller.</div>'

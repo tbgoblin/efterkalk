@@ -5,6 +5,87 @@ const {
     parseCalendarMonth,
     groupMonthDetailRows
 } = require('../services/omsaetningService');
+const orderFlow = require('../assets/js/order-flow');
+
+test('order flow reconciles carryover, new orders, partial invoicing and same-month completion', () => {
+    const result = orderFlow.build([
+        { OrdNo: 1, OrderDate: 20260801, OrderValueDkk: 1000, InvoicedDkk: 600, RemainingDkk: 400 },
+        { OrdNo: 2, OrderDate: 20260901, OrderValueDkk: 500, InvoicedDkk: 500, RemainingDkk: 0 },
+        { OrdNo: 3, OrderDate: 20260915, OrderValueDkk: 200, InvoicedDkk: 0, RemainingDkk: 200 }
+    ], [
+        { OrdNo: 1, InvoicedBeforeDkk: 200, InvoicedInMonthDkk: 400, InvoicedTotalDkk: 600 },
+        { OrdNo: 2, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 500, InvoicedTotalDkk: 500 }
+    ], 20260901);
+    assert.equal(result.total.opening, 800);
+    assert.equal(result.total.incoming, 700);
+    assert.equal(result.prior.invoiced, 400);
+    assert.equal(result.received.invoiced, 500);
+    assert.equal(result.received.completed, 1);
+    assert.equal(result.total.closing, 600);
+    assert.equal(result.total.current, 600);
+    assert.equal(result.unknownCount, 0);
+    assert.equal(result.total.opening + result.total.incoming - result.total.invoiced + result.total.adjustment, result.total.closing);
+});
+
+test('order flow separates current rest from historical rest and never invents missing invoice history', () => {
+    const result = orderFlow.build([
+        { OrdNo: 1, OrderDate: 20260701, OrderValueDkk: 1000, InvoicedDkk: 1000, RemainingDkk: 0 },
+        { OrdNo: 2, OrderDate: 20260801, OrderValueDkk: 600, InvoicedDkk: 400, RemainingDkk: 200 },
+        { OrdNo: 3, OrderDate: 20260801, OrderValueDkk: 600, InvoicedDkk: 400, RemainingDkk: 200 },
+        { OrdNo: 4, OrderDate: 20260801, OrderValueDkk: -600, InvoicedDkk: -600, RemainingDkk: 0 }
+    ], [
+        { OrdNo: 1, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 300, InvoicedTotalDkk: 1000 },
+        { OrdNo: 3, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 100, InvoicedTotalDkk: 100 }
+    ], 20260801);
+    assert.equal(result.unknownCount, 2);
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.total.closing, 700);
+    assert.equal(result.total.current, 0);
+});
+
+test('order flow retains signed invoice corrections and makes balancing adjustments explicit', () => {
+    const result = orderFlow.build([
+        { OrdNo: 1, OrderDate: 20260701, OrderValueDkk: 100, InvoicedDkk: 150, RemainingDkk: 0 },
+        { OrdNo: 2, OrderDate: 20260701, OrderValueDkk: 100, InvoicedDkk: 50, RemainingDkk: 50 }
+    ], [
+        { OrdNo: 1, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 150, InvoicedTotalDkk: 150 },
+        { OrdNo: 2, InvoicedBeforeDkk: 100, InvoicedInMonthDkk: -50, InvoicedTotalDkk: 50 }
+    ], 20260801);
+    assert.equal(result.total.adjustment, 50);
+    assert.equal(result.rows[1].invoiced, -50);
+    assert.equal(result.total.opening + result.total.incoming - result.total.invoiced + result.total.adjustment, result.total.closing);
+});
+
+test('order flow fetches sales-only carryover and unique invoices in one customer-filtered batch', async () => {
+    const inputs = new Map();
+    let queries = 0;
+    let sqlText = '';
+    const request = {
+        input(name, _type, value) { inputs.set(name, value); return this; },
+        async query(text) {
+            queries++;
+            sqlText = text;
+            return { recordsets: [[{ OrdNo: 1, OrderDate: 20250115, OrderValueDkk: 100, InvoicedDkk: 0, RemainingDkk: 100 }], []] };
+        }
+    };
+    const service = createOmsaetningService({ getConnection: async () => ({ request: () => request }), sql: { Int: 'Int', MAX: 'MAX', NVarChar: () => 'text' } });
+    const result = await service.getOrderFlow({ month: '2025-02', customerCsv: '42' });
+    assert.equal(queries, 1);
+    assert.equal(inputs.get('customerCsv'), '42');
+    assert.equal(inputs.get('firstDate'), 20250201);
+    assert.equal(inputs.get('asOf'), 20250228);
+    assert.equal(inputs.get('period'), 202408);
+    assert.match(sqlText, /o\.TrTp = 1 AND o\.OrdTp = 1/);
+    assert.match(sqlText, /o\.CustNo > 0 AND c\.CustNo = o\.CustNo/);
+    assert.match(sqlText, /posting\.Cust = invoice\.CustNo/);
+    assert.match(sqlText, /HAVING COUNT_BIG\(\*\) = 1/);
+    assert.match(sqlText, /o\.InvoIF > 0 OR o\.LstInvDt >= @firstDate/);
+    assert.doesNotMatch(sqlText, /\bTOP\b/);
+    assert.equal(result.prior.opening, 100);
+    await assert.rejects(() => service.getOrderFlow({ month: 'invalid' }), { statusCode: 400 });
+    await assert.rejects(() => service.getOrderFlow({ month: '2200-01' }), { statusCode: 400 });
+    assert.equal(queries, 1);
+});
 
 test('calendar months map to Visma fiscal periods and exact date limits', () => {
     assert.deepEqual(parseCalendarMonth('2026-08'), {

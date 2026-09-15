@@ -242,8 +242,32 @@ function createOrdreindgangService({ getConnection, sql }) {
         };
     }
 
+    async function getRecentOrders({ from, to }) {
+        const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value)) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+        const days = (Date.parse(to) - Date.parse(from)) / 86400000;
+        if (!validDate(from) || !validDate(to) || days < 0 || days > 89) {
+            const error = new Error('Vælg højst 90 dage med gyldige datoer.');
+            error.statusCode = 400;
+            throw error;
+        }
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('fromDate', sql.Int, Number(from.replace(/-/g, '')))
+            .input('toDate', sql.Int, Number(to.replace(/-/g, '')))
+            .query(`SELECT O.OrdNo, O.OrdDt AS OrderDate, O.CustNo,
+                           COALESCE(NULLIF(LTRIM(RTRIM(O.Nm)), ''), Customer.CustomerName, '') AS CustomerName,
+                           (O.InvoSF + O.InvoIF) * (O.ExRt / 100.0) AS OrderValueDkk
+                    FROM Ord O
+                    OUTER APPLY (SELECT MAX(LTRIM(RTRIM(A.Nm))) AS CustomerName
+                                 FROM Actor A WHERE O.CustNo > 0 AND A.CustNo = O.CustNo) Customer
+                    WHERE O.TrTp = 1 AND O.OrdTp = 1
+                      AND O.OrdDt >= @fromDate AND O.OrdDt <= @toDate
+                    ORDER BY O.OrdDt DESC, O.OrdNo DESC`);
+        return { from, to, rows: result.recordset || [] };
+    }
+
     return {
-        getSummary
+        getSummary, getRecentOrders
     };
 }
 

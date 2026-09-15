@@ -124,8 +124,8 @@ test('NoPac allocates only packed main-product quantities to finished stock', ()
 
 test('Rsv distinguishes still reserved, picked and finished quantities without adding a second value', () => {
     const result = buildReservationSummary([
-        { ProdNo: '100-A', OrdNo: 700, SalesOrderNo: 900, NoRsv: 10, NoPic: 4, NoFin: 1, CstPr: 25 },
-        { ProdNo: '100-B', OrdNo: 901, SalesOrderNo: 901, NoRsv: 2, NoPic: 2, NoFin: 2, CstPr: 100 }
+        { ProdNo: '100-A', OrdNo: 700, SalesOrderNo: 900, ShpNo: 10, LotShpNo: 10, LotCostPrice: 25, NoRsv: 10, NoPic: 4, NoFin: 1, CstPr: 20 },
+        { ProdNo: '100-B', OrdNo: 901, SalesOrderNo: 901, ShpNo: 11, LotShpNo: 11, LotCostPrice: 100, NoRsv: 2, NoPic: 2, NoFin: 2, CstPr: 90 }
     ]);
 
     assert.equal(result.rows[0].awaitingPickQty, 6);
@@ -133,8 +133,22 @@ test('Rsv distinguishes still reserved, picked and finished quantities without a
     assert.equal(result.rows[0].activeValue, 225);
     assert.equal(result.rows[1].status, 'finished');
     assert.equal(result.summary.activeValue, 225);
+    assert.equal(result.summary.valuedActiveValue, 225);
+    assert.equal(result.summary.excludedActiveRowCount, 0);
     assert.equal(result.summary.registeredValue, 450);
     assert.equal(result.summary.finishedRowCount, 1);
+});
+
+test('Rsv without both an open sales order and a matching lot is excluded from valuation', () => {
+    const result = buildReservationSummary([
+        { ProdNo: '100-A', SalesOrderNo: 0, ShpNo: 10, LotShpNo: 10, LotCostPrice: 1, NoRsv: 6 },
+        { ProdNo: '100-B', SalesOrderNo: 900, ShpNo: 11, LotShpNo: '', CstPr: 2, NoRsv: 3 }
+    ]);
+
+    assert.equal(result.summary.activeValue, 12);
+    assert.equal(result.summary.valuedActiveValue, 0);
+    assert.equal(result.summary.excludedActiveValue, 12);
+    assert.equal(result.summary.excludedActiveRowCount, 2);
 });
 
 test('completed and open route states are calculated per product line', () => {
@@ -222,7 +236,8 @@ test('current reservations are read-only, linked and cached', async () => {
                     return { recordset: [{
                         ProdNo: '100-A', Descr: 'Component', OrdNo: 700, OrdLnNo: 1,
                         SalesOrderNo: 900, LinkSource: 'OrdLn.R4', NoRsv: 10, NoPic: 4, NoFin: 1,
-                        CstPr: 25, PoPhStB: 20, ShpRsv: 10, Bal: 20, StcInc: 0
+                        ShpNo: 10, LotShpNo: 10, LotCostPrice: 25,
+                        CstPr: 20, PoPhStB: 20, ShpRsv: 10, Bal: 20, StcInc: 0
                     }] };
                 }
             };
@@ -235,9 +250,18 @@ test('current reservations are read-only, linked and cached', async () => {
     assert.equal(first.rows[0].salesOrderNo, 900);
     assert.equal(first.rows[0].activeQty, 9);
     assert.equal(first.summary.activeValue, 225);
+    assert.equal(first.summary.valuedActiveValue, 225);
     assert.equal(second, first);
     assert.equal(queries.length, 1);
     assert.equal(/\b(INSERT|UPDATE|DELETE|MERGE|EXEC(?:UTE)?)\b/i.test(queries[0]), false);
+    assert.match(queries[0], /LEFT JOIN Ord LineSO WITH\(NOLOCK\)/i);
+    assert.match(queries[0], /LineSO\.OrdNo\s*=\s*NULLIF\(TRY_CONVERT\(int, L\.R4\), 0\)/i);
+    assert.match(queries[0], /LEFT JOIN Ord HeaderSO WITH\(NOLOCK\)/i);
+    assert.match(queries[0], /HeaderSO\.OrdNo\s*=\s*NULLIF\(TRY_CONVERT\(int, O\.R4\), 0\)/i);
+    assert.match(queries[0], /COALESCE\(\s*LineSO\.OrdNo,\s*HeaderSO\.OrdNo,/i);
+    assert.match(queries[0], /WHEN LineSO\.OrdNo IS NOT NULL THEN 'OrdLn\.R4'/i);
+    assert.match(queries[0], /FROM ShpBal S WITH\(NOLOCK\)/i);
+    assert.match(queries[0], /LineSO\.OrdPrSt\s*&\s*256\s*=\s*256/i);
 });
 
 test('movement evidence reads purchase, nesting, invoice and Søg state without writes', async () => {
@@ -307,6 +331,26 @@ test('current V2 valuation preserves V1 rules and removes only documented VIA/fi
     assert.equal(result.duplicateReduction, 1000);
     assert.equal(result.categories.finishedNotInvoiced, 1000);
     assert.equal(result.categories.viaLaser, 0);
+});
+
+test('verified reserved stock is visible without being added twice to physical stock', () => {
+    const current = payload({
+        opfolgningvare: [{ ProdNo: '100-A', Value: 10 }]
+    });
+    current.totals = { opfolgningvare: 10, total: 10 };
+    const result = canonicalValueSummary(current, {
+        evidence: {
+            reservations: [{
+                prodNo: '100-A', salesOrderNo: 900, activeQty: 6,
+                activeValue: 6, valuationEligible: true
+            }]
+        }
+    });
+
+    assert.equal(result.categories.opfolgningvare, 10);
+    assert.equal(result.categories.reservedStock, 6);
+    assert.equal(result.categories.viaLaser, 0);
+    assert.equal(result.total, 10);
 });
 
 test('period reconciliation nets plate transformation into VIA and registered rest', () => {

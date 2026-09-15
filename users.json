@@ -26,7 +26,16 @@
       "ordreoversigt": false,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": true
+      "lagerliste": true,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-20T10:10:12.695Z"
   },
@@ -67,7 +76,7 @@
     "active": true,
     "permissions": {
       "efterkalk": true,
-      "salgordreVia": true,
+      "salgordreVia": false,
       "omsaetning": false,
       "ordreindgang": false,
       "ordreoversigt": false,
@@ -80,7 +89,7 @@
       "bomResources": false,
       "bomMaterials": false,
       "bomParameters": false,
-      "bomCalculator": true,
+      "bomCalculator": false,
       "bomSuppliers": false,
       "bomVismaPreview": false
     },
@@ -101,7 +110,16 @@
       "ordreoversigt": true,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": true
+      "lagerliste": true,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-21T09:40:13.119Z"
   },
@@ -120,7 +138,16 @@
       "ordreoversigt": true,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": false
+      "lagerliste": false,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-24T10:25:39.847Z"
   },
@@ -133,13 +160,22 @@
     "active": true,
     "permissions": {
       "efterkalk": true,
-      "salgordreVia": false,
+      "salgordreVia": true,
       "omsaetning": true,
       "ordreindgang": true,
       "ordreoversigt": true,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": true
+      "lagerliste": true,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-24T10:26:13.990Z"
   },
@@ -186,7 +222,16 @@
       "ordreoversigt": true,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": false
+      "lagerliste": false,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-24T10:27:08.314Z"
   },
@@ -205,7 +250,16 @@
       "ordreoversigt": false,
       "belastning": true,
       "personalehandbog": true,
-      "lagerliste": false
+      "lagerliste": false,
+      "bomOverview": false,
+      "bomStykliste": false,
+      "bomComponents": false,
+      "bomResources": false,
+      "bomMaterials": false,
+      "bomParameters": false,
+      "bomCalculator": false,
+      "bomSuppliers": false,
+      "bomVismaPreview": false
     },
     "createdAt": "2026-08-24T10:28:19.614Z"
   }

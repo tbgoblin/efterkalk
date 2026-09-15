@@ -4,7 +4,7 @@ App desktop per **efterkalkulation** e analisi margini ordini, pensata per uso i
 
 Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al costing degli ordini riunisce dati commerciali e produttivi provenienti da Visma/SQL Server e comprende aree dedicate a BOM/preventivazione, magazzino, QMS, carico produttivo, fatturato e VIA.
 
-**Versione attuale:** `1.1.47` (fonte: `package.json`)
+**Versione attuale:** `1.1.68` (fonte: `package.json`)
 
 ---
 
@@ -15,6 +15,8 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 - calcolo costi/ricavi/margine per ordine
 - dettaglio ordini di produzione collegati
 - apertura **tegning/PDF** con pulsante `Vis tegning`
+- **Lagerliste 1**: valore fisico, chiusure mensili, snapshot giornalieri, confronto periodi, PDF, ricerca articolo e prenotazioni verificate
+- **SalgOrdre VIA**: materiale, stang, tempo e componenti acquistati; distingue quantità ordinate, ricevute e consumate
 - **Lagerliste 2 (Beta/Shadow)** separata: riconcilia i movimenti tra periodi, distingue REST previsto/registrato/svalutazione e usa `NoPac` per evitare doppioni VIA/Færdige senza cambiare Lagerliste 1
 - cache locale + warmup automatico per velocizzare l’avvio
 - pacchetto desktop Windows con aggiornamento automatico via GitHub Releases
@@ -52,6 +54,14 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 - chiarita la semantica di `Gr4` come **tipo ordine** (es. Multiordre) con rinomina variabili/UI note, senza modificare la logica business
 - fix allocazione laser nel fallback aggregato: se il nesting totale è registrato su quantità maggiori della singola riga (es. 200 vs 100), il costo viene ripartito proporzionalmente evitando raddoppi su singolo articolo
 - mantenuta e documentata la nota di divergenza prezzo unitario quando il totale laser viene redistribuito su quantità diverse (`allocation spread`)
+
+### Lagerliste e VIA (`2026-09-15`)
+
+- `Opfølgningsvarer` mostra il valore fisico e il residuo Lager dopo l’eventuale trasferimento di componenti acquistati a VIA
+- le prenotazioni `Rsv` sono collegate solo a salgsordrer esistenti e aperte, con lotto `ShpBal` verificato; la sezione informativa non viene mai sommata due volte
+- `Indkøbte dele til ordre` entra nel VIA con il consumo `NoFin` oppure, prima del consumo, quando ricezione, giacenza fisica e prenotazione verificata provano l’allocazione; il corrispondente valore FIFO esce dal Lager
+- VIA, Lagerliste e CSV includono lo stesso valore dei componenti acquistati e il relativo dettaglio espandibile
+- cache Lagerliste `v35`, cache VIA `v34` e schema di valutazione `35`
 
 ---
 
@@ -136,7 +146,7 @@ Il progetto dispone di una prima suite automatica eseguibile con:
 npm test
 ```
 
-I test sono isolati e non si collegano a Visma: verificano sessioni bearer/cookie e logout, rifiuto delle scritture anonime, blocco BOM su profili `readOnly`, conservazione di anteprima/duplicati/transazione, apertura sicura dei PDF locali/UNC/HTTPS e le regole pure di Lagerliste 2. Per Lagerliste 2 sono coperti prodotti speciali `L2/L3`, REST registrato, færdigmelding indipendente del REST, associazione esatta dei codici `_SCR0`, riuso del REST tra nesting diversi, separazione tra quadratura materiale e svalutazione/rivalutazione REST, route aperte/completate, priorità delle fonti R4, lastre non registrate marcate `Søg`, ripartizione `NoPac`, eliminazione dei doppioni VIA/Færdige, consumo `Opfølgningsvarer → Færdige SO` documentato da `ProdTr`, pareggio `plade → VIA + REST`, conservazione dei residui reali e passaggio `VIA Laser → Færdige SO`.
+I test sono isolati e non si collegano a Visma: verificano sessioni, protezione scritture, BOM `readOnly`, PDF, selezione/stampa periodi Lagerliste, prezzi FIFO, migrazione GOH, Diverse, prenotazioni, priorità dei collegamenti ordine, ripartizione `NoPac`, eliminazione dei doppioni VIA/Færdige e componenti acquistati calcolati solo da `NoFin`. Le query SQL richiedono comunque una verifica con dati aziendali reali.
 
 Questa è una rete di sicurezza iniziale, non ancora una copertura completa. Prima di refactor importanti è consigliato introdurre test di caratterizzazione con casi anonimizzati e risultati attesi, in particolare per:
 

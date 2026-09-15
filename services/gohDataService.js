@@ -796,10 +796,16 @@ async function saveRawImport(sourceName, sourceType, payload) {
 }
 
 // Documenti di stato condivisi (users, note ordini, soglie, ...) su dbo.AppState.
-async function getAppState(key) {
-    if (!isEnabled()) return null;
+async function getAppState(key, { strict = false } = {}) {
+    if (!isEnabled()) {
+        if (strict) throw new Error('GOH er ikke tilgængelig');
+        return null;
+    }
     const pool = await getPool();
-    if (!pool) return null;
+    if (!pool) {
+        if (strict) throw new Error('GOH er ikke tilgængelig');
+        return null;
+    }
     try {
         const result = await pool.request()
             .input('key', sql.NVarChar(100), String(key))
@@ -809,6 +815,7 @@ async function getAppState(key) {
         return { payload: JSON.parse(row.Payload), updatedAt: row.UpdatedAt };
     } catch (err) {
         markUnavailable(err);
+        if (strict) throw err;
         return null;
     }
 }
@@ -866,7 +873,7 @@ async function getAppStateKeysByPrefix(prefix) {
     }
 }
 
-async function setAppState(key, payload, { createOnly = false } = {}) {
+async function setAppState(key, payload, { createOnly = false, expectedVersion = -1 } = {}) {
     if (!isEnabled()) return false;
     const pool = await getPool();
     if (!pool) return false;
@@ -875,13 +882,15 @@ async function setAppState(key, payload, { createOnly = false } = {}) {
             .input('key', sql.NVarChar(100), String(key))
             .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(payload))
             .input('createOnly', sql.Bit, createOnly)
+            .input('expectedVersion', sql.Int, expectedVersion)
             .input('protectRevision', sql.Bit, /^lagerliste_month_\d{4}-\d{2}$/.test(String(key)))
             .query(`MERGE dbo.AppState WITH (HOLDLOCK) AS t
                 USING (SELECT @key AS StateKey) AS s ON t.StateKey = s.StateKey
                 WHEN MATCHED AND @createOnly = 0
+                    AND (@expectedVersion = -1 OR TRY_CONVERT(int, JSON_VALUE(CASE WHEN ISJSON(t.Payload) = 1 THEN t.Payload ELSE '{}' END, '$.version')) = @expectedVersion)
                     AND (@protectRevision = 0 OR JSON_VALUE(CASE WHEN ISJSON(t.Payload) = 1 THEN t.Payload ELSE '{}' END, '$.revision.number') IS NULL)
                     THEN UPDATE SET Payload = @payload, UpdatedAt = SYSUTCDATETIME()
-                WHEN NOT MATCHED THEN INSERT (StateKey, Payload) VALUES (@key, @payload)
+                WHEN NOT MATCHED AND @expectedVersion IN (-1, 0) THEN INSERT (StateKey, Payload) VALUES (@key, @payload)
                 OUTPUT $action AS Action;`);
         return Boolean(result.recordset && result.recordset.length === 1);
     } catch (err) {

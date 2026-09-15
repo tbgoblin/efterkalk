@@ -8,11 +8,12 @@
 - analizzare costi, ricavi e margini
 - esplodere gli ordini di produzione collegati
 - controllare operazioni, nesting e materiale laser
+- controllare valore fisico del magazzino, VIA, prenotazioni e chiusure mensili
 - aprire rapidamente i disegni PDF (`Vis tegning`)
 
 Nel suo stato attuale l'app va considerata un **hub operativo interno**, non soltanto un calcolatore di margini. Riunisce informazioni commerciali e produttive di Visma/SQL Server e include anche moduli per BOM/preventivazione, magazzino, QMS, carico produttivo, fatturato e VIA.
 
-**Versione applicativa documentata:** `1.1.49` (la fonte autorevole è il campo `version` di `package.json`).
+**Versione applicativa documentata:** `1.1.68` (la fonte autorevole è il campo `version` di `package.json`).
 
 L’interfaccia utente usa testi prevalentemente **danesi**, adatti al contesto operativo di fabbrica.
 
@@ -27,12 +28,7 @@ L’interfaccia utente usa testi prevalentemente **danesi**, adatti al contesto 
 - permessi per leggere eventuali cartelle rete/UNC dei disegni
 
 ### Connessione database
-Configurata in `db.js`:
-
-- **server:** `10.2.0.3\\VISMA`
-- **database:** `F0001`
-- driver: `msnodesqlv8`
-- autenticazione: `trustedConnection: true`
+La connessione attiva è risolta dai profili applicativi e da `db.js`. Il progetto usa SQL Server tramite `mssql`/`msnodesqlv8` e autenticazione Windows dove prevista. Host, database e credenziali non devono essere riportati nei manuali o nel repository.
 
 > Se la macchina non vede il server SQL o non ha i driver nativi corretti, l’app non caricherà i dati.
 
@@ -70,9 +66,7 @@ npm start
 ## 4. Uso quotidiano
 
 ### 4.1 Accesso iniziale
-All’apertura compare una finestra `Adgangskode`.
-
-**Codice attuale:** `12345`
+All’apertura compare la finestra di accesso. Usare l’utente assegnato dall’amministratore; password o codici di bootstrap non devono essere documentati né condivisi nei file del progetto.
 
 Il login crea una sessione server-side in memoria valida per 8 ore. Per compatibilità la pagina principale conserva il bearer token; un cookie `HttpOnly`, `SameSite=Strict` e same-origin permette alle pagine separate BOM/QMS di usare la stessa sessione. Il logout revoca entrambi.
 
@@ -121,7 +115,68 @@ Il numero mensile di giorni lavorativi segue questa precedenza:
 
 Il pannello `Administration → Arbejdsdage pr. måned` è visibile al Superadmin. Selezionare l'anno, correggere i 12 valori e premere `Gem arbejdsdage`. `Brug kalenderforslag` reinserisce i conteggi automatici nell'interfaccia; per renderli permanenti occorre poi salvarli. I valori ammessi sono interi da 0 a 31 e vengono conservati centralmente in GOH, così tutti gli utenti vedono le stesse soglie Omsætning.
 
-### 4.3 Lagerliste 2 (Beta/Shadow)
+### 4.3 Lagerliste 1 — uso operativo e valore ufficiale
+
+`Lagerliste` è la vista ufficiale per controllo corrente, chiusure mensili, snapshot giornalieri e confronto fra periodi. Richiede il permesso modulo `lagerliste`.
+
+#### Lettura del riepilogo
+
+- `Pladelager`: quantità fisica per prezzo standard; il selettore può mostrare il FIFO senza modificare i dati salvati;
+- `Rest plader`: REST realmente registrati e valorizzati con il prezzo di recupero configurato;
+- `Stang materiale`, `Lager Komponenter (FIFO)` e `Diverse`: categorie di magazzino distinte;
+- `Opfølgningsvarer`: parte della giacenza fisica `PoPhStB × PhCstPr` ancora classificata come Lager. I componenti acquistati ricevuti e verificati per un ordine vengono trasferiti a VIA; quantità e valore fisici originali restano visibili per audit;
+- `Færdige SO kostpris`: ordini completati e non ancora fatturati;
+- `VIA Tid`, `VIA Laser`, `VIA Stang`, `Indkøbte dele til ordre` e `Plader VIA`: componenti del valore in lavorazione;
+- `Vare i arbejde`: somma di `Færdige SO kostpris` e delle componenti VIA;
+- `Varelager`: magazzino fisico, compresi i REST registrati. Le prenotazioni non vengono sommate una seconda volta.
+
+Il selettore `Standardpris / FIFO` modifica solo la valutazione delle lastre nella vista corrente, nel riepilogo e nel PDF. Le chiusure già salvate non vengono riscritte.
+
+#### Prenotazioni
+
+La sezione `Reserveret til ordre · info` è disponibile soltanto sulla vista corrente. Mostra prodotto, lotto, quantità attiva, valore e ordine vendita verificato. Una prenotazione è valorizzabile solo quando:
+
+1. esiste una riga `Rsv` ancora attiva;
+2. il lotto `Rsv.ShpNo` esiste in `ShpBal`;
+3. il collegamento `OrdLn.R4` → `Ord.R4` → ordine diretto porta a una salgsordre esistente e aperta.
+
+Le righe senza lotto o senza ordine aperto sono indicate come `Ikke medregnet`. La tabella prenotazioni non aumenta mai direttamente il totale. Quando una prenotazione appartiene a un componente acquistato ricevuto, il valore FIFO viene sottratto da `Opfølgningsvarer` e riclassificato in VIA; le altre prenotazioni restano nel Lager. Se il caricamento delle prenotazioni fallisce, Lagerliste continua a mostrare il resto del report con un avviso non bloccante.
+
+#### Ricerca articolo
+
+`Vareopslag` permette di cercare un `ProdNo` e controllare saldo, FIFO, lotti `ShpBal`, prenotazioni attive e righe ordine aperte. Usarlo quando il totale aggregato non spiega una differenza su un articolo specifico.
+
+#### Periodi, stampa e chiusure
+
+- `Periode A` apre la vista scelta; `Periode B` aggiunge il confronto;
+- `Aktuel`, chiusure `Måned YYYY-MM` e `Snapshot ...` sono sorgenti distinte;
+- `PDF` stampa esattamente il periodo o confronto visualizzato ed espande le sezioni necessarie;
+- `Gem måned` crea la chiusura mensile; `Gem snapshot` crea una fotografia puntuale;
+- creazione/cancellazione di snapshot, chiusure e riconciliazioni manuali richiedono Superadmin;
+- `Kopiér lokale måneder til GOH` migra le chiusure locali, verifica ogni scrittura, conserva gli originali e richiede conferma aggiuntiva prima di sovrascrivere un conflitto.
+
+Le riconciliazioni manuali richiedono una nota. Documentano una causa conosciuta, ma non modificano Visma, le quantità o i totali della Lagerliste.
+
+### 4.4 Salgsordre VIA
+
+`SalgOrdre VIA` mostra soltanto ordini vendita esistenti e aperti, con produzione collegata ricorsivamente. Richiede il permesso `salgordreVia`.
+
+Per ogni ordine sono visibili:
+
+- `Materiale`: consumo materiale registrato e materiale nesting;
+- `Stang`: consumo registrato di prodotti `Gr6=2`;
+- `Indkøbte dele`: componenti collegati a un’indkøbsordre;
+- `Tid`: minuti registrati in `ProdTr ×` costo risorsa;
+- `Total kost`: somma delle quattro componenti precedenti;
+- avanzamento processo, prossima risorsa e valore vendita.
+
+La tabella può essere cercata per ordine/cliente, ordinata per colonna, ridimensionata ed esportata in CSV. Il CSV contiene anche `Indkøbte dele til ordre` e usa lo stesso totale mostrato nella UI. `Opdater` sulla singola riga forza il ricalcolo dell’ordine; l’aggiornamento generale usa la cache VIA quando ancora valida.
+
+Aprendo `Indkøbte dele til ordre` si vedono `Indkøbsordre`, prodotto, `Bestilt`, `Modtaget`, `Forbrugt`, `Medregnet antal`, prezzo unitario e `Medregnet VIA`. Entra nel VIA la quantità consumata `NoFin` e, prima del consumo, la quantità ricevuta che risulta ancora fisica e verificata come riservata all’ordine. La quota trasferita dal Lager usa il FIFO; il consumo usa il prezzo della riga d’acquisto. Il solo ordinato non viene conteggiato. Più righe dello stesso prodotto collegate alla stessa indkøbsordre vengono aggregate per non ripetere la ricezione.
+
+La sezione separata `Reserveret til ordre` usa le stesse prenotazioni verificate della Lagerliste. È una vista informativa e non viene sommata direttamente: per i componenti acquistati ricevuti supporta la riclassificazione Lager → VIA; per le altre merci resta parte del Lager.
+
+### 4.5 Lagerliste 2 (Beta/Shadow)
 
 `Lagerliste 2` è una pagina autonoma accessibile dalla dashboard e dal menu laterale. È stata separata intenzionalmente da Lagerliste 1: non modifica il calcolo esistente, non salva dati in Visma e usa soltanto endpoint di lettura protetti dal permesso `lagerliste`.
 
@@ -171,9 +226,11 @@ Regole conservative della Beta:
 
 La query route considera il mese corrente e i due mesi precedenti ed è mantenuta in cache per due minuti. Se uno snapshot storico non contiene `SalesOrdNo`, Lagerliste 2 prova a integrare il riferimento soltanto quando l'esatta `nestingordre + route` attuale porta a un unico ordine vendita; non sceglie tra più SO. `NoPac` non è storicizzato negli snapshot esistenti: la ripartizione delle sovrapposizioni usa lo stato Visma disponibile al momento del confronto e viene quindi presentata come riconciliazione operativa, non come ricostruzione contabile storica certificata.
 
-`ShpBal` (`VareParti`) contiene informazioni utili sui lotti e sulle riserve, tra cui `RestBal`, `NoRsv`, `NoRsvInc`, `OrdNo`, costo e valore. Lagerliste 2 non usa ancora questi campi per pareggiare automaticamente gli ordini lager: `OrdNo` può rappresentare l'ordine di origine/ricezione del lotto e non dimostra da solo la successiva vendita destinataria. Finché il legame di prenotazione non è verificato, questi dati rimangono evidenza informativa e non una contropartita contabile.
+I componenti acquistati collegati a una produzione sono mostrati come `Indkøbte dele til ordre`. `NoOrg` indica la quantità ordinata e non viene mai usato da solo come valore. Le ricezioni positive `ProdTr.StcMov` con `TrTp=6` rendono conteggiabile la quantità ricevuta: se il prodotto è un `Opfølgningsvare`, devono esistere anche prenotazione attiva e giacenza fisica, e la quota viene trasferita dal Lager al VIA al costo FIFO. `OrdLn.NoFin` resta la prova del consumo e viene valorizzato con il prezzo dell’indkøbsordre. Nei dettagli sono separate `Bestilt`, `Modtaget`, `Forbrugt`, `Medregnet antal` e `Medregnet VIA`; righe duplicate per prodotto e indkøbsordre sono aggregate.
 
-### 4.3 Lista ordini
+`ShpBal` (`VareParti`) contiene lotto e costo della merce riservata, ma il suo `OrdNo` può rappresentare l'ordine di origine/ricezione e non viene usato come destinazione. Lagerliste 2 prende la destinazione da `Rsv` e la accetta soltanto quando il collegamento `OrdLn.R4` → `Ord.R4` → ordine diretto porta a una salgsordre esistente e ancora aperta. Se esiste anche il lotto `Rsv.ShpNo = ShpBal.ShpNo`, la prenotazione viene mostrata con prodotto, lotto, quantità, valore e ordine. Per un componente acquistato già ricevuto, la quota verificata viene riclassificata da `Opfølgningsvarer` a VIA; per ogni altra prenotazione resta nel valore Lager. La sezione informativa non viene mai sommata separatamente. Gli snapshot storici non mostrano prenotazioni correnti.
+
+### 4.6 Lista ordini
 La lista mostra gli ultimi ordini fatturati:
 
 - finestra temporale: **30 giorni**
@@ -186,7 +243,7 @@ La lista:
 - usa cache locale per partire più velocemente
 - per i `MultiOrdre` (`Ord.Gr4 = 3`) mostra un badge tondo `M` con tooltip `MultiOrdre`
 
-### 4.4 Dettaglio ordine
+### 4.7 Dettaglio ordine
 Aprendo un ordine si vedono tipicamente:
 
 1. **testata ordine**
@@ -199,7 +256,7 @@ Note operative:
 - le righe `Ydelse` / righe con `PurcNo` collegato possono essere aperte per vedere l’ordine di produzione figlio
 - nei `MultiOrdre` compare anche la logica dedicata `NestMultiPris` nelle viste laser
 
-### 4.5 Disegni e immagini
+### 4.8 Disegni e immagini
 Se per il prodotto esiste un disegno, appare il pulsante `Vis tegning`.
 
 Comportamento:
@@ -207,7 +264,7 @@ Comportamento:
 - se non riesce, tenta apertura tramite URL/path lato client
 - supporta percorsi locali, UNC e URL HTTP/HTTPS
 
-### 4.6 Laser / nesting
+### 4.9 Laser / nesting
 Sono presenti viste e metriche dedicate al laser:
 
 - endpoint `GET /laser-route-metrics`
@@ -219,7 +276,7 @@ Sono presenti viste e metriche dedicate al laser:
 - se lo stesso prodotto è distribuito su più `nestingordre`, il riepilogo li aggrega tutti
 - anche negli ordini standard il popup laser può mostrare più righe (`nestingordre` / `rute`) per lo stesso prodotto
 
-### 4.7 Interpretazione dei costi laser
+### 4.10 Interpretazione dei costi laser
 Per evitare ambiguità durante i controlli:
 
 - `NestKost pr. stk` nel popup laser è il costo unitario della **riga/route mostrata**
@@ -577,6 +634,11 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `services/authService.js` | utenti, sessioni bearer/cookie e guard di autenticazione |
 | `services/aftercalcCostExclusionsService.js` | flag permanenti GOH per esclusione costo delle righe vendita |
 | `services/omsaetningService.js` | riepilogo contabile Omsætning e dettaglio mensile fattura/ordine |
+| `services/viaService.js` | ordini vendita aperti, componenti VIA e dettagli degli acquisti collegati |
+| `services/lagerlisteService.js` | valutazione Lagerliste 1, chiusure mensili e snapshot puntuali |
+| `services/lagerliste2Service.js` | route/nesting, prenotazioni verificate ed evidenze di movimento |
+| `services/lagerlisteAllocation.js` | eliminazione dei doppioni tra VIA, Færdige SO e magazzino componenti |
+| `services/lagerlisteDiverseService.js` | righe Diverse correnti e revisioni mensili condivise in GOH |
 | `assets/js/omsaetning-daily-thresholds.js` | calendario lavorativo danese e conversione dei target giornalieri in soglie mensili |
 | `services/bomService.js` | letture BOM e creazione transazionale prodotti, con blocco `readOnly` |
 | `utils/productRules.js` | regole dedicate ai prodotti |
@@ -611,6 +673,17 @@ deve essere aggiornato anche questo capitolo, specificando:
 | `GET /production-summary/:ordno` | riepilogo ordine di produzione |
 | `GET /laser-route-metrics` | metriche laser/nesting |
 | `GET /nesting-detail/:ordno/:prodno` | dettaglio nesting per prodotto |
+| `GET /salgordre-via` | ordini VIA; supporta `ordNo`, `cached=1` e `force=1` |
+| `GET /salgordre-via/reservations` | prenotazioni verificate mostrate nel modulo VIA |
+| `GET /lagerliste/current` | valutazione Lagerliste corrente; `force=1` invalida la cache |
+| `GET /lagerliste/vareopslag/:prodno` | saldo, lotti, prenotazioni e ordini aperti del prodotto |
+| `GET /lagerliste/snapshot-months` | elenco chiusure mensili disponibili |
+| `GET/POST /lagerliste/snapshot/:month` | legge o crea una chiusura mensile |
+| `GET/POST /lagerliste/snapshots` | elenca o crea snapshot puntuali |
+| `GET/DELETE /lagerliste/snapshots/:id` | legge o elimina uno snapshot puntuale |
+| `GET /lagerliste2/routes/current` | route/nesting correnti della vista Beta |
+| `GET /lagerliste2/reservations/current` | prenotazioni correnti verificate |
+| `POST /lagerliste2/movement-evidence` | evidenze di movimento tra due istanti |
 | `POST /cache-refresh-order/:ordno` | refresh cache singolo ordine |
 | `GET /cache-refresh-order-status/:ordno` | stato refresh ordine |
 | `POST /cache-clear` | svuota cache persistente |
@@ -629,6 +702,8 @@ deve essere aggiornato anche questo capitolo, specificando:
 - **aftercalc cache** persistente su file JSON
 - **production summary cache** persistente
 - **laser metrics cache** persistente
+- **SalgOrdre VIA cache** persistente, chiave `salgordre_via_v34`
+- **Lagerliste cache** persistente, chiave base `lagerliste_v35`
 
 ### TTL attuali
 Da `server.js`:
@@ -638,6 +713,9 @@ Da `server.js`:
 - `order margin`: **30 min**
 - `laser metrics`: **60 min**
 - `order list cache`: **10 min**
+- `SalgOrdre VIA`: **5 min**, con warmup periodico ogni 10 min
+
+La Lagerliste usa chiavi versionate e valida `valuationVersion = 35`. Quando cambia una formula di valutazione occorre incrementare sia la chiave cache interessata sia la versione di valutazione, aggiornando i fixture di test e la documentazione.
 
 ### Posizione cache
 `diskCache.js` cerca in ordine:
@@ -771,6 +849,7 @@ All’avvio desktop, l’app controlla se esiste una release più nuova e notifi
 - provare `GET /order-list`
 - testare almeno un `GET /aftercalc/<ordNo reale>`
 - testare almeno un `GET /production-summary/<prodOrdNo reale>`
+- per modifiche Lagerliste/VIA, testare anche `/lagerliste/current?force=1`, `/salgordre-via?force=1` e almeno un ordine con prenotazione o componente acquistato
 
 #### Prima di una release
 - confermare build `npm run build:win`
@@ -814,6 +893,18 @@ Azioni:
 - verificare accesso al DB
 - controllare se il log segnala errori di query o timeout
 
+### Problema: una prenotazione non compare o risulta `Ikke medregnet`
+Controllare nell’ordine:
+1. `Rsv.NoRsv > 0`;
+2. presenza del lotto `Rsv.ShpNo` in `ShpBal`;
+3. destinazione risolta tramite `OrdLn.R4`, poi `Ord.R4`, poi ordine diretto;
+4. salgsordre ancora aperta secondo gli stessi stati accettati da Salgsordre VIA.
+
+Non usare `ShpBal.OrdNo` come ordine vendita: identifica normalmente l’origine/ricezione del lotto.
+
+### Problema: `Indkøbte dele` mostra ordinato/ricevuto ma VIA è zero
+`NoOrg` da solo non basta. Se `Modtaget > 0`, verificare che il prodotto ricevuto sia ancora fisicamente presente e che `Rsv` colleghi la riga a una salgsordre aperta. In assenza di queste prove il sistema non lo sottrae dal Lager e non lo attribuisce al VIA. `NoFin > 0` resta invece consumo certo.
+
 ---
 
 ## 13. Note per sviluppatori
@@ -825,12 +916,12 @@ Azioni:
 
 ### Copertura dei test e rischio di regressione
 
-Il progetto dispone di una prima suite automatica per autenticazione/sessioni, protezione delle scritture, comportamento BOM `readOnly` e apertura PDF. Usa esclusivamente simulazioni in memoria e non scrive su Visma o su database reali. Le verifiche operative su ordini reali rimangono necessarie perché la suite non copre ancora le formule di costing.
+Il progetto dispone di test isolati per autenticazione/sessioni, protezione delle scritture, BOM `readOnly`, apertura PDF, selezione periodi e stampa Lagerliste, prezzi FIFO, migrazione GOH, righe Diverse, prenotazioni, collegamenti ordine, allocazione VIA/Færdige SO e componenti acquistati. I test non scrivono su Visma o database reali. Le query SQL e i risultati su ordini reali devono comunque essere verificati in ambiente aziendale.
 
 La priorità consigliata prima di ulteriori refactor è estendere i test di caratterizzazione con dati anonimizzati e risultati attesi per:
 
 - esclusioni prodotto e operazione (`R1090`, `R8200`, componenti `R*`);
-- fallback da `NoFin` a `NoOrg`;
+- fallback da `NoFin` a `NoOrg` nelle sole formule che ancora lo prevedono; per `Indkøbte dele til ordre` il fallback è vietato;
 - risoluzione ricorsiva dei costi degli ordini figli;
 - calcolo e allocazione laser nei `MultiOrdre`;
 - ordini con nesting multipli e fatturazione parziale;

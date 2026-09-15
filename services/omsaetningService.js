@@ -474,7 +474,84 @@ function createOmsaetningService({ getConnection, sql }) {
         };
     }
 
+    async function getOrderFlow({ month, customerCsv = '' }) {
+        const meta = parseCalendarMonth(month);
+        const now = new Date();
+        const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        if (!meta || meta.firstDateInt > today) {
+            const error = new Error('Vælg en måned til og med indeværende måned.');
+            error.statusCode = 400;
+            throw error;
+        }
+        const asOf = Math.min(today, meta.lastDateInt);
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('firstDate', sql.Int, meta.firstDateInt)
+            .input('asOf', sql.Int, asOf)
+            .input('period', sql.Int, meta.fiscalPeriodKey)
+            .input('customerCsv', sql.NVarChar(sql.MAX), String(customerCsv || '').trim())
+            .query(`
+                SELECT o.OrdNo, o.OrdDt AS OrderDate, o.CustNo, c.Nm AS CustomerName,
+                    CAST(ISNULL(o.InvoSF, 0) * (ISNULL(o.ExRt, 100) / 100.0) AS decimal(38, 6)) AS InvoicedDkk,
+                    CAST(ISNULL(o.InvoIF, 0) * (ISNULL(o.ExRt, 100) / 100.0) AS decimal(38, 6)) AS RemainingDkk,
+                    CAST((ISNULL(o.InvoSF, 0) + ISNULL(o.InvoIF, 0)) * (ISNULL(o.ExRt, 100) / 100.0) AS decimal(38, 6)) AS OrderValueDkk
+                INTO #FlowOrders
+                FROM Ord o
+                LEFT JOIN Actor c ON o.CustNo > 0 AND c.CustNo = o.CustNo
+                WHERE o.TrTp = 1 AND o.OrdTp = 1
+                    AND o.OrdDt > 0 AND o.OrdDt <= @asOf
+                    AND (o.InvoIF > 0 OR o.LstInvDt >= @firstDate OR o.OrdDt >= @firstDate)
+                    AND (ISNULL(o.InvoSF, 0) + ISNULL(o.InvoIF, 0)) > 0
+                    AND (@customerCsv = '' OR EXISTS (
+                        SELECT 1 FROM STRING_SPLIT(@customerCsv, ',') selectedCustomer
+                        WHERE TRY_CAST(LTRIM(RTRIM(selectedCustomer.value)) AS int) = o.CustNo
+                    ));
+
+                SELECT * FROM #FlowOrders ORDER BY OrderDate, OrdNo;
+
+                ;WITH RelevantInvoices AS (
+                    SELECT LTRIM(RTRIM(o.InvoNo)) AS InvoNo, o.CustNo
+                    FROM Ord o INNER JOIN #FlowOrders target ON target.OrdNo = o.OrdNo
+                    WHERE o.InvoNo IS NOT NULL AND LTRIM(RTRIM(o.InvoNo)) <> ''
+                    UNION
+                    SELECT LTRIM(RTRIM(ct.InvoNo)), target.CustNo
+                    FROM CustTr ct INNER JOIN #FlowOrders target ON target.OrdNo = ct.OrdNo
+                    WHERE ct.InvoNo IS NOT NULL AND LTRIM(RTRIM(ct.InvoNo)) <> ''
+                ), Candidates AS (
+                    SELECT invoice.InvoNo, invoice.CustNo, o.OrdNo
+                    FROM RelevantInvoices invoice INNER JOIN Ord o
+                        ON o.InvoNo = invoice.InvoNo AND o.CustNo = invoice.CustNo
+                    WHERE o.TrTp = 1 AND o.OrdTp = 1
+                    UNION
+                    SELECT invoice.InvoNo, invoice.CustNo, ct.OrdNo
+                    FROM RelevantInvoices invoice INNER JOIN CustTr ct
+                        ON ct.InvoNo = invoice.InvoNo
+                    INNER JOIN Ord o ON o.OrdNo = ct.OrdNo AND o.CustNo = invoice.CustNo
+                    WHERE o.TrTp = 1 AND o.OrdTp = 1
+                ), UniqueInvoices AS (
+                    SELECT InvoNo, CustNo, MIN(OrdNo) AS OrdNo
+                    FROM Candidates GROUP BY InvoNo, CustNo HAVING COUNT_BIG(*) = 1
+                )
+                SELECT invoice.OrdNo,
+                    -SUM(CASE WHEN posting.AcYrPr < @period THEN CAST(posting.AcAm AS decimal(38, 6)) ELSE 0 END) AS InvoicedBeforeDkk,
+                    -SUM(CASE WHEN posting.AcYrPr = @period AND posting.VoDt <= @asOf THEN CAST(posting.AcAm AS decimal(38, 6)) ELSE 0 END) AS InvoicedInMonthDkk,
+                    -SUM(CAST(posting.AcAm AS decimal(38, 6))) AS InvoicedTotalDkk
+                FROM UniqueInvoices invoice
+                INNER JOIN #FlowOrders target ON target.OrdNo = invoice.OrdNo
+                INNER JOIN AcTr posting ON posting.InvoNo = invoice.InvoNo AND posting.Cust = invoice.CustNo
+                INNER JOIN Ac account ON account.AcNo = posting.AcNo AND account.AcGr = '10_Omsætning'
+                WHERE posting.SrcTp IN (1, 9)
+                GROUP BY invoice.OrdNo;
+                DROP TABLE #FlowOrders;
+            `);
+        return {
+            month: meta.raw, asOf, basis: 'sales-value-all-revenue-accounts', reconstructed: true,
+            ...require('../assets/js/order-flow').build(result.recordsets[0] || [], result.recordsets[1] || [], meta.firstDateInt)
+        };
+    }
+
     return {
+        getOrderFlow,
         getAccounts,
         searchCustomers,
         getSummary,

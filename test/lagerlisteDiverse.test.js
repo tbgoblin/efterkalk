@@ -130,7 +130,7 @@ test('unavailable GOH does not appear as an empty new month', async () => {
 });
 
 test('cached reports refresh Diverse once; incomplete monthly closure is blocked', async () => {
-    const base = { valuationVersion: 31, generatedAt: new Date().toISOString(),
+    const base = { valuationVersion: 35, generatedAt: new Date().toISOString(),
         categories: { plates: [], gr5Items: [], opfolgningvare: [], finishedNotInvoiced: [], salgordreVia: [] },
         totals: { total: 100, diverse: 10, finishedNotInvoiced: 0, salgordreVia: 0 } };
     const service = createLagerlisteService({ diskCache: { get: () => base },
@@ -143,7 +143,7 @@ test('cached reports refresh Diverse once; incomplete monthly closure is blocked
 });
 
 test('existing stock-category overlap refuses a duplicated Diverse valuation', async () => {
-    const base = { valuationVersion: 31, categories: { plates: [{ ProdNo: '44001' }], gr5Items: [], opfolgningvare: [], finishedNotInvoiced: [], salgordreVia: [] }, totals: { finishedNotInvoiced: 0, salgordreVia: 0 } };
+    const base = { valuationVersion: 35, categories: { plates: [{ ProdNo: '44001' }], gr5Items: [], opfolgningvare: [], finishedNotInvoiced: [], salgordreVia: [] }, totals: { finishedNotInvoiced: 0, salgordreVia: 0 } };
     const service = createLagerlisteService({ diskCache: { get: () => base },
         getDiverse: async () => ({ rows: [{ ProdNo: '44001', Value: 20 }], total: 20 }) });
     await assert.rejects(service.getCurrent(), /overlapper/);

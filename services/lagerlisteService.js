@@ -3,12 +3,12 @@
 // separate from live values so closing a month remains reproducible.
 const path = require('path');
 const { buildOrderStates } = require('./lagerliste2Service');
-const { allocateSharedOrders, allocateComponentStock, validateValuation, validateClosure } = require('./lagerlisteAllocation');
+const { allocateSharedOrders, allocateComponentStock, allocatePurchasedPartsFromFollowUpStock, validateValuation, validateClosure } = require('./lagerlisteAllocation');
 
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null, getDiverse = null }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v31';
+    const cacheKey = 'lagerliste_v35';
     const excludedOrderNumbers = new Set([61423, 75330, 131790, 140134, 331368]);
     let currentMemoryCache = null;
 
@@ -269,11 +269,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                             AND CONVERT(varchar(100), P.ProdNo) LIKE '1%'
                             AND CONVERT(varchar(100), P.ProdNo) NOT LIKE '%L%'
                             AND COALESCE(TRY_CONVERT(decimal(18, 6), P.ProdGr), 0) IN (1, 2)
-                            AND (
-                                        COALESCE(TRY_CONVERT(decimal(18, 6), B.Bal), 0)
-                                        + COALESCE(TRY_CONVERT(decimal(18, 6), B.StcInc), 0)
-                                        - COALESCE(TRY_CONVERT(decimal(18, 6), B.ShpRsv), 0)
-                                    ) <> 0
+                            AND COALESCE(TRY_CONVERT(decimal(18, 6), B.PoPhStB), 0) <> 0
                 `);
         const restPrices = typeof getRestPrices === 'function' ? getRestPrices() : { '301': 3, '311': 10, '321': 15, '331': 4, '381': 10, '302': 1 };
         const restPlateResult = await pool.request().query(`
@@ -416,17 +412,24 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             const beholdning = toNumber(row.Beholdning);
             const fifoPrice = toNumber(row.PhCstPr);
             const pophStB = toNumber(row.PoPhStB);
-            const preciseValue = beholdning * fifoPrice;
+            const balanceBeforeReservations = toNumber(row.Bal) + toNumber(row.StcInc);
+            const preciseAvailableValue = beholdning * fifoPrice;
             const precisePoPhStBValue = pophStB * fifoPrice;
+            const preciseReservedValue = toNumber(row.ShpRsv) * fifoPrice;
+            const preciseBalanceDifferenceValue = (pophStB - balanceBeforeReservations) * fifoPrice;
             return {
                 ...row,
                 Beholdning: beholdning,
                 PoPhStB: pophStB,
                 PhCstPr: fifoPrice,
-                Value: round(preciseValue),
+                AvailableValue: round(preciseAvailableValue),
+                Value: round(precisePoPhStBValue),
                 PoPhStBValue: round(precisePoPhStBValue),
-                Diff: round(precisePoPhStBValue - preciseValue),
-                _preciseValue: preciseValue
+                ReservedValue: round(preciseReservedValue),
+                RemainingReservedValue: round(preciseReservedValue),
+                BalanceDifferenceValue: round(preciseBalanceDifferenceValue),
+                Diff: round(precisePoPhStBValue - preciseAvailableValue),
+                _preciseValue: precisePoPhStBValue
             };
         });
         const finishedNotInvoiced = await mapWithConcurrency((finishedResult.recordset || []).filter(row => !isExcludedOrder(row.OrdNo)), async row => {
@@ -557,10 +560,24 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             MaterialCost: round(row.MaterialCost),
             StangCost: round(row.StangCost),
             PurchasedPartCost: round(row.PurchasedPartCost),
+            PurchasedPartDetails: (Array.isArray(row.PurchasedPartDetails) ? row.PurchasedPartDetails : []).map(detail => ({
+                ...detail,
+                orderedQty: round(detail.orderedQty),
+                receivedQty: round(detail.receivedQty),
+                consumedQty: round(detail.consumedQty),
+                countedQty: round(detail.countedQty),
+                unitPrice: round(detail.unitPrice),
+                stockUnitCost: round(detail.stockUnitCost),
+                stockTransferQty: round(detail.stockTransferQty),
+                stockTransferValue: round(detail.stockTransferValue),
+                countedValue: round(detail.countedValue)
+            })),
             TimeCost: round(row.TimeCost),
             SalesValue: round(row.SalesValue),
             Value: round(toNumber(row.MaterialCost) + toNumber(row.StangCost) + toNumber(row.PurchasedPartCost) + toNumber(row.TimeCost))
         }));
+        const purchasedPartStockAllocation = allocatePurchasedPartsFromFollowUpStock(opfolgningvare, salgordreVia);
+        opfolgningvare.splice(0, opfolgningvare.length, ...purchasedPartStockAllocation.rows);
         const stockAllocation = allocateComponentStock(gr5Items, opfolgningvare);
         gr5Items.splice(0, gr5Items.length, ...stockAllocation.rows);
         const viaOrderNos = new Set(salgordreVia.map(row => Number(row.OrdNo)));
@@ -582,8 +599,9 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         finishedNotInvoiced.splice(0, finishedNotInvoiced.length, ...allocation.finished);
         salgordreVia.splice(0, salgordreVia.length, ...allocation.via);
         const payload = {
-            valuationVersion: 31,
+            valuationVersion: 35,
             stockAllocations: stockAllocation.audit,
+            purchasedPartStockAllocations: purchasedPartStockAllocation.audit,
             orderAllocations: allocation.audit,
             generatedAt: new Date().toISOString(),
             categories: {
@@ -832,13 +850,22 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0)
                     * COALESCE(TRY_CONVERT(decimal(18, 6), R.CstPr), 0) AS Value,
                 O.TrTp AS OrderTrTp, O.DelDt, O.CustNo,
-                COALESCE(TRY_CONVERT(int, O.R4), 0) AS SalesOrdNo,
+                COALESCE(
+                    LineSO.OrdNo,
+                    HeaderSO.OrdNo,
+                    CASE WHEN O.OrdTp = 1 AND O.TrTp = 1 THEN O.OrdNo END,
+                    0
+                ) AS SalesOrdNo,
                 LTRIM(RTRIM(COALESCE(A.Nm, A2.Nm, ''))) AS CustomerName
             FROM Rsv R WITH(NOLOCK)
             LEFT JOIN Ord O WITH(NOLOCK) ON O.OrdNo = R.OrdNo
+            LEFT JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = R.OrdNo AND L.LnNo = R.OrdLnNo
+            LEFT JOIN Ord LineSO WITH(NOLOCK) ON LineSO.OrdNo = NULLIF(TRY_CONVERT(int, L.R4), 0)
+            LEFT JOIN Ord HeaderSO WITH(NOLOCK) ON HeaderSO.OrdNo = NULLIF(TRY_CONVERT(int, O.R4), 0)
             LEFT JOIN Actor A WITH(NOLOCK) ON A.CustNo = O.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), O.CustNo), 0) <> 0
-            LEFT JOIN Ord SO WITH(NOLOCK) ON SO.OrdNo = TRY_CONVERT(int, O.R4) AND COALESCE(TRY_CONVERT(int, O.R4), 0) > 0
-            LEFT JOIN Actor A2 WITH(NOLOCK) ON A2.CustNo = SO.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), SO.CustNo), 0) <> 0
+            LEFT JOIN Actor A2 WITH(NOLOCK)
+                ON A2.CustNo = COALESCE(LineSO.CustNo, HeaderSO.CustNo)
+               AND COALESCE(TRY_CONVERT(decimal(18, 6), COALESCE(LineSO.CustNo, HeaderSO.CustNo)), 0) <> 0
             WHERE R.ProdNo = @prodNo
               AND COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0) > 0
             ORDER BY R.OrdNo DESC

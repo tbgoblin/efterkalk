@@ -68,7 +68,7 @@
 
         <section class="panel">
             <header class="panel-head">
-                <div><h2>Aktuel lagerværdi og reservationer</h2><p>V1-reference følger de eksisterende Lagerliste 1-regler. V2 fjerner kun dokumenterede VIA/Færdige-overlap efter NoPac. Rsv vises som placering/destination og lægges aldrig oven i lagerværdien.</p></div>
+                <div><h2>Aktuel lagerværdi og reservationer</h2><p>V1 værdisætter fysisk lager. V2 fjerner dokumenterede VIA/Færdige-overlap og viser den del af lageret, som er reserveret via et verificeret vareparti og en åben salgsordre.</p></div>
                 <div class="toolbar">
                     <div class="field"><label for="reservationFilter">Reservationer</label><select id="reservationFilter"><option value="active" selected>Kun åbne</option><option value="all">Alle registreringer</option><option value="finished">Færdigmeldte</option></select></div>
                     <button id="refreshReservationsBtn" class="secondary" type="button">Opdater værdi</button>
@@ -79,7 +79,7 @@
                     <div class="metric"><span>V1 referenceværdi</span><strong id="valuationV1">–</strong></div>
                     <div class="metric"><span>V2 uden overlap</span><strong id="valuationV2">–</strong></div>
                     <div class="metric"><span>Fjernet dobbeltværdi</span><strong id="valuationDedup">–</strong></div>
-                    <div class="metric"><span>Åben Rsv-værdi · info</span><strong id="reservationActiveValue">–</strong></div>
+                    <div class="metric"><span>Reserveret lager · del af V2</span><strong id="reservationActiveValue">–</strong></div>
                 </div>
                 <div id="reservationStatus" class="status">Indlæser lager og reservationer…</div>
                 <div class="table-wrap"><table><thead><tr><th>Status</th><th>Produkt</th><th>Ordrelink</th><th>Kunde</th><th class="num">Fysisk</th><th class="num">V1 disponibel</th><th class="num">Reserveret</th><th class="num">Plukket</th><th class="num">Færdigmeldt</th><th class="num">Aktiv værdi</th></tr></thead><tbody id="reservationRows"><tr><td colspan="10" class="empty">Indlæser…</td></tr></tbody></table></div>

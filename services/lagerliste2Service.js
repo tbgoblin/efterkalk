@@ -120,8 +120,11 @@ function buildReservationSummary(sourceRows) {
         const awaitingPickQty = Math.max(0, reservedQty - pickedQty);
         const pickedNotFinishedQty = Math.max(0, pickedQty - finishedQty);
         const activeQty = awaitingPickQty + pickedNotFinishedQty;
-        const costPrice = toNumber(row.CstPr);
+        const lotCostPrice = toNumber(row.LotCostPrice);
+        const costPrice = lotCostPrice || toNumber(row.CstPr) || toNumber(row.PhCstPr);
         const salesOrderNo = toNumber(row.SalesOrderNo);
+        const lotMatched = Boolean(String(row.LotShpNo || '').trim());
+        const valuationEligible = salesOrderNo > 0 && lotMatched;
         const status = activeQty <= 0.005
             ? 'finished'
             : (awaitingPickQty > 0.005 && pickedNotFinishedQty > 0.005
@@ -132,6 +135,7 @@ function buildReservationSummary(sourceRows) {
             descr: String(row.Descr || '').trim(),
             orderNo: toNumber(row.OrdNo),
             orderLineNo: toNumber(row.OrdLnNo),
+            shipmentNo: String(row.ShpNo || '').trim(),
             salesOrderNo,
             linkSource: String(row.LinkSource || '').trim(),
             customerName: String(row.CustomerName || '').trim(),
@@ -144,6 +148,9 @@ function buildReservationSummary(sourceRows) {
             costPrice: round(costPrice),
             activeValue: round(activeQty * costPrice),
             registeredValue: round(reservedQty * costPrice),
+            lotMatched,
+            lotReservedQty: round(row.LotReservedQty),
+            valuationEligible,
             physicalStock: round(row.PoPhStB),
             stockReserved: round(row.ShpRsv),
             v1AvailableQty: round(toNumber(row.Bal) + toNumber(row.StcInc) - toNumber(row.ShpRsv)),
@@ -153,6 +160,7 @@ function buildReservationSummary(sourceRows) {
         };
     });
     const activeRows = rows.filter(row => row.activeQty > 0.005);
+    const valuedRows = activeRows.filter(row => row.valuationEligible);
     return {
         rows,
         summary: {
@@ -162,6 +170,9 @@ function buildReservationSummary(sourceRows) {
             linkedRowCount: rows.filter(row => row.salesOrderNo > 0).length,
             unlinkedRowCount: rows.filter(row => row.salesOrderNo <= 0).length,
             activeValue: round(activeRows.reduce((sum, row) => sum + row.activeValue, 0)),
+            valuedActiveValue: round(valuedRows.reduce((sum, row) => sum + row.activeValue, 0)),
+            excludedActiveValue: round(activeRows.filter(row => !row.valuationEligible).reduce((sum, row) => sum + row.activeValue, 0)),
+            excludedActiveRowCount: activeRows.length - valuedRows.length,
             registeredValue: round(rows.reduce((sum, row) => sum + row.registeredValue, 0))
         }
     };
@@ -588,23 +599,51 @@ function createLagerliste2Service({ getConnection, sql, getRestPrices }) {
                     R.NoPic,
                     R.NoFin,
                     R.CstPr,
+                    R.ShpNo,
+                    Lot.LotShpNo,
+                    Lot.LotCostPrice,
+                    Lot.LotReservedQty,
                     R.ChDt,
                     R.ChTm,
                     COALESCE(
-                        NULLIF(TRY_CONVERT(int, L.R4), 0),
-                        NULLIF(TRY_CONVERT(int, O.R4), 0),
-                        CASE WHEN O.OrdTp = 1 AND O.TrTp = 1 THEN O.OrdNo END,
+                        LineSO.OrdNo,
+                        HeaderSO.OrdNo,
+                        CASE WHEN O.OrdTp = 1 AND O.TrTp = 1 AND O.Gr12 <> 10
+                                  AND (O.OrdPrSt & 256 = 256 OR O.OrdPrSt = 0 OR O.OrdPrSt = 402653456
+                                       OR O.OrdPrSt = 134217728 OR O.OrdPrSt & 4194304 = 4194304)
+                             THEN O.OrdNo END,
                         0
                     ) AS SalesOrderNo,
                     CASE
-                        WHEN NULLIF(TRY_CONVERT(int, L.R4), 0) IS NOT NULL THEN 'OrdLn.R4'
-                        WHEN NULLIF(TRY_CONVERT(int, O.R4), 0) IS NOT NULL THEN 'Ord.R4'
-                        WHEN O.OrdTp = 1 AND O.TrTp = 1 THEN 'OrdNo'
+                        WHEN LineSO.OrdNo IS NOT NULL THEN 'OrdLn.R4'
+                        WHEN HeaderSO.OrdNo IS NOT NULL THEN 'Ord.R4'
+                        WHEN O.OrdTp = 1 AND O.TrTp = 1 AND O.Gr12 <> 10
+                             AND (O.OrdPrSt & 256 = 256 OR O.OrdPrSt = 0 OR O.OrdPrSt = 402653456
+                                  OR O.OrdPrSt = 134217728 OR O.OrdPrSt & 4194304 = 4194304) THEN 'OrdNo'
                         ELSE ''
                     END AS LinkSource
                 FROM Rsv R WITH(NOLOCK)
                 LEFT JOIN Ord O WITH(NOLOCK) ON O.OrdNo = R.OrdNo
                 LEFT JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = R.OrdNo AND L.LnNo = R.OrdLnNo
+                LEFT JOIN Ord LineSO WITH(NOLOCK)
+                    ON LineSO.OrdNo = NULLIF(TRY_CONVERT(int, L.R4), 0)
+                   AND LineSO.OrdTp = 1 AND LineSO.TrTp = 1 AND LineSO.Gr12 <> 10
+                   AND (LineSO.OrdPrSt & 256 = 256 OR LineSO.OrdPrSt = 0 OR LineSO.OrdPrSt = 402653456
+                        OR LineSO.OrdPrSt = 134217728 OR LineSO.OrdPrSt & 4194304 = 4194304)
+                LEFT JOIN Ord HeaderSO WITH(NOLOCK)
+                    ON HeaderSO.OrdNo = NULLIF(TRY_CONVERT(int, O.R4), 0)
+                   AND HeaderSO.OrdTp = 1 AND HeaderSO.TrTp = 1 AND HeaderSO.Gr12 <> 10
+                   AND (HeaderSO.OrdPrSt & 256 = 256 OR HeaderSO.OrdPrSt = 0 OR HeaderSO.OrdPrSt = 402653456
+                        OR HeaderSO.OrdPrSt = 134217728 OR HeaderSO.OrdPrSt & 4194304 = 4194304)
+                OUTER APPLY (
+                    SELECT TOP 1
+                        CONVERT(varchar(100), S.ShpNo) AS LotShpNo,
+                        COALESCE(TRY_CONVERT(decimal(18, 6), S.CstPr), 0) AS LotCostPrice,
+                        COALESCE(TRY_CONVERT(decimal(18, 6), S.NoRsv), 0) AS LotReservedQty
+                    FROM ShpBal S WITH(NOLOCK)
+                    WHERE S.ProdNo = R.ProdNo AND S.ShpNo = R.ShpNo
+                    ORDER BY S.RecDt DESC
+                ) Lot
                 WHERE R.ProdNo IN (${placeholders.join(', ')})
                   AND COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0) > 0
                   AND (
@@ -759,22 +798,32 @@ function createLagerliste2Service({ getConnection, sql, getRestPrices }) {
                 R.NoPic,
                 R.NoFin,
                 R.CstPr,
+                R.ShpNo,
+                Lot.LotShpNo,
+                Lot.LotCostPrice,
+                Lot.LotReservedQty,
                 R.ChDt,
                 R.ChTm,
                 B.Bal,
                 B.StcInc,
                 B.ShpRsv,
                 B.PoPhStB,
+                B.PhCstPr,
                 COALESCE(
-                    NULLIF(TRY_CONVERT(int, L.R4), 0),
-                    NULLIF(TRY_CONVERT(int, O.R4), 0),
-                    CASE WHEN O.OrdTp = 1 AND O.TrTp = 1 THEN O.OrdNo END,
+                    LineSO.OrdNo,
+                    HeaderSO.OrdNo,
+                    CASE WHEN O.OrdTp = 1 AND O.TrTp = 1 AND O.Gr12 <> 10
+                              AND (O.OrdPrSt & 256 = 256 OR O.OrdPrSt = 0 OR O.OrdPrSt = 402653456
+                                   OR O.OrdPrSt = 134217728 OR O.OrdPrSt & 4194304 = 4194304)
+                         THEN O.OrdNo END,
                     0
                 ) AS SalesOrderNo,
                 CASE
-                    WHEN NULLIF(TRY_CONVERT(int, L.R4), 0) IS NOT NULL THEN 'OrdLn.R4'
-                    WHEN NULLIF(TRY_CONVERT(int, O.R4), 0) IS NOT NULL THEN 'Ord.R4'
-                    WHEN O.OrdTp = 1 AND O.TrTp = 1 THEN 'OrdNo'
+                    WHEN LineSO.OrdNo IS NOT NULL THEN 'OrdLn.R4'
+                    WHEN HeaderSO.OrdNo IS NOT NULL THEN 'Ord.R4'
+                    WHEN O.OrdTp = 1 AND O.TrTp = 1 AND O.Gr12 <> 10
+                         AND (O.OrdPrSt & 256 = 256 OR O.OrdPrSt = 0 OR O.OrdPrSt = 402653456
+                              OR O.OrdPrSt = 134217728 OR O.OrdPrSt & 4194304 = 4194304) THEN 'OrdNo'
                     ELSE ''
                 END AS LinkSource,
                 LTRIM(RTRIM(COALESCE(A.Nm, A2.Nm, ''))) AS CustomerName
@@ -783,9 +832,29 @@ function createLagerliste2Service({ getConnection, sql, getRestPrices }) {
             LEFT JOIN StcBal B WITH(NOLOCK) ON B.ProdNo = R.ProdNo AND B.StcNo = 1
             LEFT JOIN Ord O WITH(NOLOCK) ON O.OrdNo = R.OrdNo
             LEFT JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = R.OrdNo AND L.LnNo = R.OrdLnNo
+            LEFT JOIN Ord LineSO WITH(NOLOCK)
+                ON LineSO.OrdNo = NULLIF(TRY_CONVERT(int, L.R4), 0)
+               AND LineSO.OrdTp = 1 AND LineSO.TrTp = 1 AND LineSO.Gr12 <> 10
+               AND (LineSO.OrdPrSt & 256 = 256 OR LineSO.OrdPrSt = 0 OR LineSO.OrdPrSt = 402653456
+                    OR LineSO.OrdPrSt = 134217728 OR LineSO.OrdPrSt & 4194304 = 4194304)
+            LEFT JOIN Ord HeaderSO WITH(NOLOCK)
+                ON HeaderSO.OrdNo = NULLIF(TRY_CONVERT(int, O.R4), 0)
+               AND HeaderSO.OrdTp = 1 AND HeaderSO.TrTp = 1 AND HeaderSO.Gr12 <> 10
+               AND (HeaderSO.OrdPrSt & 256 = 256 OR HeaderSO.OrdPrSt = 0 OR HeaderSO.OrdPrSt = 402653456
+                    OR HeaderSO.OrdPrSt = 134217728 OR HeaderSO.OrdPrSt & 4194304 = 4194304)
+            OUTER APPLY (
+                SELECT TOP 1
+                    CONVERT(varchar(100), S.ShpNo) AS LotShpNo,
+                    COALESCE(TRY_CONVERT(decimal(18, 6), S.CstPr), 0) AS LotCostPrice,
+                    COALESCE(TRY_CONVERT(decimal(18, 6), S.NoRsv), 0) AS LotReservedQty
+                FROM ShpBal S WITH(NOLOCK)
+                WHERE S.ProdNo = R.ProdNo AND S.ShpNo = R.ShpNo
+                ORDER BY S.RecDt DESC
+            ) Lot
             LEFT JOIN Actor A WITH(NOLOCK) ON A.CustNo = O.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), O.CustNo), 0) <> 0
-            LEFT JOIN Ord SO WITH(NOLOCK) ON SO.OrdNo = COALESCE(NULLIF(TRY_CONVERT(int, L.R4), 0), NULLIF(TRY_CONVERT(int, O.R4), 0))
-            LEFT JOIN Actor A2 WITH(NOLOCK) ON A2.CustNo = SO.CustNo AND COALESCE(TRY_CONVERT(decimal(18, 6), SO.CustNo), 0) <> 0
+            LEFT JOIN Actor A2 WITH(NOLOCK)
+                ON A2.CustNo = COALESCE(LineSO.CustNo, HeaderSO.CustNo)
+               AND COALESCE(TRY_CONVERT(decimal(18, 6), COALESCE(LineSO.CustNo, HeaderSO.CustNo)), 0) <> 0
             WHERE COALESCE(TRY_CONVERT(decimal(18, 6), R.NoRsv), 0) > 0
             ORDER BY R.ChDt DESC, R.ChTm DESC, R.OrdNo DESC, R.OrdLnNo
         `);

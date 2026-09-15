@@ -97,7 +97,7 @@ function createApiRouter({
         logEvent('GOH-STATE: ' + hydrated + '/5 delte tilstande hentet fra GOH (users/noter/efterkalk-kost/graenser/afstemninger)');
     });
 
-    const VIA_CACHE_KEY = 'salgordre_via_v32';
+    const VIA_CACHE_KEY = 'salgordre_via_v34';
     const VIA_CACHE_TTL_MS = 5 * 60 * 1000;
     const VIA_WARM_INTERVAL_MS = 10 * 60 * 1000;
     let viaWarmRunning = false;
@@ -141,6 +141,49 @@ function createApiRouter({
         revokeSession(req);
         res.setHeader('Set-Cookie', buildExpiredSessionCookie());
         return res.json({ ok: true });
+    });
+
+    function dashboardPreferenceKey(req, res) {
+        const profile = settingsService.getActiveProfile();
+        if (String(req.query.profile || '') !== profile.id) {
+            res.status(409).json({ ok: false, error: 'Databaseprofilen er ændret. Genindlæs siden.' });
+            return null;
+        }
+        const username = String(getSessionUser(req).username).trim().toLowerCase();
+        const identity = JSON.stringify([username, String(profile.server).toLowerCase(), String(profile.database).toLowerCase()]);
+        return 'dashboard_v1_' + crypto.createHash('sha256').update(identity).digest('hex');
+    }
+
+    router.get('/dashboard/preferences', requireAuthenticated, async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        const key = dashboardPreferenceKey(req, res);
+        if (!key) return;
+        try {
+            const state = await gohData.getAppState(key, { strict: true });
+            if (state && (!Number.isInteger(state.payload?.version) || state.payload.version < 1 || !state.payload.config)) throw new Error('Ugyldig dashboard-profil');
+            return res.json({ ok: true, schemaVersion: 2, version: state ? state.payload.version : 0, config: state ? require('../assets/js/dashboard').normalizeConfig(state.payload.config) : null });
+        } catch (error) {
+            logEvent('DASHBOARD LOAD ERROR: ' + error.message);
+            return res.status(503).json({ ok: false, error: 'Dashboard-profilen kunne ikke hentes fra GOH.' });
+        }
+    });
+
+    router.put('/dashboard/preferences', requireAuthenticated, express.json({ limit: '64kb' }), async (req, res) => {
+        const key = dashboardPreferenceKey(req, res);
+        if (!key) return;
+        const version = req.body?.version;
+        if (!Number.isInteger(version) || version < 0 || version >= 2147483647 || !req.body.config || typeof req.body.config !== 'object' || Array.isArray(req.body.config)) {
+            return res.status(400).json({ ok: false, error: 'Ugyldig dashboard-profil eller version.' });
+        }
+        try {
+            const config = require('../assets/js/dashboard').normalizeConfig(req.body.config);
+            const saved = await gohData.setAppState(key, { version: version + 1, config }, { createOnly: version === 0, expectedVersion: version });
+            if (!saved) return res.status(gohData.isEnabled() ? 409 : 503).json({ ok: false, error: gohData.isEnabled() ? 'Dashboardet er ændret på en anden postation. Genindlæs før du gemmer igen.' : 'Dashboard-profilen kunne ikke gemmes i GOH.' });
+            return res.json({ ok: true, schemaVersion: 2, version: version + 1 });
+        } catch (error) {
+            logEvent('DASHBOARD SAVE ERROR: ' + error.message);
+            return res.status(503).json({ ok: false, error: 'Dashboard-profilen kunne ikke gemmes i GOH.' });
+        }
     });
 
     router.get('/admin/users', (req, res) => {
@@ -294,6 +337,16 @@ function createApiRouter({
         } catch (err) {
             logEvent('ERROR salgordre-via: ' + err.message);
             res.status(500).json({ error: err.message || 'SalgOrdre VIA fejl' });
+        }
+    });
+
+    router.get('/salgordre-via/reservations', requireModulePermission('salgordreVia'), async (req, res) => {
+        try {
+            const forceRefresh = String(req.query && req.query.force || '') === '1';
+            return res.json({ ok: true, ...(await lagerliste2Service.getCurrentReservations({ forceRefresh })) });
+        } catch (err) {
+            logEvent('ERROR salgordre-via/reservations: ' + err.message);
+            return res.status(500).json({ ok: false, error: err.message || 'SalgOrdre VIA reservationsfejl' });
         }
     });
 
@@ -1097,10 +1150,6 @@ function createApiRouter({
             if (Number.isNaN(ordNo)) {
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
-            const cacheKey = ORDER_MARGIN_CACHE_KEY_PREFIX + ordNo;
-            const cached = diskCache.get(cacheKey);
-            if (cached) return res.json({ ...cached, cached: true });
-
             const marginInfo = await getOrComputeOrderMargin(ordNo);
             const result = {
                 ordNo: marginInfo.ordNo,
@@ -1110,7 +1159,6 @@ function createApiRouter({
                 hasInvoiceWarning: Boolean(marginInfo.hasInvoiceWarning),
                 cached: true
             };
-            diskCache.set(cacheKey, result, CACHE_TTL_ORDER_MARGIN_MS);
             return res.json(result);
         } catch (err) {
             logEvent('ERROR order-margin: ' + err.message);
@@ -1579,6 +1627,18 @@ function createApiRouter({
         }
     });
 
+    router.get('/omsaetning/order-flow', requireModulePermission('omsaetning'), async (req, res) => {
+        try {
+            const data = await omsaetningService.getOrderFlow({
+                month: String(req.query.month || '').trim(),
+                customerCsv: String(req.query.customers || '').trim()
+            });
+            return res.json({ ok: true, ...data });
+        } catch (err) {
+            return res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+        }
+    });
+
     router.get('/omsaetning/month-detail', async (req, res) => {
         try {
             const month = String(req.query.month || '').trim();
@@ -1605,6 +1665,16 @@ function createApiRouter({
             }
             logEvent('ERROR omsaetning/month-detail: ' + err.message);
             return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/ordreindgang/recent', async (req, res) => {
+        if (!requireModulePermission(req, res, 'ordreindgang') || !requireModulePermission(req, res, 'omsaetning')) return;
+        try {
+            const result = await ordreindgangService.getRecentOrders({ from: String(req.query.from || ''), to: String(req.query.to || '') });
+            return res.json({ ok: true, ...result });
+        } catch (error) {
+            return res.status(error.statusCode || 500).json({ ok: false, error: error.statusCode ? error.message : 'Seneste ordreindgang kunne ikke hentes.' });
         }
     });
 
@@ -2310,6 +2380,7 @@ function createApiRouter({
     router.get('/efterkalk/customer-invoices', async (req, res) => {
         try {
             const allCustomers = String(req.query.scope || '').toLowerCase() === 'all';
+            const includeAllAmounts = String(req.query.includeAllAmounts || '') === '1';
             const custNo = parseInt(req.query.custno);
             if (!allCustomers && (Number.isNaN(custNo) || custNo <= 0)) {
                 return res.status(400).json({ ok: false, error: 'custno ugyldigt' });
@@ -2329,6 +2400,7 @@ function createApiRouter({
                 .input('custNo',   sql.Int, allCustomers ? null : custNo)
                 .input('fromDate', sql.Int, fromInt)
                 .input('toDate',   sql.Int, toInt)
+                .input('includeAllAmounts', sql.Bit, includeAllAmounts ? 1 : 0)
                 .query(`
                     SELECT
                         O.OrdNo,
@@ -2342,14 +2414,15 @@ function createApiRouter({
                         A_cust.Shrt AS CustomerShrt,
                         SU.Usr      AS SellerUsr
                     FROM Ord O
-                    LEFT JOIN Actor A_cust ON A_cust.CustNo = O.CustNo
+                    LEFT JOIN Actor A_cust ON O.CustNo <> 0 AND A_cust.CustNo = O.CustNo
                     OUTER APPLY (
                         SELECT TOP 1 A.Usr FROM Actor A
                         WHERE LTRIM(RTRIM(CONVERT(VARCHAR(50), A.EmpNo))) = LTRIM(RTRIM(CONVERT(VARCHAR(50), O.SelBuy)))
                     ) SU
                     WHERE (@custNo IS NULL OR O.CustNo = @custNo)
+                                            AND O.TrTp = 1
                       AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
-                      AND O.InvoAm  > 0
+                      AND (@includeAllAmounts = 1 OR O.InvoAm > 0)
                       AND O.LstInvDt >= @fromDate
                       AND O.LstInvDt <= @toDate
                     ORDER BY O.LstInvDt DESC, O.OrdNo DESC

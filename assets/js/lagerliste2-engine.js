@@ -163,6 +163,10 @@
             restPlates: round(totals.restPlates),
             stang: round(totals.stang),
             opfolgningvare: round(totals.opfolgningvare),
+            reservedStock: round((Array.isArray(context && context.evidence && context.evidence.reservations)
+                ? context.evidence.reservations : [])
+                .filter(row => row.valuationEligible && number(row.activeQty) > EPSILON)
+                .reduce((sum, row) => sum + number(row.activeValue), 0)),
             viaLaser: sumSpec('VIA Laser'),
             viaStang: sumSpec('VIA Stang'),
             purchasedParts: sumSpec('Indkøbt dele'),
@@ -171,7 +175,9 @@
             finishedNotInvoiced: sumSpec('Færdige SO'),
             diverse: round(totals.diverse)
         };
-        const total = round(Object.values(categories).reduce((sum, value) => sum + number(value), 0));
+        const total = round(Object.entries(categories)
+            .filter(([key]) => key !== 'reservedStock')
+            .reduce((sum, [, value]) => sum + number(value), 0));
         const rawV1Total = round(totals.total !== undefined
             ? totals.total
             : ['plates', 'restPlates', 'stang', 'opfolgningvare', 'finishedNotInvoiced', 'salgordreVia', 'diverse']
@@ -373,8 +379,9 @@
         // Rsv er den faktiske reservation mellem lagerprodukt og ordre. Den
         // bruges kun, hvis der endnu ikke findes en ProdTr-lagerafgang for
         // produktet. NoPic/NoFin afgør, om varen stadig står reserveret eller
-        // allerede er plukket/færdigmeldt; Rsv-værdien lægges aldrig til
-        // lagertotalen som en ekstra post.
+        // allerede er plukket/færdigmeldt. Rsv-visningen er informativ og må
+        // ikke lægges til totalen som en ekstra værdi. Modtagne indkøbsdele
+        // kan allerede være omklassificeret fra Opfølgningsvarer til VIA.
         for (const source of movements) {
             if (source.category !== 'Opfølgningsvarer' || source.remaining >= -EPSILON || !source.productKey) continue;
             if ((stockConsumptionOrdersByProduct.get(source.productKey) || new Set()).size) continue;

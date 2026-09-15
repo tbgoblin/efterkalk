@@ -314,10 +314,23 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
     }
     await aftercalcCostExclusionsService.ensureHydrated();
     const costExclusionFingerprint = aftercalcCostExclusionsService.getFingerprintSync(key);
+    const cachedAftercalc = forceRefresh ? null : getAftercalcCacheWithFallback(key, false);
+    const currentSummary = cachedAftercalc && !cachedAftercalc.error && cachedAftercalc.summary;
+    const currentCost = currentSummary ? calculateAdjustedCost(
+        Number(currentSummary.totalCost || 0),
+        cachedAftercalc.salesOrderLines,
+        aftercalcCostExclusionsService.getExcludedLineKeysSync(key)
+    ).adjustedCost : null;
+    const matchesCurrentCalculation = margin => !currentSummary || (
+        Number(margin.totalRevenue || 0) === Number(currentSummary.totalRevenue || 0)
+        && Number(margin.totalCost) === currentCost
+        && Number(margin.styklisteFallbackCost || 0) === Number(currentSummary.styklisteFallbackCost || 0)
+        && Boolean(margin.hasInvoiceWarning) === Boolean(currentSummary.hasInvoiceWarning)
+    );
 
     if (!forceRefresh && orderMarginCache.has(key)) {
         const memoryMargin = orderMarginCache.get(key);
-        if (memoryMargin && memoryMargin.costExclusionFingerprint === costExclusionFingerprint) {
+        if (memoryMargin && memoryMargin.costExclusionFingerprint === costExclusionFingerprint && matchesCurrentCalculation(memoryMargin)) {
             return memoryMargin;
         }
         orderMarginCache.delete(key);
@@ -333,7 +346,8 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
         if (diskMargin
             && diskMargin.totalCost !== null
             && diskMargin.totalCost !== undefined
-            && diskFingerprint === costExclusionFingerprint) {
+            && diskFingerprint === costExclusionFingerprint
+            && matchesCurrentCalculation(diskMargin)) {
             const marginInfo = {
                 ordNo: key,
                 totalRevenue: Number(diskMargin.totalRevenue || 0),
@@ -355,7 +369,7 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
     // Deriva il margine dalla cache/calcolo aftercalc condiviso: evita il doppio
     // calcolo DB per ordine durante il warmup (aftercalc + margin sono lo stesso dato).
     const computePromise = (async () => {
-        const data = await getOrComputeAftercalc(key, {
+        const data = currentSummary ? cachedAftercalc : await getOrComputeAftercalc(key, {
             priority: options.priority || 'normal',
             forceRefresh
         });
@@ -1338,6 +1352,7 @@ app.get('/', (req, res) => {
                 .modal-box { width: 99vw; max-height: 93vh; padding: 12px; }
                 .modal-box th, .modal-box td { padding: 8px 6px; font-size: 13px; }
                 .dashboard-category-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+                .dashboard-widget-grid { grid-template-columns:1fr 1fr; }
                 .dashboard-warmup-notice { flex-direction:column; align-items:flex-start; }
                 .dashboard-warmup-progress { width:100%; justify-content:space-between; }
                 .dashboard-warmup-track { flex:1; }
@@ -1368,6 +1383,7 @@ app.get('/', (req, res) => {
             }
             @media (max-width: 640px) {
                 .dashboard-category-grid { grid-template-columns:1fr; }
+                .dashboard-widget-grid { grid-template-columns:1fr; }
                 .order-detail-modal-overlay { padding: 6px; }
                 .order-detail-modal-shell { border-radius: 10px; }
                 .order-detail-modal-header { padding: 10px 12px; }
@@ -1576,13 +1592,32 @@ app.get('/', (req, res) => {
             .dashboard-warmup-track { width:140px; height:8px; border-radius:999px; background:#d9e9fb; overflow:hidden; }
             .dashboard-warmup-track > div { height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,#1565c0 0%,#2e7d32 100%); transition:width .3s ease; }
             .dashboard-warmup-pct { min-width:40px; text-align:right; font-size:12px; font-weight:700; color:#0f3560; }
-            .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:1fr; gap:12px; }
+            .dashboard-grid { margin-top:14px; display:grid; grid-template-columns:1fr; gap:14px; }
+            .dashboard-widget-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+            .dashboard-widget { min-width:0; background:#fff; border:1px solid #d8e6fa; border-radius:8px; box-shadow:0 6px 16px rgba(15,53,96,0.07); overflow:hidden; }
+            .dashboard-widget-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:12px 12px 9px; border-bottom:1px solid #e4edf8; }
+            .dashboard-widget-head h3 { margin:0; border:0; padding:0; color:#173f65; font-size:14px; }
+            .dashboard-widget-head span { color:#6a8098; font-size:10px; font-weight:700; text-transform:uppercase; }
+            .dashboard-widget-list { min-height:196px; }
+            .dashboard-widget-row { width:100%; min-height:39px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; border:0; border-bottom:1px solid #edf2f8; background:#fff; padding:8px 12px; text-align:left; cursor:pointer; color:#244766; }
+            .dashboard-widget-row:last-child { border-bottom:0; }
+            .dashboard-widget-row:hover, .dashboard-widget-row:focus-visible { background:#eef6ff; outline:none; }
+            .dashboard-widget-row-main { min-width:0; }
+            .dashboard-widget-row-main strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:#173f65; }
+            .dashboard-widget-row-main small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; color:#71859b; font-size:10px; }
+            .dashboard-widget-value { text-align:right; color:#0f3560; font-size:11px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; }
+            .dashboard-widget-value.positive { color:#1f6b3a; }
+            .dashboard-widget-value.negative { color:#a52b2b; }
+            .dashboard-widget-empty { min-height:196px; display:flex; align-items:center; justify-content:center; padding:18px; color:#71859b; font-size:12px; text-align:center; }
+            .dashboard-modules-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+            .dashboard-modules-head h3 { margin:0; border:0; padding:0; color:#0f3560; font-size:17px; }
+            .dashboard-modules-head p { margin:3px 0 0; color:#607993; font-size:11px; }
             .dashboard-category { background:rgba(255,255,255,0.65); border:1px solid #d8e8fb; border-radius:14px; padding:10px; box-shadow:inset 0 1px 0 rgba(255,255,255,0.9); }
             .dashboard-category-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 8px 0; }
             .dashboard-category-head h3 { margin:0; border:none; padding:0; color:#0f3560; font-size:15px; font-weight:800; }
             .dashboard-category-head span { font-size:11px; color:#5b7897; font-weight:700; }
             .dashboard-category-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-            .dash-card { position:relative; isolation:isolate; border:1px solid #d8e6fa; border-radius:14px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08), inset 0 1px 0 rgba(255,255,255,0.90); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:150px; transform:translateZ(0); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+            .dash-card { position:relative; isolation:isolate; border:1px solid #d8e6fa; border-radius:8px; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); box-shadow:0 8px 18px rgba(15,53,96,0.08), inset 0 1px 0 rgba(255,255,255,0.90); padding:12px; display:flex; flex-direction:column; gap:8px; min-height:142px; transform:translateZ(0); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
             .dash-card::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.70), rgba(255,255,255,0.08)); z-index:-1; pointer-events:none; }
             .dash-card:hover { transform:translateY(-2px) scale(1.01); border-color:#c5dbf8; box-shadow:0 16px 26px rgba(15,53,96,0.16), inset 0 1px 0 rgba(255,255,255,0.95); }
             .dash-card h4 { margin:0; color:#0f3560; font-size:15px; }
@@ -1813,6 +1848,17 @@ app.get('/', (req, res) => {
             #mainOrdreoversigt { display:none; }
             #mainSalgordreVia { display:none; }
             #mainAdministration { display:none; }
+            .admin-section-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+            .admin-section-nav button { min-height:92px; padding:14px 16px; border:1px solid #c7d7ea; border-radius:8px; background:#fff; color:#355675; cursor:pointer; text-align:left; transition:transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease; }
+            .admin-section-nav button:hover { transform:translateY(-1px); border-color:#78aee5; background:#f7fbff; box-shadow:0 4px 12px rgba(15,53,96,0.10); color:#0f3560; }
+            .admin-section-nav button:focus-visible { outline:3px solid #78aee5; outline-offset:2px; }
+            .admin-section-nav button.active { border-color:#0f3560; background:#edf5fc; color:#0f3560; box-shadow:inset 0 4px 0 #0f3560, 0 4px 12px rgba(15,53,96,0.10); }
+            .admin-section-card-title { display:block; color:inherit; font-size:15px; font-weight:800; line-height:1.25; }
+            .admin-section-card-text { display:block; margin-top:6px; color:#5d7892; font-size:12px; font-weight:500; line-height:1.4; }
+            .admin-section-nav button.active .admin-section-card-text { color:#355675; }
+            .admin-section { display:none; }
+            .admin-section.active { display:block; }
+            .admin-section-intro { margin:0 0 12px; color:#4f6d8c; font-size:13px; line-height:1.5; }
             .admin-layout { display:grid; grid-template-columns:minmax(280px,0.8fr) minmax(480px,1.6fr); gap:14px; }
             .admin-panel { border:1px solid #d6e6f8; border-radius:10px; padding:14px; background:#fff; }
             .admin-panel h4 { margin:0 0 12px; color:#0f3560; }
@@ -1827,7 +1873,7 @@ app.get('/', (req, res) => {
             .admin-user-actions { display:flex; gap:8px; margin-top:9px; }
             .admin-user-actions button { padding:5px 8px; border:0; border-radius:5px; background:#1565c0; color:#fff; font-weight:700; cursor:pointer; }
             .admin-user-actions button.danger { background:#b71c1c; }
-            .admin-working-days-panel { grid-column:1/-1; }
+            .admin-working-days-panel { width:100%; box-sizing:border-box; }
             .admin-working-days-head { display:flex; align-items:end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
             .admin-working-days-head label { display:flex; flex-direction:column; gap:4px; color:#355675; font-size:12px; font-weight:700; }
             .admin-working-days-head input { width:110px; padding:7px 9px; border:1px solid #c7d7ea; border-radius:6px; font-size:14px; }
@@ -1838,7 +1884,7 @@ app.get('/', (req, res) => {
             .admin-working-days-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:12px; }
             .admin-working-days-actions button { padding:8px 12px; border:0; border-radius:6px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
             .admin-working-days-actions button.secondary { border:1px solid #c7d7ea; background:#fff; color:#0f3560; }
-            @media(max-width:800px) { .admin-layout { grid-template-columns:1fr; } }
+            @media(max-width:800px) { .admin-layout { grid-template-columns:1fr; } .admin-section-nav { grid-template-columns:1fr; gap:8px; } .admin-section-nav button { width:100%; min-height:72px; } }
             @media(max-width:800px) { .admin-working-days-grid { grid-template-columns:repeat(3,minmax(90px,1fr)); } }
             @media(max-width:480px) { .admin-working-days-grid { grid-template-columns:repeat(2,minmax(90px,1fr)); } }
             .via-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
@@ -1852,6 +1898,14 @@ app.get('/', (req, res) => {
             .via-progress { min-width:110px; }
             .via-progress-bar { height:7px; background:#dce8f8; border-radius:8px; overflow:hidden; margin-top:4px; }
             .via-progress-bar > span { display:block; height:100%; background:#2e7d32; }
+            .via-purchased-detail-row > td { padding:6px 12px 12px; background:#f7fbff; }
+            .via-purchased-detail-row details > summary { cursor:pointer; color:#0f3560; font-weight:700; }
+            .via-purchased-detail-row .order-list-section { margin-top:8px; }
+            .via-reservations { margin-top:20px; padding-top:16px; border-top:1px solid #d6e6f8; }
+            .via-reservations-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:10px; }
+            .via-reservations-head h4 { margin:0; color:#0f3560; font-size:16px; }
+            .via-reservations-head p { margin:3px 0 0; color:#4f6d8c; font-size:12px; }
+            .via-reservations-total { color:#0f3560; font-size:14px; white-space:nowrap; }
             .ordreoversigt-sheet { background:#fff; border:2px solid #111827; color:#111827; font-family:Calibri, Arial, sans-serif; padding:0; box-shadow:0 2px 8px rgba(0,0,0,0.12); }
             .ordreoversigt-barcode-row { padding:10px 12px; border-bottom:1px solid #111827; }
             .ordreoversigt-barcode { display:inline-block; min-width:196px; height:42px; padding:11px 12px 0; border:1px solid #111827; background:repeating-linear-gradient(90deg,#111 0,#111 2px,#fff 2px,#fff 4px,#111 4px,#111 5px,#fff 5px,#fff 8px); color:#fff; font-weight:700; text-align:center; text-shadow:0 0 2px #000; font-size:12px; letter-spacing:0.05em; }
@@ -1946,6 +2000,8 @@ app.get('/', (req, res) => {
             .sales-line-exclusion-label { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer; }
             .report-cost-adjustment { margin:10px 0 0; padding:9px 11px; border:1px solid #efc36a; border-radius:8px; background:#fff8e6; color:#704b00; font-size:12px; line-height:1.45; }
         </style>
+        <link rel="stylesheet" href="/assets/dashboard.css?v=${pkgVersion}-7" />
+        <link rel="stylesheet" href="/assets/order-flow.css?v=${pkgVersion}-2" />
     </head>
     <body>
         <div id="accessGateOverlay" class="access-gate-overlay" style="display:flex;">
@@ -1985,7 +2041,7 @@ app.get('/', (req, res) => {
                         <h4>Login</h4>
                         <p>Samme adgangskode som startskærm.</p>
                         <div class="side-menu-login-row">
-                            <input id="sideMenuUserInput" type="text" placeholder="Navn (fx Marco)" autocomplete="off" />
+                            <input id="sideMenuUserInput" type="text" placeholder="Brugernavn (fx MW)" autocomplete="username" />
                         </div>
                         <div class="side-menu-login-row">
                             <input id="sideMenuLoginInput" type="password" placeholder="Kode" autocomplete="off" />
@@ -1999,13 +2055,13 @@ app.get('/', (req, res) => {
                         <div class="side-menu-module-list">
                             <button type="button" onclick="navigateFromSideMenu('dashboard')">🏠 Dashboard</button>
                             <button type="button" data-module-key="efterkalk" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
+                            <button type="button" data-module-key="salgordre-via" onclick="navigateFromSideMenu('salgordre-via')">SalgOrdre VIA</button>
                             <button type="button" data-module-key="omsaetning" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
                             <button type="button" data-module-key="ordreindgang" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
-                            <button type="button" disabled>Faktura - Kommer snart</button>
                             <button type="button" data-module-key="ordreoversigt" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
                             <button type="button" data-module-key="bom" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
+                            <button type="button" data-module-key="lagerliste" onclick="navigateFromSideMenu('lagerliste')">Lagerliste</button>
                             <button type="button" data-module-key="lagerliste" onclick="window.location.href='/assets/lagerliste2.html'">🧪 Lagerliste 2 (Beta)</button>
-                            <button type="button" disabled>APV - Kommer snart</button>
                             <button type="button" data-module-key="belastning" onclick="openModule('belastning')">Belastning</button>
                             <button type="button" data-module-key="personalehåndbog" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
                             <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
@@ -2042,8 +2098,7 @@ app.get('/', (req, res) => {
         <div class="container main-dashboard" id="mainDashboard">
             <section class="dashboard-shell">
                 <div class="dashboard-head">
-                    <h2>Gantech Operations Hub</h2>
-                    <p>Vælg makrokategori og modul. Salg, Produktion og HR er klar til at blive udbygget.</p>
+                    <h2>Gantech · Driftscenter</h2>
                     <div id="dashboardUpdateNotice" class="dashboard-update-notice" aria-live="polite">
                         <div class="dashboard-update-copy">
                             <strong id="dashboardUpdateTitle">Opdateringsstatus</strong>
@@ -2068,123 +2123,21 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 <div class="dashboard-grid">
+                    <section id="dashboardOperationalOverview" aria-label="Dashboard"></section>
+                    <div class="dashboard-modules-head"><div><h3>Mine moduler</h3><p>Kun de moduler, du har adgang til, vises her.</p></div></div>
                     <section class="dashboard-category">
-                        <div class="dashboard-category-head">
-                            <h3>Salg</h3>
-                            <span>Ordre, kunde og faktura</span>
-                        </div>
                         <div class="dashboard-category-grid">
-                            <article class="dash-card" data-module-key="efterkalk">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Efterkalkulation</h4>
-                                <p>Ordreliste, kost, margin, produktion og rapportvisning.</p>
-                                <button onclick="openModule('efterkalk')">Åbn Efterkalk</button>
-                            </article>
-                            <article class="dash-card" data-module-key="salgordre-via">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>SalgOrdre VIA</h4>
-                                <p>Aktive salgsordrer med åben produktion, fremdrift og næste ressource.</p>
-                                <button onclick="openModule('salgordre-via')">Åbn SalgOrdre VIA</button>
-                            </article>
-                            <article class="dash-card" id="administrationDashCard" style="display:none;">
-                                <span class="dash-chip">Superadmin</span>
-                                <h4>Administration</h4>
-                                <p>Brugere, adgang og modulrettigheder.</p>
-                                <button onclick="openModule('administration')">Åbn Administration</button>
-                            </article>
-                            <article class="dash-card" data-module-key="omsaetning">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Omsætning</h4>
-                                <p>Total omsætning, KPI-overblik og udvikling pr. periode/kunde.</p>
-                                <button onclick="openModule('omsaetning')">Åbn Omsætning</button>
-                            </article>
-                            <article class="dash-card" data-module-key="ordreindgang">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Ordreindgang</h4>
-                                <p>Ordreindgang fra SSRS: budget, ordre, tilbud og udvikling pr. uge/periode.</p>
-                                <button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button>
-                            </article>
-                        </div>
-                    </section>
-
-                    <section class="dashboard-category dashboard-category-accounting">
-                        <div class="dashboard-category-head">
-                            <h3>Bogholderi</h3>
-                            <span>Fakturagrundlag og lagerkontrol</span>
-                        </div>
-                        <div class="dashboard-category-grid">
-                            <article class="dash-card">
-                                <span class="dash-chip">Planlagt</span>
-                                <h4>Faktura</h4>
-                                <p>Fakturastatus, kreditnota og opfølgning på åbne poster.</p>
-                                <button type="button" disabled>Kommer snart</button>
-                            </article>
-                            <article class="dash-card" data-module-key="lagerliste">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Lagerliste</h4>
-                                <p>Lagerværdi for plader, stangmateriale, VIA og færdige ikke-fakturerede varer.</p>
-                                <button type="button" onclick="openModule('lagerliste')">Åbn Lagerliste</button>
-                            </article>
-                            <article class="dash-card" data-module-key="lagerliste">
-                                <span class="dash-chip">Beta</span>
-                                <h4>Lagerliste 2</h4>
-                                <p>Eksperimentel route- og transaktionsafstemning uden ændringer i Lagerliste 1.</p>
-                                <button type="button" onclick="window.location.href='/assets/lagerliste2.html'">Åbn Lagerliste 2</button>
-                            </article>
-                        </div>
-                    </section>
-
-                    <section class="dashboard-category">
-                        <div class="dashboard-category-head">
-                            <h3>Produktion</h3>
-                            <span>Planlægning, BOM og ordreflow</span>
-                        </div>
-                        <div class="dashboard-category-grid">
-                            <article class="dash-card" data-module-key="belastning">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Ordreoversigt</h4>
-                                <p>Samlet status for produktionsordrer, levering og kapacitet.</p>
-                                <button type="button" onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button>
-                            </article>
-                            <article class="dash-card" data-module-key="personalehåndbog">
-                                <span class="dash-chip">Planlagt</span>
-                                <h4>Bom</h4>
-                                <p>Styklister, komponenter og versionering med sporbarhed.</p>
-                                <button type="button" disabled>Kommer snart</button>
-                            </article>
-                            <article class="dash-card">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Belastning</h4>
-                                <p>Kapacitetsbelastning, ressourcer, ordreflyt og planlægningsudsving.</p>
-                                <button onclick="openModule('belastning')">Åbn Belastning</button>
-                            </article>
-                        </div>
-                    </section>
-
-                    <section class="dashboard-category">
-                        <div class="dashboard-category-head">
-                            <h3>HR</h3>
-                            <span>Arbejdsmiljø og medarbejderdata</span>
-                        </div>
-                        <div class="dashboard-category-grid">
-                            <article class="dash-card">
-                                <span class="dash-chip">Planlagt</span>
-                                <h4>APV</h4>
-                                <p>Arbejdsmiljøvurdering, opgaver, frister og opfølgning.</p>
-                                <button type="button" disabled>Kommer snart</button>
-                            </article>
-                            <article class="dash-card">
-                                <span class="dash-chip">Aktiv</span>
-                                <h4>Personalehåndbog</h4>
-                                <p>Intranet personalehåndbog med søgning.</p>
-                                <button onclick="openPersonalehåndbog()">Åbn Personalehåndbog</button>
-                            </article>
-                            <article class="dash-card">
-                                <span class="dash-chip">Planlagt</span>
-                                <h4>Kvalitetsledelsessystem</h4>
-                                <p>SharePoint startside for QMS procedurer og dokumenter.</p>
-                                <button type="button" disabled>Kommer snart</button>
-                            </article>
+                            <article class="dash-card" data-module-key="efterkalk"><span class="dash-chip">Salg</span><h4>Efterkalkulation</h4><p>Ordreliste, kost, margin, produktion og rapportvisning.</p><button onclick="openModule('efterkalk')">Åbn Efterkalk</button></article>
+                            <article class="dash-card" data-module-key="salgordre-via"><span class="dash-chip">Produktion</span><h4>SalgOrdre VIA</h4><p>Aktive salgsordrer, fremdrift, næste ressource og kapitalbinding.</p><button onclick="openModule('salgordre-via')">Åbn VIA</button></article>
+                            <article class="dash-card" data-module-key="omsaetning"><span class="dash-chip">Salg</span><h4>Omsætning</h4><p>KPI, udvikling og sammenligning pr. periode og kunde.</p><button onclick="openModule('omsaetning')">Åbn Omsætning</button></article>
+                            <article class="dash-card" data-module-key="ordreindgang"><span class="dash-chip">Salg</span><h4>Ordreindgang</h4><p>Budget, ordre, tilbud og udvikling pr. uge og periode.</p><button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button></article>
+                            <article class="dash-card" data-module-key="ordreoversigt"><span class="dash-chip">Produktion</span><h4>Ordreoversigt</h4><p>Produktionsstatus, levering, indkøb og dokumentation pr. ordre.</p><button onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button></article>
+                            <article class="dash-card" data-module-key="belastning"><span class="dash-chip">Produktion</span><h4>Belastning</h4><p>Kapacitet, ressourcer, ordreflyt og planlægningsudsving.</p><button onclick="openModule('belastning')">Åbn Belastning</button></article>
+                            <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Bogholderi</span><h4>Lagerliste</h4><p>Lagerværdi, VIA og færdige ikke-fakturerede varer.</p><button onclick="openModule('lagerliste')">Åbn Lagerliste</button></article>
+                            <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Beta</span><h4>Lagerliste 2</h4><p>Route- og transaktionsafstemning for lagerbevægelser.</p><button onclick="window.location.href='/assets/lagerliste2.html'">Åbn Lagerliste 2</button></article>
+                            <article class="dash-card" data-module-key="bom"><span class="dash-chip">Produktion</span><h4>BOMe+ Beregner</h4><p>Styklister, materialer og beregning i BOM-arbejdsområdet.</p><button onclick="window.location.href='/assets/bom-workspace-v2.html'">Åbn BOMe+</button></article>
+                            <article class="dash-card" data-module-key="personalehåndbog"><span class="dash-chip">HR</span><h4>Personalehåndbog</h4><p>Intranet, personaledokumenter og søgning.</p><button onclick="openPersonalehåndbog()">Åbn håndbog</button></article>
+                            <article class="dash-card" id="administrationDashCard" style="display:none;"><span class="dash-chip">Superadmin</span><h4>Administration</h4><p>Brugere, adgang, indstillinger og arbejdsdage.</p><button onclick="openModule('administration')">Åbn Administration</button></article>
                         </div>
                     </section>
                 </div>
@@ -2579,6 +2532,13 @@ app.get('/', (req, res) => {
                 </div>
                 <div id="viaKpis" class="via-kpis"></div>
                 <div id="viaResults" class="omsaetning-empty">Indlæser aktive salgsordrer...</div>
+                <section class="via-reservations">
+                    <div class="via-reservations-head">
+                        <div><h4>Reserveret til ordre</h4><p>Fysisk lager med verificeret vareparti og åben salgsordre. Beløbet er lager, ikke VIA-forbrug.</p></div>
+                        <strong id="viaReservationsTotal" class="via-reservations-total">–</strong>
+                    </div>
+                    <div id="viaReservationsResults" class="omsaetning-empty">Indlæser reservationer...</div>
+                </section>
             </section>
         </div>
 
@@ -2634,34 +2594,48 @@ app.get('/', (req, res) => {
 
         <div class="container main-omsaetning" id="mainAdministration">
             <section class="omsaetning-shell">
-                <div class="omsaetning-head"><div><h3>Administration</h3><p>Brugere og modulrettigheder.</p></div></div>
-                <section class="admin-panel" style="margin-bottom:18px">
-                    <h4>Lagerliste – Diverse (månedlige værdier)</h4>
-                    <p>Stangmateriale er ikke med. PEM 44, bolte 45, nitter 46 og muffer 63 hentes automatisk fra Visma, lager 1, til standardpris. Tomme felter er ikke bekræftede nuller. Skrot: paller × kg/palle × kg-pris.</p>
-                    <input type="month" id="diverseAdminMonth" aria-label="Diverse måned">
-                    <button onclick="diverseAdminLoad()">Hent måned</button>
-                    <button onclick="diverseAdminCopyPrevious()">Kopiér forrige måned</button>
-                    <div id="diverseAdminRows" style="overflow:auto;max-height:55vh"></div>
-                    <select id="diverseAdminCategory" aria-label="Ny linjes kategori">
-                        <option>Div. bolte</option><option>Paller</option><option>Forbrugsmatl. Pakkeri</option><option>Gasser</option><option>Forbrugsmatl. Svejseafd.</option><option>Kølevæske</option><option>Skrot Alu</option><option>Skrot RF</option><option>Skrot Sort</option>
-                    </select>
-                    <button onclick="diverseAdminAdd()">Tilføj detaljelinje</button>
-                    <button onclick="diverseAdminUseTemplate()">Brug skabelon for kategori</button>
-                    <button onclick="diverseAdminSave()">Gem Diverse</button>
-                    <div id="diverseAdminStatus" role="status"></div>
+                <div class="omsaetning-head"><div><h3>Administration</h3><p>Administrer adgang, lagergrundlag og økonomiske kalenderdata.</p></div></div>
+                <nav class="admin-section-nav" aria-label="Administrationsområder" role="tablist" onkeydown="handleAdminTabKeydown(event)">
+                    <button id="adminTabUsers" class="active" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="adminSectionUsers" onclick="showAdminSection('users')"><span class="admin-section-card-title">Brugere & adgang</span><span class="admin-section-card-text">Opret brugere, styr adgang og vælg moduler.</span></button>
+                    <button id="adminTabDiverse" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionDiverse" onclick="showAdminSection('diverse')"><span class="admin-section-card-title">Lagerliste · Diverse</span><span class="admin-section-card-text">Vedligehold manuelle værdier og skrotberegninger.</span></button>
+                    <button id="adminTabWorkingDays" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionWorkingDays" onclick="showAdminSection('working-days')"><span class="admin-section-card-title">Omsætning · Arbejdsdage</span><span class="admin-section-card-text">Fastlæg arbejdsdage, dagsmål og budgetgrundlag.</span></button>
+                </nav>
+                <section id="adminSectionUsers" class="admin-section active" role="tabpanel" aria-labelledby="adminTabUsers">
+                    <p class="admin-section-intro">Opret brugere, aktivér eller deaktivér adgang, og vælg hvilke moduler den enkelte bruger må åbne.</p>
+                    <div class="admin-layout">
+                        <section class="admin-panel">
+                            <h4>Opret bruger</h4>
+                            <div class="admin-form">
+                                <input id="adminNewUsername" placeholder="Brugernavn" autocomplete="off" />
+                                <input id="adminNewDisplayName" placeholder="Visningsnavn" autocomplete="off" />
+                                <input id="adminNewPassword" type="password" placeholder="Kode" />
+                                <button type="button" onclick="createAdminUser()">Opret bruger</button>
+                            </div>
+                            <div id="adminStatus" class="via-status" style="margin:12px 0 0;"></div>
+                        </section>
+                        <section class="admin-panel"><h4>Brugere og rettigheder</h4><div id="adminUsers">Indlæser brugere...</div></section>
+                    </div>
                 </section>
-                <div class="admin-layout">
+                <section id="adminSectionDiverse" class="admin-section" role="tabpanel" aria-labelledby="adminTabDiverse" hidden>
+                    <p class="admin-section-intro">Vedligehold månedlige manuelle lagerværdier og skrotberegninger til Lagerliste.</p>
                     <section class="admin-panel">
-                        <h4>Opret bruger</h4>
-                        <div class="admin-form">
-                            <input id="adminNewUsername" placeholder="Brugernavn" autocomplete="off" />
-                            <input id="adminNewDisplayName" placeholder="Visningsnavn" autocomplete="off" />
-                            <input id="adminNewPassword" type="password" placeholder="Kode" />
-                            <button type="button" onclick="createAdminUser()">Opret bruger</button>
-                        </div>
-                        <div id="adminStatus" class="via-status" style="margin:12px 0 0;"></div>
+                        <h4>Lagerliste – Diverse (månedlige værdier)</h4>
+                        <p>Stangmateriale er ikke med. PEM 44, bolte 45, nitter 46 og muffer 63 hentes automatisk fra Visma, lager 1, til standardpris. Tomme felter er ikke bekræftede nuller. Skrot: paller × kg/palle × kg-pris.</p>
+                        <input type="month" id="diverseAdminMonth" aria-label="Diverse måned">
+                        <button onclick="diverseAdminLoad()">Hent måned</button>
+                        <button onclick="diverseAdminCopyPrevious()">Kopiér forrige måned</button>
+                        <div id="diverseAdminRows" style="overflow:auto;max-height:55vh"></div>
+                        <select id="diverseAdminCategory" aria-label="Ny linjes kategori">
+                            <option>Div. bolte</option><option>Paller</option><option>Forbrugsmatl. Pakkeri</option><option>Gasser</option><option>Forbrugsmatl. Svejseafd.</option><option>Kølevæske</option><option>Skrot Alu</option><option>Skrot RF</option><option>Skrot Sort</option>
+                        </select>
+                        <button onclick="diverseAdminAdd()">Tilføj detaljelinje</button>
+                        <button onclick="diverseAdminUseTemplate()">Brug skabelon for kategori</button>
+                        <button onclick="diverseAdminSave()">Gem Diverse</button>
+                        <div id="diverseAdminStatus" role="status"></div>
                     </section>
-                    <section class="admin-panel"><h4>Brugere</h4><div id="adminUsers">Indlæser brugere...</div></section>
+                </section>
+                <section id="adminSectionWorkingDays" class="admin-section" role="tabpanel" aria-labelledby="adminTabWorkingDays" hidden>
+                    <p class="admin-section-intro">Fastlæg arbejdsdage pr. måned til beregning af dagsmål, 0-punkt og budget i Omsætning.</p>
                     <section class="admin-panel admin-working-days-panel">
                         <div class="admin-working-days-head">
                             <div><h4>Arbejdsdage pr. måned</h4><div class="via-status">Bruges til Omsætning, når dagsmål er aktiveret.</div></div>
@@ -2676,7 +2650,7 @@ app.get('/', (req, res) => {
                             <button type="button" onclick="saveAdminWorkingDays()">Gem arbejdsdage</button>
                         </div>
                     </section>
-                </div>
+                </section>
             </section>
         </div>
 
@@ -3001,6 +2975,8 @@ app.get('/', (req, res) => {
         <script src="/assets/js/aftercalc-cost-exclusions.js?v=${pkgVersion}"></script>
         <script src="/assets/js/omsaetning-daily-thresholds.js?v=${pkgVersion}"></script>
         <script src="/assets/js/table-sort.js?v=${pkgVersion}-5"></script>
+        <script src="/assets/js/order-flow.js?v=${pkgVersion}-4"></script>
+        <script src="/assets/js/dashboard.js?v=${pkgVersion}-12"></script>
         <script>
             function formatNumber(num) {
                 const fixed = parseFloat(num).toFixed(2);
@@ -3709,7 +3685,10 @@ app.get('/', (req, res) => {
             async function loadAllNotes() {
                 try {
                     const r = await fetch('/order-notes-all');
-                    if (r.ok) orderNotesCache = await r.json();
+                    if (r.ok) {
+                        orderNotesCache = await r.json();
+                        scheduleDashboardWidgets();
+                    }
                 } catch {}
             }
 
@@ -3721,6 +3700,7 @@ app.get('/', (req, res) => {
                     if (!r.ok) return null;
                     const note = await r.json();
                     orderNotesCache[String(numericOrdNo)] = note || { status: '', text: '', updatedAt: null };
+                    scheduleDashboardWidgets();
                     renderOrderNoteBanner(numericOrdNo);
                     updateOrderNoteCell(numericOrdNo);
                     return note;
@@ -3809,6 +3789,7 @@ app.get('/', (req, res) => {
                     if (r.ok) {
                         const note = await r.json();
                         orderNotesCache[String(ordNo)] = note;
+                        scheduleDashboardWidgets();
                     }
                 } catch {}
                 document.getElementById('notePopupOverlay').remove();
@@ -3821,6 +3802,7 @@ app.get('/', (req, res) => {
                 try {
                     await fetch('/order-note/' + ordNo, { method: 'DELETE' });
                     delete orderNotesCache[String(ordNo)];
+                    scheduleDashboardWidgets();
                 } catch {}
                 document.getElementById('notePopupOverlay').remove();
                 updateOrderNoteCell(ordNo);
@@ -3863,6 +3845,9 @@ app.get('/', (req, res) => {
             let authToken = null;
             let loggedUserRole = 'user';
             let loggedUserPermissions = {};
+            let loggedUsername = '';
+            let dashboardOrderState = 'idle';
+            let dashboardRenderTimer = null;
             let loggedUserDisplayName = 'Bruger';
             let sideMenuOpen = false;
             let dashboardUpdatePollTimer = null;
@@ -4017,6 +4002,7 @@ app.get('/', (req, res) => {
             };
 
             function canAccessModule(moduleKey) {
+                if (!accessGranted) return false;
                 if (loggedUserRole === 'superadmin') return true;
                 if (moduleKey === 'bom') return Object.keys(loggedUserPermissions).some(key => key.startsWith('bom') && loggedUserPermissions[key] === true);
                 const permissionKey = MODULE_PERMISSION_KEYS[moduleKey];
@@ -4029,6 +4015,317 @@ app.get('/', (req, res) => {
                 });
                 const migrateButton = document.getElementById('lagerlisteMigrateLocalBtn');
                 if (migrateButton) migrateButton.style.display = loggedUserRole === 'superadmin' ? '' : 'none';
+                renderDashboardWidgets();
+            }
+
+            let dashboardSourceCache = null;
+            let dashboardEconomicPeriod = 'all';
+            let dashboardLoadQuery = '';
+            let dashboardLoadHorizons = [20];
+
+            function getDashboardSourceCache() {
+                if (!dashboardSourceCache) dashboardSourceCache = window.GohDashboard.model.createSourceCache();
+                return dashboardSourceCache;
+            }
+
+            function dashboardSourceKey(moduleKey, parameters) {
+                return JSON.stringify([loggedUsername.toLowerCase(), _settingsActiveId, moduleKey, parameters]);
+            }
+
+            function getDashboardSourceRequest(moduleKey, today, forceRefresh = false, period = dashboardEconomicPeriod, days = 20) {
+                if (moduleKey === 'recent-orders') {
+                    const start = new Date(today + 'T12:00:00');
+                    start.setDate(start.getDate() - 89);
+                    const from = start.toISOString().slice(0, 10);
+                    const key = dashboardSourceKey(moduleKey, [from, today]);
+                    return { key, loader: async () => {
+                        if (!accessGranted || !canAccessModule('ordreindgang') || !canAccessModule('omsaetning') || key !== dashboardSourceKey(moduleKey, [from, today])) throw new Error('Adgang ændret');
+                        const response = await fetch('/ordreindgang/recent?' + new URLSearchParams({ from, to: today }), { headers: { Authorization: 'Bearer ' + authToken }, signal: AbortSignal.timeout(30000) });
+                        const payload = await response.json();
+                        if (!response.ok || !payload.ok) throw new Error(payload.error || 'Seneste ordreindgang kunne ikke hentes');
+                        return payload;
+                    } };
+                }
+                if (moduleKey === 'order-flow') {
+                    const month = window.GohOrderFlow.selectedMonth(dashboardSourceKey('order-flow', 'view'), today.slice(0, 7));
+                    return getOrderFlowRequest(month, []);
+                }
+                if (moduleKey === 'efterkalk') {
+                    const from = window.GohDashboard.model.economicRange(today, period).from;
+                    const query = new URLSearchParams({ scope: 'all', from, to: today, includeAllAmounts: '1' });
+                    return { key: dashboardSourceKey(moduleKey, ['sales-only-v1', from, today]), loader: async () => {
+                        const response = await fetch('/efterkalk/customer-invoices?' + query.toString());
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        const payload = await response.json();
+                        if (forceRefresh) payload.refreshCosts = true;
+                        return payload;
+                    } };
+                }
+                if (moduleKey === 'omsaetning') {
+                    const range = window.GohDashboard.model.economicRange(today, period);
+                    const accounts = Array.from(OMSAETNING_SSRS_DEFAULT_ACCOUNTS);
+                    const parameters = buildOmsaetningSummaryCacheKey(range.fra, range.til, accounts, []);
+                    return { key: dashboardSourceKey(moduleKey, parameters), loader: () => fetchOmsaetningSummaryCached(range.fra, range.til, accounts, [], { forceRefresh }) };
+                }
+                if (moduleKey === 'belastning') {
+                    const filters = { today, dage: days, resGr: '', ord: '', kunde: '' };
+                    const unfiltered = getDashboardSourceCache().peek(belastningSummaryKey(filters)) || getDashboardSourceCache().peek(belastningSummaryKey({ ...filters, dage: 20 }));
+                    const search = window.GohDashboard.model.loadSearchFilters(dashboardLoadQuery, unfiltered?.payload);
+                    filters.ord = search.ord;
+                    filters.kunde = search.kunde;
+                    return { key: belastningSummaryKey(filters), loader: () => requestBelastningSummary(filters) };
+                }
+                return null;
+            }
+
+            function getOrderFlowRequest(month, customers) {
+                const selected = Array.from(new Set(customers.map(String))).sort();
+                const key = dashboardSourceKey('order-flow', [month, selected]);
+                return { key, loader: async () => {
+                    if (!accessGranted || !canAccessModule('omsaetning') || key !== dashboardSourceKey('order-flow', [month, selected])) throw new Error('Adgang ændret');
+                    const response = await fetch('/omsaetning/order-flow?' + new URLSearchParams({ month, customers: selected.join(',') }), { signal: AbortSignal.timeout(60000) });
+                    if (!response.ok) throw new Error(response.status === 404 ? 'Genstart GOH for at aktivere ordreflow.' : 'HTTP ' + response.status);
+                    return response.json();
+                } };
+            }
+
+            function fetchOrderFlowCached(month, customers = [], force = false) {
+                const request = getOrderFlowRequest(month, customers);
+                return getDashboardSourceCache().load(request.key, request.loader, force);
+            }
+
+            function ensureDashboardSources(modules, today, widgetIds, period, query = '', options = {}) {
+                if (!accessGranted || !_settingsActiveId) return;
+                const horizons = window.GohDashboard.model.loadHorizons(widgetIds || [], options);
+                if (horizons.join(',') !== dashboardLoadHorizons.join(',')) {
+                    dashboardLoadHorizons = horizons;
+                    scheduleDashboardWidgets();
+                }
+                if (dashboardLoadQuery !== query) {
+                    dashboardLoadQuery = query;
+                    scheduleDashboardWidgets();
+                }
+                if (period && period !== dashboardEconomicPeriod) {
+                    dashboardEconomicPeriod = period;
+                    scheduleDashboardWidgets();
+                }
+                const cache = getDashboardSourceCache();
+                for (const moduleKey of modules) {
+                    if (!canAccessModule(moduleKey === 'recent-orders' ? 'ordreindgang' : moduleKey)) continue;
+                    if (['efterkalk', 'recent-orders'].includes(moduleKey) && !canAccessModule('omsaetning')) continue;
+                    const requests = moduleKey === 'belastning' ? horizons.map(days => getDashboardSourceRequest(moduleKey, today, false, period, days)) : [getDashboardSourceRequest(moduleKey, today)];
+                    for (const request of requests) {
+                        if (!request) continue;
+                        const entry = cache.peek(request.key);
+                        if (entry && (entry.promise || Date.now() < entry.expires)) continue;
+                        cache.load(request.key, request.loader).catch(error => console.warn('Dashboard ' + moduleKey + ':', error.message)).finally(scheduleDashboardWidgets);
+                        scheduleDashboardWidgets();
+                    }
+                }
+                if ((widgetIds || []).some(id => ['best', 'risk', 'coverage', 'sellers'].includes(id))) ensureDashboardOrderCosts(today);
+            }
+
+            async function refreshDashboardSources(widgetIds, today, options = {}) {
+                if (!accessGranted || !_settingsActiveId) return [];
+                const cache = getDashboardSourceCache();
+                const refreshKey = dashboardSourceKey('refresh', today);
+                const isCurrent = () => accessGranted && refreshKey === dashboardSourceKey('refresh', today);
+                try {
+                    return await window.GohDashboard.model.refreshVisibleSources(widgetIds, canAccessModule, async moduleKey => {
+                        if (!isCurrent()) return;
+                        if (moduleKey === 'belastning') {
+                            await Promise.all(window.GohDashboard.model.loadHorizons(widgetIds, options).map(days => {
+                                const request = getDashboardSourceRequest(moduleKey, today, true, dashboardEconomicPeriod, days);
+                                return cache.load(request.key, request.loader, true);
+                            }));
+                            return;
+                        }
+                        if (moduleKey === 'salgordre-via') {
+                            await cache.load(dashboardSourceKey(moduleKey, 'refresh'), async () => {
+                                await loadSalgordreVia(true, { loadReservations: false });
+                                if (salgordreViaLoadState === 'error') throw new Error('VIA kunne ikke opdateres');
+                                return { ok: true };
+                            }, true);
+                            return;
+                        }
+                        const request = getDashboardSourceRequest(moduleKey, today, true);
+                        const pending = [cache.load(request.key, request.loader, true)];
+                        if (moduleKey === 'efterkalk') {
+                            pending.push(cache.load(dashboardSourceKey('order-notes', today), async () => {
+                                const response = await fetch('/order-notes-all');
+                                if (!response.ok) throw new Error('HTTP ' + response.status);
+                                return response.json();
+                            }, true).then(notes => { if (isCurrent()) orderNotesCache = notes; }));
+                        }
+                        scheduleDashboardWidgets();
+                        const results = await Promise.allSettled(pending);
+                        const failed = results.find(result => result.status === 'rejected');
+                        if (failed) throw failed.reason;
+                    }, options);
+                } finally {
+                    if (isCurrent()) renderDashboardWidgets();
+                }
+            }
+
+            function synchronizeDashboardOrderMargin(ordNo, margin) {
+                if (!dashboardSourceCache || !accessGranted || !_settingsActiveId || !canAccessModule('efterkalk') || !canAccessModule('omsaetning')) return;
+                const cache = dashboardSourceCache;
+                const now = new Date();
+                const today = String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                const numericOrdNo = Number(ordNo);
+                cache.put(dashboardSourceKey('order-margin', numericOrdNo), {
+                    ordNo: numericOrdNo, totalRevenue: margin.totalRevenue, totalCost: margin.totalCost,
+                    styklisteFallbackCost: 0, hasInvoiceWarning: margin.hasInvoiceWarning
+                });
+                for (const period of ['all', 'year']) {
+                    const entry = cache.peek(getDashboardSourceRequest('efterkalk', today, false, period).key);
+                    for (const row of entry?.payload?.rows || []) {
+                        if (Number(row.OrdNo) === numericOrdNo) row.TotalCost = margin.totalCost;
+                    }
+                }
+                scheduleDashboardWidgets();
+            }
+
+            function ensureDashboardOrderCosts(today) {
+                if (!canAccessModule('efterkalk') || !canAccessModule('omsaetning')) return;
+                const cache = getDashboardSourceCache();
+                const key = getDashboardSourceRequest('efterkalk', today).key;
+                const entry = cache.peek(key);
+                const payload = entry && entry.payload;
+                if (!payload || !Array.isArray(payload.rows) || payload.costState === 'loading') return;
+                const rows = payload.rows.filter(row => !window.GohDashboard.model.isCreditOrder(row, orderNotesCache));
+                if (rows.every(row => row.TotalCost !== null && row.TotalCost !== undefined)) {
+                    payload.costState = 'ready';
+                    return;
+                }
+                if (payload.costState === 'error' && Date.now() - payload.costCheckedAt < 60000) return;
+                const isActive = () => accessGranted && canAccessModule('efterkalk') && canAccessModule('omsaetning')
+                    && getDashboardSourceRequest('efterkalk', today).key === key && cache.peek(key)?.payload === payload
+                    && document.getElementById('mainDashboard')?.style.display === 'block';
+                payload.costState = 'loading';
+                window.GohDashboard.model.hydrateOrderCosts(rows, ordNo => cache.load(dashboardSourceKey('order-margin', ordNo), async () => {
+                    const response = await fetch('/order-margin/' + ordNo, { signal: AbortSignal.timeout(60000) });
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const margin = await response.json();
+                    if (margin.error || margin.totalCost === null || margin.totalCost === undefined) throw new Error('Kost mangler');
+                    return margin;
+                }, payload.refreshCosts === true), isActive, scheduleDashboardWidgets).finally(() => {
+                    payload.costState = !isActive() ? 'idle' : rows.every(row => row.TotalCost !== null && row.TotalCost !== undefined) ? 'ready' : 'error';
+                    payload.costCheckedAt = Date.now();
+                    scheduleDashboardWidgets();
+                });
+                scheduleDashboardWidgets();
+            }
+
+            function belastningSummaryKey(filters) {
+                return dashboardSourceKey('belastning', [filters.today, filters.dage, filters.resGr, filters.ord, filters.kunde]);
+            }
+
+            async function requestBelastningSummary(filters) {
+                const query = new URLSearchParams({ toDay: filters.today, dage: String(filters.dage), resGr: filters.resGr, ord: filters.ord, kunde: filters.kunde });
+                const response = await fetch('/belastning/grafisk?' + query.toString());
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const payload = await response.json();
+                if (!payload.ok) throw new Error(payload.error || 'Belastning grafisk fejl');
+                return payload;
+            }
+
+            function getDashboardPreferenceTransport() {
+                const username = loggedUsername;
+                const token = authToken;
+                const profile = _settingsActiveId;
+                const current = () => accessGranted && loggedUsername === username && authToken === token && _settingsActiveId === profile;
+                async function request(method, config, version) {
+                    if (!current()) throw new Error('Sessionen er ændret');
+                    const body = method === 'PUT' ? JSON.stringify({ config, version }) : undefined;
+                    const response = await fetch('/dashboard/preferences?profile=' + encodeURIComponent(profile), {
+                        method, credentials: 'same-origin', cache: 'no-store',
+                        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        body,
+                        signal: AbortSignal.timeout(15000), keepalive: Boolean(body && new TextEncoder().encode(body).length < 60000)
+                    });
+                    if (!current()) throw new Error('Sessionen er ændret');
+                    const result = await response.json();
+                    if (!response.ok || !result.ok) {
+                        const error = new Error(result.error || 'GOH-profilen kunne ikke synkroniseres');
+                        error.status = response.status;
+                        throw error;
+                    }
+                    return result;
+                }
+                return { loadPreferences: () => request('GET'), savePreferences: (config, version) => request('PUT', config, version) };
+            }
+
+            function renderDashboardWidgets() {
+                if (!window.GohDashboard) return;
+                try {
+                    if (accessGranted && !_settingsActiveId) {
+                        window.GohDashboard.reset();
+                        const host = document.getElementById('dashboardOperationalOverview');
+                        if (host) host.textContent = 'Afventer databaseprofil...';
+                        return;
+                    }
+                    const now = new Date();
+                    const today = String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                    const cache = getDashboardSourceCache();
+                    const revenue = canAccessModule('omsaetning') ? cache.peek(getDashboardSourceRequest('omsaetning', today).key) : null;
+                    const load = canAccessModule('belastning') ? cache.peek(getDashboardSourceRequest('belastning', today).key) : null;
+                    const loads = canAccessModule('belastning') ? Object.fromEntries(dashboardLoadHorizons.map(days => [days, cache.peek(getDashboardSourceRequest('belastning', today, false, dashboardEconomicPeriod, days).key)])) : {};
+                    const recent = canAccessModule('ordreindgang') && canAccessModule('omsaetning') ? cache.peek(getDashboardSourceRequest('recent-orders', today).key) : null;
+                    const invoices = canAccessModule('efterkalk') && canAccessModule('omsaetning') ? cache.peek(getDashboardSourceRequest('efterkalk', today).key) : null;
+                    window.GohDashboard.update({
+                        authenticated: accessGranted, username: loggedUsername,
+                        database: _settingsActiveId, canAccess: canAccessModule,
+                        ...getDashboardPreferenceTransport(),
+                        today, economicPeriod: dashboardEconomicPeriod,
+                        flowScope: dashboardSourceKey('order-flow', 'view'),
+                        loadOrderFlow: (month, force) => fetchOrderFlowCached(month, [], force),
+                        revenue: revenue && revenue.payload, revenueState: revenue ? revenue.state : 'idle',
+                        load: load && load.payload, loadState: load ? load.state : 'idle', loadQuery: dashboardLoadQuery,
+                        loads, recentOrders: recent?.payload?.rows || [], recentState: recent?.state || 'idle',
+                        ensureSources: (modules, widgetIds, period, query, options) => ensureDashboardSources(modules, today, widgetIds, period, query, options),
+                        refreshSources: (widgetIds, options) => refreshDashboardSources(widgetIds, today, options),
+                        orders: invoices && invoices.payload ? invoices.payload.rows : [],
+                        notes: orderNotesCache,
+                        margins: {},
+                        costState: invoices && invoices.payload ? invoices.payload.costState : 'idle',
+                        via: canAccessModule('salgordre-via') ? salgordreViaRows : [],
+                        orderState: invoices ? invoices.state : 'idle',
+                        viaState: typeof salgordreViaLoadState === 'undefined' ? 'idle' : salgordreViaLoadState,
+                        openModule,
+                        openOrder: (ordNo, moduleKey) => {
+                            if (!canAccessModule(moduleKey)) return;
+                            if (moduleKey === 'efterkalk') openDashboardOrder(ordNo);
+                            else {
+                                const search = document.getElementById('viaSearchInput');
+                                if (search) search.value = String(ordNo);
+                                openModule('salgordre-via');
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.warn('Dashboard kunne ikke opdateres:', error);
+                }
+            }
+
+            function scheduleDashboardWidgets() {
+                if (dashboardRenderTimer) return;
+                dashboardRenderTimer = setTimeout(() => {
+                    dashboardRenderTimer = null;
+                    const dashboard = document.getElementById('mainDashboard');
+                    if (dashboard && dashboard.style.display === 'block') renderDashboardWidgets();
+                }, 250);
+            }
+
+            function openDashboardOrder(ordNo) {
+                if (!canAccessModule('efterkalk')) return;
+                const input = document.getElementById('orderInput');
+                if (input) input.value = String(ordNo);
+                openModule('efterkalk');
+                if (document.getElementById('mainWorkspace').style.display === 'block') {
+                    orderDetailReturnModule = 'dashboard';
+                    selectOrder(ordNo);
+                }
             }
 
             // ── Settings: database profiler ──────────────────────────────
@@ -4036,6 +4333,7 @@ app.get('/', (req, res) => {
             let _settingsActiveId = '';
 
             function _updateDbBadge(profile) {
+                renderDashboardWidgets();
                 const badge = document.getElementById('dbProfileBadge');
                 if (!badge) return;
                 const id = String((profile && profile.id) || '');
@@ -5172,11 +5470,9 @@ app.get('/', (req, res) => {
             function submitAccessCodeFromSideMenu() {
                 const sideUserInput = document.getElementById('sideMenuUserInput');
                 const sideInput = document.getElementById('sideMenuLoginInput');
+                const gateUserInput = document.getElementById('accessGateUserInput');
                 const gateInput = document.getElementById('accessGateInput');
-                if (sideUserInput) {
-                    const desiredName = sanitizeDisplayName(sideUserInput.value);
-                    setLoggedUserDisplayName(desiredName);
-                }
+                if (sideUserInput && gateUserInput) gateUserInput.value = String(sideUserInput.value || '').trim();
                 if (sideInput && gateInput) {
                     gateInput.value = sideInput.value || '';
                 }
@@ -5208,7 +5504,14 @@ app.get('/', (req, res) => {
                 accessGranted = false;
                 authToken = null;
                 loggedUserRole = 'user';
+                loggedUserPermissions = {};
+                loggedUsername = '';
+                if (dashboardSourceCache) dashboardSourceCache.clear();
+                if (window.GohOrderFlow) window.GohOrderFlow.reset();
+                omsaetningSummaryCache.clear();
+                omsaetningSummaryInFlight.clear();
                 setLoggedUserDisplayName('Bruger');
+                applyModulePermissions();
                 const adminCard = document.getElementById('administrationDashCard');
                 if (adminCard) adminCard.style.display = 'none';
                 closeSideMenu();
@@ -5229,31 +5532,70 @@ app.get('/', (req, res) => {
                 if (!modal || !body) return;
                 body.innerHTML = ''
                     + '<section class="manual-card">'
-                    + '<h4>1. Dashboard</h4>'
-                    + '<p>Overblik over makrokategorier og hurtig adgang til moduler.</p>'
-                    + '<ul><li>Brug kortene til at åbne modul.</li><li>Brug "Ryd Efterkalk cache" kun ved dataproblemer.</li><li>Warmup-status viser baggrundsindlæsning.</li></ul>'
+                    + '<h4>1. Login, dashboard og navigation</h4>'
+                    + '<p>Log ind med brugernavn og kode. "Husk brugernavn" gemmer kun brugernavnet på denne computer.</p>'
+                    + '<p>Widgetindstillinger åbnes med indstillingsikonet ved modul-pilen: eget navn, lokalt filter, rækkeantal og relevante valg. Belastning kan have 1-90 dage pr. widget, med/uden rest og aftenvisning. Laveste DB har en DB %-grænse, næste leveringer en horisont, og kvartalsomsætning viser kvartalets tre måneder. Gem indstillinger gemmer i din GOH-profil; Annuller bevarer tidligere valg.</p>'
+                    + '<p>I Salg og widgetbiblioteket findes Kunder og aktivitet samt Seneste ordreindgang. Kundegrafen viser Top3-6+Andre efter bogført omsætning eller antal fakturaordrer. Klik et segment for tilhørende kunder; CSV følger udsnittet. Ringens areal bruger positive kundesaldi, negative saldi og netto vises særskilt. Ordreindgang følger Visma-ordredato, ikke fakturadato eller teknisk oprettelsestid, og viser aktuelle ordreværdier for valgte 1-90 dage. Alle widgetvalg og indstillinger er personlige og gemmes i GOH.</p>'
+                    + '<p>Træk direkte i widgettens overskrift eller flyttehåndtag; ændr bredde og højde med hjørnehåndtaget. Ændringer gemmes automatisk i GOH ved slip. Piletaster virker også. Indret dashboard samler flere ændringer: Gem layout bekræfter, Annuller eller Escape fortryder. Standardskabeloner bliver personlige kopier. Pak widgets tæt udfylder plads; tabeller ruller inde i widgetten. Gemt i GOH vises først efter bekræftelse. Ved fejl bevares en lokal recovery-kopi, hvis browserlagring virker, og synkronisering kan prøves igen. En nyere profil fra en anden postation overskrives ikke automatisk.</p>'
+                    + '<ul><li>Dashboard og side-menu bruger de samme modulrettigheder. Økonomiske widgets kræver Omsætning-adgang; produktion kan vises uden beløb.</li><li>Vælg blandt de tilladte skabeloner: Økonomi, Produktion, Salg eller Ledelse.</li><li>Ny dashboard opretter en personlig kopi. Tilpas: navn, widgetvalg, rækkefølge med pile og bredde. Gem bekræfter; Annuller bevarer det tidligere layout.</li><li>Mine dashboards rummer op til 12 personlige visninger. Positioner, størrelser, widgetvalg, navne, sidste visning, periode, antal rækker, søgning og Ordreflow-filtre gemmes i GOH pr. brugernavn og tilsluttet database, uden ordredata. Samme profil hentes på andre postationer. Tidligere lokale layouts importeres kun, hvis GOH-profilen ikke findes.</li><li>Økonomiperioden styrer Omsætning, DB, ansvarlige og seneste Efterkalk-ordrer. Regnskabsår starter i juli; Dette kalenderår starter 1. januar og henter også januar-juni. Måned og kvartal følger kalenderen. Omsætning bruger standardkonti og beholder kreditposteringer. Kreditnotaer med negativt fakturabeløb eller kreditmarkering i ordrenoten udelades fra ordre-widgets, også ved nulbeløb. Øvrige salgsordrer med nulbeløb eller negativt DB bevares. Top 5/10 begrænser kun visningen.</li><li>Kost inkl. stykliste-tillæg hentes via cache med højst tre samtidige beregninger. Antal med kendt kost vises i widgetten; manglende kost tæller aldrig som nul.</li><li>Produktion viser Belastning: dagarbejde mod kapacitet, aftenarbejde, restarbejde og daglig plan i timer for i dag + 20 dage. VIA viser aktuelle leveringer.</li><li>Søgning filtrerer Omsætning på kunde, Efterkalk/VIA på kunde/ansvarlig/ordre og Belastning på ressource, kunde eller ordrenummer. Kunden ændrer ikke ressourcernes tilgængelige kapacitet. Økonomiperioden ændrer ikke produktionsperioden.</li><li>Åbn modulet eller eksportér viste data til CSV. Luk af en ordre åbnet fra Home vender tilbage til Home; fra Efterkalkulation vender Luk tilbage til ordrelisten. Tilladte widgetkilder indlæses efter behov og genbruges i 15 minutter; søgning og layout ændrer ikke Visma.</li><li>Ved besked om genstart: genstart GOH-serveren og genindlæs siden. Brug Ryd Efterkalk cache kun ved kendte cacheproblemer.</li></ul>'
                     + '</section>'
                     + '<section class="manual-card">'
                     + '<h4>2. Efterkalkulation</h4>'
-                    + '<p>Ordreliste, margin, produktion og rapportdetaljer.</p>'
-                    + '<ul><li>Klik på ordrelinje for fuld rapport.</li><li>"Opdater" på en ordre rydder cache for netop den ordre og henter frisk beregning.</li><li>Hvis tal ikke ændrer sig, er kilde-data sandsynligvis uændret.</li></ul>'
+                    + '<p>Ordreliste, kost, salg, margin og produktionsdetaljer pr. ordre.</p>'
+                    + '<ul><li>Søg på ordrenummer eller åbn en ordre fra listen; filtrér listen på bruger, kunde og minimumsbeløb.</li><li>Åbn underordrer, operationer, laser/nesting, Ydelse og Underleverandør.</li><li>Skift marginberegning, og brug Rapport 2.0 til samlet visning, udskrift eller PDF.</li><li>Åbn "Vis tegning" og billedvisning, når dokumentation findes på produktet.</li><li>"Udelad kost" fjerner kun den valgte kost fra marginen; salget bevares, og valget gemmes i GOH.</li><li>"Opdater" genberegner kun den valgte ordre.</li><li>Fakturaoversigt: vælg kunde og datointerval, og se fakturaordrer, omsætning, kost og dækningsbidrag.</li><li>Månedens DB: vælg måned og se alle kunder og ordrer med registreret eller korrigeret kost.</li><li>I Månedens DB kan du se kundetrend, eksportere kunde- og ordre-CSV og gemme den færdigberegnede måned i GOH.</li></ul>'
                     + '</section>'
                     + '<section class="manual-card">'
-                    + '<h4>3. Omsætning</h4>'
+                    + '<h4>3. SalgOrdre VIA</h4>'
+                    + '<p>Åbne salgsordrer med registreret værdi i produktionen.</p>'
+                    + '<ul><li>Se Materiale, Stang, Indkøbte dele, Tid og Total kost pr. ordre.</li><li>Åbn købte dele og kontrollér Bestilt, Modtaget, Forbrugt og Medregnet VIA.</li><li>Bestilt alene giver ingen VIA-værdi.</li><li>Modtagne, fysisk tilstedeværende og sikkert reserverede dele flyttes fra Lager til VIA uden dobbelt værdi.</li><li>Reservationstabellen er information og lægges ikke oven i totalen.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>4. Omsætning</h4>'
                     + '<p>Periode-, konto- og kundebaseret omsætningsanalyse.</p>'
-                    + '<ul><li>Vælg periode og konti.</li><li>Tryk "Opdater" for nye tal.</li><li>Print fra modulet efter opdatering.</li></ul>'
+                    + '<p>Ordreflow findes i månedspanelet og som widget i Home: Primo, Tilgang, Faktureret og Ultimo. Klik søjler for ordrer; filtrér på Tidligere/Nye og Kun færdigfakturerede ordrer. Widgetten har egen måned, søgning og CSV. Rest er salgsværdi, ikke VIA-kost. Alle omsætningskonti indgår, uanset kontofilter; kunder afgrænses som valgt. Historik rekonstrueres fra bogføring og aktuelle ordreværdier. Uafstemt fakturahistorik giver en synlig advarsel om delsummer.</p>'
+                    + '<ul><li>Vælg regnskabsår, måneder, konti og eventuelle kunder.</li><li>Klik en måned for bogførte poster, tilknyttede ordrer og Ordreindgang.</li><li>Brug manuelle månedsmål eller dagsmål × arbejdsdage.</li><li>Udskriv den aktuelle visning efter opdatering.</li></ul>'
                     + '</section>'
                     + '<section class="manual-card">'
-                    + '<h4>4. Ordreindgang</h4>'
-                    + '<p>Ugevis ordre- og tilbudsoverblik.</p>'
-                    + '<ul><li>Vælg ugeinterval (YYYYWW).</li><li>Tryk "Opdater".</li><li>Brug tabeller/grafer til opfølgning.</li></ul>'
+                    + '<h4>5. Ordreindgang</h4>'
+                    + '<p>Ugevis overblik over ordrer, tilbud, budget og udvikling.</p>'
+                    + '<ul><li>Vælg Fra uge og Til uge.</li><li>Vis eller skjul tilbud, trendlinje og manuelt budget.</li><li>Ferieuger kan udelades fra trend, MA3 og periodemål.</li><li>Brug KPI, graf, ugetabel og topkunder til opfølgning.</li></ul>'
                     + '</section>'
                     + '<section class="manual-card">'
-                    + '<h4>5. Datadifferencer (NestKost)</h4>'
-                    + '<p>NestKost pr. stk kan afvige, hvis færdigmeldt antal på ordrelinjen ikke matcher nesting-fordeling.</p>'
-                    + '<ul><li>Pris pr. stk beregnes fra samme kilde som linjens totale kost.</li><li>Routedetaljer kan vise et andet antal pga. fordeling/split på ruter.</li></ul>'
+                    + '<h4>6. Lagerliste</h4>'
+                    + '<p>Officiel lagerværdi, VIA, månedslukning og periodesammenligning.</p>'
+                    + '<ul><li>Vælg standardpris eller FIFO for plader.</li><li>Opfølgningsvarer viser fysisk lagerværdi minus købte dele, der er flyttet sikkert til VIA.</li><li>Reservationer, fysisk værdi, flyttet VIA og resterende lagerværdi vises særskilt.</li><li>Brug Vareopslag til saldo, partier, reservationer og åbne ordrelinjer.</li><li>Gem måned/snapshot, sammenlign perioder og udskriv PDF; skrivefunktioner kræver Superadmin.</li></ul>'
                     + '</section>'
-                    + '<div class="manual-meta">Tip: Brug side-menuen (☰) til hurtig navigation mellem moduler og manual.</div>';
+                    + '<section class="manual-card">'
+                    + '<h4>7. Lagerliste 2 (Beta)</h4>'
+                    + '<p>Kontrolvisning til route/nesting og forklaring af bevægelser mellem perioder.</p>'
+                    + '<ul><li>Se åbne, delvise og afsluttede routes med produkter, plader og REST.</li><li>Sammenlign perioder og se dokumenterede bevægelser mellem Lager, VIA, Færdige SO og Faktureret.</li><li>Uforklarede differencer forbliver synlige; Beta ændrer ikke Visma eller Lagerliste 1.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>8. Ordreoversigt</h4>'
+                    + '<p>Produktionsoversigt til frigivelse og udskrivning.</p>'
+                    + '<ul><li>Indtast ordrenummer og hent varelinjer, save-/laserlister, rute og indkøbsdetaljer.</li><li>Oversigten viser leveringsdata, ressourcer, U-lev-ordrer og advarsler.</li><li>Brug Print til produktionspapirer.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>9. Belastning</h4>'
+                    + '<p>Kapacitetsbelastning pr. ressource og dato.</p>'
+                    + '<ul><li>Vælg startdato, antal dage og ressourcegrupper.</li><li>Filtrér på ordre eller kunde.</li><li>Klik en søjle eller et kort for at åbne de underliggende ordrer.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>10. BOMe+ Beregner</h4>'
+                    + '<p>Styklister, komponenter, ressourcer, materialer, parametre og tilbudsberegning.</p>'
+                    + '<ul><li>Tilgængelige områder afhænger af dine BOM-rettigheder.</li><li>Beregneren understøtter filanalyse, materiale, laser, buk og øvrige processer.</li><li>Kontrollér altid preview før en godkendt Visma-skrivning; read-only profiler kan ikke skrive.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>11. Personalehåndbog og QMS</h4>'
+                    + '<p>Søgning og visning af interne personale- og kvalitetsdokumenter.</p>'
+                    + '<ul><li>Personalehåndbogen åbnes fra dashboard eller side-menu.</li><li>Brug søgefeltet til at finde relevante sider.</li><li>QMS-funktioner og redigering vises kun, når de er tilgængelige for brugeren.</li></ul>'
+                    + '</section>'
+                    + '<section class="manual-card">'
+                    + '<h4>12. Administration (Superadmin)</h4>'
+                    + '<p>Fælles opsætning er opdelt i tre kort.</p>'
+                    + '<ul><li>Brugere & adgang: brugernavn, visningsnavn, status og modulrettigheder.</li><li>Lagerliste · Diverse: månedlige manuelle værdier og skrotberegninger.</li><li>Omsætning · Arbejdsdage: arbejdsdage pr. måned til dagsmål og budget.</li><li>Indstillinger gemt i GOH gælder på tværs af arbejdsstationer.</li></ul>'
+                    + '</section>'
+                    + '<div class="manual-meta">Tip: Brug side-menuen til hurtig navigation. Ser data gamle ud, opdatér først det aktuelle modul; ryd kun hele Efterkalk-cachen ved et kendt cacheproblem.</div>';
                 modal.style.display = 'flex';
                 pushModalStack('brugermanualModal');
             }
@@ -5419,7 +5761,7 @@ app.get('/', (req, res) => {
                 const customers = Array.from(new Set((Array.isArray(selectedCustomers) ? selectedCustomers : [])
                     .map(v => String(v || '').trim())
                     .filter(Boolean))).sort();
-                return JSON.stringify({ fra, til, accounts, customers });
+                return JSON.stringify({ database: _settingsActiveId, username: loggedUsername.toLowerCase(), fra, til, accounts, customers });
             }
 
             async function fetchOmsaetningSummaryCached(fra, til, selectedAccounts, selectedCustomers, options) {
@@ -5484,6 +5826,10 @@ app.get('/', (req, res) => {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     const payload = await response.json();
                     setOmsaetningCacheEntry(omsaetningSummaryCache, cacheKey, payload);
+                    if (dashboardSourceCache && payload.ok !== false) {
+                        dashboardSourceCache.put(dashboardSourceKey('omsaetning', cacheKey), payload);
+                        scheduleDashboardWidgets();
+                    }
                     return payload;
                 })();
 
@@ -5632,7 +5978,19 @@ app.get('/', (req, res) => {
                 }
                 html += '</section>';
 
-                body.innerHTML = html;
+                body.innerHTML = '<section id="omsaetningOrderFlow" aria-label="Ordreflow"></section>' + html;
+                if (window.GohOrderFlow && canAccessModule('omsaetning')) {
+                    const now = new Date();
+                    const today = String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                    const flowScope = dashboardSourceKey('order-flow', 'detail');
+                    const customers = Array.from(omsaetningSelectedCustomers.keys());
+                    window.GohOrderFlow.mount(document.getElementById('omsaetningOrderFlow'), {
+                        scope: flowScope, month, today, fixedMonth: true,
+                        load: (selectedMonth, force) => fetchOrderFlowCached(selectedMonth, customers, force),
+                        isActive: () => accessGranted && canAccessModule('omsaetning') && flowScope === dashboardSourceKey('order-flow', 'detail'),
+                        openOrder: canAccessModule('efterkalk') ? ordNo => searchOrderByNo(ordNo) : null
+                    });
+                }
                 wrap.style.display = 'block';
             }
 
@@ -9299,10 +9657,11 @@ app.get('/', (req, res) => {
                 }
                 startBelastningPeriodicRefresh();
                 setBelastningStatus('Henter data...');
-                await loadBelastningGrafisk({ forceRefresh: true });
+                await loadBelastningGrafisk();
             }
 
             async function loadBelastningGrafisk(options) {
+                if (!canAccessModule('belastning')) return;
                 const safeOptions = options && typeof options === 'object' ? options : {};
                 const emptyEl = document.getElementById('belastningEmpty');
                 const loadBtn = document.getElementById('belastningLoadBtn');
@@ -9317,18 +9676,9 @@ app.get('/', (req, res) => {
 
                 try {
                     const filters = getBelastningFilters();
-                    const query = new URLSearchParams({
-                        toDay: filters.today,
-                        dage: String(filters.dage),
-                        resGr: filters.resGr,
-                        ord: filters.ord,
-                        kunde: filters.kunde
-                    });
-                    const response = await fetch('/belastning/grafisk?' + query.toString());
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    const payload = await response.json();
-                    if (!payload.ok) throw new Error(payload.error || 'Belastning grafisk fejl');
+                    const payload = await getDashboardSourceCache().load(belastningSummaryKey(filters), () => requestBelastningSummary(filters), safeOptions.forceRefresh === true);
                     belastningLastPayload = payload;
+                    scheduleDashboardWidgets();
                     const oddItems = payload.odd && Array.isArray(payload.odd.resources) ? payload.odd.resources.map(item => ({ ...item, parity: 1 })) : [];
                     const evenItems = payload.even && Array.isArray(payload.even.resources) ? payload.even.resources.map(item => ({ ...item, parity: 0 })) : [];
                     const oddRows = payload.odd && Array.isArray(payload.odd.rows) ? payload.odd.rows : [];
@@ -9371,11 +9721,8 @@ app.get('/', (req, res) => {
                 if (userInput) {
                     let rememberedUsername = '';
                     try { rememberedUsername = localStorage.getItem('afterkalk_remembered_username') || ''; } catch {}
-                    const currentName = sanitizeDisplayName(loggedUserDisplayName);
                     if (!String(userInput.value || '').trim() && rememberedUsername) {
                         userInput.value = rememberedUsername;
-                    } else if (!String(userInput.value || '').trim() && currentName && currentName !== 'Bruger') {
-                        userInput.value = currentName;
                     }
                     if (rememberUser) rememberUser.checked = Boolean(rememberedUsername);
                 }
@@ -9429,8 +9776,13 @@ app.get('/', (req, res) => {
                     loggedUserRole = data.user && data.user.role || 'user';
                     loggedUserPermissions = data.user && data.user.permissions || {};
                     setLoggedUserDisplayName(data.user && data.user.displayName || userName);
+                    const canonicalUsername = String(data.user && data.user.username || loginUserName);
+                    loggedUsername = canonicalUsername;
+                    if (userInput) userInput.value = canonicalUsername;
+                    const sideUserInput = document.getElementById('sideMenuUserInput');
+                    if (sideUserInput) sideUserInput.value = canonicalUsername;
                     try {
-                        if (rememberUser && rememberUser.checked) localStorage.setItem('afterkalk_remembered_username', String(data.user && data.user.username || loginUserName));
+                        if (rememberUser && rememberUser.checked) localStorage.setItem('afterkalk_remembered_username', canonicalUsername);
                         else localStorage.removeItem('afterkalk_remembered_username');
                     } catch {}
                         accessGranted = true;
@@ -9485,6 +9837,42 @@ app.get('/', (req, res) => {
             }
 
             const ADMIN_MONTH_NAMES = ['Januar', 'Februar', 'Marts', 'April', 'Maj', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'December'];
+
+            function showAdminSection(sectionKey) {
+                const sections = {
+                    users: ['adminTabUsers', 'adminSectionUsers'],
+                    diverse: ['adminTabDiverse', 'adminSectionDiverse'],
+                    'working-days': ['adminTabWorkingDays', 'adminSectionWorkingDays']
+                };
+                const selectedKey = Object.prototype.hasOwnProperty.call(sections, sectionKey) ? sectionKey : 'users';
+                try { sessionStorage.setItem('adminSection', selectedKey); } catch (_) {}
+                Object.entries(sections).forEach(([key, ids]) => {
+                    const tab = document.getElementById(ids[0]);
+                    const panel = document.getElementById(ids[1]);
+                    const selected = key === selectedKey;
+                    if (tab) {
+                        tab.classList.toggle('active', selected);
+                        tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+                        tab.tabIndex = selected ? 0 : -1;
+                    }
+                    if (panel) {
+                        panel.classList.toggle('active', selected);
+                        panel.hidden = !selected;
+                    }
+                });
+            }
+
+            function handleAdminTabKeydown(event) {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                const tabs = Array.from(event.currentTarget.querySelectorAll('[role="tab"]'));
+                const currentIndex = tabs.indexOf(document.activeElement);
+                if (currentIndex < 0) return;
+                event.preventDefault();
+                let nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : currentIndex + (event.key === 'ArrowRight' ? 1 : -1);
+                nextIndex = (nextIndex + tabs.length) % tabs.length;
+                tabs[nextIndex].focus();
+                tabs[nextIndex].click();
+            }
 
             function getAdminWorkingDaysYear() {
                 const input = document.getElementById('adminWorkingDaysYear');
@@ -9667,16 +10055,16 @@ app.get('/', (req, res) => {
                 if (_accessInitialized) return;
                 _accessInitialized = true;
                 startWarmupPolling();
-                loadOrderList(false);
-                setTimeout(() => {
-                    if (!orderListData || orderListData.length === 0) {
-                        loadOrderList(true);
-                    }
-                }, 2500);
-                startOrderListAutoRefresh();
+                if (canAccessModule('efterkalk')) {
+                    loadOrderList(false);
+                    setTimeout(() => {
+                        if (!orderListData || orderListData.length === 0) loadOrderList(true);
+                    }, 2500);
+                    startOrderListAutoRefresh();
+                }
                 startDashboardUpdatePolling();
                 setTimeout(() => {
-                    fetch('/salgordre-via').catch(() => {});
+                    if (canAccessModule('salgordre-via')) loadSalgordreVia(false);
                 }, 7000);
 
                 const params = new URLSearchParams(window.location.search);
@@ -9719,6 +10107,9 @@ app.get('/', (req, res) => {
                     if (lagerliste) lagerliste.style.display = 'none';
                     if (administration) administration.style.display = 'block';
                     closeSideMenu();
+                    let adminSection = 'users';
+                    try { adminSection = sessionStorage.getItem('adminSection') || 'users'; } catch (_) {}
+                    showAdminSection(adminSection);
                     loadAdminUsers();
                     initializeOrdreindgangHolidaySettings();
                     loadAdminWorkingDays();
@@ -10131,6 +10522,7 @@ app.get('/', (req, res) => {
             }
 
             function goToDashboard() {
+                orderDetailReturnModule = null;
                 const dashboard = document.getElementById('mainDashboard');
                 const workspace = document.getElementById('mainWorkspace');
                 const ordreoversigt = document.getElementById('mainOrdreoversigt');
@@ -10150,6 +10542,7 @@ app.get('/', (req, res) => {
                 if (belastning) belastning.style.display = 'none';
                 if (lagerliste) lagerliste.style.display = 'none';
                 if (dashboard) dashboard.style.display = 'block';
+                renderDashboardWidgets();
                 const detailModal = document.getElementById('orderDetailModal');
                 const detailBody = document.getElementById('orderDetailModalBody');
                 if (detailModal) detailModal.style.display = 'none';
@@ -10900,6 +11293,7 @@ app.get('/', (req, res) => {
             }
 
             function updateOrderMarginCell(ordNo) {
+                scheduleDashboardWidgets();
                 const listEl = document.getElementById('orderList');
                 if (!listEl) return;
                 const cells = listEl.querySelectorAll('.order-margin-cell[data-ordno="' + ordNo + '"]');
@@ -11563,8 +11957,13 @@ app.get('/', (req, res) => {
                 reportOriginState = null;
                 updateOrderDetailModalBackButton();
                 removeModalStack('orderDetailModal');
-                if (orderDetailReturnModule === 'salgordre-via') {
-                    orderDetailReturnModule = null;
+                const returnModule = orderDetailReturnModule;
+                orderDetailReturnModule = null;
+                if (returnModule === 'dashboard') {
+                    goToDashboard();
+                    return;
+                }
+                if (returnModule === 'salgordre-via') {
                     openModule('salgordre-via');
                     return;
                 }
@@ -12022,6 +12421,7 @@ app.get('/', (req, res) => {
                         totalCost: effectiveTotalCost,
                         hasInvoiceWarning: Boolean(data.summary.hasInvoiceWarning)
                     };
+                    synchronizeDashboardOrderMargin(detailOrdNo, marginStateByOrdNo[detailOrdNo]);
                     updateOrderMarginCell(detailOrdNo);
                     const _invoAm = Number(data.orderHeader.InvoAm || 0);
                     const _dInvoIF = Number(data.orderHeader.DInvoIF || 0);
@@ -13612,6 +14012,7 @@ app.get('/', (req, res) => {
                 if (!el) return;
 
                 const showOrderListError = (message) => {
+                    dashboardOrderState = 'error';
                     el.innerHTML = '<div class="order-list-section"><h3>Ordreliste kunne ikke indlæses</h3><div>' + escapeHtml(message) + '</div><div style="margin-top:8px;"><button class="list-toggle-btn" onclick="refreshOrderList()">Prøv igen</button></div></div>';
                 };
 
@@ -13622,6 +14023,7 @@ app.get('/', (req, res) => {
                 }
 
                 orderListLoading = true;
+                dashboardOrderState = 'loading';
                 const previousHtml = el.innerHTML;
                 setSystemStatus('System loading...', '#fff3cd', '#8a6d3b');
                 if (!orderListData || orderListData.length === 0) {
@@ -13633,6 +14035,7 @@ app.get('/', (req, res) => {
                         : '/order-list';
                     const response = await fetch(endpoint);
                     if (!response.ok) {
+                        dashboardOrderState = 'error';
                         setSystemStatus('System error', '#fdecea', '#b71c1c');
                         if (previousHtml) {
                             el.innerHTML = previousHtml;
@@ -13643,6 +14046,7 @@ app.get('/', (req, res) => {
                     }
                     const orders = await response.json();
                     if (!orders || orders.error) {
+                        dashboardOrderState = 'error';
                         setSystemStatus('System error', '#fdecea', '#b71c1c');
                         if (previousHtml) {
                             el.innerHTML = previousHtml;
@@ -13652,7 +14056,9 @@ app.get('/', (req, res) => {
                         return;
                     }
                     orderListData = orders;
+                    dashboardOrderState = 'ready';
                     hydrateMarginStateFromOrderList(orders);
+                    renderDashboardWidgets();
                     populateBrugerFilterOptions();
                     loadAllNotes().then(() => {
                         if (orderListVisible) renderOrderList();
@@ -13661,6 +14067,7 @@ app.get('/', (req, res) => {
                     checkOrderListFreshness();
                 } catch (err) {
                     console.error('Fejl i loadOrderList:', err);
+                    dashboardOrderState = 'error';
                     setSystemStatus('System error', '#fdecea', '#b71c1c');
                     if (previousHtml) {
                         el.innerHTML = previousHtml;
@@ -13669,6 +14076,7 @@ app.get('/', (req, res) => {
                     }
                 } finally {
                     orderListLoading = false;
+                    renderDashboardWidgets();
                 }
             }
 
@@ -14033,7 +14441,9 @@ app.get('/', (req, res) => {
                 }
                 const sideMenuUserInput = document.getElementById('sideMenuUserInput');
                 if (sideMenuUserInput) {
-                    sideMenuUserInput.value = sanitizeDisplayName(loggedUserDisplayName);
+                    let rememberedUsername = '';
+                    try { rememberedUsername = localStorage.getItem('afterkalk_remembered_username') || ''; } catch {}
+                    sideMenuUserInput.value = rememberedUsername;
                 }
                 updateReportOpenButtonState(Boolean(lastOrderReportHtml));
                 refreshSideMenuAuthState();
