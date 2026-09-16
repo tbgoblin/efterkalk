@@ -44,6 +44,7 @@
       "assets/**/*",
       "users.json",
       "electron-main.js",
+      "electron-preload.js",
       "loading.html",
       "package.json",
       "node_modules/express/**/*",

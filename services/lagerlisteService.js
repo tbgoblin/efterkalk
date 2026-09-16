@@ -8,7 +8,7 @@ const { allocateSharedOrders, allocateComponentStock, allocatePurchasedPartsFrom
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null, getDiverse = null }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v35';
+    const cacheKey = 'lagerliste_v36';
     const excludedOrderNumbers = new Set([61423, 75330, 131790, 140134, 331368]);
     let currentMemoryCache = null;
 

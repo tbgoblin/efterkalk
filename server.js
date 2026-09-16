@@ -1708,6 +1708,7 @@ app.get('/', (req, res) => {
             .omsaetning-chart-sub { font-size:11px; color:#5f7892; }
             .omsaetning-chart-body { padding:8px; overflow:auto; }
             .omsaetning-chart-svg { width:100%; min-width:680px; height:260px; display:block; }
+            .omsaetning-month-total { pointer-events:none; }
             .ordreindgang-chart-svg { height:430px; min-height:400px; }
             .ordreindgang-legend-row { margin:0 0 8px 0; }
             .ordreindgang-legend-row .omsaetning-legend-item { font-size:12px; font-weight:700; }
@@ -1895,7 +1896,14 @@ app.get('/', (req, res) => {
             .via-kpi { border:1px solid #d6e6f8; border-radius:8px; background:#f7fbff; padding:9px 11px; }
             .via-kpi span { display:block; color:#4f6d8c; font-size:11px; font-weight:700; }
             .via-kpi strong { display:block; margin-top:3px; color:#0f3560; font-size:18px; }
+            .via-kpi-backlog { border-color:#3d8b78; background:linear-gradient(180deg,#203b35 0%,#1e302c 100%); }
+            .via-kpi-backlog span, .via-kpi-backlog strong { color:#e6f4ee; }
+            .via-kpi-backlog small { display:block; margin-top:4px; color:#a9d9c7; font-size:10px; }
             .via-progress { min-width:110px; }
+            #viaResults > .order-list-section { overflow-x:auto; }
+            #viaResults .via-backlog-table { min-width:1400px; }
+            #viaResults .via-backlog-table > :is(thead,tbody) > tr > :is(th,td) { overflow-wrap:anywhere; white-space:normal; }
+            #viaResults .via-backlog-table .via-progress { min-width:0; }
             .via-progress-bar { height:7px; background:#dce8f8; border-radius:8px; overflow:hidden; margin-top:4px; }
             .via-progress-bar > span { display:block; height:100%; background:#2e7d32; }
             .via-purchased-detail-row > td { padding:6px 12px 12px; background:#f7fbff; }
@@ -2000,7 +2008,7 @@ app.get('/', (req, res) => {
             .sales-line-exclusion-label { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer; }
             .report-cost-adjustment { margin:10px 0 0; padding:9px 11px; border:1px solid #efc36a; border-radius:8px; background:#fff8e6; color:#704b00; font-size:12px; line-height:1.45; }
         </style>
-        <link rel="stylesheet" href="/assets/dashboard.css?v=${pkgVersion}-7" />
+        <link rel="stylesheet" href="/assets/dashboard.css?v=${pkgVersion}-8" />
         <link rel="stylesheet" href="/assets/order-flow.css?v=${pkgVersion}-2" />
         <link rel="stylesheet" href="/assets/theme.css?v=${pkgVersion}-1" data-goh-theme />
         <script src="/assets/js/theme.js?v=${pkgVersion}-1" defer></script>
@@ -2015,16 +2023,22 @@ app.get('/', (req, res) => {
                 <div class="access-gate-fields">
                     <div class="access-gate-field">
                         <label for="accessGateUserInput">Brugernavn</label>
-                        <input id="accessGateUserInput" type="text" placeholder="fx Marco" autocomplete="off" />
+                        <input id="accessGateUserInput" name="username" type="text" placeholder="fx Marco" autocomplete="username" />
                     </div>
                     <div class="access-gate-field">
                         <label for="accessGateInput">Kode</label>
-                        <input id="accessGateInput" type="password" placeholder="Indtast kode" autocomplete="off" />
+                        <input id="accessGateInput" name="password" type="password" placeholder="Indtast kode" autocomplete="current-password" />
                     </div>
                     <label class="access-gate-field" style="display:flex;align-items:center;gap:7px;cursor:pointer;">
                         <input id="accessGateRememberUser" type="checkbox" style="width:auto;" />
                         <span>Husk brugernavn på denne computer</span>
                     </label>
+                    <label id="accessGateRememberPasswordLabel" class="access-gate-field" style="display:none;align-items:center;gap:7px;cursor:pointer;">
+                        <input id="accessGateRememberPassword" type="checkbox" style="width:auto;" />
+                        <span>Husk kode for min Windows-bruger på denne postation</span>
+                    </label>
+                    <button id="accessGateForgetLogin" type="button" style="display:none;" onclick="forgetRememberedLogin()">Glem gemt login</button>
+                    <span id="accessGateLoginStorageStatus" role="status" aria-live="polite"></span>
                 </div>
                 <div class="access-gate-row">
                     <button id="accessGateBtn" type="button" onclick="submitAccessCode()">Åbn dashboard</button>
@@ -2055,20 +2069,21 @@ app.get('/', (req, res) => {
                     <section class="side-menu-section">
                         <h4>Moduler</h4>
                         <div class="side-menu-module-list">
+                            <button id="sideMenuAdministrationBtn" type="button" onclick="navigateFromSideMenu('administration')" style="display:none;">🔐 Administration</button>
+                            <button type="button" data-module-key="belastning" onclick="openModule('belastning')">Belastning</button>
+                            <button type="button" data-module-key="bom" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
+                            <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
                             <button type="button" onclick="navigateFromSideMenu('dashboard')">🏠 Dashboard</button>
+                            <button type="button" onclick="closeSideMenu();openSettingsModal()">⚙️ Database settings</button>
                             <button type="button" data-module-key="efterkalk" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
-                            <button type="button" data-module-key="salgordre-via" onclick="navigateFromSideMenu('salgordre-via')">SalgOrdre VIA</button>
+                            <button type="button" data-module-key="lagerliste" onclick="navigateFromSideMenu('lagerliste')">Lagerliste</button>
+                            <button type="button" data-module-key="lagerliste" onclick="window.location.href='/assets/lagerliste2.html'">🧪 Lagerliste 2 (Beta)</button>
+                            <button type="button" data-module-key="ledelsesrapport" onclick="window.open('/assets/ledelsesrapport.html','_blank','noopener')">Ledelsesrapport</button>
                             <button type="button" data-module-key="omsaetning" onclick="navigateFromSideMenu('omsaetning')">Omsætning</button>
                             <button type="button" data-module-key="ordreindgang" onclick="navigateFromSideMenu('ordreindgang')">Ordreindgang</button>
                             <button type="button" data-module-key="ordreoversigt" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
-                            <button type="button" data-module-key="bom" onclick="window.location.href='/assets/bom-workspace-v2.html'">📊 BOMe+ Beregner</button>
-                            <button type="button" data-module-key="lagerliste" onclick="navigateFromSideMenu('lagerliste')">Lagerliste</button>
-                            <button type="button" data-module-key="lagerliste" onclick="window.location.href='/assets/lagerliste2.html'">🧪 Lagerliste 2 (Beta)</button>
-                            <button type="button" data-module-key="belastning" onclick="openModule('belastning')">Belastning</button>
                             <button type="button" data-module-key="personalehåndbog" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
-                            <button type="button" onclick="navigateFromSideMenu('brugermanual')">Brugermanual</button>
-                            <button id="sideMenuAdministrationBtn" type="button" onclick="navigateFromSideMenu('administration')" style="display:none;">🔐 Administration</button>
-                            <button type="button" onclick="closeSideMenu();openSettingsModal()">⚙️ Database settings</button>
+                            <button type="button" data-module-key="salgordre-via" onclick="navigateFromSideMenu('salgordre-via')">SalgOrdre VIA</button>
                         </div>
                     </section>
 
@@ -2141,6 +2156,7 @@ app.get('/', (req, res) => {
                             <article class="dash-card" data-module-key="ordreindgang"><span class="dash-chip">Salg</span><h4>Ordreindgang</h4><p>Budget, ordre, tilbud og udvikling pr. uge og periode.</p><button onclick="openModule('ordreindgang')">Åbn Ordreindgang</button></article>
                             <article class="dash-card" data-module-key="ordreoversigt"><span class="dash-chip">Produktion</span><h4>Ordreoversigt</h4><p>Produktionsstatus, levering, indkøb og dokumentation pr. ordre.</p><button onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button></article>
                             <article class="dash-card" data-module-key="belastning"><span class="dash-chip">Produktion</span><h4>Belastning</h4><p>Kapacitet, ressourcer, ordreflyt og planlægningsudsving.</p><button onclick="openModule('belastning')">Åbn Belastning</button></article>
+                            <article class="dash-card" data-module-key="ledelsesrapport"><span class="dash-chip">Ledelse</span><h4>Ledelsesrapport</h4><p>Samlet økonomi, ordreindgang, kapacitet og VIA klar til udskrivning.</p><button onclick="window.open('/assets/ledelsesrapport.html','_blank','noopener')">Åbn rapport</button></article>
                             <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Bogholderi</span><h4>Lagerliste</h4><p>Lagerværdi, VIA og færdige ikke-fakturerede varer.</p><button onclick="openModule('lagerliste')">Åbn Lagerliste</button></article>
                             <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Beta</span><h4>Lagerliste 2</h4><p>Route- og transaktionsafstemning for lagerbevægelser.</p><button onclick="window.location.href='/assets/lagerliste2.html'">Åbn Lagerliste 2</button></article>
                             <article class="dash-card" data-module-key="bom"><span class="dash-chip">Produktion</span><h4>BOMe+ Beregner</h4><p>Styklister, materialer og beregning i BOM-arbejdsområdet.</p><button onclick="window.location.href='/assets/bom-workspace-v2.html'">Åbn BOMe+</button></article>
@@ -2529,7 +2545,7 @@ app.get('/', (req, res) => {
                 <div class="omsaetning-head">
                     <div>
                         <h3>SalgOrdre VIA</h3>
-                        <p>Ikke-fakturerede salgsordrer med produktion, der endnu ikke er færdig.</p>
+                        <p>Aktive salgsordrer i Ordrebeholdning med tilhørende produktionsstatus, når den findes.</p>
                     </div>
                 </div>
                 <div class="via-toolbar">
@@ -2976,7 +2992,7 @@ app.get('/', (req, res) => {
             </div>
         </div>
         
-        <script src="/assets/js/via.js?v=${pkgVersion}"></script>
+        <script src="/assets/js/via.js?v=${pkgVersion}-backlog1"></script>
         <script src="/assets/js/qms-ph.js?v=${pkgVersion}"></script>
         <script src="/assets/js/lagerliste.js?v=${pkgVersion}"></script>
         <script src="/assets/js/lagerliste-diverse.js?v=${pkgVersion}"></script>
@@ -2984,7 +3000,8 @@ app.get('/', (req, res) => {
         <script src="/assets/js/omsaetning-daily-thresholds.js?v=${pkgVersion}"></script>
         <script src="/assets/js/table-sort.js?v=${pkgVersion}-5"></script>
         <script src="/assets/js/order-flow.js?v=${pkgVersion}-4"></script>
-        <script src="/assets/js/dashboard.js?v=${pkgVersion}-13"></script>
+        <script src="/assets/js/dashboard.js?v=${pkgVersion}-15"></script>
+        <script src="/assets/js/report-charts.js?v=${pkgVersion}-2"></script>
         <script>
             function formatNumber(num) {
                 const fixed = parseFloat(num).toFixed(2);
@@ -4005,6 +4022,7 @@ app.get('/', (req, res) => {
                 ordreindgang: 'ordreindgang',
                 ordreoversigt: 'ordreoversigt',
                 belastning: 'belastning',
+                ledelsesrapport: 'ledelsesrapport',
                 personalehåndbog: 'personalehandbog',
                 lagerliste: 'lagerliste'
             };
@@ -4245,7 +4263,7 @@ app.get('/', (req, res) => {
                 const current = () => accessGranted && loggedUsername === username && authToken === token && _settingsActiveId === profile;
                 async function request(method, config, version) {
                     if (!current()) throw new Error('Sessionen er ændret');
-                    const body = method === 'PUT' ? JSON.stringify({ config, version }) : undefined;
+                    const body = method === 'PUT' ? JSON.stringify({ config, version, schemaVersion: 4 }) : undefined;
                     const response = await fetch('/dashboard/preferences?profile=' + encodeURIComponent(profile), {
                         method, credentials: 'same-origin', cache: 'no-store',
                         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -4298,6 +4316,7 @@ app.get('/', (req, res) => {
                         margins: {},
                         costState: invoices && invoices.payload ? invoices.payload.costState : 'idle',
                         via: canAccessModule('salgordre-via') ? salgordreViaRows : [],
+                        viaMeta: salgordreViaMeta,
                         orderState: invoices ? invoices.state : 'idle',
                         viaState: typeof salgordreViaLoadState === 'undefined' ? 'idle' : salgordreViaLoadState,
                         openModule,
@@ -4433,6 +4452,7 @@ app.get('/', (req, res) => {
                     if (!d.ok) throw new Error(d.error || 'Fejl');
                     _settingsProfiles = d.profiles || [];
                     _settingsActiveId = d.activeProfileId || profileId;
+                    resetSalgordreVia();
                     _updateDbBadge(d.activeProfile);
                     renderSettingsProfileList();
                     renderSettingsWarning(d.activeProfile);
@@ -5507,13 +5527,16 @@ app.get('/', (req, res) => {
                 closeSideMenu();
             }
 
-            function logoutFromSideMenu() {
+            async function logoutFromSideMenu() {
+                accessSessionRevision += 1;
+                _accessLoginInProgress = true;
                 const tokenToRevoke = authToken;
                 accessGranted = false;
                 authToken = null;
                 loggedUserRole = 'user';
                 loggedUserPermissions = {};
                 loggedUsername = '';
+                resetSalgordreVia();
                 if (dashboardSourceCache) dashboardSourceCache.clear();
                 if (window.GohOrderFlow) window.GohOrderFlow.reset();
                 omsaetningSummaryCache.clear();
@@ -5528,10 +5551,19 @@ app.get('/', (req, res) => {
                 const gateInput = document.getElementById('accessGateInput');
                 if (gateInput) gateInput.value = '';
                 refreshSideMenuAuthState();
-                fetch('/auth/logout', {
-                    method: 'POST',
-                    headers: tokenToRevoke ? { 'Authorization': 'Bearer ' + tokenToRevoke } : {}
-                }).catch(() => {});
+                const button = document.getElementById('accessGateBtn');
+                if (button) button.disabled = true;
+                try {
+                    await Promise.all([forgetRememberedLogin(), fetch('/auth/logout', {
+                        method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(8000),
+                        headers: tokenToRevoke ? { 'Authorization': 'Bearer ' + tokenToRevoke } : {}
+                    }).then(response => { if (!response.ok) throw new Error('Logout fejlede'); })]);
+                } catch (_) {
+                    document.getElementById('accessGateLoginStorageStatus').textContent = 'Sessionen kunne ikke lukkes på serveren. Prøv Log ud igen.';
+                } finally {
+                    _accessLoginInProgress = false;
+                    if (button) button.disabled = false;
+                }
             }
 
             function openBrugermanual() {
@@ -5541,10 +5573,13 @@ app.get('/', (req, res) => {
                 body.innerHTML = ''
                     + '<section class="manual-card">'
                     + '<h4>1. Login, dashboard og navigation</h4>'
-                    + '<p>Log ind med brugernavn og kode. "Husk brugernavn" gemmer kun brugernavnet på denne computer.</p>'
+                    + '<p>Log ind med brugernavn og kode. "Husk brugernavn" gemmer kun brugernavnet. En gyldig session genbruges ved genindlæsning og retur fra Ledelsesrapport (op til 8 timer, indtil Log ud eller servergenstart).</p>'
+                    + '<p>I Windows-desktopappen kan "Husk kode" gemme det senest valgte login krypteret med Windows DPAPI i din Windows-profil, særskilt pr. postation/RDS-client. Login genoprettes ved næste start. Brug kun dette på din egen Windows-konto. Log ud eller Glem gemt login sletter den gemte kode. Uden tilgængelig Windows-kryptering eller identificerbar RDS-client vises valget ikke. I en almindelig browser bruges browserens egen adgangskodeadministrator. Koder gemmes aldrig i GOH, fælles cache eller localStorage.</p>'
+                    + '<p>Ledelsesrapport har separate perioder: Omsætning og Største kunder pr. måned, Ordreindgang pr. uge, Belastning som aktuel plan mellem to datoer (inklusive rest før startdato). VIA kan afgrænses efter ordredato for de aktuelt åbne ordrer; kost er aktuel, ikke historisk. Hver sektion angiver sin egen periode. Alle valgte måneder i Omsætning og alle valgte uger i Ordreindgang bliver i ét diagram pr. modul.</p>'
                     + '<p>Widgetindstillinger åbnes med indstillingsikonet ved modul-pilen: eget navn, lokalt filter, rækkeantal og relevante valg. Belastning kan have 1-90 dage pr. widget, med/uden rest og aftenvisning. Laveste DB har en DB %-grænse, næste leveringer en horisont, og kvartalsomsætning viser kvartalets tre måneder. Gem indstillinger gemmer i din GOH-profil; Annuller bevarer tidligere valg.</p>'
                     + '<p>I Salg og widgetbiblioteket findes Kunder og aktivitet samt Seneste ordreindgang. Kundegrafen viser Top3-6+Andre efter bogført omsætning eller antal fakturaordrer. Klik et segment for tilhørende kunder; CSV følger udsnittet. Ringens areal bruger positive kundesaldi, negative saldi og netto vises særskilt. Ordreindgang følger Visma-ordredato, ikke fakturadato eller teknisk oprettelsestid, og viser aktuelle ordreværdier for valgte 1-90 dage. Alle widgetvalg og indstillinger er personlige og gemmes i GOH.</p>'
-                    + '<p>Træk direkte i widgettens overskrift eller flyttehåndtag; ændr bredde og højde med hjørnehåndtaget. Ændringer gemmes automatisk i GOH ved slip. Piletaster virker også. Indret dashboard samler flere ændringer: Gem layout bekræfter, Annuller eller Escape fortryder. Standardskabeloner bliver personlige kopier. Pak widgets tæt udfylder plads; tabeller ruller inde i widgetten. Gemt i GOH vises først efter bekræftelse. Ved fejl bevares en lokal recovery-kopi, hvis browserlagring virker, og synkronisering kan prøves igen. En nyere profil fra en anden postation overskrives ikke automatisk.</p>'
+                    + '<p>Træk direkte i widgettens overskrift eller flyttehåndtag; ændr bredde og højde med hjørnehåndtaget. Ændringer gemmes automatisk i GOH ved slip. Piletaster virker også. Indret dashboard samler flere ændringer: Gem layout bekræfter, Annuller eller Escape fortryder. Standarddashboards tilpasses på den samme fane, kun for dig. Pak widgets tæt udfylder plads; tabeller ruller inde i widgetten. Gemt i GOH vises først efter bekræftelse. Ved fejl bevares en lokal recovery-kopi, hvis browserlagring virker, og synkronisering kan prøves igen. En nyere profil fra en anden postation overskrives ikke automatisk.</p>'
+                    + '<p>Side-menuens moduler er alfabetisk sorteret. Nye personlige dashboards vises som faner ved siden af Økonomi, Produktion, Salg og Ledelse. Tilpas ændrer den valgte dashboard: navn, widgets, rækkefølge og størrelse. De fire standarddashboards kan også ændres pr. bruger, uden at oprette en ekstra fane. Nulstil min dashboard i Tilpas gendanner kun din standardvisning. De fire standardvisninger tæller ikke med i grænsen på 12 personlige dashboards. Alle ændringer gemmes i din GOH-profil pr. bruger og database.</p>'
                     + '<ul><li>Dashboard og side-menu bruger de samme modulrettigheder. Økonomiske widgets kræver Omsætning-adgang; produktion kan vises uden beløb.</li><li>Vælg blandt de tilladte skabeloner: Økonomi, Produktion, Salg eller Ledelse.</li><li>Ny dashboard opretter en personlig kopi. Tilpas: navn, widgetvalg, rækkefølge med pile og bredde. Gem bekræfter; Annuller bevarer det tidligere layout.</li><li>Mine dashboards rummer op til 12 personlige visninger. Positioner, størrelser, widgetvalg, navne, sidste visning, periode, antal rækker, søgning og Ordreflow-filtre gemmes i GOH pr. brugernavn og tilsluttet database, uden ordredata. Samme profil hentes på andre postationer. Tidligere lokale layouts importeres kun, hvis GOH-profilen ikke findes.</li><li>Økonomiperioden styrer Omsætning, DB, ansvarlige og seneste Efterkalk-ordrer. Regnskabsår starter i juli; Dette kalenderår starter 1. januar og henter også januar-juni. Måned og kvartal følger kalenderen. Omsætning bruger standardkonti og beholder kreditposteringer. Kreditnotaer med negativt fakturabeløb eller kreditmarkering i ordrenoten udelades fra ordre-widgets, også ved nulbeløb. Øvrige salgsordrer med nulbeløb eller negativt DB bevares. Top 5/10 begrænser kun visningen.</li><li>Kost inkl. stykliste-tillæg hentes via cache med højst tre samtidige beregninger. Antal med kendt kost vises i widgetten; manglende kost tæller aldrig som nul.</li><li>Produktion viser Belastning: dagarbejde mod kapacitet, aftenarbejde, restarbejde og daglig plan i timer for i dag + 20 dage. VIA viser aktuelle leveringer.</li><li>Søgning filtrerer Omsætning på kunde, Efterkalk/VIA på kunde/ansvarlig/ordre og Belastning på ressource, kunde eller ordrenummer. Kunden ændrer ikke ressourcernes tilgængelige kapacitet. Økonomiperioden ændrer ikke produktionsperioden.</li><li>Åbn modulet eller eksportér viste data til CSV. Luk af en ordre åbnet fra Home vender tilbage til Home; fra Efterkalkulation vender Luk tilbage til ordrelisten. Tilladte widgetkilder indlæses efter behov og genbruges i 15 minutter; søgning og layout ændrer ikke Visma.</li><li>Ved besked om genstart: genstart GOH-serveren og genindlæs siden. Brug Ryd Efterkalk cache kun ved kendte cacheproblemer.</li></ul>'
                     + '</section>'
                     + '<section class="manual-card">'
@@ -7030,9 +7065,9 @@ app.get('/', (req, res) => {
                 const showCustomerComparison = compareCustomers.length > 1;
 
                 const leftPad = 48;
-                const topPad = 16;
+                const topPad = 30;
                 const bottomPad = 42;
-                const chartHeight = 190;
+                const chartHeight = 214;
                 const innerHeight = chartHeight - topPad - bottomPad;
                 const barWidth = 34;
                 const barGap = 18;
@@ -7045,6 +7080,15 @@ app.get('/', (req, res) => {
                     const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
                     const ratio = (safeScale.max - safeValue) / (safeScale.span || 1);
                     return topPad + (ratio * innerHeight);
+                }
+
+                function appendMonthTotalLabel(svgHtml, x, width, monthKey, total, scale) {
+                    const value = Number(total || 0);
+                    const anchorY = value >= 0 ? toY(value, scale) - 6 : toY(value, scale) + 14;
+                    const boundedY = Math.max(12, Math.min(chartHeight - bottomPad - 2, anchorY));
+                    const label = formatMio(value) + ' Mio';
+                    const title = formatMonthDa(monthKey) + ': ' + label + ' DKK';
+                    return svgHtml + '<text class="omsaetning-month-total" x="' + (x + width / 2) + '" y="' + boundedY + '" text-anchor="middle" font-size="10" font-weight="700" fill="#173452"><title>' + escapeHtmlFE(title) + '</title>' + escapeHtmlFE(label) + '</text>';
                 }
 
                 function appendGrid(svgHtml, width, scale) {
@@ -7108,6 +7152,8 @@ app.get('/', (req, res) => {
                             stackedSvgHtml += '<rect x="' + x + '" y="' + y + '" width="' + groupedBarWidth + '" height="' + h + '" fill="' + getOmsaetningColor(customerIndex) + '" rx="2"><title>' + escapeHtmlFE(titleText) + '</title></rect>';
                         });
 
+                        stackedSvgHtml = appendMonthTotalLabel(stackedSvgHtml, monthX, perMonthGroupWidth, monthKey, monthlyTotals[monthIndex], groupedScale);
+
                         const labelX = monthX + (perMonthGroupWidth / 2);
                         stackedSvgHtml += '<text x="' + labelX + '" y="' + (topPad + innerHeight + 14) + '" text-anchor="middle" font-size="10" fill="#47617c">' + escapeHtmlFE(formatMonthDa(monthKey)) + '</text>';
                     });
@@ -7122,69 +7168,10 @@ app.get('/', (req, res) => {
                     ).join('');
                 } else {
                     if (stackedTitle) stackedTitle.textContent = 'Omsætning pr. måned (stacked pr. konto)';
-
-                    const stackedMonthTotals = monthKeys.map(monthKey => {
-                        const values = monthMap.get(monthKey) || new Map();
-                        let pos = 0;
-                        let neg = 0;
-                        for (const value of values.values()) {
-                            const n = Number(value || 0);
-                            if (n >= 0) pos += n;
-                            else neg += n;
-                        }
-                        return { pos, neg };
-                    });
-                    const stackedScale = buildScale(
-                        stackedMonthTotals.flatMap(t => [t.pos, t.neg]),
-                        0.1
-                    );
-                    const stackedZeroY = toY(0, stackedScale);
-
-                    stackedSvgHtml = appendGrid(stackedSvgHtml, innerWidth, stackedScale);
-
-                    monthKeys.forEach((monthKey, monthIndex) => {
-                        const x = leftPad + monthIndex * (barWidth + barGap);
-                        const values = monthMap.get(monthKey) || new Map();
-                        let positiveStack = 0;
-                        let negativeStack = 0;
-                        accountOrder.forEach((acc, accIndex) => {
-                            const value = Number(values.get(acc.acNo) || 0);
-                            if (value === 0) return;
-
-                            let startValue;
-                            let endValue;
-                            if (value > 0) {
-                                startValue = positiveStack;
-                                endValue = positiveStack + value;
-                                positiveStack = endValue;
-                            } else {
-                                startValue = negativeStack;
-                                endValue = negativeStack + value;
-                                negativeStack = endValue;
-                            }
-
-                            const yStart = toY(startValue, stackedScale);
-                            const yEnd = toY(endValue, stackedScale);
-                            const y = Math.min(yStart, yEnd);
-                            const h = Math.max(1, Math.abs(yEnd - yStart));
-                            const titleText = formatMonthDa(monthKey) + ' - ' + String(acc.acNo) + ' ' + String(acc.name || '') + ': ' + formatMio(value) + ' Mio DKK (' + formatDkkFromMio(value) + ' DKK)';
-                            stackedSvgHtml += '<rect x="' + x + '" y="' + y + '" width="' + barWidth + '" height="' + h + '" fill="' + getOmsaetningColor(accIndex) + '" rx="2"><title>' + escapeHtmlFE(titleText) + '</title></rect>';
-                        });
-
-                        if (Math.abs(positiveStack) < 0.000001 && Math.abs(negativeStack) < 0.000001) {
-                            stackedSvgHtml += '<line x1="' + x + '" y1="' + stackedZeroY + '" x2="' + (x + barWidth) + '" y2="' + stackedZeroY + '" stroke="#cddced" stroke-width="1" />';
-                        }
-                        stackedSvgHtml += '<text x="' + (x + barWidth / 2) + '" y="' + (topPad + innerHeight + 14) + '" text-anchor="middle" font-size="10" fill="#47617c">' + escapeHtmlFE(formatMonthDa(monthKey)) + '</text>';
-                    });
-
-                    stackedSvgHtml += '</g>';
-                    stackedSvg.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + viewHeight);
-                    stackedSvg.innerHTML = stackedSvgHtml;
-
-                    legend.innerHTML = accountOrder.map((acc, idx) =>
-                        '<span class="omsaetning-legend-item"><span class="omsaetning-legend-swatch" style="background:' + getOmsaetningColor(idx) + ';"></span>' +
-                        escapeHtmlFE(String(acc.acNo)) + ' ' + escapeHtmlFE(acc.name || '') + '</span>'
-                    ).join('');
+                    const chart = window.GohReportCharts.revenueStacked(safeRows, monthKeys);
+                    stackedSvg.setAttribute('viewBox', chart.viewBox);
+                    stackedSvg.innerHTML = chart.html;
+                    legend.innerHTML = chart.legend;
                 }
 
                 const trendLeftPad = 42;
@@ -7417,25 +7404,7 @@ app.get('/', (req, res) => {
             }
 
             function parseOrdreindgangHolidayWeeksSet(value) {
-                const normalized = normalizeOrdreindgangHolidayWeeksText(value);
-                const result = new Set();
-                if (!normalized) return result;
-                for (const part of normalized.split(',')) {
-                    const rangeMatch = /^([0-9]{6})-([0-9]{6})$/.exec(part);
-                    if (!rangeMatch) { result.add(part); continue; }
-                    let year = Number(rangeMatch[1].slice(0, 4));
-                    let week = Number(rangeMatch[1].slice(4, 6));
-                    const endKey = rangeMatch[2];
-                    let guard = 0;
-                    while (guard++ < 160) {
-                        const key = String(year) + String(week).padStart(2, '0');
-                        result.add(key);
-                        if (key >= endKey) break;
-                        week += 1;
-                        if (week > getIsoWeeksInYear(year)) { year += 1; week = 1; }
-                    }
-                }
-                return result;
+                return window.GohReportCharts.orderHolidayWeeks(value);
             }
 
             function getOrdreindgangHolidaySettingsFromInputs() {
@@ -7607,20 +7576,7 @@ app.get('/', (req, res) => {
             }
 
             function computeOrdreindgangBudgetTargets(config) {
-                const safe = sanitizeOrdreindgangBudgetConfig(config);
-                // Ordreindgang values are shown in thousands; align budget to same scale.
-                const daily = safe.dailyBudget / 1000;
-                const annual = daily * safe.workDaysPerYear;
-                const weekly = annual / 52;
-                const monthly = annual / 12;
-                return {
-                    daily,
-                    weekly,
-                    monthly,
-                    annual,
-                    workDaysPerYear: safe.workDaysPerYear,
-                    useManualBudget: safe.useManualBudget
-                };
+                return window.GohReportCharts.orderBudgetTargets(sanitizeOrdreindgangBudgetConfig(config));
             }
 
             function getOrdreindgangBudgetConfigFromInputs() {
@@ -7693,18 +7649,8 @@ app.get('/', (req, res) => {
             }
 
             function getOrdreindgangRowsForView(rows) {
-                const safeRows = Array.isArray(rows) ? rows : [];
-                const budgetCfg = getOrdreindgangBudgetConfigFromInputs();
-                if (!budgetCfg.useManualBudget) return safeRows;
-                const targets = computeOrdreindgangBudgetTargets(budgetCfg);
-                const holidaySet = getOrdreindgangHolidayWeeksSet();
-                const ignoreHolidays = shouldIgnoreOrdreindgangHolidayWeeks();
-                return safeRows.map(row => ({
-                    ...row,
-                    totalBudget: (ignoreHolidays && holidaySet.has(String(row && row.weekKey || '')) && Number(row && row.totalOrd || 0) === 0)
-                        ? 0
-                        : targets.weekly
-                }));
+                return window.GohReportCharts.orderRowsForView(rows, getOrdreindgangBudgetConfigFromInputs(),
+                    getOrdreindgangHolidayWeeksSet(), shouldIgnoreOrdreindgangHolidayWeeks());
             }
 
             function onOrdreindgangBudgetConfigChanged() {
@@ -8333,22 +8279,7 @@ app.get('/', (req, res) => {
             }
 
             function computeOrdreindgangMovingAvg(values, windowSize, skipMask) {
-                const safeValues = Array.isArray(values) ? values : [];
-                const safeWindow = Math.max(1, Number(windowSize) || 1);
-                const safeSkip = Array.isArray(skipMask) ? skipMask : [];
-                const out = [];
-                for (let i = 0; i < safeValues.length; i += 1) {
-                    let sum = 0;
-                    let count = 0;
-                    for (let j = i; j >= 0 && count < safeWindow; j -= 1) {
-                        if (safeSkip[j]) continue;
-                        const n = Number(safeValues[j] || 0);
-                        sum += n;
-                        count += 1;
-                    }
-                    out.push(count > 0 ? (sum / count) : null);
-                }
-                return out;
+                return window.GohReportCharts.orderMovingAverage(values, windowSize, skipMask);
             }
 
             function enrichOrdreindgangTrendRows(rows) {
@@ -9086,143 +9017,12 @@ app.get('/', (req, res) => {
             }
 
             function buildBelastningClusterSvg(dayRows, opts) {
-                const options = opts && typeof opts === 'object' ? opts : {};
-                const clickable = options.clickable === true;
-                const chartResGr = String(options.resGr || '').trim();
-                const chartParity = options.parity === 0 ? 0 : 1;
-                const activeDayKey = String(options.activeDayKey || '').trim();
-                const sourceRows = Array.isArray(dayRows) ? dayRows : [];
-                const collapseBeforeToday = options.collapseBeforeToday !== false;
                 const activeDateInput = document.getElementById('belastningToDay');
-                const todayRaw = (activeDateInput && activeDateInput.value)
-                    ? activeDateInput.value
-                    : new Date().toISOString().slice(0, 10);
-                const todayCut = (() => {
-                    const t = new Date(todayRaw + 'T00:00:00').getTime();
-                    return Number.isNaN(t) ? Date.now() : t;
-                })();
-
-                let rows = [];
-                if (collapseBeforeToday) {
-                    const groupedByDay = new Map();
-                    sourceRows.forEach((row, index) => {
-                        const dateKey = normalizeBelastningDateKey(row && row.Dato, row && row.DatoX);
-                        const dateSort = getBelastningDateSortValue(dateKey);
-                        const isNullDate = !row.Dato && !String(row.DatoX || '').trim();
-                        const isBefore = isNullDate || dateSort < todayCut;
-                        const bucketKey = isBefore ? '__before__' : (dateKey || ('__unknown__' + index));
-                        if (!groupedByDay.has(bucketKey)) {
-                            groupedByDay.set(bucketKey, {
-                                Dato: isBefore ? null : (row && row.Dato),
-                                DatoX: isBefore ? '-' : normalizeBelastningDisplayDate(row && row.Dato, row && row.DatoX),
-                                Kap: 0,
-                                Resv: 0,
-                                Aften: 0,
-                                __dayKey: isBefore ? 'before' : dateKey,
-                                __dateLabel: isBefore ? '-' : normalizeBelastningDisplayDate(row && row.Dato, row && row.DatoX),
-                                __sort: isBefore ? Number.MIN_SAFE_INTEGER : dateSort
-                            });
-                        }
-                        const bucket = groupedByDay.get(bucketKey);
-                        bucket.Kap += isBefore ? 0 : Number(row && row.Kap || 0);
-                        bucket.Resv += Number(row && row.Resv || 0);
-                        bucket.Aften += Number(row && row.Aften || 0);
-                    });
-                    rows = Array.from(groupedByDay.values()).sort((a, b) => Number(a.__sort || 0) - Number(b.__sort || 0));
-                } else {
-                    rows = sourceRows.slice().map((row, index) => {
-                        const dateKey = normalizeBelastningDateKey(row && row.Dato, row && row.DatoX);
-                        return {
-                            ...row,
-                            __dayKey: dateKey || ('__unknown__' + index),
-                            __dateLabel: normalizeBelastningDisplayDate(row && row.Dato, row && row.DatoX),
-                            __sort: getBelastningDateSortValue(dateKey)
-                        };
-                    }).sort((a, b) => Number(a.__sort || 0) - Number(b.__sort || 0));
-                }
-
-                if (rows.length === 0) return '';
-
-                const leftPad = 40;
-                const rightPad = 12;
-                const topPad = 22;
-                const bottomPad = 86;
-                const parentWidth = Math.max(420, (window.innerWidth || 1200) * 0.42);
-                const targetDaysOnScreen = Math.max(12, Math.min(30, rows.length));
-                const groupW = Math.max(16, Math.min(30, Math.floor(parentWidth / Math.max(1, targetDaysOnScreen))));
-                const innerW = Math.max(parentWidth, rows.length * groupW);
-                const innerH = 180;
-                const svgW = leftPad + innerW + rightPad;
-                const svgH = topPad + innerH + bottomPad;
-                const maxVal = rows.reduce((max, row) => {
-                    return Math.max(max, Number(row.Kap || 0), Number(row.Resv || 0), Number(row.Aften || 0));
-                }, 1);
-
-                const yFor = (v) => topPad + innerH - (Math.max(0, Number(v || 0)) / maxVal) * innerH;
-                const xFor = (i) => leftPad + i * groupW + (groupW / 2);
-                const barW = Math.max(3, Math.min(7, groupW / 3.4));
-
-                const grid = [];
-                for (let i = 0; i <= 4; i++) {
-                    const y = topPad + (innerH * i / 4);
-                    const val = formatCount(Math.round(maxVal * (1 - i / 4)));
-                    grid.push('<line class="grid" x1="' + leftPad + '" y1="' + y + '" x2="' + (svgW - rightPad) + '" y2="' + y + '"></line>');
-                    grid.push('<text class="label" x="' + (leftPad - 4) + '" y="' + (y + 3) + '" text-anchor="end">' + val + '</text>');
-                }
-
-                const bars = rows.map((row, i) => {
-                    const x = xFor(i);
-                    const kap = Number(row.Kap || 0);
-                    const resv = Number(row.Resv || 0);
-                    const aften = Number(row.Aften || 0);
-                    const dateLabel = String(row.__dateLabel || normalizeBelastningDisplayDate(row.Dato, row.DatoX));
-                    const dayKey = String(row.__dayKey || normalizeBelastningDateKey(row.Dato, row.DatoX));
-                    const ky = yFor(kap);
-                    const ry = yFor(resv);
-                    const ay = yFor(aften);
-                    const kH = topPad + innerH - ky;
-                    const rH = topPad + innerH - ry;
-                    const aH = topPad + innerH - ay;
-                    const hitX = x - (barW * 1.9);
-                    const hitW = Math.max(barW * 3.8, 10);
-                    const canClick = clickable && chartResGr && dayKey;
-                    const clickAttr = canClick
-                        ? (' onclick="onBelastningDayColumnClick(\\'' + escapeJsSingle(chartResGr) + '\\',' + chartParity + ',\\'' + escapeJsSingle(dayKey) + '\\', event)"')
-                        : '';
-                    const bandClass = 'belastning-day-band' + (activeDayKey && dayKey === activeDayKey ? ' active' : '');
-                    return ''
-                        + '<rect class="' + bandClass + '" x="' + hitX + '" y="' + topPad + '" width="' + hitW + '" height="' + innerH + '"' + clickAttr + '></rect>'
-                        + '<rect class="belastning-series-kap" x="' + (x - barW * 1.5) + '" y="' + ky + '" width="' + barW + '" height="' + kH + '"><title>' + escapeHtmlFE(dateLabel + ' Kapacitet: ' + formatBelastningMinutes(kap)) + '</title></rect>'
-                        + '<rect class="belastning-series-resv" x="' + (x - barW * 0.5) + '" y="' + ry + '" width="' + barW + '" height="' + rH + '"><title>' + escapeHtmlFE(dateLabel + ' Reservationer: ' + formatBelastningMinutes(resv)) + '</title></rect>'
-                        + '<rect class="belastning-series-aften" x="' + (x + barW * 0.5) + '" y="' + ay + '" width="' + barW + '" height="' + aH + '"><title>' + escapeHtmlFE(dateLabel + ' Rest Aften: ' + formatBelastningMinutes(aften)) + '</title></rect>';
-                }).join('');
-
-                // Show every day label; dates are already rotated to reduce overlap.
-                const labelStep = 1;
-                const labels = rows.map((row, i) => {
-                    const isToday = row.__dayKey === todayRaw;
-                    if (i % labelStep !== 0 && i !== rows.length - 1 && !isToday) return '';
-                    const txt = escapeHtmlFE(String(row.__dateLabel || normalizeBelastningDisplayDate(row.Dato, row.DatoX) || ''));
-                    const labelY = topPad + innerH + 44;
-                    const cx = xFor(i);
-                    return '<text class="label" x="' + cx + '" y="' + labelY + '" text-anchor="middle" transform="rotate(-90 ' + cx + ' ' + labelY + ')">' + txt + '</text>';
-                }).join('');
-
-                const legendX = leftPad + 4;
-                const legendY = 10;
-                const legend = ''
-                    + '<rect class="belastning-series-kap" x="' + legendX + '" y="' + legendY + '" width="10" height="10"></rect><text class="label" x="' + (legendX + 14) + '" y="' + (legendY + 9) + '">Kapacitet</text>'
-                    + '<rect class="belastning-series-resv" x="' + (legendX + 88) + '" y="' + legendY + '" width="10" height="10"></rect><text class="label" x="' + (legendX + 102) + '" y="' + (legendY + 9) + '">Reservationer</text>'
-                    + '<rect class="belastning-series-aften" x="' + (legendX + 196) + '" y="' + legendY + '" width="10" height="10"></rect><text class="label" x="' + (legendX + 210) + '" y="' + (legendY + 9) + '">Rest Aften</text>';
-
-                return '<svg class="belastning-svg" style="min-width:' + svgW + 'px" viewBox="0 0 ' + svgW + ' ' + svgH + '" preserveAspectRatio="xMinYMin meet">'
-                    + '<line class="axis" x1="' + leftPad + '" y1="' + topPad + '" x2="' + leftPad + '" y2="' + (topPad + innerH) + '"></line>'
-                    + '<line class="axis" x1="' + leftPad + '" y1="' + (topPad + innerH) + '" x2="' + (svgW - rightPad) + '" y2="' + (topPad + innerH) + '"></line>'
-                    + grid.join('')
-                    + bars
-                    + labels
-                    + legend
-                    + '</svg>';
+                return window.GohReportCharts.belastningCluster(Array.isArray(dayRows) ? dayRows : [], {
+                    ...(opts || {}),
+                    today: activeDateInput && activeDateInput.value || new Date().toISOString().slice(0, 10),
+                    viewportWidth: window.innerWidth || 1200
+                });
             }
 
             function renderBelastningDetailSvg(rows, opts) {
@@ -9753,9 +9553,89 @@ app.get('/', (req, res) => {
             }
 
             let _accessLoginInProgress = false;
+            let accessSessionRevision = 0;
+
+            async function forgetRememberedLogin() {
+                const storageStatus = document.getElementById('accessGateLoginStorageStatus');
+                try {
+                    if (window.GohDesktopLogin) await window.GohDesktopLogin.forget();
+                    document.getElementById('accessGateRememberPassword').checked = false;
+                    document.getElementById('accessGateForgetLogin').style.display = 'none';
+                    if (storageStatus) storageStatus.textContent = '';
+                } catch (_) {
+                    if (storageStatus) storageStatus.textContent = 'Gemt login kunne ikke slettes. Prøv igen.';
+                }
+            }
+
+            async function configureRememberedLogin() {
+                if (!window.GohDesktopLogin) return null;
+                try {
+                    const info = await window.GohDesktopLogin.info();
+                    document.getElementById('accessGateRememberPasswordLabel').style.display = info.available ? 'flex' : 'none';
+                    document.getElementById('accessGateRememberPassword').checked = info.saved;
+                    document.getElementById('accessGateForgetLogin').style.display = info.saved || info.damaged ? '' : 'none';
+                    if (info.saved) {
+                        document.getElementById('accessGateUserInput').value = info.username;
+                        document.getElementById('accessGateRememberUser').checked = true;
+                    }
+                    return info;
+                } catch (_) { return null; }
+            }
+
+            function applyAuthenticatedSession(data) {
+                if (!data.token || !data.user || !data.user.username) throw new Error('Ugyldig session');
+                authToken = data.token;
+                loggedUserRole = data.user.role || 'user';
+                loggedUserPermissions = data.user.permissions || {};
+                loggedUsername = String(data.user.username);
+                setLoggedUserDisplayName(data.user.displayName || loggedUsername);
+                for (const id of ['accessGateUserInput', 'sideMenuUserInput']) {
+                    const field = document.getElementById(id);
+                    if (field) field.value = loggedUsername;
+                }
+                accessGranted = true;
+                hideAccessGate();
+                refreshSideMenuAuthState();
+                const adminCard = document.getElementById('administrationDashCard');
+                if (adminCard) adminCard.style.display = loggedUserRole === 'superadmin' ? '' : 'none';
+                applyModulePermissions();
+                initializeAfterAccess();
+            }
+
+            let accessRestoreTask = null;
+            function restoreAccessSession() {
+                if (accessGranted || accessRestoreTask) return accessRestoreTask;
+                const revision = accessSessionRevision;
+                accessRestoreTask = (async () => {
+                    _accessLoginInProgress = true;
+                    const button = document.getElementById('accessGateBtn');
+                    if (button) button.disabled = true;
+                    try {
+                        const saved = await configureRememberedLogin();
+                        const response = await fetch('/auth/session', { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000) });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (revision === accessSessionRevision) applyAuthenticatedSession(data);
+                        } else if (revision === accessSessionRevision && response.status === 401 && saved?.saved) {
+                            const restored = await window.GohDesktopLogin.restore();
+                            if (restored && revision === accessSessionRevision) applyAuthenticatedSession(restored);
+                        }
+                    } catch (_) {
+                        document.getElementById('accessGateLoginStorageStatus').textContent = 'Log ind for at fortsætte.';
+                    } finally {
+                        if (revision === accessSessionRevision) {
+                            _accessLoginInProgress = false;
+                            if (button) button.disabled = false;
+                            if (!accessGranted) showAccessGate();
+                        }
+                    }
+                })();
+                return accessRestoreTask;
+            }
 
             async function submitAccessCode() {
                 if (_accessLoginInProgress) return;
+                const revision = accessSessionRevision;
                 const userInput = document.getElementById('accessGateUserInput');
                 const input = document.getElementById('accessGateInput');
                 const err = document.getElementById('accessGateError');
@@ -9763,7 +9643,7 @@ app.get('/', (req, res) => {
                 const rememberUser = document.getElementById('accessGateRememberUser');
                 const userName = String(userInput ? userInput.value : '').trim() || 'admin';
                 const loginUserName = userName.toLowerCase() === 'superbruger' ? 'admin' : userName;
-                const value = input ? String(input.value || '').trim() : '';
+                const value = input ? String(input.value || '') : '';
 
                 if (err) err.textContent = 'Åbner...';
                 if (btn) {
@@ -9780,23 +9660,24 @@ app.get('/', (req, res) => {
                     });
                     const data = await response.json();
                     if (!response.ok || data.error) throw new Error(data.error || 'Forkert brugernavn eller kode');
-                    authToken = data.token;
-                    loggedUserRole = data.user && data.user.role || 'user';
-                    loggedUserPermissions = data.user && data.user.permissions || {};
-                    setLoggedUserDisplayName(data.user && data.user.displayName || userName);
                     const canonicalUsername = String(data.user && data.user.username || loginUserName);
-                    loggedUsername = canonicalUsername;
-                    if (userInput) userInput.value = canonicalUsername;
-                    const sideUserInput = document.getElementById('sideMenuUserInput');
-                    if (sideUserInput) sideUserInput.value = canonicalUsername;
+                    const rememberPassword = document.getElementById('accessGateRememberPassword');
+                    if (rememberPassword?.checked && rememberUser) rememberUser.checked = true;
                     try {
                         if (rememberUser && rememberUser.checked) localStorage.setItem('afterkalk_remembered_username', canonicalUsername);
                         else localStorage.removeItem('afterkalk_remembered_username');
                     } catch {}
-                        accessGranted = true;
-                        hideAccessGate();
-                        refreshSideMenuAuthState();
-                        initializeAfterAccess();
+                    if (window.GohDesktopLogin) {
+                        try {
+                            if (rememberPassword?.checked) await window.GohDesktopLogin.remember({ username: canonicalUsername, password: value, token: data.token });
+                            else await window.GohDesktopLogin.forget();
+                        } catch (_) {
+                            if (rememberPassword) rememberPassword.checked = false;
+                            alert('Login er godkendt, men det gemte login kunne ikke opdateres. Brug Glem gemt login eller Log ud for at prøve igen.');
+                        }
+                    }
+                    if (input) input.value = '';
+                    if (revision === accessSessionRevision) applyAuthenticatedSession(data);
                 } catch (e) {
                     accessGranted = false;
                     if (err) err.textContent = e && e.message ? e.message : 'Forkert brugernavn eller kode';
@@ -9820,6 +9701,7 @@ app.get('/', (req, res) => {
                 ['ordreindgang', 'Ordreindgang'],
                 ['ordreoversigt', 'Ordreoversigt'],
                 ['belastning', 'Belastning'],
+                ['ledelsesrapport', 'Ledelsesrapport'],
                 ['personalehandbog', 'Personalehåndbog']
                 ,['lagerliste', 'Lagerliste'],
                 ['bomOverview', 'BOM · Oversigt'],
@@ -14385,7 +14267,7 @@ app.get('/', (req, res) => {
                     }
                 } catch {}
                 updateHeaderGreeting();
-                showAccessGate();
+                restoreAccessSession();
                 syncStickyOffsets();
                 window.addEventListener('resize', syncStickyOffsets);
                 const orderInput = document.getElementById('orderInput');

@@ -22,7 +22,7 @@ const {
 const omsaetningThresholdsService = require('../services/omsaetningThresholdsService');
 const omsaetningDailyThresholds = require('../assets/js/omsaetning-daily-thresholds');
 const { createAuthService } = require('../services/authService');
-const { fetchSalgordreViaRows } = require('../services/viaService');
+const { fetchSalgordreViaRows, getOpenViaOrders, buildViaBacklog } = require('../services/viaService');
 const { createLagerlisteService } = require('../services/lagerlisteService');
 const { createLagerliste2Service } = require('../services/lagerliste2Service');
 const settingsService = require('../services/settingsService');
@@ -74,6 +74,7 @@ function createApiRouter({
         hydrateUsersFromDb,
         safeUser,
         makePasswordHash,
+        getSessionToken,
         getSessionUser,
         requireAuthenticated,
         requireSuperadmin,
@@ -97,17 +98,56 @@ function createApiRouter({
         logEvent('GOH-STATE: ' + hydrated + '/5 delte tilstande hentet fra GOH (users/noter/efterkalk-kost/graenser/afstemninger)');
     });
 
-    const VIA_CACHE_KEY = 'salgordre_via_v34';
+    const VIA_CACHE_KEY = 'salgordre_via_v35';
     const VIA_CACHE_TTL_MS = 5 * 60 * 1000;
     const VIA_WARM_INTERVAL_MS = 10 * 60 * 1000;
     let viaWarmRunning = false;
+    const viaRequests = new Map();
+
+    function viaContext(includeBacklog) {
+        const profile = settingsService.getActiveProfile();
+        const now = new Date();
+        const month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+        const identity = JSON.stringify([String(profile.server).toLowerCase(), String(profile.database).toLowerCase()]);
+        const scope = crypto.createHash('sha256').update(identity).digest('hex');
+        return { month, profileId: profile.id, key: VIA_CACHE_KEY + '_' + scope + '_' + month + '-' + now.getDate() + (includeBacklog ? '_backlog' : '_production') };
+    }
+
+    async function getViaPayload(context, includeBacklog, requestedOrdNo = null) {
+        const requestKey = context.key + ':' + (requestedOrdNo ?? 'all');
+        if (viaRequests.has(requestKey)) return viaRequests.get(requestKey);
+        const pending = (async () => {
+            const assertContext = () => {
+                if (viaContext(includeBacklog).key !== context.key) throw new Error('Databaseprofil eller dato er ændret. Genindlæs VIA.');
+            };
+            assertContext();
+            let payload;
+            if (includeBacklog) {
+                const flow = await omsaetningService.getOrderFlow({ month: context.month });
+                assertContext();
+                const orderNos = getOpenViaOrders(flow).map(row => row.ordNo).filter(ordNo => requestedOrdNo === null || ordNo === requestedOrdNo);
+                const costs = await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo, orderNos });
+                payload = buildViaBacklog(flow, costs, requestedOrdNo);
+            } else {
+                const rows = await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo });
+                payload = { scope: 'production', rows, orderBacklogValueDkk: null };
+            }
+            assertContext();
+            payload.profileId = context.profileId;
+            payload.generatedAt = new Date().toISOString();
+            if (requestedOrdNo === null) diskCache.set(context.key, payload, VIA_CACHE_TTL_MS);
+            return payload;
+        })();
+        viaRequests.set(requestKey, pending);
+        try { return await pending; }
+        finally { if (viaRequests.get(requestKey) === pending) viaRequests.delete(requestKey); }
+    }
     async function warmSalgordreVia(label) {
         if (viaWarmRunning) return;
         viaWarmRunning = true;
         try {
-            const rows = await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo: null });
-            diskCache.set(VIA_CACHE_KEY, { rows }, VIA_CACHE_TTL_MS);
-            logEvent('WARM-VIA (' + label + '): ' + rows.length + ' rækker cachet');
+            const payload = await getViaPayload(viaContext(false), false);
+            logEvent('WARM-VIA (' + label + '): ' + payload.rows.length + ' rækker cachet');
         } catch (err) {
             logEvent('WARM-VIA ERROR (' + label + '): ' + err.message);
         } finally {
@@ -119,6 +159,7 @@ function createApiRouter({
     setInterval(() => { warmSalgordreVia('interval'); }, VIA_WARM_INTERVAL_MS);
 
     router.post('/auth/login', express.json(), (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
         const username = String(req.body && req.body.username || '').trim().toLowerCase();
         const password = String(req.body && req.body.password || '');
         const users = readUsers();
@@ -135,6 +176,13 @@ function createApiRouter({
         authSessions.set(token, { user: normalized, expiresAt: Date.now() + sessionTtlMs });
         res.setHeader('Set-Cookie', buildSessionCookie(token));
         return res.json({ token, user: normalized });
+    });
+
+    router.get('/auth/session', (req, res, next) => {
+        res.setHeader('Cache-Control', 'no-store');
+        requireAuthenticated(req, res, next);
+    }, (req, res) => {
+        return res.json({ token: getSessionToken(req), user: getSessionUser(req) });
     });
 
     router.post('/auth/logout', (req, res) => {
@@ -172,7 +220,7 @@ function createApiRouter({
         try {
             const state = await gohData.getAppState(key, { strict: true });
             if (state && (!Number.isInteger(state.payload?.version) || state.payload.version < 1 || !state.payload.config)) throw new Error('Ugyldig dashboard-profil');
-            return res.json({ ok: true, schemaVersion: 3, version: state ? state.payload.version : 0, config: state ? require('../assets/js/dashboard').normalizeConfig(state.payload.config) : null });
+            return res.json({ ok: true, schemaVersion: 4, version: state ? state.payload.version : 0, config: state ? require('../assets/js/dashboard').normalizeConfig(state.payload.config) : null });
         } catch (error) {
             logEvent('DASHBOARD LOAD ERROR: ' + error.message);
             return res.status(503).json({ ok: false, error: 'Dashboard-profilen kunne ikke hentes fra GOH.' });
@@ -182,6 +230,7 @@ function createApiRouter({
     router.put('/dashboard/preferences', requireAuthenticated, express.json({ limit: '64kb' }), async (req, res) => {
         const key = dashboardPreferenceKey(req, res);
         if (!key) return;
+        if (req.body?.schemaVersion !== 4) return res.status(400).json({ ok: false, error: 'Genindlæs GOH for at gemme den nye dashboard-profil.' });
         const version = req.body?.version;
         if (!Number.isInteger(version) || version < 0 || version >= 2147483647 || !req.body.config || typeof req.body.config !== 'object' || Array.isArray(req.body.config)) {
             return res.status(400).json({ ok: false, error: 'Ugyldig dashboard-profil eller version.' });
@@ -190,7 +239,7 @@ function createApiRouter({
             const config = require('../assets/js/dashboard').normalizeConfig(req.body.config);
             const saved = await gohData.setAppState(key, { version: version + 1, config }, { createOnly: version === 0, expectedVersion: version });
             if (!saved) return res.status(gohData.isEnabled() ? 409 : 503).json({ ok: false, error: gohData.isEnabled() ? 'Dashboardet er ændret på en anden postation. Genindlæs før du gemmer igen.' : 'Dashboard-profilen kunne ikke gemmes i GOH.' });
-            return res.json({ ok: true, schemaVersion: 3, version: version + 1 });
+            return res.json({ ok: true, schemaVersion: 4, version: version + 1 });
         } catch (error) {
             logEvent('DASHBOARD SAVE ERROR: ' + error.message);
             return res.status(503).json({ ok: false, error: 'Dashboard-profilen kunne ikke gemmes i GOH.' });
@@ -292,6 +341,206 @@ function createApiRouter({
     });
     lagerlisteService.scheduleMonthlySnapshot({ onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message) });
 
+    function parseLedelsesrapportMonth(value) {
+        const match = String(value || '').trim().match(/^(\d{4})-(\d{2})$/);
+        if (!match) return null;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        if (year < 2000 || year > 2200 || month < 1 || month > 12) return null;
+        return { year, month, raw: match[0] };
+    }
+
+    function ledelsesrapportFiscalPeriod(year, month) {
+        return month >= 7 ? (year * 100) + month - 6 : ((year - 1) * 100) + month + 6;
+    }
+
+    function ledelsesrapportIsoWeek(date) {
+        const value = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        value.setUTCDate(value.getUTCDate() + 4 - (value.getUTCDay() || 7));
+        const isoYear = value.getUTCFullYear();
+        const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+        const week = Math.ceil((((value - yearStart) / 86400000) + 1) / 7);
+        return String(isoYear) + String(week).padStart(2, '0');
+    }
+
+    function summarizeLedelsesrapportLoad(rows) {
+        const resources = new Map();
+        const days = new Map();
+        for (const row of rows) {
+            const resourceKey = String(row.ResGr || '').trim();
+            const resource = resources.get(resourceKey) || { resGr: resourceKey, name: String(row.Nm || '').trim(), reserved: 0, capacity: 0, evening: 0 };
+            resource.reserved += Number(row.Resv || 0);
+            resource.capacity += Number(row.Kap || 0);
+            resource.evening += Number(row.Aften || 0);
+            resources.set(resourceKey, resource);
+
+            const dateValue = new Date(row.Dato);
+            if (Number.isNaN(dateValue.getTime())) continue;
+            const dayKey = dateValue.toISOString().slice(0, 10);
+            const day = days.get(dayKey) || { date: dayKey, reserved: 0, capacity: 0, evening: 0 };
+            day.reserved += Number(row.Resv || 0);
+            day.capacity += Number(row.Kap || 0);
+            day.evening += Number(row.Aften || 0);
+            days.set(dayKey, day);
+        }
+        return {
+            rows,
+            resources: Array.from(resources.values()).filter(item => item.resGr).sort((a, b) => b.reserved - a.reserved),
+            days: Array.from(days.values()).sort((a, b) => a.date.localeCompare(b.date))
+        };
+    }
+
+    function parseLedelsesrapportDate(raw) {
+        const value = String(raw || '');
+        if (!/^(20\d{2}|21\d{2}|2200)-\d{2}-\d{2}$/.test(value)) return null;
+        const date = new Date(value + 'T00:00:00Z');
+        return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date : null;
+    }
+
+    function parseLedelsesrapportWeek(raw) {
+        const match = String(raw || '').match(/^(20\d{2}|21\d{2}|2200)-W(\d{2})$/);
+        if (!match) return null;
+        const year = Number(match[1]);
+        const week = Number(match[2]);
+        const monday = new Date(Date.UTC(year, 0, 4));
+        monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() || 7) + 1 + (week - 1) * 7);
+        const key = match[1] + match[2];
+        return ledelsesrapportIsoWeek(monday) === key ? { key, monday } : null;
+    }
+
+    router.get('/ledelsesrapport/config', requireModulePermission('ledelsesrapport'), async (req, res) => {
+        try {
+            return res.json({ ok: true, accounts: await omsaetningService.getAccounts(), topCustomerOptions: [5, 10, 20, 50], maxLoadDays: 180 });
+        } catch (err) {
+            logEvent('ERROR ledelsesrapport/config: ' + err.message);
+            return res.status(500).json({ ok: false, error: 'Rapportopsætningen kunne ikke hentes.' });
+        }
+    });
+
+    router.get('/ledelsesrapport/data', requireModulePermission('ledelsesrapport'), async (req, res) => {
+        try {
+            const fromMonth = parseLedelsesrapportMonth(req.query.from);
+            const toMonth = parseLedelsesrapportMonth(req.query.to);
+            if (!fromMonth || !toMonth) return res.status(400).json({ ok: false, error: 'Vælg en gyldig fra- og til-måned.' });
+            const fromDate = new Date(Date.UTC(fromMonth.year, fromMonth.month - 1, 1));
+            const exclusiveToDate = new Date(Date.UTC(toMonth.year, toMonth.month, 1));
+            const monthCount = ((toMonth.year - fromMonth.year) * 12) + toMonth.month - fromMonth.month + 1;
+            if (monthCount < 1 || monthCount > 36) return res.status(400).json({ ok: false, error: 'Perioden skal være mellem 1 og 36 måneder.' });
+
+            const hasCustomerPeriod = req.query.customerFrom !== undefined || req.query.customerTo !== undefined;
+            const customerFrom = hasCustomerPeriod ? parseLedelsesrapportMonth(req.query.customerFrom) : fromMonth;
+            const customerTo = hasCustomerPeriod ? parseLedelsesrapportMonth(req.query.customerTo) : toMonth;
+            const customerMonths = customerFrom && customerTo ? (customerTo.year - customerFrom.year) * 12 + customerTo.month - customerFrom.month + 1 : 0;
+            if (customerMonths < 1 || customerMonths > 36) return res.status(400).json({ ok: false, error: 'Vælg en gyldig periode for Største kunder (1-36 måneder).' });
+
+            const hasLoadPeriod = req.query.loadFrom !== undefined || req.query.loadTo !== undefined;
+            const loadFrom = hasLoadPeriod ? parseLedelsesrapportDate(req.query.loadFrom) : null;
+            const loadTo = hasLoadPeriod ? parseLedelsesrapportDate(req.query.loadTo) : null;
+            const loadSpan = loadFrom && loadTo ? (loadTo - loadFrom) / 86400000 : -1;
+            if (hasLoadPeriod && (loadSpan < 0 || loadSpan >= 180)) return res.status(400).json({ ok: false, error: 'Vælg en gyldig planperiode for Belastning (1-180 dage).' });
+            const hasViaPeriod = Boolean(req.query.viaFrom || req.query.viaTo);
+            const viaFrom = hasViaPeriod ? parseLedelsesrapportDate(req.query.viaFrom) : null;
+            const viaTo = hasViaPeriod ? parseLedelsesrapportDate(req.query.viaTo) : null;
+            if (hasViaPeriod && (!viaFrom || !viaTo || viaTo < viaFrom)) return res.status(400).json({ ok: false, error: 'Vælg en gyldig ordredatoperiode for VIA.' });
+
+            const hasOrderPeriod = req.query.orderFrom !== undefined || req.query.orderTo !== undefined;
+            const orderFrom = parseLedelsesrapportWeek(req.query.orderFrom);
+            const orderTo = parseLedelsesrapportWeek(req.query.orderTo);
+            if (hasOrderPeriod && (!orderFrom || !orderTo || orderTo.monday < orderFrom.monday
+                || (orderTo.monday - orderFrom.monday) / 604800000 > 156)) {
+                return res.status(400).json({ ok: false, error: 'Vælg en gyldig ugeperiode for Ordreindgang (højst 157 uger).' });
+            }
+
+            const allAccounts = await omsaetningService.getAccounts();
+            const allowedAccounts = new Set(allAccounts.map(account => String(account.acNo)));
+            const requestedAccounts = String(req.query.accounts || '').split(',').map(value => value.trim()).filter(Boolean);
+            const selectedAccounts = requestedAccounts.length ? [...new Set(requestedAccounts)] : Array.from(allowedAccounts);
+            if (!selectedAccounts.length || selectedAccounts.some(account => !/^\d+$/.test(account) || !allowedAccounts.has(account))) {
+                return res.status(400).json({ ok: false, error: 'En eller flere omsætningskonti er ugyldige.' });
+            }
+            const topCustomers = Number(req.query.topCustomers || 10);
+            if (![5, 10, 20, 50].includes(topCustomers)) return res.status(400).json({ ok: false, error: 'Antal kunder skal være 5, 10, 20 eller 50.' });
+            const loadDays = hasLoadPeriod ? loadSpan + 1 : Number(req.query.loadDays || 30);
+            if (!Number.isInteger(loadDays) || loadDays < 1 || loadDays > 180) return res.status(400).json({ ok: false, error: 'Belastning skal være mellem 1 og 180 dage.' });
+
+            const lastDate = new Date(exclusiveToDate);
+            lastDate.setUTCDate(lastDate.getUTCDate() - 1);
+            const fra = String(ledelsesrapportFiscalPeriod(fromMonth.year, fromMonth.month));
+            const til = String(ledelsesrapportFiscalPeriod(exclusiveToDate.getUTCFullYear(), exclusiveToDate.getUTCMonth() + 1));
+            const fraWeek = orderFrom ? orderFrom.key : ledelsesrapportIsoWeek(fromDate);
+            const tilWeek = orderTo ? orderTo.key : ledelsesrapportIsoWeek(lastDate);
+            const today = new Date().toISOString().slice(0, 10);
+            const loadStart = loadFrom ? loadFrom.toISOString().slice(0, 10) : today;
+            const loadEnd = loadTo ? loadTo.toISOString().slice(0, 10) : null;
+            const viaContextValue = viaContext(true);
+
+            const revenueTask = omsaetningService.getSummary({ fra, til, accountCsv: selectedAccounts.join(','), customerCsv: '' });
+            const customerEnd = new Date(Date.UTC(customerTo.year, customerTo.month, 1));
+            const customerTask = customerFrom.raw === fromMonth.raw && customerTo.raw === toMonth.raw ? revenueTask
+                : omsaetningService.getSummary({ fra: String(ledelsesrapportFiscalPeriod(customerFrom.year, customerFrom.month)),
+                    til: String(ledelsesrapportFiscalPeriod(customerEnd.getUTCFullYear(), customerEnd.getUTCMonth() + 1)),
+                    accountCsv: selectedAccounts.join(','), customerCsv: '' });
+
+            const [revenue, orders, oddLoad, evenLoad, via, customerRevenue] = await Promise.all([
+                revenueTask,
+                ordreindgangService.getSummary({ fraWeek, tilWeek }),
+                fetchBelastningRows({ getConnection, sql, toDay: loadStart, dage: hasLoadPeriod ? loadSpan : loadDays, resGrCsv: '', parity: 1, orderNo: '', customerFilter: '' }),
+                fetchBelastningRows({ getConnection, sql, toDay: loadStart, dage: hasLoadPeriod ? loadSpan : loadDays, resGrCsv: '', parity: 0, orderNo: '', customerFilter: '' }),
+                getViaPayload(viaContextValue, true),
+                customerTask
+            ]);
+
+            const customerMap = new Map();
+            for (const row of customerRevenue.rows) {
+                const key = String(row.custNo || '');
+                if (!key) continue;
+                const customer = customerMap.get(key) || { custNo: row.custNo, name: row.customerName || key, revenueMio: 0 };
+                customer.revenueMio += Number(row.revenueMio || 0);
+                customerMap.set(key, customer);
+            }
+            const allViaRows = Array.isArray(via.rows) ? via.rows : [];
+            const orderDateKey = row => {
+                const value = String(row.OrderDate || '').slice(0, 10);
+                const key = /^\d{8}$/.test(value) ? value.slice(0, 4) + '-' + value.slice(4, 6) + '-' + value.slice(6) : value;
+                return parseLedelsesrapportDate(key) ? key : '';
+            };
+            const viaRows = hasViaPeriod ? allViaRows.filter(row => {
+                const date = orderDateKey(row);
+                return date && date >= req.query.viaFrom && date <= req.query.viaTo;
+            }) : allViaRows;
+            const loadRows = oddLoad.concat(evenLoad).filter(row => !loadEnd || !row.Dato || new Date(row.Dato).toISOString().slice(0, 10) <= loadEnd);
+            const costKeys = ['MaterialCost', 'StangCost', 'PurchasedPartCost', 'TimeCost'];
+            const costs = Object.fromEntries(costKeys.map(key => [key, viaRows.reduce((sum, row) => sum + (row.CostDataAvailable ? Number(row[key] || 0) : 0), 0)]));
+
+            return res.json({
+                ok: true,
+                generatedAt: new Date().toISOString(),
+                filters: { from: fromMonth.raw, to: toMonth.raw, accounts: selectedAccounts, topCustomers, loadDays,
+                    customerFrom: customerFrom.raw, customerTo: customerTo.raw,
+                    loadFrom: loadStart, loadTo: loadEnd, viaFrom: hasViaPeriod ? req.query.viaFrom : '', viaTo: hasViaPeriod ? req.query.viaTo : '',
+                    orderFrom: fraWeek.slice(0, 4) + '-W' + fraWeek.slice(4), orderTo: tilWeek.slice(0, 4) + '-W' + tilWeek.slice(4) },
+                accounts: allAccounts.filter(account => selectedAccounts.includes(String(account.acNo))),
+                revenue: { totalRevenueMio: revenue.totalRevenueMio, rows: revenue.rows, topCustomers: Array.from(customerMap.values()).sort((a, b) => b.revenueMio - a.revenueMio).slice(0, topCustomers) },
+                orders,
+                load: summarizeLedelsesrapportLoad(loadRows),
+                via: {
+                    asOf: String(via.generatedAt || new Date().toISOString()),
+                    excludedUndatedCount: hasViaPeriod ? allViaRows.filter(row => !orderDateKey(row)).length : 0,
+                    orderCount: viaRows.length,
+                    unknownCostCount: viaRows.filter(row => !row.CostDataAvailable).length,
+                    costs,
+                    totalCost: Object.values(costs).reduce((sum, value) => sum + value, 0),
+                    totalSales: viaRows.reduce((sum, row) => sum + Number(row.SalesValue || 0), 0),
+                    remainingSales: viaRows.reduce((sum, row) => sum + Number(row.RemainingSalesValue || 0), 0)
+                }
+            });
+        } catch (err) {
+            if (err && err.statusCode) return res.status(err.statusCode).json({ ok: false, error: err.message });
+            logEvent('ERROR ledelsesrapport/data: ' + err.message);
+            return res.status(500).json({ ok: false, error: 'Ledelsesrapporten kunne ikke dannes.' });
+        }
+    });
+
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
             const ordNo = parseInt(req.params.ordno);
@@ -319,12 +568,18 @@ function createApiRouter({
 
     router.get('/salgordre-via', requireModulePermission('salgordreVia'), async (req, res) => {
         try {
+            res.setHeader('Cache-Control', 'no-store');
             const requestedOrdNo = req.query.ordNo === undefined ? null : Number(req.query.ordNo);
-            if (requestedOrdNo !== null && (!Number.isInteger(requestedOrdNo) || requestedOrdNo <= 0)) {
+            if (requestedOrdNo !== null && (!Number.isSafeInteger(requestedOrdNo) || requestedOrdNo <= 0)) {
                 return res.status(400).json({ error: 'Ordrenummer ugyldigt' });
             }
-
-            const cacheKey = VIA_CACHE_KEY;
+            const user = getSessionUser(req);
+            const includeBacklog = !!user && (user.role === 'superadmin' || !!user.permissions?.omsaetning);
+            const context = viaContext(includeBacklog);
+            if (req.query.profile !== undefined && req.query.profile !== context.profileId) {
+                return res.status(409).json({ error: 'Databaseprofilen er ændret. Genindlæs siden.' });
+            }
+            const cacheKey = context.key;
             // Solo cache (anche scaduta): risposta immediata per stale-while-revalidate
             if (requestedOrdNo === null && String(req.query.cached || '') === '1') {
                 const freshCached = diskCache.get(cacheKey);
@@ -335,15 +590,14 @@ function createApiRouter({
             }
             if (requestedOrdNo === null && req.query.force !== '1') {
                 const cached = diskCache.get(cacheKey);
-                if (cached) return res.json({ ...cached, cached: true });
+                if (cached) return res.json({ ...cached, cached: true, fresh: true });
             }
-            if (requestedOrdNo !== null && req.query.force === '1') {
-                diskCache.del(cacheKey);
+            if (requestedOrdNo !== null) {
+                const fullRequest = viaRequests.get(cacheKey + ':all');
+                if (fullRequest) await fullRequest;
             }
-
-            const rows = await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo });
-            const payload = { rows };
-            if (requestedOrdNo === null) diskCache.set(cacheKey, payload, VIA_CACHE_TTL_MS);
+            const payload = await getViaPayload(context, includeBacklog, requestedOrdNo);
+            if (requestedOrdNo !== null) diskCache.del(cacheKey);
             res.json(payload);
         } catch (err) {
             logEvent('ERROR salgordre-via: ' + err.message);

@@ -1,6 +1,7 @@
 // ── SalgOrdre VIA ───────────────────────────────────────────────────────────
 // Estratto verbatim da routes/apiRoutes.js: query per gli ordini di vendita
-// aperti con produzione ricorsiva, minuti consuntivati (ProdTr), regola
+// produzione ricorsiva e perimetro storico di valorizzazione, minuti
+// consuntivati (ProdTr), regola
 // LASER EAGLE su R1100 e costo materiale (righe normali + nesting L).
 function toNumber(value) {
     const parsed = Number(value || 0);
@@ -61,26 +62,91 @@ function normalizePurchasedPartRows(recordset) {
     });
 }
 
-async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
+function getOpenViaOrders(flow) {
+    if (!flow || !Array.isArray(flow.rows) || !Number.isFinite(flow.total?.closing)) {
+        throw new Error('Ordrebeholdning kunne ikke beregnes');
+    }
+    const seen = new Set();
+    for (const row of flow.rows) {
+        if (!Number.isSafeInteger(row.ordNo) || row.ordNo <= 0 || !Number.isFinite(row.closing) || seen.has(row.ordNo)) {
+            throw new Error('Ugyldige eller dublerede ordrer i Ordrebeholdning');
+        }
+        seen.add(row.ordNo);
+    }
+    return flow.rows.filter(row => row.closing > 0.01);
+}
+
+function buildViaBacklog(flow, costRows, requestedOrdNo = null) {
+    const openOrders = getOpenViaOrders(flow);
+    const costs = new Map();
+    for (const row of costRows) {
+        const ordNo = Number(row.OrdNo);
+        if (costs.has(ordNo)) throw new Error('Dublerede kostdata for ordre ' + ordNo);
+        costs.set(ordNo, row);
+    }
+    const rows = openOrders.filter(order => requestedOrdNo === null || order.ordNo === requestedOrdNo).map(order => {
+        const cost = costs.get(order.ordNo);
+        const costDataAvailable = !!cost && ['MaterialCost', 'StangCost', 'PurchasedPartCost', 'TimeCost'].every(key => cost[key] != null && Number.isFinite(Number(cost[key])));
+        return {
+            ...cost,
+            OrdNo: order.ordNo,
+            CustomerName: order.customerName,
+            CustNo: order.custNo,
+            OrderDate: order.orderDate,
+            Gr12: order.gr12,
+            OrdPrSt: order.ordPrSt,
+            SalesValue: order.value,
+            RemainingSalesValue: order.closing,
+            CostDataAvailable: costDataAvailable,
+            ...(!costDataAvailable ? { MaterialCost: null, StangCost: null, PurchasedPartCost: null, TimeCost: null, PurchasedPartDetails: [] } : {})
+        };
+    });
+    return {
+        scope: 'open-backlog', rows, month: flow.month, asOf: flow.asOf,
+        unknownCount: flow.unknownCount || 0,
+        missingCostCount: rows.filter(row => !row.CostDataAvailable).length,
+        orderBacklogValueDkk: rows.reduce((sum, row) => sum + row.RemainingSalesValue, 0),
+        excludedResidualDkk: flow.total.closing - openOrders.reduce((sum, row) => sum + row.closing, 0)
+    };
+}
+
+async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo = null, orderNos = null }) {
+    if (requestedOrdNo !== null && (!Number.isSafeInteger(requestedOrdNo) || requestedOrdNo <= 0)) {
+        throw new Error('Ordrenummer ugyldigt');
+    }
+    if (orderNos !== null && (!Array.isArray(orderNos) || orderNos.some(value => !Number.isSafeInteger(value) || value <= 0))) {
+        throw new Error('Ordrenumre ugyldige');
+    }
+    const selectedOrders = orderNos === null ? null : [...new Set(orderNos)].filter(value => requestedOrdNo === null || value === requestedOrdNo);
+    if (selectedOrders && selectedOrders.length === 0) return [];
+    if (selectedOrders && selectedOrders.length > 1000) {
+        const rows = [];
+        for (let offset = 0; offset < selectedOrders.length; offset += 1000) {
+            rows.push(...await fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo, orderNos: selectedOrders.slice(offset, offset + 1000) }));
+        }
+        return rows;
+    }
     const pool = await getConnection();
     const request = pool.request();
     request.timeout = 60000;
     request.input('requestedOrdNo', sql.Numeric, requestedOrdNo);
+    const scopePredicate = selectedOrders
+        ? 'OrdNo IN (' + selectedOrders.map((value, index) => {
+            request.input('viaOrder' + index, sql.Numeric, value);
+            return '@viaOrder' + index;
+        }).join(',') + ')'
+        : `Gr12 <> 10 AND (
+            OrdPrSt & 256 = 256 OR OrdPrSt = 0 OR OrdPrSt = 402653456
+            OR OrdPrSt = 134217728 OR OrdPrSt & 4194304 = 4194304
+        )`;
     const result = await request.query(`
                 WITH OpenSalesOrders AS (
                     SELECT OrdNo, DelDt, CreUsr, CustNo, OrdTp, TrTp, Gr12, OrdPrSt, InvoSF, InvoIF, ExRt
                     FROM Ord WITH(NOLOCK)
                                         WHERE OrdTp = 1
                                             AND TrTp = 1
-                                            AND Gr12 <> 10
-                                            AND (
-                                                    OrdPrSt & 256 = 256
-                                                    OR OrdPrSt = 0
-                                                    OR OrdPrSt = 402653456
-                                                    OR OrdPrSt = 134217728
-                                                    OR OrdPrSt & 4194304 = 4194304
-                                            )
-                                                AND (@requestedOrdNo IS NULL OR OrdNo = @requestedOrdNo)
+                                            AND (${scopePredicate})
+                                            AND (@requestedOrdNo IS NULL OR OrdNo = @requestedOrdNo)
                 ),
                 ProductionOrders AS (
                     SELECT DISTINCT
@@ -111,7 +177,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                         END AS ResourceStatus,
                         ISNULL(ProdTr.FinishedMinutes, 0) AS FinishedMinutes,
                         ISNULL(L.NoOrg, 0) AS PlannedMinutes
-                        ,ISNULL(L.CCstPr, 0) * CASE
+                        ,CAST(ISNULL(L.CCstPr, 0) AS decimal(28, 6)) * CASE
                             WHEN UPPER(ISNULL(L.ProdNo, '')) = 'R1100'
                              AND UPPER(ISNULL(LastEmployee.EmployeeName, '')) LIKE '%LASER EAGLE%'
                             THEN 2
@@ -121,7 +187,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                     INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
                     LEFT JOIN R7 R WITH(NOLOCK) ON R.RNo = L.R7
                     OUTER APPLY (
-                        SELECT SUM(CAST(P.NoInvoAb AS decimal(18, 6))) AS FinishedMinutes
+                        SELECT SUM(CAST(P.NoInvoAb AS decimal(28, 6))) AS FinishedMinutes
                         FROM ProdTr P WITH(NOLOCK)
                         WHERE P.OrdNo = L.OrdNo
                           AND P.OrdLnNo = L.LnNo
@@ -155,14 +221,14 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                         SUM(CASE WHEN ResourceStatus < 80 THEN 1 ELSE 0 END) AS RemainingResources,
                         SUM(FinishedMinutes) AS CompletedResourceMinutes,
                         SUM(PlannedMinutes) AS EffectiveResourceMinutes,
-                        SUM(FinishedMinutes * ResourceUnitCost) AS TimeCost
+                        SUM(CONVERT(float, FinishedMinutes) * CONVERT(float, ResourceUnitCost)) AS TimeCost
                     FROM ResourceMinutes
                     GROUP BY SalesOrderNo
                 ),
                 MaterialCosts AS (
                     SELECT
                         ProductionOrders.SalesOrderNo,
-                        SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS MaterialCost
+                        SUM(CONVERT(float, ISNULL(L.NoFin, 0)) * CONVERT(float, ISNULL(L.CCstPr, 0))) AS MaterialCost
                     FROM ProductionOrders
                     INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
                     LEFT JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
@@ -175,7 +241,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                                     StangCosts AS (
                                         SELECT
                                             ProductionOrders.SalesOrderNo,
-                                            SUM(ISNULL(L.NoFin, 0) * ISNULL(L.CCstPr, 0)) AS StangCost
+                                            SUM(CONVERT(float, ISNULL(L.NoFin, 0)) * CONVERT(float, ISNULL(L.CCstPr, 0))) AS StangCost
                                         FROM ProductionOrders
                                         INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
                                         INNER JOIN Prod P WITH(NOLOCK) ON P.ProdNo = L.ProdNo
@@ -275,7 +341,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                 NestingMaterialCosts AS (
                     SELECT
                         ProductionOrders.SalesOrderNo,
-                        SUM(ISNULL(N.NoFin, 0) * ISNULL(N.CstPr, 0)) AS MaterialCost
+                        SUM(CONVERT(float, ISNULL(N.NoFin, 0)) * CONVERT(float, ISNULL(N.CstPr, 0))) AS MaterialCost
                     FROM ProductionOrders
                     INNER JOIN OrdLn N WITH(NOLOCK)
                         ON N.TrInf2 = CONVERT(varchar(20), ProductionOrders.OrdNo)
@@ -324,7 +390,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
                         FOR JSON PATH
                     ), '[]') AS PurchasedPartDetailsJson,
                     ISNULL(Active.TimeCost, 0) AS TimeCost,
-                    (ISNULL(S.InvoSF, 0) + ISNULL(S.InvoIF, 0)) * (ISNULL(NULLIF(S.ExRt, 0), 100) / 100.0) AS SalesValue,
+                    CONVERT(decimal(38, 6), (CONVERT(float, ISNULL(S.InvoSF, 0)) + CONVERT(float, ISNULL(S.InvoIF, 0))) * (CONVERT(float, ISNULL(NULLIF(S.ExRt, 0), 100)) / 100.0)) AS SalesValue,
                     CAST(NULL AS datetime) AS PlannedDate,
                     CAST(NULL AS varchar(100)) AS ResourceName
                 FROM OpenSalesOrders S
@@ -346,4 +412,4 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo }) {
     return normalizePurchasedPartRows(result.recordset || []);
 }
 
-module.exports = { fetchSalgordreViaRows, normalizePurchasedPartRows };
+module.exports = { fetchSalgordreViaRows, normalizePurchasedPartRows, getOpenViaOrders, buildViaBacklog };

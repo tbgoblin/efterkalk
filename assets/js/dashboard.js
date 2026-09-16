@@ -55,8 +55,12 @@
     function normalizeConfig(raw) {
         const config = raw && typeof raw === 'object' ? raw : {};
         const used = new Set();
-        const boards = (Array.isArray(config.boards) ? config.boards : []).slice(0, 12).filter(board => {
-            if (!board || !/^custom-[a-z0-9-]+$/.test(board.id) || used.has(board.id)) return false;
+        let customCount = 0;
+        const boards = (Array.isArray(config.boards) ? config.boards : []).filter(board => {
+            if (!board || used.has(board.id)) return false;
+            const standard = templates.some(template => template.id === board.id);
+            if (!standard && (!/^custom-[a-z0-9-]+$/.test(board.id) || customCount >= 12)) return false;
+            if (!standard) customCount += 1;
             used.add(board.id);
             return true;
         }).map(board => ({
@@ -249,6 +253,11 @@
         return templates.filter(template => (template.id === 'production' || canAccess('omsaetning')) && allowedWidgets(template.widgets, canAccess).length);
     }
 
+    function availableBoards(config, canAccess) {
+        return allowedTemplates(canAccess).map(template => config.boards.find(board => board.id === template.id) || template)
+            .concat(config.boards.filter(board => board.id.startsWith('custom-')));
+    }
+
     async function refreshVisibleSources(widgetIds, canAccess, loadSource, options = {}) {
         const modules = [...new Set(allowedWidgets(widgetIds, canAccess).flatMap(widget => widget.id === 'customer-share' && options[widget.id]?.metric === 'orders' && canAccess('efterkalk') ? ['efterkalk'] : [widget.source || widget.module]))];
         const results = await Promise.allSettled(modules.map(moduleKey => Promise.resolve().then(() => loadSource(moduleKey))));
@@ -371,8 +380,11 @@
         const via = (input.via || []).map(row => ({
             order: number(row.OrdNo), customer: text(row.CustomerName) || 'Ukendt kunde', seller: text(row.SellerUsr) || 'Ikke angivet',
             date: dateKey(row.DeliveryDate), resource: text(row.ResourceName) || 'Ikke angivet',
+            costDataAvailable: row.CostDataAvailable !== false,
             material: number(row.MaterialCost) || 0, bar: number(row.StangCost) || 0, purchased: number(row.PurchasedPartCost) || 0, time: number(row.TimeCost) || 0
-        })).filter(row => row.order > 0 && matches(row)).map(row => ({ ...row, value: row.material + row.bar + row.purchased + row.time }));
+        })).filter(row => row.order > 0 && matches(row)).map(row => ({ ...row, value: row.costDataAvailable ? row.material + row.bar + row.purchased + row.time : null }));
+        const viaCostsComplete = via.every(row => row.costDataAvailable);
+        const viaTotal = field => viaCostsComplete ? sum(via, field) : null;
         const limit = options.limit || (input.limit === 10 ? 10 : 5);
         const recentFrom = new Date(today + 'T12:00:00');
         recentFrom.setDate(recentFrom.getDate() - options.days + 1);
@@ -430,12 +442,12 @@
                 sellers: sellers.slice(0, limit),
                 trend,
                 coverage: [{ label: 'Ordrer med kendt kost', value: valued.length, unit: 'antal' }, { label: 'Mangler kostgrundlag', value: orders.length - valued.length, unit: 'antal' }, ...(options.showPercentage ? [{ label: 'Dækning', value: orders.length ? valued.length / orders.length * 100 : null, unit: '%' }] : [])],
-                'via-kpi': [{ label: 'Kapitalbinding', value: sum(via, 'value'), unit: 'DKK' }, { label: 'Aktive ordrer', value: via.length, unit: 'antal' }, { label: 'Overskredet levering', value: overdue.length, unit: 'antal' }],
-                'via-top': via.slice().sort((left, right) => right.value - left.value || right.order - left.order).slice(0, limit),
+                'via-kpi': [{ label: 'Registreret VIA-kost', value: viaTotal('value'), unit: 'DKK' }, { label: 'Aktive ordrer', value: via.length, unit: 'antal' }, { label: 'Overskredet levering', value: overdue.length, unit: 'antal' }],
+                'via-top': via.filter(row => row.costDataAvailable).sort((left, right) => right.value - left.value || right.order - left.order).slice(0, limit),
                 'via-due': overdue.slice(0, limit),
                 'via-next': via.filter(row => row.date && row.date >= today && (!options.deliveryDays || (Date.parse(row.date) - Date.parse(today)) / 86400000 < options.deliveryDays)).sort((left, right) => left.date.localeCompare(right.date) || left.order - right.order).slice(0, limit),
-                resources: aggregate(via, row => row.resource, row => row.resource, 'value').slice(0, limit),
-                'via-cost': [{ label: 'Materiale', value: sum(via, 'material') }, { label: 'Stang', value: sum(via, 'bar') }, { label: 'Indkøbte dele', value: sum(via, 'purchased') }, { label: 'Tid', value: sum(via, 'time') }],
+                resources: viaCostsComplete ? aggregate(via, row => row.resource, row => row.resource, 'value').slice(0, limit) : [],
+                'via-cost': [{ label: 'Materiale', value: viaTotal('material') }, { label: 'Stang', value: viaTotal('bar') }, { label: 'Indkøbte dele', value: viaTotal('purchased') }, { label: 'Tid', value: viaTotal('time') }],
                 'load-kpi': [{ label: options.includeBacklog ? 'Planlagt dagarbejde inkl. rest' : 'Planlagt dagarbejde', value: sum(loadRows, 'planned'), unit: 'timer' }, { label: 'Kapacitet', value: sum(loadRows, 'capacity'), unit: 'timer' }, ...(options.showEvening ? [{ label: 'Aftenarbejde', value: sum(loadRows, 'evening'), unit: 'timer' }] : []), { label: 'Ressourcer over kapacitet', value: resources.filter(row => loadRatio(row) > 1).length, unit: 'antal' }],
                 'load-resources': resources.slice().sort((left, right) => loadRatio(right) - loadRatio(left) || right.value - left.value).slice(0, limit),
                 'load-days': [...dayGroups.values()].sort((left, right) => left.label.localeCompare(right.label)),
@@ -444,7 +456,7 @@
         };
     }
 
-    const model = { catalog, templates, normalizeConfig, normalizeLayout, arrangeWidgets, widgetOptions, loadHorizons, customerShares, createPreferenceStore, allowedWidgets, allowedTemplates, refreshVisibleSources, fiscalRange, economicRange, createSourceCache, isCreditOrder, hydrateOrderCosts, loadSearchFilters, storageKey, dateKey, buildData };
+    const model = { catalog, templates, normalizeConfig, normalizeLayout, arrangeWidgets, widgetOptions, loadHorizons, customerShares, createPreferenceStore, allowedWidgets, allowedTemplates, availableBoards, refreshVisibleSources, fiscalRange, economicRange, createSourceCache, isCreditOrder, hydrateOrderCosts, loadSearchFilters, storageKey, dateKey, buildData };
     if (typeof module === 'object' && module.exports) module.exports = model;
     else root.GohDashboard = { model };
 
@@ -481,6 +493,13 @@
         if (!scope || !context.authenticated) return;
         config.query = query;
         preferenceStore?.set(config);
+    }
+    function saveBoard(board) {
+        config.boards = config.boards.some(item => item.id === board.id)
+            ? config.boards.map(item => item.id === board.id ? board : item) : config.boards.concat(board);
+        config.active = board.id;
+        config = normalizeConfig(config);
+        persist();
     }
     function saveTheme(value) {
         if (!preferencesReady || !context?.authenticated) return;
@@ -561,13 +580,8 @@
     }
     function commitWidgetOptions(id, options) {
         const original = currentBoard();
-        const existing = config.boards.some(board => board.id === original.id);
-        if (!existing && config.boards.length >= 12) { notify('Maks. 12 personlige dashboards.', true); return false; }
-        const board = { ...original, id: existing ? original.id : 'custom-' + root.crypto.randomUUID(), name: existing ? original.name : original.name + ' · min visning', options: { ...original.options, [id]: options } };
-        config.boards = config.boards.filter(item => item.id !== board.id).concat(board);
-        config.active = board.id;
-        config = normalizeConfig(config);
-        persist(); renderControls(); renderWidgets();
+        saveBoard({ ...original, options: { ...original.options, [id]: options } });
+        renderControls(); renderWidgets();
         return true;
     }
     function openWidgetSettings(id, button) {
@@ -616,8 +630,8 @@
     }
     function mount(host) {
         host.className = 'goh-dashboard';
-        host.innerHTML = '<div class="goh-toolbar"><div id="gohDashTemplates" class="goh-templates" role="group" aria-label="Dashboard-skabeloner"></div>'
-            + '<div class="goh-toolbar-actions"><label>Mine dashboards<select id="gohDashPersonal"><option value="">Vælg dashboard</option></select></label>'
+        host.innerHTML = '<div class="goh-toolbar"><div id="gohDashTemplates" class="goh-templates" role="group" aria-label="Dashboards"></div>'
+            + '<div class="goh-toolbar-actions">'
             + '<button type="button" class="goh-primary" data-dash-action="create">+ Ny dashboard</button>'
             + '<button type="button" data-dash-action="edit">Tilpas</button>'
             + action('Indret dashboard', layoutIcon('move'), 'id="gohDashArrange" data-dash-action="arrange"')
@@ -659,11 +673,9 @@
         const availableTemplates = allowedTemplates(context.canAccess);
         if (templates.some(item => item.id === config.active) && !availableTemplates.some(item => item.id === config.active)) config.active = availableTemplates[0]?.id || 'production';
         const board = currentBoard();
-        byId('gohDashTemplates').innerHTML = availableTemplates.map(template => '<button type="button" data-template="' + template.id + '" aria-pressed="' + (config.active === template.id) + '">' + escape(template.name) + '</button>').join('');
+        byId('gohDashTemplates').innerHTML = availableBoards(config, context.canAccess).map(item => '<button type="button" data-template="' + item.id + '" aria-pressed="' + (config.active === item.id) + '">' + escape(item.name) + '</button>').join('');
         byId('gohDashBase').querySelectorAll('option').forEach(option => { option.hidden = templates.some(item => item.id === option.value) && !availableTemplates.some(item => item.id === option.value); });
         byId('gohDashPeriodLabel').hidden = !context.canAccess('omsaetning') || !allowedWidgets(board.widgets, context.canAccess).some(widget => ['efterkalk', 'omsaetning'].includes(widget.module) && widget.kind !== 'flow');
-        byId('gohDashPersonal').innerHTML = '<option value="">Vælg dashboard</option>' + config.boards.map(item => '<option value="' + item.id + '">' + escape(item.name) + '</option>').join('');
-        byId('gohDashPersonal').value = config.boards.some(item => item.id === config.active) ? config.active : '';
         byId('gohDashPeriod').value = config.period;
         byId('gohDashLimit').value = String(config.limit);
         byId('gohDashTitle').textContent = board.name;
@@ -673,7 +685,7 @@
         for (const id of ['gohDashCompact', 'gohDashSaveLayout', 'gohDashCancelLayout']) byId(id).hidden = !layoutDraft;
         byId('gohDashArrange').hidden = Boolean(layoutDraft);
         byId('gohDashArrange').disabled = preferenceStatus === 'loading';
-        byId('dashboardOperationalOverview').querySelectorAll('.goh-templates button, .goh-filters input, .goh-filters select, #gohDashPersonal, [data-dash-action="create"], [data-dash-action="edit"]').forEach(control => { control.disabled = Boolean(layoutDraft) || preferenceStatus === 'loading'; });
+        byId('dashboardOperationalOverview').querySelectorAll('.goh-templates button, .goh-filters input, .goh-filters select, [data-dash-action="create"], [data-dash-action="edit"]').forEach(control => { control.disabled = Boolean(layoutDraft) || preferenceStatus === 'loading'; });
         byId('gohDashRetryPreferences').disabled = Boolean(layoutDraft);
     }
     function renderRefreshControl() {
@@ -757,7 +769,12 @@
         } else {
             body = '<ol class="goh-rows">' + rows.map(row => '<li><button type="button" data-order="' + row.order + '" data-order-module="' + (widget.id === 'recent-orders' ? 'efterkalk' : widget.module) + '"' + (widget.id === 'recent-orders' && !context.canAccess('efterkalk') ? ' disabled' : '') + '><span><strong>' + row.order + ' · ' + escape(row.customer) + '</strong><small>' + escape(displayDate(row.date) + (row.resource || row.seller ? ' · ' + (row.resource || row.seller) : '')) + '</small></span>' + (context.canAccess('omsaetning') ? '<b class="' + (row.value < 0 ? 'goh-negative' : '') + '">' + escape(format(row.value)) + '</b>' : '') + '</button></li>').join('') + '</ol>';
         }
-        return header + '<div class="goh-widget-body">' + body + '</div><footer>' + (state === 'error' ? '<strong class="goh-negative">Opdatering fejlede · </strong>' : state === 'loading' ? 'Opdaterer · ' : '') + escape(source) + '</footer>';
+        const viaWarning = widget.module === 'salgordre-via'
+            ? (result.via.some(row => !row.costDataAvailable) ? ' · Ufuldstændige kostdata' : '')
+                + (context.viaMeta?.unknownCount > 0 ? ' · ' + context.viaMeta.unknownCount + ' ordrer med uafstemt historik udeladt' : '')
+                + (context.viaMeta?.scope === 'production' ? ' · Historisk produktionsudvalg' : '')
+            : '';
+        return header + '<div class="goh-widget-body">' + body + '</div><footer>' + (state === 'error' ? '<strong class="goh-negative">Opdatering fejlede · </strong>' : state === 'loading' ? 'Opdaterer · ' : '') + escape(source + viaWarning) + '</footer>';
     }
     function renderWidgets() {
         if (!context || !context.authenticated) return;
@@ -830,20 +847,13 @@
     function startLayout(render = true) {
         if (preferenceStatus === 'loading') return false;
         const board = currentBoard();
-        const existing = config.boards.some(item => item.id === board.id);
-        if (!existing && config.boards.length >= 12) { notify('Maks. 12 personlige dashboards.', true); return false; }
-        layoutDraft = { ...board, id: existing ? board.id : 'custom-' + root.crypto.randomUUID(), name: existing ? board.name : board.name + ' · min visning', widgets: board.widgets.slice(), wide: (board.wide || []).slice(), layout: { ...board.layout, ...arrangeWidgets(allowedWidgets(board.widgets, context.canAccess).map(widget => widget.id), board.layout, board.wide) } };
+        layoutDraft = { ...board, widgets: board.widgets.slice(), wide: (board.wide || []).slice(), layout: { ...board.layout, ...arrangeWidgets(allowedWidgets(board.widgets, context.canAccess).map(widget => widget.id), board.layout, board.wide) } };
         if (render) { renderControls(); renderWidgets(); notify('Layout redigeres · Gem eller annuller'); }
         return true;
     }
     function finishLayout(save) {
         if (!layoutDraft) return;
-        if (save) {
-            config.boards = config.boards.filter(board => board.id !== layoutDraft.id).concat(layoutDraft);
-            config.active = layoutDraft.id;
-            config = normalizeConfig(config);
-            persist();
-        }
+        if (save) saveBoard(layoutDraft);
         layoutDraft = null;
         renderControls(); renderWidgets();
         if (!save) notify('Layoutændringer annulleret');
@@ -926,14 +936,15 @@
         opener = button;
         const board = currentBoard();
         const existing = !isNew && config.boards.some(item => item.id === board.id);
-        if (!existing && config.boards.length >= 12) { notify('Maks. 12 personlige dashboards. Slet en dashboard først.', true); return; }
+        if (isNew && config.boards.filter(item => item.id.startsWith('custom-')).length >= 12) { notify('Maks. 12 personlige dashboards. Slet en dashboard først.', true); return; }
         const newId = () => typeof root.crypto.randomUUID === 'function' ? root.crypto.randomUUID() : Array.from(root.crypto.getRandomValues(new Uint32Array(4)), value => value.toString(16)).join('-');
-        draft = { id: existing ? board.id : 'custom-' + newId(), name: existing ? board.name : board.name + ' · min visning', widgets: board.widgets.slice(), wide: (board.wide || []).slice(), layout: structuredClone(board.layout || {}), options: structuredClone(board.options || {}), existing };
+        draft = { id: isNew ? 'custom-' + newId() : board.id, name: isNew ? board.name + ' · min visning' : board.name, widgets: board.widgets.slice(), wide: (board.wide || []).slice(), layout: structuredClone(board.layout || {}), options: structuredClone(board.options || {}), existing };
         byId('gohDashName').value = draft.name;
         byId('gohDashBase').value = 'current';
         byId('gohDashEditorError').textContent = '';
-        byId('gohDashEditorTitle').textContent = existing ? 'Rediger dashboard' : 'Ny personlig dashboard';
+        byId('gohDashEditorTitle').textContent = isNew ? 'Ny personlig dashboard' : 'Rediger min dashboard';
         byId('gohDashEditor').querySelector('[data-dash-action="delete"]').hidden = !existing;
+        byId('gohDashEditor').querySelector('[data-dash-action="delete"]').textContent = templates.some(item => item.id === draft.id) ? 'Nulstil min dashboard' : 'Slet dashboard';
         renderEditor();
         byId('gohDashEditor').showModal();
         byId('gohDashName').focus();
@@ -953,10 +964,7 @@
         const name = byId('gohDashName').value.trim();
         if (!name || !allowedWidgets(draft.widgets, context.canAccess).length) { byId('gohDashEditorError').textContent = 'Angiv et navn og vælg mindst én tilgængelig widget.'; return; }
         const board = { id: draft.id, name, widgets: draft.widgets, wide: draft.wide, layout: draft.layout, options: draft.options };
-        config.boards = config.boards.filter(item => item.id !== board.id).concat(board);
-        config.active = board.id;
-        config = normalizeConfig(config);
-        persist();
+        saveBoard(board);
         byId('gohDashEditor').close();
         renderControls();
         renderWidgets();
@@ -964,7 +972,6 @@
     function onChange(event) {
         if (preferenceStatus === 'loading') return;
         const target = event.target;
-        if (target.id === 'gohDashPersonal' && target.value) { config.active = target.value; persist(); renderControls(); renderWidgets(); }
         if (target.id === 'gohDashPeriod' || target.id === 'gohDashLimit') { config.period = byId('gohDashPeriod').value; config.limit = Number(byId('gohDashLimit').value); persist(); renderWidgets(); }
         if (!draft) return;
         if (target.id === 'gohDashBase' && target.value !== 'current') { draft.widgets = templates.find(item => item.id === target.value)?.widgets.slice() || []; draft.wide = []; draft.layout = {}; renderEditor(); }
@@ -991,7 +998,7 @@
         if (attrs.dashAction === 'save-layout') finishLayout(true);
         if (attrs.dashAction === 'cancel-layout') finishLayout(false);
         if (attrs.dashAction === 'compact' && layoutDraft) { layoutDraft.layout = { ...layoutDraft.layout, ...arrangeWidgets(allowedWidgets(layoutDraft.widgets, context.canAccess).map(widget => widget.id), layoutDraft.layout, layoutDraft.wide, '', true) }; renderWidgets(); }
-        if (attrs.template && allowedTemplates(context.canAccess).some(item => item.id === attrs.template)) { config.active = attrs.template; persist(); renderControls(); renderWidgets(); byId('gohDashTemplates').querySelector('[data-template="' + attrs.template + '"]').focus(); }
+        if (attrs.template && availableBoards(config, context.canAccess).some(item => item.id === attrs.template)) { config.active = attrs.template; persist(); renderControls(); renderWidgets(); byId('gohDashTemplates').querySelector('[data-template="' + attrs.template + '"]').focus(); }
         if (attrs.openModule && context.canAccess(attrs.openModule)) context.openModule(attrs.openModule);
         if (attrs.order && context.canAccess(attrs.orderModule)) context.openOrder(Number(attrs.order), attrs.orderModule);
         if (attrs.move && draft) {
@@ -1003,7 +1010,14 @@
         }
         if (attrs.dashAction === 'create' || attrs.dashAction === 'edit') openEditor(attrs.dashAction === 'create', button);
         if (attrs.dashAction === 'cancel') byId('gohDashEditor').close();
-        if (attrs.dashAction === 'delete' && draft && draft.existing && root.confirm('Slet dashboard "' + draft.name + '"?')) { config.boards = config.boards.filter(board => board.id !== draft.id); config.active = 'management'; persist(); byId('gohDashEditor').close(); renderControls(); renderWidgets(); }
+        if (attrs.dashAction === 'delete' && draft && draft.existing) {
+            const standard = templates.some(item => item.id === draft.id);
+            if (root.confirm(standard ? 'Nulstil kun din visning af "' + draft.name + '"?' : 'Slet dashboard "' + draft.name + '"?')) {
+                config.boards = config.boards.filter(board => board.id !== draft.id);
+                config.active = standard ? draft.id : 'management';
+                persist(); byId('gohDashEditor').close(); renderControls(); renderWidgets();
+            }
+        }
         if (attrs.dashAction === 'export') exportCsv();
         if (attrs.dashAction === 'refresh') refreshData();
     }
@@ -1043,7 +1057,7 @@
             try { legacy = JSON.parse(root.localStorage.getItem(key) || 'null'); cached = JSON.parse(root.localStorage.getItem(key + ':goh') || 'null'); } catch (_) { legacy = null; cached = null; }
             mount(host);
             preferenceStore = createPreferenceStore({
-                cached, legacy, schemaVersion: 3, initial: { active: allowedTemplates(next.canAccess)[0]?.id || 'production' },
+                cached, legacy, schemaVersion: 4, initial: { active: allowedTemplates(next.canAccess)[0]?.id || 'production' },
                 load: next.loadPreferences, save: next.savePreferences,
                 cache: value => {
                     try { root.localStorage.setItem(key + ':goh', JSON.stringify(value)); localRecoveryAvailable = true; }

@@ -45,6 +45,7 @@
     [data-goh-theme=dark] .goh-donut-segment:focus-visible { filter:brightness(1.3); }
     [data-goh-theme=dark] :is(.belastning-svg,.omsaetning-chart-svg) :is(.axis,.grid) { stroke:var(--goh-border); }
     [data-goh-theme=dark] :is(.belastning-svg,.omsaetning-chart-svg) text { fill:var(--goh-muted); }
+    [data-goh-theme=dark] .omsaetning-month-total { fill:var(--goh-text); }
     [data-goh-theme=dark] .goh-track .goh-bar-negative { background:#e27470; }
     [data-goh-theme=dark] .goh-seller-db span { background:#78bce3; }
     [data-goh-theme=dark] .goh-capacity-legend span + span::before, [data-goh-theme=dark] .goh-capacity-track span { background:#e5b85a; }

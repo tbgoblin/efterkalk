@@ -61,7 +61,13 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 - le prenotazioni `Rsv` sono collegate solo a salgsordrer esistenti e aperte, con lotto `ShpBal` verificato; la sezione informativa non viene mai sommata due volte
 - `Indkøbte dele til ordre` entra nel VIA con il consumo `NoFin` oppure, prima del consumo, quando ricezione, giacenza fisica e prenotazione verificata provano l’allocazione; il corrispondente valore FIFO esce dal Lager
 - VIA, Lagerliste e CSV includono lo stesso valore dei componenti acquistati e il relativo dettaglio espandibile
-- cache Lagerliste `v35`, cache VIA `v34` e schema di valutazione `35`
+- cache Lagerliste `v36`, cache VIA `v35` separata per database/data/perimetro; schema di valutazione `35` invariato
+
+### VIA: rettifica del perimetro (`2026-09-16`)
+
+- Con accesso Omsætning, la lista usa gli ordini con residuo `closing > 0,01 DKK` del modello Ordreflow, non tutti i candidati mensili. Tabella, KPI filtrato e CSV espongono il residuo, non il lordo.
+- Lagerliste conserva il filtro storico e le regole di costo/allocazione. Costi mancanti, storico non riconciliato e residui minimi esclusi sono espliciti; il refresh singolo verifica l'identità dell'ordine.
+- Verificati nel browser filtri/CSV, risposta errata, metadati, costi sconosciuti anche nel dashboard e recupero da errore. Dopo riavvio: 170/170 ordini e residui coincidenti con Ordreflow, totale 5.329.032,91 DKK; il residuo escluso di 0,00811 DKK spiega il centesimo rispetto alla totalizzazione Ordreflow. Refresh singolo 413646 verificato senza modifiche agli altri ordini. Suite Node e confronto numerico di Lagerliste non eseguiti; nessun rilascio incluso.
 
 ---
 

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="da">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ledelsesrapport</title>
+    <style>
+        :root { --ink:#17324d; --muted:#60758a; --line:#d8e2eb; --navy:#123f69; --blue:#2c6aa3; --cyan:#38a3a5; --green:#4f8a5b; --gold:#d49a35; --red:#c45b4b; --paper:#fff; --wash:#edf3f7; }
+        * { box-sizing:border-box; }
+        body { margin:0; color:var(--ink); background:var(--wash); font-family:"Segoe UI",Tahoma,sans-serif; }
+        button,input,select { font:inherit; }
+        .toolbar { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px; padding:10px 18px; background:#fff; border-bottom:1px solid var(--line); box-shadow:0 4px 18px rgba(23,50,77,.08); }
+        .toolbar strong { margin-right:auto; }
+        button { border:1px solid #b8cad9; border-radius:6px; background:#fff; color:var(--ink); padding:8px 12px; font-weight:700; cursor:pointer; }
+        button.primary { border-color:var(--navy); background:var(--navy); color:#fff; }
+        .report { width:min(1480px,calc(100% - 32px)); margin:20px auto 40px; background:var(--paper); padding:24px; box-shadow:0 10px 32px rgba(23,50,77,.10); }
+        .report-head { display:grid; grid-template-columns:1fr auto; gap:20px; align-items:end; padding-bottom:14px; border-bottom:3px solid var(--navy); }
+        h1 { margin:0; color:var(--navy); font:700 30px/1.05 Georgia,serif; letter-spacing:0; }
+        .subtitle,.meta,.note { color:var(--muted); }
+        .subtitle { margin:6px 0 0; font-size:13px; }
+        .meta { text-align:right; font-size:11px; line-height:1.5; }
+        .kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin:16px 0; }
+        .kpi { padding:11px 12px; border-left:4px solid var(--blue); background:#f4f8fb; }
+        .kpi .label { color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; }
+        .kpi .value { margin-top:3px; color:var(--navy); font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; }
+        .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .panel { min-width:0; border:1px solid var(--line); border-radius:6px; padding:12px; background:#fff; break-inside:avoid; }
+        .panel.wide { grid-column:1/-1; }
+        .panel-head { display:flex; justify-content:space-between; gap:12px; align-items:baseline; margin-bottom:8px; }
+        h2 { margin:0; color:var(--navy); font:700 17px/1.2 Georgia,serif; letter-spacing:0; }
+        .unit { color:var(--muted); font-size:10px; }
+        svg { display:block; width:100%; height:250px; overflow:visible; }
+        .weekly-chart { height:auto; aspect-ratio:1000/320; }
+        .legend { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:6px; color:#4d6479; font-size:10px; }
+        .legend span { display:inline-flex; align-items:center; gap:4px; }
+        .swatch { width:9px; height:9px; display:inline-block; }
+        .omsaetning-legend { display:flex; flex-wrap:wrap; gap:8px 12px; margin-top:6px; font-size:11px; }
+        .omsaetning-legend-item { display:inline-flex; align-items:center; gap:6px; }
+        .omsaetning-legend-swatch { width:10px; height:10px; border-radius:2px; }
+        .via-totals { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 0 0; }
+        .via-totals dt { color:var(--muted); font-size:12px; }
+        .via-totals dd { margin:4px 0 0; font-weight:800; font-size:20px; overflow-wrap:anywhere; }
+        .load-page { margin-top:22px; break-before:page; }
+        .resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+        .resource-grid.single-column { grid-template-columns:minmax(0,1fr); }
+        .single-column .belastning-svg { aspect-ratio:1060/288; }
+        .belastning-resource-chart { min-width:0; border:1px solid var(--line); border-radius:8px; padding:10px; break-inside:avoid; }
+        .belastning-resource-chart h3 { margin:0 0 8px; color:var(--navy); font-size:13px; overflow-wrap:anywhere; }
+        .belastning-svg { height:auto; aspect-ratio:556/288; }
+        .belastning-svg .axis { stroke:#aec2de; stroke-width:1.1; }
+        .belastning-svg .grid { stroke:#e4edf9; stroke-width:1; stroke-dasharray:3 4; }
+        .belastning-svg .label { fill:#3e5d84; font-size:10px; font-weight:700; }
+        .belastning-day-band { fill:transparent; }
+        .belastning-series-kap { fill:#6d96dc; }
+        .belastning-series-resv { fill:#ff6b57; }
+        .belastning-series-aften { fill:#f4b8c8; }
+        .belastning-mini-meta { display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:4px; color:#567395; font-size:11px; }
+        .order-period { margin-top:16px; }
+        .empty { padding:70px 20px; text-align:center; color:var(--muted); }
+        .error { color:#a33025; }
+        dialog { width:min(760px,calc(100% - 30px)); border:0; border-radius:8px; padding:0; color:var(--ink); background:var(--paper); box-shadow:0 24px 70px rgba(10,35,58,.28); }
+        dialog::backdrop { background:rgba(14,35,52,.55); }
+        .dialog-head { padding:18px 20px 12px; border-bottom:1px solid var(--line); }
+        .dialog-head h2 { font-size:21px; }
+        .dialog-body { padding:16px 20px; }
+        .fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+        label { display:grid; gap:5px; color:#405a70; font-size:11px; font-weight:700; }
+        input,select { width:100%; border:1px solid #b8cad9; border-radius:5px; padding:8px; color:var(--ink); background:#fff; }
+        .accounts-head { display:flex; align-items:center; justify-content:space-between; margin:16px 0 7px; }
+        .accounts-head span { font-size:12px; font-weight:800; }
+        .accounts-head button { padding:5px 8px; font-size:10px; }
+        .accounts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; max-height:220px; overflow:auto; border:1px solid var(--line); padding:9px; }
+        .accounts label { display:flex; align-items:center; gap:7px; font-weight:600; }
+        .accounts input { width:auto; }
+        .dialog-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; }
+        #status { margin-right:auto; align-self:center; font-size:11px; color:var(--muted); }
+        @media screen and (max-width:800px) { .grid,.fields,.resource-grid { grid-template-columns:1fr; } .panel.wide { grid-column:auto; } .kpis { grid-template-columns:repeat(2,1fr); } .report { width:100%; margin:0; padding:14px; } .toolbar { position:static; flex-wrap:wrap; } .report-head { grid-template-columns:1fr; } .meta { text-align:left; } .kpi .value { font-size:16px; } }
+        @page { size:A4 landscape; margin:9mm; }
+        @media print {
+            body { background:#fff; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+            .toolbar,dialog { display:none !important; }
+            .report { width:auto; margin:0; padding:0; box-shadow:none; }
+            .report-head { padding-bottom:8px; }
+            .kpis { margin:10px 0; gap:6px; }
+            .kpi { padding:7px 9px; }
+            .kpi .value { font-size:16px; }
+            .grid { display:block; }
+            .panel { padding:8px; margin-bottom:10px; }
+            svg { height:205px; }
+            .weekly-chart { width:100%; height:auto; }
+            .order-panel { break-inside:avoid; }
+            .load-page { margin:0; }
+            .resource-grid { gap:4mm; }
+            .belastning-resource-chart { height:82mm; padding:2mm; }
+            .belastning-svg { width:100%; height:65mm; }
+            .belastning-mini-meta { font-size:9px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="toolbar">
+        <button type="button" onclick="location.href='/'" title="Tilbage">←</button>
+        <strong>Ledelsesrapport</strong>
+        <button type="button" onclick="openConfig()">Indstillinger</button>
+        <button type="button" class="primary" onclick="window.print()">Print liggende</button>
+    </header>
+    <main id="report" class="report"><div class="empty">Vælg rapportens indstillinger.</div></main>
+
+    <dialog id="configDialog">
+        <form id="configForm" method="dialog">
+            <header class="dialog-head"><h2>Opsæt ledelsesrapport</h2></header>
+            <div class="dialog-body">
+                <div class="fields">
+                    <label>Omsætning, fra måned<input id="fromMonth" type="month" required /></label>
+                    <label>Omsætning, til måned<input id="toMonth" type="month" required /></label>
+                </div>
+                <div class="fields order-period">
+                    <label>Største kunder, fra måned<input id="customerFromMonth" type="month" required /></label>
+                    <label>Største kunder, til måned<input id="customerToMonth" type="month" required /></label>
+                    <label>Antal kunder<select id="topCustomers"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></label>
+                </div>
+                <div class="fields order-period">
+                    <label>Ordreindgang, fra uge<input id="orderFromWeek" type="week" required /></label>
+                    <label>Ordreindgang, til uge<input id="orderToWeek" type="week" required /></label>
+                </div>
+                <div class="fields order-period">
+                    <label>Belastning, plan fra dato<input id="loadFromDate" type="date" required /></label>
+                    <label>Belastning, plan til dato<input id="loadToDate" type="date" required /></label>
+                </div>
+                <div class="fields order-period">
+                    <label>VIA, åbne ordrer<select id="viaPeriod"><option value="all">Alle ordredatoer</option><option value="dates">Valgt ordredatoperiode</option></select></label>
+                    <label>VIA, ordredato fra<input id="viaFromDate" type="date" disabled /></label>
+                    <label>VIA, ordredato til<input id="viaToDate" type="date" disabled /></label>
+                </div>
+                <div class="accounts-head"><span>Omsætningskonti</span><div><button type="button" onclick="setAllAccounts(true)">Vælg alle</button> <button type="button" onclick="setAllAccounts(false)">Fravælg alle</button></div></div>
+                <div id="accounts" class="accounts"><span class="note">Henter konti...</span></div>
+            </div>
+            <footer class="dialog-actions"><span id="status" role="status" aria-live="polite"></span><button type="button" onclick="configDialog.close()">Luk</button><button id="generateBtn" type="submit" class="primary">Dan rapport</button></footer>
+        </form>
+    </dialog>
+    <script src="/assets/js/report-charts.js?v=4"></script>
+    <script src="/assets/js/ledelsesrapport.js?v=7"></script>
+</body>
+</html>

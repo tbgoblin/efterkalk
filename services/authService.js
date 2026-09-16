@@ -9,11 +9,12 @@ const USERS_STATE_KEY = 'app_users';
 const SESSION_COOKIE_NAME = 'gantech_session';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
-function createAuthService({ fs, usersFile }) {
+function createAuthService({ fs, usersFile, cookieScope = process.env.PORT || '' }) {
     const legacyUsersFile = usersFile || path.join(__dirname, '..', 'users.json');
     const dataDir = String(process.env.GANTECH_DATA_DIR || '').trim();
     const resolvedUsersFile = dataDir ? path.join(dataDir, 'users.json') : legacyUsersFile;
     const authSessions = new Map();
+    const sessionCookieName = SESSION_COOKIE_NAME + (cookieScope ? '_' + crypto.createHash('sha256').update(String(cookieScope)).digest('hex').slice(0, 12) : '');
 
     function ensureUsersFile() {
         if (fs.existsSync(resolvedUsersFile)) return;
@@ -78,7 +79,7 @@ function createAuthService({ fs, usersFile }) {
             const separator = item.indexOf('=');
             if (separator === -1) continue;
             const name = item.slice(0, separator).trim();
-            if (name !== SESSION_COOKIE_NAME) continue;
+            if (name !== sessionCookieName) continue;
             const value = item.slice(separator + 1).trim();
             try {
                 return decodeURIComponent(value);
@@ -118,12 +119,12 @@ function createAuthService({ fs, usersFile }) {
     }
 
     function buildSessionCookie(token) {
-        return SESSION_COOKIE_NAME + '=' + encodeURIComponent(token)
+        return sessionCookieName + '=' + encodeURIComponent(token)
             + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + Math.floor(SESSION_TTL_MS / 1000);
     }
 
     function buildExpiredSessionCookie() {
-        return SESSION_COOKIE_NAME + '=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        return sessionCookieName + '=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
 
     function requireSuperadmin(req, res) {
@@ -162,6 +163,7 @@ function createAuthService({ fs, usersFile }) {
         hydrateUsersFromDb,
         safeUser,
         makePasswordHash,
+        getSessionToken,
         getSessionUser,
         requireAuthenticated,
         requireSuperadmin,

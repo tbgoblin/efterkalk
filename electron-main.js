@@ -1,8 +1,10 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { createDesktopCredentialStore } = require('./services/desktopCredentialService');
 
 let mainWindow = null;
 let autoUpdaterConfigured = false;
@@ -145,6 +147,49 @@ const desktopUpdateState = {
 
 // Detect RDS environment
 const IS_RDS = !!process.env.SESSIONNAME && process.env.SESSIONNAME !== 'Console';
+const desktopClient = String(process.env.CLIENTNAME || '').trim().toLowerCase();
+const desktopScope = crypto.createHash('sha256').update(JSON.stringify([
+    os.hostname().toLowerCase(), String(process.env.USERDOMAIN || '').toLowerCase(), os.userInfo().username.toLowerCase(), desktopClient, IS_RDS ? 'rds' : 'local'
+])).digest('hex');
+const desktopPartition = 'persist:goh-' + desktopScope + '-' + crypto.createHash('sha256')
+    .update(String(process.env.SESSIONNAME || 'console')).digest('hex').slice(0, 12);
+let credentialStore;
+
+function setupDesktopLogin() {
+    credentialStore = createDesktopCredentialStore({ fs, safeStorage,
+        filePath: path.join(app.getPath('userData'), 'login-' + desktopScope + '.bin'),
+        enabled: process.platform === 'win32' && (!IS_RDS || Boolean(desktopClient)) });
+    let loginQueue = Promise.resolve();
+    const handle = (channel, action) => ipcMain.handle(channel, async (event, data) => {
+        if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame
+            || new URL(event.senderFrame.url).origin !== APP_URL || new URL(event.senderFrame.url).pathname !== '/') throw new Error('Login-adgang afvist');
+        const task = loginQueue.then(() => action(data));
+        loginQueue = task.catch(() => {});
+        return task;
+    });
+    handle('goh-login:info', () => credentialStore.info());
+    handle('goh-login:forget', () => { credentialStore.forget(); return { ok: true }; });
+    handle('goh-login:remember', async data => {
+        const response = await mainWindow.webContents.session.fetch(APP_URL + '/auth/session', {
+            headers: { Authorization: 'Bearer ' + String(data?.token || '') }, credentials: 'include', redirect: 'error', signal: AbortSignal.timeout(8000)
+        });
+        const session = response.ok ? await response.json() : null;
+        if (!session?.user || session.user.username.toLowerCase() !== String(data?.username || '').toLowerCase()) throw new Error('Log ind før du gemmer kode');
+        credentialStore.save({ username: session.user.username, password: data.password });
+        return { ok: true };
+    });
+    handle('goh-login:restore', async () => {
+        const saved = credentialStore.read();
+        if (!saved) return null;
+        const response = await mainWindow.webContents.session.fetch(APP_URL + '/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saved),
+            credentials: 'include', redirect: 'error', signal: AbortSignal.timeout(10000)
+        });
+        if (response.status === 401) credentialStore.forget();
+        if (!response.ok) throw new Error('Gemt login kunne ikke åbnes. Log ind igen.');
+        return response.json();
+    });
+}
 
 const logDirInfo = process.env.GANTECH_LOG_DIR || '(auto)';
 console.info('Desktop process booting... port=' + USER_PORT + ' rds=' + IS_RDS + ' logDir=' + logDirInfo);
@@ -468,6 +513,8 @@ function createMainWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            preload: path.join(__dirname, 'electron-preload.js'),
+            partition: desktopPartition,
             sandbox: !IS_RDS  // sandbox must be disabled on some RDS configurations
         }
     });
@@ -495,8 +542,31 @@ function createMainWindow() {
     });
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url).catch(() => {});
+        const target = new URL(url);
+        if (target.origin === APP_URL) return { action: 'allow', overrideBrowserWindowOptions: {
+            autoHideMenuBar: true, width: 1440, height: 960,
+            webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: !IS_RDS, partition: desktopPartition, preload: '' }
+        } };
+        if (['http:', 'https:', 'mailto:'].includes(target.protocol)) shell.openExternal(url).catch(() => {});
         return { action: 'deny' };
+    });
+    mainWindow.webContents.on('did-create-window', child => {
+        child.webContents.on('will-navigate', (event, url) => {
+            const target = new URL(url);
+            if (target.origin === APP_URL && target.pathname === '/') {
+                event.preventDefault();
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
+                child.close();
+            } else if (target.origin !== APP_URL) {
+                event.preventDefault();
+                if (['http:', 'https:', 'mailto:'].includes(target.protocol)) shell.openExternal(url).catch(() => {});
+            }
+        });
+        child.webContents.setWindowOpenHandler(({ url }) => {
+            const target = new URL(url);
+            if (['http:', 'https:', 'mailto:'].includes(target.protocol) && target.origin !== APP_URL) shell.openExternal(url).catch(() => {});
+            return { action: 'deny' };
+        });
     });
 
     mainWindow.on('closed', () => {
@@ -506,6 +576,7 @@ function createMainWindow() {
 
 function bootDesktopApp() {
     configureAutoStart();
+    setupDesktopLogin();
 
     // Show loading screen immediately — don't wait for server
     createMainWindow();

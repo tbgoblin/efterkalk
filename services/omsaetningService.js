@@ -491,7 +491,7 @@ function createOmsaetningService({ getConnection, sql }) {
             .input('period', sql.Int, meta.fiscalPeriodKey)
             .input('customerCsv', sql.NVarChar(sql.MAX), String(customerCsv || '').trim())
             .query(`
-                SELECT o.OrdNo, o.OrdDt AS OrderDate, o.CustNo, c.Nm AS CustomerName,
+                SELECT o.OrdNo, o.OrdDt AS OrderDate, o.CustNo, c.Nm AS CustomerName, o.Gr12, o.OrdPrSt,
                     CAST(ISNULL(o.InvoSF, 0) * (ISNULL(o.ExRt, 100) / 100.0) AS decimal(38, 6)) AS InvoicedDkk,
                     CAST(ISNULL(o.InvoIF, 0) * (ISNULL(o.ExRt, 100) / 100.0) AS decimal(38, 6)) AS RemainingDkk,
                     CAST((ISNULL(o.InvoSF, 0) + ISNULL(o.InvoIF, 0)) * (ISNULL(o.ExRt, 100) / 100.0) AS decimal(38, 6)) AS OrderValueDkk

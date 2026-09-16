@@ -2,6 +2,63 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const dashboard = require('../assets/js/dashboard');
 
+test('standard overrides retain their identity and do not consume the 12 custom dashboard slots', () => {
+    const originals = structuredClone(dashboard.templates);
+    const boards = Array.from({ length: 13 }, (_, index) => ({ id: 'custom-' + index, name: 'Plan ' + index, widgets: ['load-kpi'] }))
+        .concat(dashboard.templates.map(template => ({ ...template, name: template.name + ' personlig', widgets: ['load-days'],
+            layout: { 'load-days': { x: 0, y: 0, w: 6, h: 8 } }, options: { 'load-days': { days: 45 } } })))
+        .concat([{ id: 'production', name: 'Duplicate', widgets: [] }, { id: 'unknown', widgets: [] }]);
+    const config = dashboard.normalizeConfig({ active: 'production', boards, theme: 'dark', query: 'hold 1' });
+    assert.equal(config.boards.length, 16);
+    assert.equal(config.boards.filter(board => board.id.startsWith('custom-')).length, 12);
+    assert.equal(config.active, 'production');
+    assert.equal(config.boards.find(board => board.id === 'production').options['load-days'].days, 45);
+    assert.equal(config.boards.find(board => board.id === 'production').layout['load-days'].w, 6);
+    assert.deepEqual(dashboard.normalizeConfig(JSON.parse(JSON.stringify(config))), config);
+    assert.deepEqual(dashboard.templates, originals);
+    const tabs = dashboard.availableBoards(config, () => true);
+    assert.deepEqual(tabs.slice(0, 4).map(board => board.id), dashboard.templates.map(board => board.id));
+    assert.equal(tabs.length, 16);
+    assert.equal(new Set(tabs.map(board => board.id)).size, 16);
+    assert.equal(tabs[1].name, 'Produktion personlig');
+    assert.equal(dashboard.availableBoards(dashboard.normalizeConfig({}), () => true)[1].name, 'Produktion');
+    assert.deepEqual(dashboard.availableBoards(dashboard.normalizeConfig({ boards: [boards[14]] }), module => module === 'belastning').map(board => board.id), ['production']);
+});
+
+test('sidebar entries are alphabetical by their Danish names', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+    const start = source.indexOf('<div class="side-menu-module-list">');
+    const menu = source.slice(start, source.indexOf('</div>', start));
+    const names = [...menu.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map(match => match[1].replace(/^[^\p{L}\p{N}]+/u, '').trim());
+    assert.ok(names.length >= 15);
+    assert.deepEqual(names, names.slice().sort((left, right) => left.localeCompare(right, 'da')));
+    assert.match(source, /JSON\.stringify\(\{ config, version, schemaVersion: 4 \}\)/);
+});
+
+test('standard board settings survive serialized GOH writes and a new session', async () => {
+    let record = { schemaVersion: 4, version: 2, config: { active: 'production', theme: 'dark', boards: [{ id: 'custom-existing', name: 'Plan', widgets: ['load-kpi'] }] } };
+    let loaded;
+    const options = { schemaVersion: 4, cache() {}, onStatus() {}, onConfig(value) { loaded = value; },
+        load: async () => structuredClone(record), save: async (config, version) => {
+            assert.equal(version, record.version);
+            record = { schemaVersion: 4, version: version + 1, config: structuredClone(config) };
+            return record;
+        } };
+    const store = dashboard.createPreferenceStore(options);
+    await store.load();
+    await store.set({ ...loaded, boards: loaded.boards.concat({ id: 'production', name: 'Mit hold', widgets: ['load-days'], options: { 'load-days': { days: 30 } } }) });
+    store.dispose();
+    const reopened = dashboard.createPreferenceStore(options);
+    await reopened.load();
+    assert.equal(loaded.active, 'production');
+    assert.equal(loaded.theme, 'dark');
+    assert.deepEqual(loaded.boards.map(board => board.id), ['custom-existing', 'production']);
+    assert.equal(loaded.boards[1].options['load-days'].days, 30);
+    reopened.dispose();
+});
+
 test('personal themes are opt-in and survive preference normalization', () => {
     assert.equal(dashboard.normalizeConfig({}).theme, 'light');
     for (const theme of ['light', 'dark', 'system']) {
@@ -36,8 +93,8 @@ test('dark palette preserves status meaning with readable foregrounds', () => {
 test('personal theme uses the serialized GOH store without losing boards', async () => {
     const writes = [];
     let loaded;
-    const store = dashboard.createPreferenceStore({ schemaVersion: 3, cache() {}, onStatus() {}, onConfig(value) { loaded = value; },
-        load: async () => ({ schemaVersion: 3, version: 4, config: { theme: 'dark', active: 'custom-theme', boards: [{ id: 'custom-theme', widgets: ['load-kpi'] }] } }),
+    const store = dashboard.createPreferenceStore({ schemaVersion: 4, cache() {}, onStatus() {}, onConfig(value) { loaded = value; },
+        load: async () => ({ schemaVersion: 4, version: 4, config: { theme: 'dark', active: 'custom-theme', boards: [{ id: 'custom-theme', widgets: ['load-kpi'] }] } }),
         save: async (config, version) => { writes.push({ config, version }); return { version: version + 1 }; } });
     await store.load();
     assert.equal(loaded.theme, 'dark');
@@ -186,6 +243,20 @@ test('generated dashboard shell keeps the login and source bridge valid JavaScri
     assert.ok(inline.includes('days = 20'));
     assert.ok(inline.includes("['best', 'risk', 'coverage', 'sellers'].includes(id)"));
     assert.ok(inline.includes('synchronizeDashboardOrderMargin(detailOrdNo, marginStateByOrdNo[detailOrdNo])'));
+    assert.ok(inline.includes('class="omsaetning-month-total"'));
+    assert.ok(inline.includes('appendMonthTotalLabel'));
+});
+
+test('VIA renders per-row residuals instead of comparing an unrelated gross-sales KPI', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const route = fs.readFileSync(path.join(__dirname, '../routes/apiRoutes.js'), 'utf8');
+    const via = fs.readFileSync(path.join(__dirname, '../assets/js/via.js'), 'utf8');
+    assert.match(route, /omsaetningService\.getOrderFlow\(\{ month: context\.month \}\)/);
+    assert.match(route, /orderBacklogValueDkk/);
+    assert.match(via, /sortHeader\('remainingSalesValue', 'Restsalgsværdi'\)/);
+    assert.match(via, /;Restsalgsværdi/);
+    assert.doesNotMatch(via, /Salgsværdi VIA|Ordrebeholdning total/);
 });
 
 test('interactive order flow uses a separate refresh source and economic permissions', async () => {
@@ -706,6 +777,16 @@ test('dashboard VIA sums cost categories once and does not inherit invoice perio
     assert.equal(result.via.length, 3);
 });
 
+test('dashboard keeps orders with unknown VIA costs but never reports those costs as zero', () => {
+    const result = dashboard.buildData({ ...input, via: [...input.via, { OrdNo: 8, DeliveryDate: 20260914, CostDataAvailable: false, MaterialCost: null, TimeCost: null }] });
+    assert.equal(result.via.length, 4);
+    assert.equal(result.via.find(row => row.order === 8).value, null);
+    assert.equal(result.widgets['via-kpi'][0].value, null);
+    assert.ok(result.widgets['via-cost'].every(row => row.value === null));
+    assert.ok(result.widgets['via-due'].some(row => row.order === 8));
+    assert.ok(result.widgets['via-top'].every(row => row.order !== 8));
+});
+
 test('dashboard dates reject invalid calendar days and support SQL compact and ISO dates', () => {
     assert.equal(dashboard.dateKey(20260230), '');
     assert.equal(dashboard.dateKey(0), '');
@@ -937,7 +1018,7 @@ test('dashboard API authenticates, scopes by canonical user and database, and re
     async function invoke(method, username, body, query = { profile: 'production' }) {
         const result = { status: 200, body: null };
         const response = { setHeader() {}, status(value) { result.status = value; return this; }, json(value) { result.body = value; return this; } };
-        const request = { query, body, sessionUser: username ? { username } : null };
+        const request = { query, body: method === 'PUT' ? { schemaVersion: 4, ...body } : body, sessionUser: username ? { username } : null };
         for (const callback of handlers.get(method + ' /dashboard/preferences')) {
             let next = false;
             await callback(request, response, () => { next = true; });
@@ -947,8 +1028,13 @@ test('dashboard API authenticates, scopes by canonical user and database, and re
     }
     assert.equal((await invoke('GET')).status, 401);
     assert.equal((await invoke('PUT', null, {})).status, 401);
-    assert.equal((await invoke('PUT', 'MW', { version: 0, username: 'TB', config: { active: 'sales', query: ' logi ', unknown: 'ignored' } })).status, 200);
+    assert.equal((await invoke('PUT', 'MW', { version: 0, username: 'TB', config: { active: 'sales', query: ' logi ', unknown: 'ignored', boards: [{ id: 'sales', name: 'Mit salg', widgets: ['invoice-kpi'], options: { 'invoice-kpi': { showMonths: false } } }] } })).status, 200);
     assert.equal((await invoke('GET', 'mw')).body.config.query, 'logi');
+    assert.equal((await invoke('GET', 'mw')).body.schemaVersion, 4);
+    assert.equal((await invoke('GET', 'mw')).body.config.boards[0].id, 'sales');
+    assert.equal((await invoke('GET', 'mw')).body.config.boards[0].options['invoice-kpi'].showMonths, false);
+    assert.equal((await invoke('PUT', 'MW', { schemaVersion: 3, version: 1, config: {} })).status, 400);
+    assert.equal((await invoke('PUT', 'MW', { schemaVersion: undefined, version: 1, config: {} })).status, 400);
     assert.equal((await invoke('GET', 'TB')).body.config, null);
     assert.equal(records.size, 1);
     assert.ok([...records.keys()][0].length <= 100);
@@ -984,3 +1070,4 @@ test('strict AppState reads distinguish missing data from GOH failure without ch
     assert.match(source, /expectedVersion = -1/);
     assert.match(source, /WHEN NOT MATCHED AND @expectedVersion IN \(-1, 0\)/);
 });
+

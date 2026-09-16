@@ -1,10 +1,13 @@
 # GOH: grafisk og operationel videreudvikling
 
-Opdateret 2026-09-15. Desktop er målplatformen; mobilarbejde er ikke bestilt.
+Opdateret 2026-09-16. Desktop er målplatformen; mobilarbejde er ikke bestilt.
 Dette er en prioriteret revision, ikke en erklæring om at alle moduler er redesignet.
 
 ## Færdigt i denne iteration
 
+- [x] Ledelsesrapport: separate perioder pr. sektion; ét Omsætning-diagram for 1-36 måneder, ét Ordreindgang-diagram og ét diagram pr. Belastning-ressource. Browserfixtures kontrollerer periodeparametre, datofejl uden queries, månedsværdier/kreditter og A4 med 15 måneder.
+- [x] Implementeret sessionsrestore ved retur/genindlæsning, port-scopede cookies og opt-in Windows-DPAPI-login pr. Windows-bruger/RDS-client. Desktoprapport åbnes internt med fælles session; Log ud sletter gemt login.
+- [ ] Efter genstart: verificer separate rapportperioder mod live-data, inkluderet sidste plandag, Electron Tilbage, Husk kode, genstart og Log ud på to Windows-brugere/RDS-clients. Kør `node test/authService.test.js`, `node test/ledelsesrapport.test.js` og `npm test`; kommandokørsel og ægte DPAPI er ikke tilgængelige i editorsessionen.
 - [x] Dashboard-søgning i Belastning understøtter kunde/ordre samt lokal ressourcefiltrering. Live-kontrol: `logi` giver planlagte timer; visningen bliver ikke tom på grund af et ekstra ressourcenavnfilter.
 - [x] Personlige dashboard-positioner og størrelser: træk, resize, tastatur, pak tæt, Gem/Annuller. Standardskabeloner kopieres; layouts isoleres pr. bruger/database.
 - [x] Direkte header-drag og hjørne-resize med automatisk lagring i GOH pr. bruger/tilsluttet database. Widgetvalg, navne, sidste visning, filtre og Ordreflow-state følger profilen. Legacy-import, lokal recovery, serialiserede writes, versionskonflikter og sene sessionssvar håndteres.
@@ -38,6 +41,11 @@ Dette er en prioriteret revision, ikke en erklæring om at alle moduler er redes
 
 ### 2. SalgOrdre VIA
 
+- [x] Rettet i kode: kommerciel VIA bruger Ordreflows åbne restsaldo-rækker; KPI, tabel og CSV følger samme filter. Lagerliste beholder historisk produktionsudvalg. Scoped cache, kontrolleret enkeltordre-refresh og synlig fejl med tidligere data er implementeret.
+- [x] Isolerede browserkontroller: restsaldo, filter/CSV, manglende kost (også dashboard), metadata-opdatering, forkert ordre-id, lukket ordre og fejlgenopretning. Desktop 1200/1600 px: lokal tabelrulning og ingen tekstoverlap efter rettelsen.
+- [x] Live efter brugerens servergenstart og login 2026-09-16: ny VIA-API og Ordreflow har samme 170/170 åbne ordrenumre og samme restsaldo pr. ordre, ingen dubletter eller manglende kostdata. VIA = 5.329.032,91 DKK; 0,00811 DKK under rækkegrænsen forklarer forskellen til Ordreflows total på 5.329.032,92 DKK og markeres i status. Enkeltordre 413646 opdateret uden ændringer på andre ordrer eller totalen. Ingen versionsændring eller publicering er udført.
+- [ ] Kør `node test/viaService.test.js` og `npm test` i et miljø med kommandokørsel. Kontroller Lagerlistes historiske ordreudvalg og numeriske værdi efter cachefornyelse; den tunge Lagerliste-query er ikke tvunget under denne rettelse.
+- [ ] SQL-overflowets oprindelige årsag er ikke dokumenteret. Eksisterende numeriske kostudtryk er ikke omskrevet i denne rettelse; isoler udtrykket før eventuelle yderligere aritmetikændringer. Historiske snapshots er ikke rettet automatisk.
 - [ ] Stablede kostsøjler pr. ressource eller kunde over ordretabellen; klik filtrerer de allerede indlæste rækker. Brug `getSalgordreViaVisibleRows` og `renderSalgordreVia` i `assets/js/via.js`.
 - [ ] Vis Materiale, Stang, Indkøbte dele og Tid én gang. Samlet kost er ikke en femte stablet komponent; salgsværdi har eget sammenligningsfelt.
 - [ ] Flyt købte dele til en eksplicit detaljevisning frem for mange indlejrede tabeller. Bevar Bestilt/Modtaget/Forbrugt/Medregnet og de verificerede reservationer.
@@ -46,6 +54,8 @@ Dette er en prioriteret revision, ikke en erklæring om at alle moduler er redes
 ### 3. Omsætning og Ordreindgang
 
 - [ ] Knyt eksisterende måneds-/kontosøjler og budgettærskler til samme månedspanel som Ordreflow. Undgå flere gentagelser af samme månedstotal. Brug `renderOmsaetningCharts` og `renderOmsaetningMonthDetail`.
+- [x] Vis nettoomsætning pr. måned direkte på den stacked søjle i Mio DKK. Labelen følger samme filtre og kommer med i Omsætningens Print rapport som del af SVG-grafen.
+- [x] Fjernet den misvisende separate bruttosalgs-KPI fra VIA; den aktuelle rettelse og udestående driftskontroller er beskrevet under SalgOrdre VIA.
 - [ ] Kundesammenligning som sorterede bjælker med beløb og ændring, derefter kundens fakturaordrer. Kreditposteringer skal fortsat indgå i bogført omsætning.
 - [ ] Ordreindgang: klik på uge/søjle filtrerer uge- og kundetabel; behold særskilte serier for ordreværdi, tilbud, budget og MA3. Brug `renderOrdreindgangTrendChart`, `renderOrdreindgangWeeklyTable`, `renderOrdreindgangCustomersTable`.
 - [ ] Kontrollér visning af negative ugebeløb: eksisterende grafens `toY` klamper værdier til nul. En akseændring kræver en negativ fixture, ikke ændring af ordrebeløbet.

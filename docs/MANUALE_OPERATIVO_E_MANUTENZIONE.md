@@ -702,8 +702,8 @@ deve essere aggiornato anche questo capitolo, specificando:
 - **aftercalc cache** persistente su file JSON
 - **production summary cache** persistente
 - **laser metrics cache** persistente
-- **SalgOrdre VIA cache** persistente, chiave `salgordre_via_v34`
-- **Lagerliste cache** persistente, chiave base `lagerliste_v35`
+- **SalgOrdre VIA cache** persistente, prefisso `salgordre_via_v35`, separata per server/database/data e perimetro commerciale o produttivo
+- **Lagerliste cache** persistente, chiave base `lagerliste_v36`; non cambia lo schema di valutazione o gli snapshot storici
 
 ### TTL attuali
 Da `server.js`:

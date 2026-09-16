@@ -22,8 +22,8 @@
 .goh-dashboard .goh-primary, .goh-editor .goh-primary { background:#167260; color:#fff; border-color:#167260; }
 .goh-dashboard .goh-primary:hover, .goh-editor .goh-primary:hover { background:#105b4d; }
 .goh-toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px; border-bottom:1px solid var(--dash-line); padding-bottom:16px; }
-.goh-templates { display:flex; flex-wrap:wrap; gap:4px; }
-.goh-templates button { border:0; border-bottom:3px solid transparent; border-radius:0; background:none; }
+.goh-templates { display:flex; flex-wrap:wrap; gap:4px; min-width:0; max-width:100%; }
+.goh-templates button { border:0; border-bottom:3px solid transparent; border-radius:0; background:none; min-width:0; max-width:100%; overflow-wrap:anywhere; }
 .goh-templates button[aria-pressed=true] { color:var(--dash-accent); border-bottom-color:var(--dash-accent); background:#e7f0ec; }
 .goh-toolbar-actions { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; }
 #gohDashRefresh[aria-busy=true] svg { animation:goh-dash-refresh 1s linear infinite; }

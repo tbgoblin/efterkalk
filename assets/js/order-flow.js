@@ -24,6 +24,7 @@
             rows.push({
                 ordNo: Number(order.OrdNo), orderDate: Number(order.OrderDate),
                 customerName: String(order.CustomerName || '').trim(), custNo: Number(order.CustNo || 0),
+                gr12: Number(order.Gr12 || 0), ordPrSt: Number(order.OrdPrSt || 0),
                 cohort: received ? 'new' : 'prior', value, opening,
                 incoming: received ? value : 0, invoiced, closing,
                 current: Math.max(0, Number(order.RemainingDkk || 0)),
