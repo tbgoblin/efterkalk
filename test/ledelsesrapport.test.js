@@ -20,6 +20,21 @@ test('management report is exposed through a separately administered module perm
     assert.match(source, /ledelsesrapport: 'ledelsesrapport'/);
     assert.match(source, /\['ledelsesrapport', 'Ledelsesrapport'\]/);
     assert.match(source, /data-module-key="ledelsesrapport"/);
+    assert.match(source, /id="adminTabLedelsesrapport"/);
+    assert.match(source, /loadAdminLedelsesrapportDefaults\(\)/);
+    assert.match(source, /id="adminReportLoadResources"/);
+    assert.match(source, /id="adminReportOrderLines"/);
+    assert.match(source, /function moveAdminReportResource\(/);
+    assert.match(source, /function startAdminReportResourceDrag\(/);
+    assert.match(source, /function refreshAdminReportResourcePagePreview\(/);
+});
+
+test('management report defaults are stored in GOH and protected by superadmin', () => {
+    const source = fs.readFileSync(path.join(root, 'routes/apiRoutes.js'), 'utf8');
+    assert.match(source, /getAppState\('ledelsesrapport_defaults'/);
+    assert.match(source, /setAppState\('ledelsesrapport_defaults', payload\)/);
+    assert.match(source, /router\.post\('\/admin\/ledelsesrapport-defaults', express\.json\(\)/);
+    assert.match(source, /const user = requireSuperadmin\(req, res\)/);
 });
 
 test('management report page is landscape printable and its client script parses', () => {
@@ -42,7 +57,13 @@ test('management report page is landscape printable and its client script parses
     assert.match(script, /Forventet salg \(åbne ordrer\)/);
     assert.match(script, /Samlet kost/);
     assert.match(script, /Belastning pr\. ressource/);
-    assert.match(script, /VIA kostfordeling/);
+    assert.match(script, /Ordrebeholdning pr\./);
+    assert.doesNotMatch(script, /<h2>VIA kostfordeling<\/h2>/);
+    assert.match(script, /applyDefaults\(config\.defaults\)/);
+    assert.match(html, /id="loadResources"/);
+    assert.match(html, /id="orderLines"/);
+    assert.match(html, /draggable|Træk i håndtaget/);
+    assert.match(html, /ledelsesrapport\.js\?v=16/);
 });
 
 test('shared revenue keeps credits, empty months and Danish precision', () => {
@@ -89,9 +110,25 @@ function reportClientFixture() {
     const source = fs.readFileSync(path.join(root, 'assets/js/ledelsesrapport.js'), 'utf8');
     const body = source.slice(source.indexOf('{') + 1, source.indexOf('    async function loadConfig()'));
     const charts = require('../assets/js/report-charts');
-    return new Function('document', 'window', body + ';return { stackedRevenue, horizontalBars, customerBars, orderReportView, lineChart, resourceLoadPanels, render, report };')(
+    return new Function('document', 'window', body + ';return { stackedRevenue, horizontalBars, customerBars, orderReportView, lineChart, resourceLoadPanels, orderFlowPanel, render, report };')(
         { getElementById: () => ({}) }, { GohReportCharts: charts });
 }
+
+test('management report renders the printable order backlog flow instead of VIA cost distribution', () => {
+    const client = reportClientFixture();
+    const html = client.orderFlowPanel({ asOf: 20260918, unknownCount: 0,
+        total: { opening: 6130000, incoming: 2590000, invoiced: 4220000, closing: 4500000, current: 4502591.91, completed: 193, adjustment: -207.97 },
+        prior: { opening: 6130000, incoming: 0, invoiced: 3300000, closing: 2500000 },
+        received: { opening: 0, incoming: 2590000, invoiced: 920000, closing: 2000000, completed: 74 } });
+    assert.match(html, /Ordrebeholdning pr\. 18\.09\.2026/);
+    assert.match(html, /Færdigfaktureret i måneden/);
+    assert.match(html, /Primo/);
+    assert.match(html, /Tilgang/);
+    assert.match(html, /Faktureret/);
+    assert.match(html, /Ultimo/);
+    assert.match(html, /4\.502\.591,91 kr\./);
+    assert.doesNotMatch(html, /VIA kostfordeling/);
+});
 
 test('top customer rows show their contribution margin', () => {
     const client = reportClientFixture();
@@ -152,6 +189,18 @@ test('order report fits all weeks in one chart without dropping weekly numbers',
     }
 });
 
+test('order report MA3 ignores every week with zero orders', () => {
+    const client = reportClientFixture();
+    const view = client.orderReportView({ weeklyRows: [
+        { weekKey: '202601', totalOrd: 100 },
+        { weekKey: '202602', totalOrd: 0 },
+        { weekKey: '202603', totalOrd: 200 },
+        { weekKey: '202604', totalOrd: 300 }
+    ], kpis: {} }, { budget: {}, holidays: { ignoreHolidayWeeks: false } });
+    assert.deepEqual(view.rows.map(row => row.ma3), [100, 100, 150, 200]);
+    assert.equal(view.rows[1].isAnomaly, false);
+});
+
 test('order budget matches manual settings, preserves SSRS mode and skips only empty holiday weeks', () => {
     const charts = require('../assets/js/report-charts');
     const rows = [
@@ -191,6 +240,25 @@ test('report order chart keeps the full trend and source period average without 
     assert.equal(holiday.average, null);
 });
 
+test('report hides unselected order lines and Belastning resources', () => {
+    const client = reportClientFixture();
+    const rows = [{ weekKey: '202601', totalOrd: 100, ma3: 90, totalBudget: 110 }];
+    const svg = client.lineChart(rows, 95, ['ma3']);
+    assert.match(svg, /data-series="ordreBars"/);
+    assert.match(svg, /data-series="ma3"/);
+    assert.doesNotMatch(svg, /data-series="totalOrd"|data-series="totalBudget"|data-series="periodAverage"/);
+    assert.doesNotMatch(client.lineChart([{ ...rows[0], isAnomaly: true }], 95, ['totalBudget']), /data-series="anomaly"/);
+    const load = client.resourceLoadPanels({ generatedAt: '2026-09-18', filters: { loadFrom: '2026-09-18', loadTo: '2026-09-20' }, load: { rows: [
+        { ResGr: '11', Nm: 'Laser', Dato: '2026-09-18', Kap: 100, Resv: 80, Aften: 0 },
+        { ResGr: '42', Nm: 'Bore', Dato: '2026-09-18', Kap: 100, Resv: 70, Aften: 0 },
+        { ResGr: '50', Nm: 'Svejs', Dato: '2026-09-18', Kap: 100, Resv: 60, Aften: 0 }
+    ] } }, ['42', '11']);
+    assert.match(load, /data-resource="42"/);
+    assert.match(load, /data-resource="11"/);
+    assert.doesNotMatch(load, /data-resource="50"/);
+    assert.ok(load.indexOf('data-resource="42"') < load.indexOf('data-resource="11"'));
+});
+
 test('resource horizons always stay in one card per resource with all bars inside the SVG', () => {
     const client = reportClientFixture();
     const charts = require('../assets/js/report-charts');
@@ -216,19 +284,29 @@ function reportFixture(options = {}) {
     const calls = [];
     const dailyRow = { ResGr: '11', Nm: 'Laser', Dato: null, DatoX: '', Kap: 0, Resv: 300, Aften: 10 };
     new Function('router', 'requireModulePermission', 'omsaetningService', 'ordreindgangService', 'fetchBelastningRows',
-        'getViaPayload', 'viaContext', 'getConnection', 'sql', 'logEvent', 'getOrComputeOrderMargin', source.slice(start, end))(
+        'getViaPayload', 'viaContext', 'getConnection', 'sql', 'logEvent', 'getOrComputeOrderMargin', 'gohData', source.slice(start, end))(
         { get(route, guard, handler) { handlers.set(route, { guard, handler }); } },
         permission => (req, res, next) => req.user?.permissions?.[permission] ? next() : res.status(403).json({ error: 'Denied' }),
-        { getAccounts: async () => { calls.push('accounts'); return options.accounts || [{ acNo: 11012 }]; }, getSummary: async params => { calls.push({ revenue: params }); return options.revenue ? options.revenue(params) : { rows: [], totalRevenueMio: 0 }; } },
+        { getAccounts: async () => { calls.push('accounts'); return options.accounts || [{ acNo: 11012 }]; },
+            getSummary: async params => { calls.push({ revenue: params }); return options.revenue ? options.revenue(params) : { rows: [], totalRevenueMio: 0 }; },
+            getOrderFlow: async params => { calls.push({ orderFlow: params }); return options.orderFlow || { month: params.month, asOf: 20260918, unknownCount: 0, total: {}, prior: {}, received: {} }; } },
         { getSummary: async params => { calls.push({ orders: params }); return { weeklyRows: [] }; } },
         async params => { calls.push({ load: params }); return params.parity === 1 ? (options.loadRows || [dailyRow]) : []; },
         async () => ({ rows: options.viaRows || [] }), () => ({}), async () => ({ request: () => {
             const request = { input() { return request; }, async query() { return { recordset: options.invoiceRows || [] }; } };
             return request;
         } }), { Int: 'Int', NVarChar: value => value, MAX: 'MAX' }, () => {},
-        async ordNo => options.margins?.[ordNo] || { totalRevenue: 0, totalCost: 0 }
+        async ordNo => options.margins?.[ordNo] || { totalRevenue: 0, totalCost: 0 },
+        { getAppState: async key => key === 'ledelsesrapport_defaults' && options.defaults ? { payload: options.defaults } : null }
     );
-    return { calls, dailyRow, async request(query, allowed = true) {
+    return { calls, dailyRow, async config(allowed = true) {
+        const req = { user: { permissions: { ledelsesrapport: allowed } } };
+        const result = { status: 200, payload: null };
+        const res = { status(code) { result.status = code; return this; }, json(payload) { result.payload = payload; return this; } };
+        const endpoint = handlers.get('/ledelsesrapport/config');
+        await endpoint.guard(req, res, () => endpoint.handler(req, res));
+        return result;
+    }, async request(query, allowed = true) {
         const req = { query, user: { permissions: { ledelsesrapport: allowed } } };
         const result = { status: 200, payload: null };
         const res = { status(code) { result.status = code; return this; }, json(payload) { result.payload = payload; return this; } };
@@ -237,6 +315,15 @@ function reportFixture(options = {}) {
         return result;
     } };
 }
+
+test('report config returns a valid shared default preset', async () => {
+    const defaults = { from: '2026-01', to: '2026-09', customerFrom: '2026-04', customerTo: '2026-09', topCustomers: 20,
+        orderFrom: '2026-W01', orderTo: '2026-W38', loadFrom: '2026-09-18', loadTo: '2026-10-17',
+        viaPeriod: 'dates', viaFrom: '2026-01-01', viaTo: '2026-09-18', loadResources: ['11', '42'], orderLines: ['ma3', 'totalBudget'] };
+    const result = await reportFixture({ defaults }).config();
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.payload.defaults, defaults);
+});
 
 test('report forwards independent weeks without changing revenue months or daily units', async () => {
     const fixture = reportFixture();
@@ -248,6 +335,7 @@ test('report forwards independent weeks without changing revenue months or daily
     assert.equal(revenue.til, '202604');
     assert.equal(result.payload.filters.orderFrom, '2025-W52');
     assert.deepEqual(result.payload.load.rows, [fixture.dailyRow]);
+    assert.deepEqual(fixture.calls.find(call => call.orderFlow).orderFlow, { month: '2026-09', customerCsv: '' });
 });
 
 test('invalid week ranges and unauthorized requests stop before database reads', async () => {

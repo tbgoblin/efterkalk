@@ -40,6 +40,20 @@
         .via-totals { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 0 0; }
         .via-totals dt { color:var(--muted); font-size:12px; }
         .via-totals dd { margin:4px 0 0; font-weight:800; font-size:20px; overflow-wrap:anywhere; }
+        .report-flow-head { display:grid; grid-template-columns:1fr 1fr; gap:18px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+        .report-flow-head span { display:block; color:var(--muted); font-size:10px; }
+        .report-flow-head strong { display:block; margin-top:3px; color:#187a67; font-size:21px; }
+        .report-flow-head b { display:block; margin-top:3px; color:#142f48; font-size:18px; }
+        .report-flow-head small { font-size:10px; font-weight:700; }
+        .report-flow-chart { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:10px; }
+        .report-flow-column { display:grid; grid-template-rows:22px 122px 20px; text-align:center; }
+        .report-flow-column > strong { color:#142f48; font-size:12px; }
+        .report-flow-plot { display:flex; flex-direction:column-reverse; justify-content:flex-start; align-self:end; height:116px; border-bottom:1px solid #aac9bf; background:repeating-linear-gradient(to top,transparent 0,transparent 28px,#dce7e3 29px,#dce7e3 30px); }
+        .report-flow-segment { display:block; width:54%; margin:0 auto; min-height:0; }
+        .report-flow-prior { background:#337fa8; }
+        .report-flow-new { background:#21836f; }
+        .report-flow-label { padding-top:5px; color:#17324d; font-size:10px; }
+        .report-flow-foot { display:flex; justify-content:space-between; gap:12px; margin-top:9px; color:#4d6479; font-size:9px; }
         .load-page { margin-top:22px; break-before:page; }
         .resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
         .resource-grid.single-column { grid-template-columns:minmax(0,1fr); }
@@ -72,6 +86,17 @@
         .accounts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; max-height:220px; overflow:auto; border:1px solid var(--line); padding:9px; }
         .accounts label { display:flex; align-items:center; gap:7px; font-weight:600; }
         .accounts input { width:auto; }
+        .report-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; max-height:160px; overflow:auto; border:1px solid var(--line); padding:9px; }
+        .report-options label { display:flex; align-items:center; gap:7px; font-weight:600; }
+        .report-options input { width:auto; }
+        .resource-option { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 6px; border:1px solid transparent; border-radius:5px; background:#fff; }
+        .resource-option.dragging { opacity:.45; border-color:var(--blue); }
+        .resource-drag-handle { color:var(--muted); font-weight:900; letter-spacing:-2px; cursor:grab; }
+        .resource-option label { flex:1; min-width:0; }
+        .resource-page-badge { min-width:82px; color:var(--muted); font-size:9px; font-weight:800; text-align:right; }
+        .resource-option.page-start { margin-top:7px; border-top-color:var(--blue); }
+        .resource-order { display:flex; gap:3px; }
+        .resource-order button { width:27px; height:27px; padding:0; line-height:1; }
         .dialog-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; }
         #status { margin-right:auto; align-self:center; font-size:11px; color:var(--muted); }
         @media screen and (max-width:800px) { .grid,.fields,.resource-grid { grid-template-columns:1fr; } .panel.wide { grid-column:auto; } .kpis { grid-template-columns:repeat(2,1fr); } .report { width:100%; margin:0; padding:14px; } .toolbar { position:static; flex-wrap:wrap; } .report-head { grid-template-columns:1fr; } .meta { text-align:left; } .kpi .value { font-size:16px; } }
@@ -123,10 +148,20 @@
                     <label>Ordreindgang, fra uge<input id="orderFromWeek" type="week" required /></label>
                     <label>Ordreindgang, til uge<input id="orderToWeek" type="week" required /></label>
                 </div>
+                <div class="accounts-head"><span>Ordreindgang · synlige linjer</span></div>
+                <div id="orderLines" class="report-options">
+                    <label><input type="checkbox" value="totalOrd" checked /> Ordre</label>
+                    <label><input type="checkbox" value="ma3" checked /> Gns. ordre (3 uger)</label>
+                    <label><input type="checkbox" value="totalBudget" checked /> Budget</label>
+                    <label><input type="checkbox" value="periodAverage" checked /> Gns. ordre i perioden</label>
+                </div>
                 <div class="fields order-period">
                     <label>Belastning, plan fra dato<input id="loadFromDate" type="date" required /></label>
                     <label>Belastning, plan til dato<input id="loadToDate" type="date" required /></label>
                 </div>
+                <div class="accounts-head"><span>Belastning · synlige ressourcer</span></div>
+                <p class="note">Træk i håndtaget for at ændre rækkefølgen. Op til 32 dage vises 4 pr. side; længere perioder 2 pr. side.</p>
+                <div id="loadResources" class="report-options"><span class="note">Henter ressourcer...</span></div>
                 <div class="fields order-period">
                     <label>VIA, åbne ordrer<select id="viaPeriod"><option value="all">Alle ordredatoer</option><option value="dates">Valgt ordredatoperiode</option></select></label>
                     <label>VIA, ordredato fra<input id="viaFromDate" type="date" disabled /></label>
@@ -139,6 +174,6 @@
         </form>
     </dialog>
     <script src="/assets/js/report-charts.js?v=4"></script>
-    <script src="/assets/js/ledelsesrapport.js?v=11"></script>
+    <script src="/assets/js/ledelsesrapport.js?v=17"></script>
 </body>
 </html>

@@ -37,28 +37,30 @@
         const ignoreHolidays = holidays.ignoreHolidayWeeks !== false;
         const rows = charts.orderRowsForView(orders.weeklyRows, settings.budget, holidaySet, ignoreHolidays);
         const holidayMask = rows.map(row => holidaySet.has(String(row.weekKey || '')) && number(row.totalOrd) === 0);
-        const moving = charts.orderMovingAverage(rows.map(row => number(row.totalOrd)), 3, ignoreHolidays ? holidayMask : null);
+        const zeroWeekMask = rows.map(row => number(row.totalOrd) === 0);
+        const moving = charts.orderMovingAverage(rows.map(row => number(row.totalOrd)), 3, zeroWeekMask);
         const average = orders.kpis?.avgSumOrd;
         return {
             average:average != null && Number.isFinite(Number(average)) ? Number(average) : null,
             rows:rows.map((row,index) => ({...row, ma3:moving[index], skipOrdLine:ignoreHolidays && holidayMask[index],
-                isAnomaly:!holidayMask[index] && moving[index] > 0 && Math.abs((number(row.totalOrd) - moving[index]) / moving[index] * 100) >= 20 }))
+            isAnomaly:!zeroWeekMask[index] && moving[index] > 0 && Math.abs((number(row.totalOrd) - moving[index]) / moving[index] * 100) >= 20 }))
         };
     }
 
-    function lineChart(rows, average) {
+    function lineChart(rows, average, selectedLines = ['totalOrd', 'ma3', 'totalBudget', 'periodAverage']) {
         const dense = rows.length > 20;
         const width = 1000, height = dense ? 400 : 320, left = 58, top = 32, bottom = dense ? 146 : 66, innerWidth = width - left - 16, innerHeight = height - top - bottom;
         const slot = innerWidth / Math.max(1, rows.length);
         const labelSize = Math.min(11, slot * 0.6), valueSize = Math.min(12, slot * 0.65);
         const markerRadius = Math.min(2.7, slot / 5);
+        const selected = new Set(selectedLines);
         const series = [
             { key:'totalOrd', label:'Ordre', color:'#0b3f88' },
             { key:'ma3', label:'Gns. ordre (3 uger)', color:'#ff6f00' },
             { key:'totalBudget', label:'Budget', color:'#1b8f3b' }
-        ];
-        const values = rows.flatMap(row => series.map(item => number(row[item.key])));
-        if (average !== null && average !== undefined) values.push(average);
+        ].filter(item => selected.has(item.key));
+        const values = rows.flatMap(row => [number(row.totalOrd), ...series.map(item => number(row[item.key]))]);
+        if (selected.has('periodAverage') && average !== null && average !== undefined) values.push(average);
         const min = Math.min(0, ...values), max = Math.max(1000, Math.ceil(Math.max(0,...values) / 1000) * 1000);
         const x = index => left + (index + 0.5) * innerWidth / Math.max(1, rows.length);
         const y = value => top + (max - number(value)) / (max - min) * innerHeight;
@@ -86,9 +88,9 @@
             });
         });
         rows.forEach((row,index) => {
-            if (row.isAnomaly) svg += '<circle data-series="anomaly" cx="'+x(index)+'" cy="'+(y(row.totalOrd)-7)+'" r="'+Math.min(3.8,slot/4)+'" fill="#fff" stroke="#e65100" stroke-width="2"><title>Anomali (dev fra MA3)</title></circle>';
+            if (selected.has('ma3') && row.isAnomaly) svg += '<circle data-series="anomaly" cx="'+x(index)+'" cy="'+(y(row.totalOrd)-7)+'" r="'+Math.min(3.8,slot/4)+'" fill="#fff" stroke="#e65100" stroke-width="2"><title>Anomali (dev fra MA3)</title></circle>';
         });
-        if (average !== null && average !== undefined) {
+        if (selected.has('periodAverage') && average !== null && average !== undefined) {
             const averageY = y(average);
             svg += '<line data-series="periodAverage" x1="'+left+'" y1="'+averageY+'" x2="'+(width-16)+'" y2="'+averageY+'" stroke="#7b1fa2" stroke-width="2.6"/>';
             svg += '<text x="'+(width-20)+'" y="'+Math.max(top+14,averageY-8)+'" text-anchor="end" font-size="11" font-weight="700" fill="#7b1fa2" paint-order="stroke" stroke="#fff" stroke-width="3">Gns. ordre i perioden: '+esc(average.toLocaleString('da-DK',{minimumFractionDigits:2,maximumFractionDigits:2}))+'</text>';
@@ -150,19 +152,27 @@
         return svg+'</svg><div class="legend"><span><i class="swatch" style="background:#78909c"></i>Kost</span><span><i class="swatch" style="background:#2e7d32"></i>DB</span><span><i class="swatch" style="background:#c62828"></i>Negativ DB</span></div>';
     }
 
-    function resourceLoadPanels(data) {
+    function resourceLoadPanels(data, selectedResources) {
+        const selected = Array.isArray(selectedResources) ? new Set(selectedResources.map(String)) : null;
+        const selectedOrder = new Map((selectedResources || []).map((key,index) => [String(key),index]));
         const grouped = new Map();
         data.load.rows.forEach(row => {
             const key = String(row.ResGr || '').trim();
-            if (!key) return;
+            if (!key || (selected && !selected.has(key))) return;
             if (!grouped.has(key)) grouped.set(key, []);
             grouped.get(key).push(row);
         });
         const cards = [];
         const today = data.filters.loadFrom || data.generatedAt.slice(0,10);
-        const resources = [...grouped.entries()].sort(([left],[right]) => left.localeCompare(right,'da',{numeric:true}))
+        const resources = [...grouped.entries()].sort(([left],[right]) => selected
+            ? (selectedOrder.get(left) ?? Number.MAX_SAFE_INTEGER) - (selectedOrder.get(right) ?? Number.MAX_SAFE_INTEGER)
+            : left.localeCompare(right,'da',{numeric:true}))
             .map(([key, rows]) => ({key, rows, days:window.GohReportCharts.loadDays(rows, {today})}));
-        const wide = resources.some(resource => resource.days.length > 32);
+        const loadFrom = new Date(String(data.filters.loadFrom || '') + 'T00:00:00');
+        const loadTo = new Date(String(data.filters.loadTo || '') + 'T00:00:00');
+        const configuredDays = Number.isFinite(loadFrom.getTime()) && Number.isFinite(loadTo.getTime())
+            ? Math.floor((loadTo - loadFrom) / 86400000) + 1 : number(data.filters.loadDays);
+        const wide = configuredDays > 32 || resources.some(resource => resource.days.length > 32);
         resources.forEach(({key, rows, days}) => {
             const sum = field => rows.reduce((total,row) => total + number(row[field]),0);
             const capacity = sum('Kap'), reserved = sum('Resv'), evening = sum('Aften');
@@ -173,31 +183,104 @@
         return chunks(cards, wide ? 2 : 4).map((page,index) => '<section class="load-page"><div class="panel-head"><h2>Belastning pr. ressource'+(index ? ' (fortsat)' : '')+'</h2><span class="unit">Aktuel plan · '+esc(today)+(data.filters.loadTo ? ' til '+esc(data.filters.loadTo) : ' · '+esc(data.filters.loadDays)+' dage frem')+' · minutter · rest før startdato</span></div><div class="resource-grid'+(wide ? ' single-column' : '')+'">'+page.join('')+'</div></section>').join('') || '<section class="load-page"><h2>Belastning pr. ressource</h2><p class="note">Ingen data i valgt periode.</p></section>';
     }
 
-    function viaComposition(via) {
-        const entries=[['Materialer',number(via.costs.MaterialCost)],['Stænger',number(via.costs.StangCost)],['Købedele',number(via.costs.PurchasedPartCost)],['Tid',number(via.costs.TimeCost)]];
-        const total=Math.max(1,entries.reduce((sum,item)=>sum+item[1],0));let x=10,svg='<svg viewBox="0 0 1000 150" style="height:150px" aria-label="VIA kostfordeling"><rect x="10" y="32" width="980" height="46" fill="#edf3f7" rx="4"/>';
-        entries.forEach((entry,index)=>{const width=entry[1]/total*980;if(width>0)svg+='<rect x="'+x+'" y="32" width="'+width+'" height="46" fill="'+colors[index]+'"><title>'+esc(entry[0]+': '+dkk(entry[1]))+'</title></rect>';x+=width;});
-        svg+='</svg><div class="legend">'+entries.map((entry,index)=>'<span><i class="swatch" style="background:'+colors[index]+'"></i>'+esc(entry[0])+': <b>'+esc(dkk(entry[1]))+'</b></span>').join('')+'</div>';return svg;
+    function orderFlowPanel(flow) {
+        if(!flow||!flow.total)return '<section class="panel"><h2>Ordrebeholdning</h2><p class="note">Ordrebeholdning kunne ikke hentes. Genstart serveren.</p></section>';
+        const total=flow.total,prior=flow.prior||{},received=flow.received||{};
+        const columns=[['opening','Primo'],['incoming','Tilgang'],['invoiced','Faktureret'],['closing','Ultimo']];
+        const max=Math.max(1,...columns.map(([key])=>Math.abs(number(prior[key]))+Math.abs(number(received[key]))));
+        const shortMio=value=>(number(value)/1000000).toLocaleString('da-DK',{minimumFractionDigits:1,maximumFractionDigits:2})+' mio.';
+        const asOf=String(flow.asOf||''),date=/^\d{8}$/.test(asOf)?asOf.slice(6,8)+'.'+asOf.slice(4,6)+'.'+asOf.slice(0,4):asOf;
+        const bars=columns.map(([key,label])=>{
+            const previous=Math.abs(number(prior[key])),fresh=Math.abs(number(received[key]));
+            return '<div class="report-flow-column"><strong>'+esc(shortMio(total[key]))+'</strong><div class="report-flow-plot"><span class="report-flow-segment report-flow-prior" style="height:'+(previous/max*100).toFixed(3)+'%"></span><span class="report-flow-segment report-flow-new" style="height:'+(fresh/max*100).toFixed(3)+'%"></span></div><span class="report-flow-label">'+label+'</span></div>';
+        }).join('');
+        const adjustment=Math.abs(number(total.adjustment))>.01?' + regulering '+dkk(total.adjustment):'';
+        const warning=flow.unknownCount?'<p class="note">'+esc(flow.unknownCount+' ordrer uden afstemt fakturahistorik er udeladt.')+'</p>':'';
+        return '<section class="panel"><div class="report-flow-head"><div><span>Ordrebeholdning pr. '+esc(date)+'</span><strong>'+esc(shortMio(total.closing))+' <small>DKK</small></strong></div><div><span>Færdigfaktureret i måneden</span><b>'+esc(total.completed)+' <small>ordrer</small></b><span>Heraf '+esc(received.completed||0)+' nye ordrer</span></div></div><div class="legend"><span><i class="swatch report-flow-prior"></i>Ordrer fra tidligere måneder</span><span><i class="swatch report-flow-new"></i>Ordrer modtaget i måneden</span></div><div class="report-flow-chart">'+bars+'</div><div class="report-flow-foot"><span>Primo + tilgang − faktureret'+esc(adjustment)+' = ultimo</span><span>Rest i dag: <b>'+esc(dkk(total.current))+'</b></span></div>'+warning+'</section>';
     }
 
-    function render(data, settings = readOrderViewSettings()) {
+    function render(data, settings = readOrderViewSettings(), display = {}) {
         const orderView = orderReportView(data.orders, settings);
-        const orderPanels = orderView.rows.length ? '<section class="panel wide order-panel"><div class="panel-head"><h2>Ordreindgang</h2><span class="unit">'+esc(data.filters.orderFrom)+' til '+esc(data.filters.orderTo)+' · t.DKK</span></div>'+lineChart(orderView.rows,orderView.average)+'<div class="legend"><span><i class="swatch" style="background:#2f5ea5"></i>Ordre (søjle)</span><span><i class="swatch" style="background:#0b3f88"></i>Ordre (linje)</span><span><i class="swatch" style="background:#ff6f00"></i>Gns. ordre (3 uger)</span><span><i class="swatch" style="background:#1b8f3b"></i>Budget</span><span><i class="swatch" style="background:#7b1fa2"></i>Gns. ordre i perioden</span></div></section>' : '<section class="panel wide"><h2>Ordreindgang</h2><p class="note">Ingen data i valgt ugeperiode.</p></section>';
-        const unknownNote=(data.via.unknownCostCount?data.via.unknownCostCount+' ordrer mangler komplet kostgrundlag.':'Alle åbne ordrer har komplet kostgrundlag.')+(data.via.excludedUndatedCount ? ' '+data.via.excludedUndatedCount+' ordrer uden ordredato er ikke med i perioden.' : '');
-        const viaPeriod = data.filters.viaFrom ? 'Ordredato '+data.filters.viaFrom+' til '+data.filters.viaTo : 'Alle ordredatoer';
+        const selectedLines = Array.isArray(display.orderLines) ? display.orderLines : ['totalOrd', 'ma3', 'totalBudget', 'periodAverage'];
+        const lineLegend = {totalOrd:['#0b3f88','Ordre (linje)'],ma3:['#ff6f00','Gns. ordre (3 uger)'],totalBudget:['#1b8f3b','Budget'],periodAverage:['#7b1fa2','Gns. ordre i perioden']};
+        const orderLegend = '<span><i class="swatch" style="background:#2f5ea5"></i>Ordre (søjle)</span>'+selectedLines.filter(key=>lineLegend[key]).map(key=>'<span><i class="swatch" style="background:'+lineLegend[key][0]+'"></i>'+lineLegend[key][1]+'</span>').join('');
+        const orderPanels = orderView.rows.length ? '<section class="panel wide order-panel"><div class="panel-head"><h2>Ordreindgang</h2><span class="unit">'+esc(data.filters.orderFrom)+' til '+esc(data.filters.orderTo)+' · t.DKK</span></div>'+lineChart(orderView.rows,orderView.average,selectedLines)+'<div class="legend">'+orderLegend+'</div></section>' : '<section class="panel wide"><h2>Ordreindgang</h2><p class="note">Ingen data i valgt ugeperiode.</p></section>';
         report.innerHTML='<header class="report-head"><div><h1>Ledelsesrapport</h1><p class="subtitle">Økonomi, ordreindgang, belastning og arbejde i gang</p></div><div class="meta"><b>'+esc(data.filters.from)+' til '+esc(data.filters.to)+'</b><br>Dannet '+esc(new Date(data.generatedAt).toLocaleString('da-DK'))+'<br>VIA aktuel pr. '+esc(new Date(data.via.asOf).toLocaleString('da-DK'))+'</div></header>'+
             '<section class="kpis"><div class="kpi"><div class="label">Omsætning</div><div class="value">'+esc(mio(data.revenue.totalRevenueMio))+'</div></div><div class="kpi"><div class="label">VIA kost</div><div class="value">'+esc(dkk(data.via.totalCost))+'</div></div><div class="kpi"><div class="label">Åbne ordrers salg</div><div class="value">'+esc(dkk(data.via.totalSales))+'</div></div><div class="kpi"><div class="label">Resterende salg</div><div class="value">'+esc(dkk(data.via.remainingSales))+'</div></div><div class="kpi"><div class="label">Åbne ordrer</div><div class="value">'+esc(data.via.orderCount)+'</div></div></section>'+
             '<div class="grid">'+stackedRevenue(data)+
             '<section class="panel"><div class="panel-head"><h2>Største kunder</h2><span class="unit">'+esc(data.filters.customerFrom || data.filters.from)+' til '+esc(data.filters.customerTo || data.filters.to)+' · omsætning, kost og DB</span></div>'+customerBars(data.revenue.topCustomers)+'</section>'+
-            '<section class="panel via-panel"><div class="panel-head"><h2>VIA kostfordeling</h2><span class="unit">Aktuel kost · '+esc(viaPeriod)+'</span></div><dl class="via-totals"><div><dt>'+ (data.via.unknownCostCount ? 'Kendt kost (ufuldstændig)' : 'Samlet kost') +'</dt><dd>'+esc(dkk(data.via.totalCost))+'</dd></div><div><dt>Forventet salg (åbne ordrer)</dt><dd>'+esc(dkk(data.via.totalSales))+'</dd></div></dl>'+viaComposition(data.via)+'<p class="note">'+esc(unknownNote)+'</p></section>'+orderPanels+'</div>'+resourceLoadPanels(data);
+            orderFlowPanel(data.orderFlow)+orderPanels+'</div>'+resourceLoadPanels(data,display.loadResources);
     }
 
     async function loadConfig() {
-        const response=await fetch('/ledelsesrapport/config');
-        const data=await response.json();
+        const [response,resourcesResponse]=await Promise.all([fetch('/ledelsesrapport/config'),fetch('/belastning/resources')]);
+        const [data,resourcesData]=await Promise.all([response.json(),resourcesResponse.json()]);
         if(!response.ok) throw new Error(data.error||'Ingen adgang til ledelsesrapporten.');
+        if(!resourcesResponse.ok) throw new Error(resourcesData.error||'Ressourcerne kunne ikke hentes.');
         document.getElementById('accounts').innerHTML=data.accounts.map(account=>'<label><input type="checkbox" value="'+esc(account.acNo)+'" checked disabled> '+esc(account.acNo+' · '+account.name)+'</label>').join('');
-        return data.accounts;
+        const resources=[...new Map((resourcesData.resources||[]).map(item=>[String(item.MainR7||'').trim(),item])).values()].filter(item=>String(item.MainR7||'').trim());
+        document.getElementById('loadResources').innerHTML=resources.map(item=>'<div class="resource-option" data-resource="'+esc(item.MainR7)+'"><span class="resource-drag-handle" draggable="true" title="Træk for at flytte" aria-label="Træk '+esc(item.R7Nm||item.MainR7)+'">⋮⋮</span><label><input type="checkbox" value="'+esc(item.MainR7)+'" checked> '+esc(item.R7Nm||item.MainR7)+'</label><span class="resource-page-badge"></span><span class="resource-order"><button type="button" data-move="-1" title="Flyt op" aria-label="Flyt '+esc(item.R7Nm||item.MainR7)+' op">↑</button><button type="button" data-move="1" title="Flyt ned" aria-label="Flyt '+esc(item.R7Nm||item.MainR7)+' ned">↓</button></span></div>').join('');
+        return data;
+    }
+
+    function refreshResourcePagePreview() {
+        const from=new Date(document.getElementById('loadFromDate').value+'T00:00:00');
+        const to=new Date(document.getElementById('loadToDate').value+'T00:00:00');
+        const days=Number.isFinite(from.getTime())&&Number.isFinite(to.getTime())?Math.floor((to-from)/86400000)+1:1;
+        const pageSize=days>32?2:4;
+        let selectedIndex=0;
+        document.querySelectorAll('#loadResources .resource-option').forEach(row=>{
+            const checked=row.querySelector('input').checked;
+            row.classList.toggle('page-start',checked&&selectedIndex>0&&selectedIndex%pageSize===0);
+            row.querySelector('.resource-page-badge').textContent=checked?'Side '+(Math.floor(selectedIndex/pageSize)+1)+' · plads '+(selectedIndex%pageSize+1)+'/'+pageSize:'Ikke med';
+            if(checked)selectedIndex+=1;
+        });
+    }
+
+    function reorderResourceOptions(container, orderedIds) {
+        if(!container||!Array.isArray(orderedIds)) return;
+        const rows=new Map([...container.querySelectorAll('.resource-option')].map(row=>[String(row.dataset.resource),row]));
+        orderedIds.forEach(id=>{const row=rows.get(String(id));if(row){container.appendChild(row);rows.delete(String(id));}});
+        rows.forEach(row=>container.appendChild(row));
+    }
+
+    document.getElementById('loadResources').addEventListener('click',event=>{
+        const button=event.target.closest('[data-move]');
+        if(!button)return;
+        const row=button.closest('.resource-option'),direction=Number(button.dataset.move);
+        const sibling=direction<0?row.previousElementSibling:row.nextElementSibling;
+        if(!sibling)return;
+        if(direction<0)row.parentElement.insertBefore(row,sibling);else row.parentElement.insertBefore(sibling,row);
+        button.focus();
+        refreshResourcePagePreview();
+    });
+    document.getElementById('loadResources').addEventListener('change',refreshResourcePagePreview);
+    document.getElementById('loadResources').addEventListener('dragstart',event=>{
+        const row=event.target.closest('.resource-option');if(!row)return;
+        row.classList.add('dragging');event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',row.dataset.resource);
+    });
+    document.getElementById('loadResources').addEventListener('dragover',event=>{
+        const target=event.target.closest('.resource-option'),dragging=document.querySelector('#loadResources .resource-option.dragging');
+        if(!target||!dragging||target===dragging)return;
+        event.preventDefault();
+        const before=event.clientY<target.getBoundingClientRect().top+target.getBoundingClientRect().height/2;
+        target.parentElement.insertBefore(dragging,before?target:target.nextElementSibling);
+        refreshResourcePagePreview();
+    });
+    document.getElementById('loadResources').addEventListener('drop',event=>{event.preventDefault();refreshResourcePagePreview();});
+    document.getElementById('loadResources').addEventListener('dragend',event=>{event.target.closest('.resource-option')?.classList.remove('dragging');refreshResourcePagePreview();});
+
+    function applyDefaults(defaults) {
+        if(!defaults) return;
+        const fields={from:'fromMonth',to:'toMonth',customerFrom:'customerFromMonth',customerTo:'customerToMonth',topCustomers:'topCustomers',orderFrom:'orderFromWeek',orderTo:'orderToWeek',loadFrom:'loadFromDate',loadTo:'loadToDate',viaPeriod:'viaPeriod',viaFrom:'viaFromDate',viaTo:'viaToDate'};
+        Object.entries(fields).forEach(([key,id])=>{if(defaults[key]!=null) document.getElementById(id).value=String(defaults[key]);});
+        const selectedResources=Array.isArray(defaults.loadResources)?new Set(defaults.loadResources.map(String)):null;
+        reorderResourceOptions(document.getElementById('loadResources'),defaults.loadResources);
+        document.querySelectorAll('#loadResources input').forEach(input=>{input.checked=!selectedResources||selectedResources.has(input.value);});
+        const selectedLines=new Set(Array.isArray(defaults.orderLines)?defaults.orderLines:['totalOrd','ma3','totalBudget','periodAverage']);
+        document.querySelectorAll('#orderLines input').forEach(input=>{input.checked=selectedLines.has(input.value);});
+        document.getElementById('viaPeriod').dispatchEvent(new Event('change'));
+        refreshResourcePagePreview();
     }
 
     window.openConfig = () => dialog.showModal();
@@ -206,6 +289,8 @@
         event.preventDefault();
         const accounts=[...document.querySelectorAll('#accounts input:checked')].map(input=>input.value);
         if(!accounts.length){status.textContent='Vælg mindst én konto.';return;}
+        const display={loadResources:[...document.querySelectorAll('#loadResources input:checked')].map(input=>input.value),orderLines:[...document.querySelectorAll('#orderLines input:checked')].map(input=>input.value)};
+        if(!display.loadResources.length){status.textContent='Vælg mindst én ressource til Belastning.';status.className='error';return;}
         status.className='';status.textContent='Danner rapport...';document.getElementById('generateBtn').disabled=true;
         try{
             const params=new URLSearchParams({from:document.getElementById('fromMonth').value,to:document.getElementById('toMonth').value,customerFrom:document.getElementById('customerFromMonth').value,customerTo:document.getElementById('customerToMonth').value,orderFrom:document.getElementById('orderFromWeek').value,orderTo:document.getElementById('orderToWeek').value,accounts:accounts.join(','),topCustomers:document.getElementById('topCustomers').value,loadFrom:document.getElementById('loadFromDate').value,loadTo:document.getElementById('loadToDate').value});
@@ -227,7 +312,7 @@
             if(!Array.isArray(data.load?.rows) || ['orderFrom','orderTo','customerFrom','customerTo','loadFrom','loadTo'].some(key=>data.filters?.[key]!==params.get(key)) || ['viaFrom','viaTo'].some(key=>(data.filters?.[key]||'')!==(params.get(key)||''))) throw new Error('Genstart serveren for at aktivere rapportens separate perioder.');
             const settings = readOrderViewSettings();
             if(holidayData?.ok && holidayData.settings) settings.holidays = holidayData.settings;
-            render(data,settings);status.textContent='';dialog.close();
+            render(data,settings,display);status.textContent='';dialog.close();
         }catch(error){status.textContent=error.message;status.className='error';}
         finally{document.getElementById('generateBtn').disabled=false;}
     });
@@ -248,6 +333,8 @@
     const dayKey = date => date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
     document.getElementById('loadFromDate').value=dayKey(now);
     document.getElementById('loadToDate').value=dayKey(new Date(now.getFullYear(),now.getMonth(),now.getDate()+29));
+    document.getElementById('loadFromDate').addEventListener('change',refreshResourcePagePreview);
+    document.getElementById('loadToDate').addEventListener('change',refreshResourcePagePreview);
     document.getElementById('viaFromDate').value=dayKey(from);
     document.getElementById('viaToDate').value=dayKey(now);
     document.getElementById('viaPeriod').addEventListener('change',event=>{
@@ -256,8 +343,9 @@
             input.disabled=event.target.value!=='dates';input.required=!input.disabled;
         }
     });
-    loadConfig().then(accounts=>{
-        if (accounts.length) document.querySelectorAll('#accounts input').forEach(input => { input.checked=true; });
+    loadConfig().then(config=>{
+        applyDefaults(config.defaults);
+        if (config.accounts.length) document.querySelectorAll('#accounts input').forEach(input => { input.checked=true; });
         dialog.showModal();
     }).catch(error=>{report.innerHTML='<div class="empty error">'+esc(error.message)+'</div>';});
 }());

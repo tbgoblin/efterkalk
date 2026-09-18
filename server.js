@@ -1849,7 +1849,7 @@ app.get('/', (req, res) => {
             #mainOrdreoversigt { display:none; }
             #mainSalgordreVia { display:none; }
             #mainAdministration { display:none; }
-            .admin-section-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+            .admin-section-nav { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
             .admin-section-nav button { min-height:92px; padding:14px 16px; border:1px solid #c7d7ea; border-radius:8px; background:#fff; color:#355675; cursor:pointer; text-align:left; transition:transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease; }
             .admin-section-nav button:hover { transform:translateY(-1px); border-color:#78aee5; background:#f7fbff; box-shadow:0 4px 12px rgba(15,53,96,0.10); color:#0f3560; }
             .admin-section-nav button:focus-visible { outline:3px solid #78aee5; outline-offset:2px; }
@@ -1885,6 +1885,23 @@ app.get('/', (req, res) => {
             .admin-working-days-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:12px; }
             .admin-working-days-actions button { padding:8px 12px; border:0; border-radius:6px; background:#0f3560; color:#fff; font-weight:700; cursor:pointer; }
             .admin-working-days-actions button.secondary { border:1px solid #c7d7ea; background:#fff; color:#0f3560; }
+            .admin-report-defaults-grid { display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:12px 16px; }
+            .admin-report-defaults-grid fieldset { min-width:0; margin:0; padding:12px; border:1px solid #d6e6f8; border-radius:7px; }
+            .admin-report-defaults-grid legend { padding:0 5px; color:#0f3560; font-weight:800; }
+            .admin-report-defaults-grid label { display:flex; flex-direction:column; gap:4px; margin-top:9px; color:#355675; font-size:12px; font-weight:700; }
+            .admin-report-defaults-grid input, .admin-report-defaults-grid select { width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid #c7d7ea; border-radius:6px; background:#fff; font-size:14px; }
+            .admin-report-defaults-grid fieldset.admin-report-options-wide { grid-column:span 2; }
+            .admin-report-option-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 12px; max-height:190px; overflow:auto; }
+            .admin-report-option-list label { flex-direction:row; align-items:center; margin:0; padding:4px 0; }
+            .admin-report-option-list input { width:auto; padding:0; }
+            .admin-report-resource-row { display:flex; align-items:center; gap:7px; min-width:0; }
+            .admin-report-resource-row.dragging { opacity:.45; outline:2px solid #78aee5; }
+            .admin-report-resource-row.page-start { margin-top:7px; border-top:2px solid #78aee5; padding-top:7px; }
+            .admin-report-resource-handle { color:#6a829a; font-weight:900; letter-spacing:-2px; cursor:grab; }
+            .admin-report-resource-row label { flex:1; min-width:0; }
+            .admin-report-resource-page { min-width:86px; color:#5d7892; font-size:10px; font-weight:800; text-align:right; }
+            .admin-report-resource-actions { display:flex; gap:3px; }
+            .admin-report-resource-actions button { width:28px; height:28px; padding:0; border:1px solid #c7d7ea; border-radius:5px; background:#fff; color:#0f3560; cursor:pointer; }
             @media(max-width:800px) { .admin-layout { grid-template-columns:1fr; } .admin-section-nav { grid-template-columns:1fr; gap:8px; } .admin-section-nav button { width:100%; min-height:72px; } }
             @media(max-width:800px) { .admin-working-days-grid { grid-template-columns:repeat(3,minmax(90px,1fr)); } }
             @media(max-width:480px) { .admin-working-days-grid { grid-template-columns:repeat(2,minmax(90px,1fr)); } }
@@ -2623,6 +2640,7 @@ app.get('/', (req, res) => {
                     <button id="adminTabUsers" class="active" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="adminSectionUsers" onclick="showAdminSection('users')"><span class="admin-section-card-title">Brugere & adgang</span><span class="admin-section-card-text">Opret brugere, styr adgang og vælg moduler.</span></button>
                     <button id="adminTabDiverse" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionDiverse" onclick="showAdminSection('diverse')"><span class="admin-section-card-title">Lagerliste · Diverse</span><span class="admin-section-card-text">Vedligehold manuelle værdier og skrotberegninger.</span></button>
                     <button id="adminTabWorkingDays" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionWorkingDays" onclick="showAdminSection('working-days')"><span class="admin-section-card-title">Omsætning · Arbejdsdage</span><span class="admin-section-card-text">Fastlæg arbejdsdage, dagsmål og budgetgrundlag.</span></button>
+                    <button id="adminTabLedelsesrapport" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionLedelsesrapport" onclick="showAdminSection('ledelsesrapport')"><span class="admin-section-card-title">Ledelsesrapport · Standard</span><span class="admin-section-card-text">Vælg standardperioder og information ved åbning.</span></button>
                 </nav>
                 <section id="adminSectionUsers" class="admin-section active" role="tabpanel" aria-labelledby="adminTabUsers">
                     <p class="admin-section-intro">Opret brugere, aktivér eller deaktivér adgang, og vælg hvilke moduler den enkelte bruger må åbne.</p>
@@ -2673,6 +2691,21 @@ app.get('/', (req, res) => {
                             <button type="button" class="secondary" onclick="resetAdminWorkingDaysToCalendar()">Brug kalenderforslag</button>
                             <button type="button" onclick="saveAdminWorkingDays()">Gem arbejdsdage</button>
                         </div>
+                    </section>
+                </section>
+                <section id="adminSectionLedelsesrapport" class="admin-section" role="tabpanel" aria-labelledby="adminTabLedelsesrapport" hidden>
+                    <p class="admin-section-intro">Disse værdier vælges automatisk, når en bruger åbner Ledelsesrapport. Brugeren kan stadig ændre dem i den enkelte rapport.</p>
+                    <section class="admin-panel">
+                        <div class="admin-report-defaults-grid">
+                            <fieldset><legend>Omsætning</legend><label>Fra måned<input id="adminReportFrom" type="month"></label><label>Til måned<input id="adminReportTo" type="month"></label></fieldset>
+                            <fieldset><legend>Største kunder</legend><label>Fra måned<input id="adminReportCustomerFrom" type="month"></label><label>Til måned<input id="adminReportCustomerTo" type="month"></label><label>Antal kunder<select id="adminReportTopCustomers"><option>5</option><option>10</option><option>20</option><option>50</option></select></label></fieldset>
+                            <fieldset><legend>Ordreindgang</legend><label>Fra uge<input id="adminReportOrderFrom" type="week"></label><label>Til uge<input id="adminReportOrderTo" type="week"></label></fieldset>
+                            <fieldset><legend>Belastning</legend><label>Plan fra dato<input id="adminReportLoadFrom" type="date" onchange="refreshAdminReportResourcePagePreview()"></label><label>Plan til dato<input id="adminReportLoadTo" type="date" onchange="refreshAdminReportResourcePagePreview()"></label></fieldset>
+                            <fieldset><legend>VIA</legend><label>Åbne ordrer<select id="adminReportViaPeriod" onchange="updateAdminReportViaDates()"><option value="all">Alle ordredatoer</option><option value="dates">Valgt ordredatoperiode</option></select></label><label>Ordredato fra<input id="adminReportViaFrom" type="date"></label><label>Ordredato til<input id="adminReportViaTo" type="date"></label></fieldset>
+                            <fieldset><legend>Ordreindgang · linjer</legend><div id="adminReportOrderLines" class="admin-report-option-list"><label><input type="checkbox" value="totalOrd"> Ordre</label><label><input type="checkbox" value="ma3"> Gns. ordre (3 uger)</label><label><input type="checkbox" value="totalBudget"> Budget</label><label><input type="checkbox" value="periodAverage"> Gns. ordre i perioden</label></div></fieldset>
+                            <fieldset class="admin-report-options-wide"><legend>Belastning · ressourcer</legend><p class="admin-section-intro">Træk i håndtaget for at ændre rækkefølgen. Op til 32 dage vises 4 pr. side; længere perioder 2 pr. side.</p><div id="adminReportLoadResources" class="admin-report-option-list"><span class="via-status">Henter ressourcer...</span></div></fieldset>
+                        </div>
+                        <div class="admin-working-days-actions"><span id="adminReportDefaultsStatus" class="via-status" style="margin-right:auto;"></span><button type="button" onclick="saveAdminLedelsesrapportDefaults()">Gem standard</button></div>
                     </section>
                 </section>
             </section>
@@ -8293,7 +8326,8 @@ app.get('/', (req, res) => {
                     const isZeroWeek = Number(row && row.totalOrd || 0) === 0;
                     return isHolidayTagged && isZeroWeek;
                 });
-                const ma3Values = computeOrdreindgangMovingAvg(ordValues, 3, ignoreHolidays ? holidayMask : null);
+                const zeroWeekMask = safeRows.map(row => Number(row && row.totalOrd || 0) === 0);
+                const ma3Values = computeOrdreindgangMovingAvg(ordValues, 3, zeroWeekMask);
                 const thresholdPct = getOrdreindgangAnomalyThresholdPct();
 
                 return safeRows.map((row, idx) => {
@@ -8318,7 +8352,7 @@ app.get('/', (req, res) => {
                         ? ((ord - ma3) / ma3) * 100
                         : null;
                     const absDev = Number.isFinite(devFromMa3Pct) ? Math.abs(devFromMa3Pct) : 0;
-                    const isAnomaly = !isHoliday && Number.isFinite(devFromMa3Pct) && absDev >= thresholdPct;
+                    const isAnomaly = !zeroWeekMask[idx] && Number.isFinite(devFromMa3Pct) && absDev >= thresholdPct;
                     const anomalyDir = isAnomaly
                         ? (devFromMa3Pct >= 0 ? 'high' : 'low')
                         : 'ok';
@@ -9732,7 +9766,8 @@ app.get('/', (req, res) => {
                 const sections = {
                     users: ['adminTabUsers', 'adminSectionUsers'],
                     diverse: ['adminTabDiverse', 'adminSectionDiverse'],
-                    'working-days': ['adminTabWorkingDays', 'adminSectionWorkingDays']
+                    'working-days': ['adminTabWorkingDays', 'adminSectionWorkingDays'],
+                    ledelsesrapport: ['adminTabLedelsesrapport', 'adminSectionLedelsesrapport']
                 };
                 const selectedKey = Object.prototype.hasOwnProperty.call(sections, sectionKey) ? sectionKey : 'users';
                 try { sessionStorage.setItem('adminSection', selectedKey); } catch (_) {}
@@ -9845,6 +9880,167 @@ app.get('/', (req, res) => {
                     if (omsaetningInitialized && getOmsaetningThresholdInputs().useDailyBudget) scheduleOmsaetningAutoReload();
                 } catch (error) {
                     setAdminWorkingDaysStatus(String(error.message || error), true);
+                }
+            }
+
+            const ADMIN_REPORT_FIELDS = {
+                from: 'adminReportFrom', to: 'adminReportTo', customerFrom: 'adminReportCustomerFrom', customerTo: 'adminReportCustomerTo',
+                topCustomers: 'adminReportTopCustomers', orderFrom: 'adminReportOrderFrom', orderTo: 'adminReportOrderTo',
+                loadFrom: 'adminReportLoadFrom', loadTo: 'adminReportLoadTo', viaPeriod: 'adminReportViaPeriod',
+                viaFrom: 'adminReportViaFrom', viaTo: 'adminReportViaTo'
+            };
+
+            function setAdminReportDefaultsStatus(text, isError) {
+                const status = document.getElementById('adminReportDefaultsStatus');
+                if (!status) return;
+                status.textContent = text || '';
+                status.style.color = isError ? '#b71c1c' : '#1b5e20';
+            }
+
+            function updateAdminReportViaDates() {
+                const useDates = document.getElementById('adminReportViaPeriod').value === 'dates';
+                ['adminReportViaFrom', 'adminReportViaTo'].forEach(id => {
+                    const input = document.getElementById(id);
+                    input.disabled = !useDates;
+                    input.required = useDates;
+                });
+            }
+
+            function setAdminReportDefaults(defaults) {
+                Object.entries(ADMIN_REPORT_FIELDS).forEach(([key, id]) => {
+                    if (defaults && defaults[key] != null) document.getElementById(id).value = String(defaults[key]);
+                });
+                const selectedResources = defaults && Array.isArray(defaults.loadResources) ? new Set(defaults.loadResources.map(String)) : null;
+                reorderAdminReportResources(defaults && defaults.loadResources);
+                document.querySelectorAll('#adminReportLoadResources input').forEach(input => { input.checked = !selectedResources || selectedResources.has(input.value); });
+                const selectedLines = new Set(defaults && Array.isArray(defaults.orderLines) ? defaults.orderLines : ['totalOrd', 'ma3', 'totalBudget', 'periodAverage']);
+                document.querySelectorAll('#adminReportOrderLines input').forEach(input => { input.checked = selectedLines.has(input.value); });
+                updateAdminReportViaDates();
+                refreshAdminReportResourcePagePreview();
+            }
+
+            function reorderAdminReportResources(orderedIds) {
+                const container = document.getElementById('adminReportLoadResources');
+                if (!container || !Array.isArray(orderedIds)) return;
+                const rows = new Map(Array.from(container.querySelectorAll('.admin-report-resource-row')).map(row => [String(row.dataset.resource), row]));
+                orderedIds.forEach(id => {
+                    const row = rows.get(String(id));
+                    if (!row) return;
+                    container.appendChild(row);
+                    rows.delete(String(id));
+                });
+                rows.forEach(row => container.appendChild(row));
+            }
+
+            function moveAdminReportResource(button, direction) {
+                const row = button && button.closest('.admin-report-resource-row');
+                if (!row) return;
+                const sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+                if (!sibling) return;
+                if (direction < 0) row.parentElement.insertBefore(row, sibling);
+                else row.parentElement.insertBefore(sibling, row);
+                button.focus();
+                refreshAdminReportResourcePagePreview();
+                setAdminReportDefaultsStatus('Rækkefølgen er ændret. Klik Gem standard.');
+            }
+
+            function refreshAdminReportResourcePagePreview() {
+                const from = new Date(String(document.getElementById('adminReportLoadFrom').value || '') + 'T00:00:00');
+                const to = new Date(String(document.getElementById('adminReportLoadTo').value || '') + 'T00:00:00');
+                const days = Number.isFinite(from.getTime()) && Number.isFinite(to.getTime()) ? Math.floor((to - from) / 86400000) + 1 : 1;
+                const pageSize = days > 32 ? 2 : 4;
+                let selectedIndex = 0;
+                document.querySelectorAll('#adminReportLoadResources .admin-report-resource-row').forEach(row => {
+                    const checked = row.querySelector('input').checked;
+                    row.classList.toggle('page-start', checked && selectedIndex > 0 && selectedIndex % pageSize === 0);
+                    row.querySelector('.admin-report-resource-page').textContent = checked
+                        ? 'Side ' + (Math.floor(selectedIndex / pageSize) + 1) + ' · plads ' + (selectedIndex % pageSize + 1) + '/' + pageSize
+                        : 'Ikke med';
+                    if (checked) selectedIndex += 1;
+                });
+            }
+
+            function startAdminReportResourceDrag(event) {
+                const row = event.target.closest('.admin-report-resource-row');
+                if (!row) return;
+                row.classList.add('dragging');
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', row.dataset.resource);
+            }
+
+            function dragAdminReportResource(event) {
+                const target = event.target.closest('.admin-report-resource-row');
+                const dragging = document.querySelector('#adminReportLoadResources .admin-report-resource-row.dragging');
+                if (!target || !dragging || target === dragging) return;
+                event.preventDefault();
+                const before = event.clientY < target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
+                target.parentElement.insertBefore(dragging, before ? target : target.nextElementSibling);
+                refreshAdminReportResourcePagePreview();
+            }
+
+            function endAdminReportResourceDrag(event) {
+                event.target.closest('.admin-report-resource-row')?.classList.remove('dragging');
+                refreshAdminReportResourcePagePreview();
+                setAdminReportDefaultsStatus('Rækkefølgen er ændret. Klik Gem standard.');
+            }
+
+            function getAdminReportSuggestedDefaults() {
+                const now = new Date();
+                const from = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+                const monthKey = date => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+                const dayKey = date => monthKey(date) + '-' + String(date.getDate()).padStart(2, '0');
+                const weekKey = date => {
+                    const value = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+                    value.setUTCDate(value.getUTCDate() + 4 - (value.getUTCDay() || 7));
+                    const year = value.getUTCFullYear();
+                    const week = Math.ceil((((value - new Date(Date.UTC(year, 0, 1))) / 86400000) + 1) / 7);
+                    return year + '-W' + String(week).padStart(2, '0');
+                };
+                return { from: monthKey(from), to: monthKey(now), customerFrom: monthKey(from), customerTo: monthKey(now), topCustomers: 10,
+                    orderFrom: weekKey(from), orderTo: weekKey(now), loadFrom: dayKey(now), loadTo: dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 29)),
+                    viaPeriod: 'all', viaFrom: dayKey(from), viaTo: dayKey(now) };
+            }
+
+            async function loadAdminLedelsesrapportDefaults() {
+                setAdminReportDefaultsStatus('Indlæser...');
+                try {
+                    const [response, resourcesResponse] = await Promise.all([
+                        fetch('/admin/ledelsesrapport-defaults', { headers: adminHeaders() }),
+                        fetch('/belastning/resources', { headers: adminHeaders() })
+                    ]);
+                    const [data, resourcesData] = await Promise.all([response.json(), resourcesResponse.json()]);
+                    if (!response.ok || !data.ok) throw new Error(data.error || 'Kunne ikke hente standarden');
+                    if (!resourcesResponse.ok || !resourcesData.ok) throw new Error(resourcesData.error || 'Kunne ikke hente ressourcer');
+                    const resources = [...new Map((resourcesData.resources || []).map(item => [String(item.MainR7 || '').trim(), item])).values()].filter(item => String(item.MainR7 || '').trim());
+                    document.getElementById('adminReportLoadResources').innerHTML = resources.map(item => '<div class="admin-report-resource-row" data-resource="' + escapeHtml(item.MainR7) + '" ondragover="dragAdminReportResource(event)"><span class="admin-report-resource-handle" draggable="true" ondragstart="startAdminReportResourceDrag(event)" ondragend="endAdminReportResourceDrag(event)" title="Træk for at flytte" aria-label="Træk ' + escapeHtml(item.R7Nm || item.MainR7) + '">⋮⋮</span><label><input type="checkbox" value="' + escapeHtml(item.MainR7) + '" onchange="refreshAdminReportResourcePagePreview()"> ' + escapeHtml(item.R7Nm || item.MainR7) + '</label><span class="admin-report-resource-page"></span><span class="admin-report-resource-actions"><button type="button" onclick="moveAdminReportResource(this,-1)" title="Flyt op" aria-label="Flyt ' + escapeHtml(item.R7Nm || item.MainR7) + ' op">↑</button><button type="button" onclick="moveAdminReportResource(this,1)" title="Flyt ned" aria-label="Flyt ' + escapeHtml(item.R7Nm || item.MainR7) + ' ned">↓</button></span></div>').join('');
+                    setAdminReportDefaults(data.defaults || getAdminReportSuggestedDefaults());
+                    setAdminReportDefaultsStatus(data.defaults ? 'Standarden er indlæst.' : 'Ingen gemt standard. Rapportens dynamiske forslag bruges.');
+                } catch (error) {
+                    setAdminReportDefaultsStatus(String(error.message || error), true);
+                }
+            }
+
+            async function saveAdminLedelsesrapportDefaults() {
+                const defaults = Object.fromEntries(Object.entries(ADMIN_REPORT_FIELDS).map(([key, id]) => [key, document.getElementById(id).value]));
+                defaults.loadResources = Array.from(document.querySelectorAll('#adminReportLoadResources input:checked')).map(input => input.value);
+                defaults.orderLines = Array.from(document.querySelectorAll('#adminReportOrderLines input:checked')).map(input => input.value);
+                if (Object.entries(defaults).some(([key, value]) => !value && !(['viaFrom', 'viaTo'].includes(key) && defaults.viaPeriod === 'all'))) {
+                    setAdminReportDefaultsStatus('Udfyld alle relevante standardfelter.', true);
+                    return;
+                }
+                if (!defaults.loadResources.length) {
+                    setAdminReportDefaultsStatus('Vælg mindst én ressource til Belastning.', true);
+                    return;
+                }
+                setAdminReportDefaultsStatus('Gemmer...');
+                try {
+                    const response = await fetch('/admin/ledelsesrapport-defaults', { method: 'POST', headers: adminHeaders(), body: JSON.stringify(defaults) });
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) throw new Error(data.error || 'Kunne ikke gemme standarden');
+                    setAdminReportDefaults(data.defaults);
+                    setAdminReportDefaultsStatus('Standarden er gemt i GOH-databasen.');
+                } catch (error) {
+                    setAdminReportDefaultsStatus(String(error.message || error), true);
                 }
             }
 
@@ -10003,6 +10199,7 @@ app.get('/', (req, res) => {
                     loadAdminUsers();
                     initializeOrdreindgangHolidaySettings();
                     loadAdminWorkingDays();
+                    loadAdminLedelsesrapportDefaults();
                     window.scrollTo({ top: 0, behavior: 'auto' });
                     return;
                 }

@@ -408,6 +408,44 @@ function createApiRouter({
         return ledelsesrapportIsoWeek(monday) === key ? { key, monday } : null;
     }
 
+    function normalizeLedelsesrapportDefaults(input) {
+        if (!input || typeof input !== 'object') return null;
+        const allowedOrderLines = new Set(['totalOrd', 'ma3', 'totalBudget', 'periodAverage']);
+        const loadResources = Array.isArray(input.loadResources)
+            ? [...new Set(input.loadResources.map(value => String(value || '').trim()).filter(value => value && value.length <= 20))].slice(0, 100)
+            : null;
+        const orderLines = Array.isArray(input.orderLines)
+            ? [...new Set(input.orderLines.map(value => String(value || '').trim()).filter(value => allowedOrderLines.has(value)))]
+            : [...allowedOrderLines];
+        const from = parseLedelsesrapportMonth(input.from);
+        const to = parseLedelsesrapportMonth(input.to);
+        const customerFrom = parseLedelsesrapportMonth(input.customerFrom);
+        const customerTo = parseLedelsesrapportMonth(input.customerTo);
+        const orderFrom = parseLedelsesrapportWeek(input.orderFrom);
+        const orderTo = parseLedelsesrapportWeek(input.orderTo);
+        const loadFrom = parseLedelsesrapportDate(input.loadFrom);
+        const loadTo = parseLedelsesrapportDate(input.loadTo);
+        const viaPeriod = input.viaPeriod === 'dates' ? 'dates' : 'all';
+        const viaFrom = viaPeriod === 'dates' ? parseLedelsesrapportDate(input.viaFrom) : null;
+        const viaTo = viaPeriod === 'dates' ? parseLedelsesrapportDate(input.viaTo) : null;
+        const topCustomers = Number(input.topCustomers);
+        const monthSpan = from && to ? (to.year - from.year) * 12 + to.month - from.month + 1 : 0;
+        const customerSpan = customerFrom && customerTo ? (customerTo.year - customerFrom.year) * 12 + customerTo.month - customerFrom.month + 1 : 0;
+        const loadSpan = loadFrom && loadTo ? (loadTo - loadFrom) / 86400000 : -1;
+        if (monthSpan < 1 || monthSpan > 36 || customerSpan < 1 || customerSpan > 36
+            || !orderFrom || !orderTo || orderTo.monday < orderFrom.monday || (orderTo.monday - orderFrom.monday) / 604800000 > 156
+            || loadSpan < 0 || loadSpan >= 180 || ![5, 10, 20, 50].includes(topCustomers)
+            || (Array.isArray(input.loadResources) && loadResources.length === 0)
+            || (viaPeriod === 'dates' && (!viaFrom || !viaTo || viaTo < viaFrom))) return null;
+        return {
+            from: from.raw, to: to.raw, customerFrom: customerFrom.raw, customerTo: customerTo.raw, topCustomers,
+            orderFrom: String(input.orderFrom), orderTo: String(input.orderTo),
+            loadFrom: String(input.loadFrom), loadTo: String(input.loadTo), viaPeriod,
+            viaFrom: viaPeriod === 'dates' ? String(input.viaFrom) : '', viaTo: viaPeriod === 'dates' ? String(input.viaTo) : '',
+            loadResources, orderLines
+        };
+    }
+
     async function getLedelsesrapportCustomerMargins(customerIds, fromDate, exclusiveToDate) {
         if (!customerIds.length) return new Map();
         const pool = await getConnection();
@@ -448,7 +486,11 @@ function createApiRouter({
 
     router.get('/ledelsesrapport/config', requireModulePermission('ledelsesrapport'), async (req, res) => {
         try {
-            return res.json({ ok: true, accounts: await omsaetningService.getAccounts(), topCustomerOptions: [5, 10, 20, 50], maxLoadDays: 180 });
+            const [accounts, state] = await Promise.all([
+                omsaetningService.getAccounts(),
+                gohData.getAppState('ledelsesrapport_defaults')
+            ]);
+            return res.json({ ok: true, accounts, defaults: normalizeLedelsesrapportDefaults(state && state.payload), topCustomerOptions: [5, 10, 20, 50], maxLoadDays: 180 });
         } catch (err) {
             logEvent('ERROR ledelsesrapport/config: ' + err.message);
             return res.status(500).json({ ok: false, error: 'Rapportopsætningen kunne ikke hentes.' });
@@ -510,6 +552,7 @@ function createApiRouter({
             const today = new Date().toISOString().slice(0, 10);
             const loadStart = loadFrom ? loadFrom.toISOString().slice(0, 10) : today;
             const loadEnd = loadTo ? loadTo.toISOString().slice(0, 10) : null;
+            const orderFlowMonth = toMonth.raw > today.slice(0, 7) ? today.slice(0, 7) : toMonth.raw;
             const viaContextValue = viaContext(true);
 
             const revenueTask = omsaetningService.getSummary({ fra, til, accountCsv: selectedAccounts.join(','), customerCsv: '' });
@@ -519,13 +562,14 @@ function createApiRouter({
                     til: String(ledelsesrapportFiscalPeriod(customerEnd.getUTCFullYear(), customerEnd.getUTCMonth() + 1)),
                     accountCsv: selectedAccounts.join(','), customerCsv: '' });
 
-            const [revenue, orders, oddLoad, evenLoad, via, customerRevenue] = await Promise.all([
+            const [revenue, orders, oddLoad, evenLoad, via, customerRevenue, orderFlow] = await Promise.all([
                 revenueTask,
                 ordreindgangService.getSummary({ fraWeek, tilWeek }),
                 fetchBelastningRows({ getConnection, sql, toDay: loadStart, dage: hasLoadPeriod ? loadSpan : loadDays, resGrCsv: '', parity: 1, orderNo: '', customerFilter: '' }),
                 fetchBelastningRows({ getConnection, sql, toDay: loadStart, dage: hasLoadPeriod ? loadSpan : loadDays, resGrCsv: '', parity: 0, orderNo: '', customerFilter: '' }),
                 getViaPayload(viaContextValue, true),
-                customerTask
+                customerTask,
+                omsaetningService.getOrderFlow({ month: orderFlowMonth, customerCsv: '' })
             ]);
 
             const customerMap = new Map();
@@ -571,6 +615,8 @@ function createApiRouter({
                 accounts: allAccounts.filter(account => selectedAccounts.includes(String(account.acNo))),
                 revenue: { totalRevenueMio: revenue.totalRevenueMio, rows: revenue.rows, topCustomers: topCustomerRows },
                 orders,
+                orderFlow: { month: orderFlow.month, asOf: orderFlow.asOf, unknownCount: orderFlow.unknownCount,
+                    total: orderFlow.total, prior: orderFlow.prior, received: orderFlow.received },
                 load: summarizeLedelsesrapportLoad(loadRows),
                 via: {
                     asOf: String(via.generatedAt || new Date().toISOString()),
@@ -774,6 +820,31 @@ function createApiRouter({
             const saved = await gohData.setAppState('omsaetning_working_days', payload);
             if (!saved) return res.status(503).json({ ok: false, error: 'Arbejdsdage kunne ikke gemmes' });
             return res.json({ ok: true, year, months: normalizedYear, updatedAt: payload.updatedAt });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.get('/admin/ledelsesrapport-defaults', async (req, res) => {
+        if (!requireSuperadmin(req, res)) return;
+        try {
+            const state = await gohData.getAppState('ledelsesrapport_defaults', { strict: true });
+            return res.json({ ok: true, defaults: normalizeLedelsesrapportDefaults(state && state.payload), updatedAt: state && state.updatedAt || null });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    });
+
+    router.post('/admin/ledelsesrapport-defaults', express.json(), async (req, res) => {
+        const user = requireSuperadmin(req, res);
+        if (!user) return;
+        try {
+            const defaults = normalizeLedelsesrapportDefaults(req.body);
+            if (!defaults) return res.status(400).json({ ok: false, error: 'Kontrollér alle perioder og standardværdier.' });
+            const payload = { ...defaults, updatedAt: new Date().toISOString(), updatedBy: String(user.username || '') };
+            const saved = await gohData.setAppState('ledelsesrapport_defaults', payload);
+            if (!saved) return res.status(503).json({ ok: false, error: 'Standarden kunne ikke gemmes i GOH-databasen.' });
+            return res.json({ ok: true, defaults: payload });
         } catch (err) {
             return res.status(500).json({ ok: false, error: err.message });
         }
