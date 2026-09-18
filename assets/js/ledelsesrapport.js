@@ -121,11 +121,33 @@
         return result;
     }
 
-    function horizontalBars(items, valueKey, label, formatter) {
-        const width=700,rowHeight=25,left=190,right=70,height=Math.max(90,items.length*rowHeight+20),max=Math.max(.01,...items.map(item=>number(item[valueKey]))),inner=width-left-right;
+    function horizontalBars(items, valueKey, label, formatter, rowLabel = item => item.name||item.resGr||item.custNo) {
+        const width=780,rowHeight=25,left=190,right=190,height=Math.max(90,items.length*rowHeight+20),max=Math.max(.01,...items.map(item=>number(item[valueKey]))),inner=width-left-right;
         let svg='<svg viewBox="0 0 '+width+' '+height+'" style="height:'+height+'px" aria-label="'+esc(label)+'">';
-        items.forEach((item,index)=>{const yy=10+index*rowHeight,w=Math.max(1,number(item[valueKey])/max*inner);svg+='<text x="'+(left-7)+'" y="'+(yy+13)+'" text-anchor="end" font-size="10" fill="#334f68">'+esc(item.name||item.resGr||item.custNo)+'</text><rect x="'+left+'" y="'+yy+'" width="'+w+'" height="16" fill="'+colors[index%colors.length]+'" rx="2"/><text x="'+(left+w+5)+'" y="'+(yy+12)+'" font-size="9" font-weight="700" fill="#17324d">'+esc(formatter(item[valueKey]))+'</text>';});
+        items.forEach((item,index)=>{const yy=10+index*rowHeight,w=Math.max(1,number(item[valueKey])/max*inner);svg+='<text x="'+(left-7)+'" y="'+(yy+13)+'" text-anchor="end" font-size="10" fill="#334f68">'+esc(rowLabel(item))+'</text><rect x="'+left+'" y="'+yy+'" width="'+w+'" height="16" fill="'+colors[index%colors.length]+'" rx="2"/><text x="'+(left+w+5)+'" y="'+(yy+12)+'" font-size="9" font-weight="700" fill="#17324d">'+esc(formatter(item[valueKey],item))+'</text>';});
         return svg+'</svg>';
+    }
+
+    function customerBars(items) {
+        const width=900,rowHeight=34,left=180,right=330,height=Math.max(100,items.length*rowHeight+44),inner=width-left-right;
+        const max=Math.max(.01,...items.map(item=>Math.max(number(item.revenueMio),number(item.costMio))));
+        let svg='<svg viewBox="0 0 '+width+' '+height+'" style="height:'+height+'px" aria-label="Største kunder med omsætning, kost og dækningsbidrag">';
+        items.forEach((item,index)=>{
+            const yy=10+index*rowHeight,revenue=Math.max(0,number(item.revenueMio)),known=item.costMio!=null&&Number.isFinite(Number(item.costMio));
+            const cost=known?Math.max(0,number(item.costMio)):0,db=known?revenue-cost:null,scale=inner/max;
+            const revenueWidth=Math.max(1,revenue*scale),costInside=Math.min(cost,revenue)*scale,positiveDb=Math.max(0,db||0)*scale,loss=Math.max(0,-(db||0))*scale;
+            const customer=item.name||item.custNo;
+            svg+='<text x="'+(left-7)+'" y="'+(yy+13)+'" text-anchor="end" font-size="10" fill="#334f68">'+esc(customer)+'</text>';
+            if(!known) svg+='<rect x="'+left+'" y="'+yy+'" width="'+revenueWidth+'" height="16" fill="#8fa8c2" rx="2"><title>'+esc(customer+': DB kan ikke beregnes')+'</title></rect>';
+            else {
+                if(costInside>0) svg+='<rect x="'+left+'" y="'+yy+'" width="'+Math.max(1,costInside)+'" height="16" fill="#78909c" rx="2"><title>'+esc('Kost: '+dkk(cost*1000000))+'</title></rect>';
+                if(positiveDb>0) svg+='<rect x="'+(left+costInside)+'" y="'+yy+'" width="'+Math.max(1,positiveDb)+'" height="16" fill="#2e7d32" rx="2"><title>'+esc('DB: '+dkk(db*1000000))+'</title></rect>';
+                if(loss>0) svg+='<rect x="'+(left+revenueWidth)+'" y="'+yy+'" width="'+Math.max(1,loss)+'" height="16" fill="#c62828" rx="2"><title>'+esc('Negativ DB: '+dkk(db*1000000))+'</title></rect>';
+            }
+            const summary=known?'Oms. '+dkk(revenue*1000000)+' · DB '+dkk(db*1000000)+' ('+number(item.dbPct).toLocaleString('da-DK',{minimumFractionDigits:1,maximumFractionDigits:1})+'%)':'Oms. '+dkk(revenue*1000000)+' · DB kan ikke beregnes';
+            svg+='<text x="'+(left+Math.max(revenueWidth,cost*scale)+7)+'" y="'+(yy+12)+'" font-size="9" font-weight="700" fill="#17324d">'+esc(summary)+'</text>';
+        });
+        return svg+'</svg><div class="legend"><span><i class="swatch" style="background:#78909c"></i>Kost</span><span><i class="swatch" style="background:#2e7d32"></i>DB</span><span><i class="swatch" style="background:#c62828"></i>Negativ DB</span></div>';
     }
 
     function resourceLoadPanels(data) {
@@ -166,7 +188,7 @@
         report.innerHTML='<header class="report-head"><div><h1>Ledelsesrapport</h1><p class="subtitle">Økonomi, ordreindgang, belastning og arbejde i gang</p></div><div class="meta"><b>'+esc(data.filters.from)+' til '+esc(data.filters.to)+'</b><br>Dannet '+esc(new Date(data.generatedAt).toLocaleString('da-DK'))+'<br>VIA aktuel pr. '+esc(new Date(data.via.asOf).toLocaleString('da-DK'))+'</div></header>'+
             '<section class="kpis"><div class="kpi"><div class="label">Omsætning</div><div class="value">'+esc(mio(data.revenue.totalRevenueMio))+'</div></div><div class="kpi"><div class="label">VIA kost</div><div class="value">'+esc(dkk(data.via.totalCost))+'</div></div><div class="kpi"><div class="label">Åbne ordrers salg</div><div class="value">'+esc(dkk(data.via.totalSales))+'</div></div><div class="kpi"><div class="label">Resterende salg</div><div class="value">'+esc(dkk(data.via.remainingSales))+'</div></div><div class="kpi"><div class="label">Åbne ordrer</div><div class="value">'+esc(data.via.orderCount)+'</div></div></section>'+
             '<div class="grid">'+stackedRevenue(data)+
-            '<section class="panel"><div class="panel-head"><h2>Største kunder</h2><span class="unit">'+esc(data.filters.customerFrom || data.filters.from)+' til '+esc(data.filters.customerTo || data.filters.to)+' · mio. DKK</span></div>'+horizontalBars(data.revenue.topCustomers,'revenueMio','Største kunder',mio)+'</section>'+
+            '<section class="panel"><div class="panel-head"><h2>Største kunder</h2><span class="unit">'+esc(data.filters.customerFrom || data.filters.from)+' til '+esc(data.filters.customerTo || data.filters.to)+' · omsætning, kost og DB</span></div>'+customerBars(data.revenue.topCustomers)+'</section>'+
             '<section class="panel via-panel"><div class="panel-head"><h2>VIA kostfordeling</h2><span class="unit">Aktuel kost · '+esc(viaPeriod)+'</span></div><dl class="via-totals"><div><dt>'+ (data.via.unknownCostCount ? 'Kendt kost (ufuldstændig)' : 'Samlet kost') +'</dt><dd>'+esc(dkk(data.via.totalCost))+'</dd></div><div><dt>Forventet salg (åbne ordrer)</dt><dd>'+esc(dkk(data.via.totalSales))+'</dd></div></dl>'+viaComposition(data.via)+'<p class="note">'+esc(unknownNote)+'</p></section>'+orderPanels+'</div>'+resourceLoadPanels(data);
     }
 
@@ -174,10 +196,10 @@
         const response=await fetch('/ledelsesrapport/config');
         const data=await response.json();
         if(!response.ok) throw new Error(data.error||'Ingen adgang til ledelsesrapporten.');
-        document.getElementById('accounts').innerHTML=data.accounts.map(account=>'<label><input type="checkbox" value="'+esc(account.acNo)+'" checked> '+esc(account.acNo+' · '+account.name)+'</label>').join('');
+        document.getElementById('accounts').innerHTML=data.accounts.map(account=>'<label><input type="checkbox" value="'+esc(account.acNo)+'" checked disabled> '+esc(account.acNo+' · '+account.name)+'</label>').join('');
+        return data.accounts;
     }
 
-    window.setAllAccounts = checked => document.querySelectorAll('#accounts input').forEach(input => { input.checked=checked; });
     window.openConfig = () => dialog.showModal();
 
     form.addEventListener('submit', async event => {
@@ -234,5 +256,8 @@
             input.disabled=event.target.value!=='dates';input.required=!input.disabled;
         }
     });
-    loadConfig().then(()=>dialog.showModal()).catch(error=>{report.innerHTML='<div class="empty error">'+esc(error.message)+'</div>';});
+    loadConfig().then(accounts=>{
+        if (accounts.length) document.querySelectorAll('#accounts input').forEach(input => { input.checked=true; });
+        dialog.showModal();
+    }).catch(error=>{report.innerHTML='<div class="empty error">'+esc(error.message)+'</div>';});
 }());

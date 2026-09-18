@@ -158,8 +158,8 @@
   {
     "username": "lv",
     "displayName": "Lars",
-    "passwordSalt": "6462a846fd247a57d0e3069085d65e01",
-    "passwordHash": "10c52d9004b5b34e9af0a0742212dc285de80fd3ba9ad966bcd179447df795b0db250a000f57aca1361fb73bc8e66014eb8820052b1c4e90657dbf71ed98e11e",
+    "passwordSalt": "0c521846fc7951e37a02c3ad2bbf2fcd",
+    "passwordHash": "31a32bf220765073fb2379f95df24116b4c7577ffa67815cebcd032dc9e1703c59709396175c3786a8a2278d8326af38961b03a89da3233a94595e5da6015810",
     "role": "user",
     "active": true,
     "permissions": {

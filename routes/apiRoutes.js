@@ -408,6 +408,44 @@ function createApiRouter({
         return ledelsesrapportIsoWeek(monday) === key ? { key, monday } : null;
     }
 
+    async function getLedelsesrapportCustomerMargins(customerIds, fromDate, exclusiveToDate) {
+        if (!customerIds.length) return new Map();
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('customerCsv', sql.NVarChar(sql.MAX), customerIds.join(','))
+            .input('fromDate', sql.Int, Number(fromDate.toISOString().slice(0, 10).replace(/-/g, '')))
+            .input('exclusiveToDate', sql.Int, Number(exclusiveToDate.toISOString().slice(0, 10).replace(/-/g, '')))
+            .query(`SELECT O.OrdNo, O.CustNo
+                    FROM Ord O
+                    WHERE O.TrTp = 1
+                      AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
+                      AND O.InvoAm > 0
+                      AND O.LstInvDt >= @fromDate AND O.LstInvDt < @exclusiveToDate
+                      AND EXISTS (
+                          SELECT 1 FROM STRING_SPLIT(@customerCsv, ',') selectedCustomer
+                          WHERE TRY_CAST(LTRIM(RTRIM(selectedCustomer.value)) AS int) = O.CustNo
+                      )`);
+        const margins = new Map(customerIds.map(customerId => [String(customerId), { costDkk: 0, knownCount: 0, unknownCount: 0 }]));
+        const rows = result.recordset || [];
+        for (let index = 0; index < rows.length; index += 3) {
+            const calculated = await Promise.all(rows.slice(index, index + 3).map(async row => {
+                try {
+                    const margin = await getOrComputeOrderMargin(Number(row.OrdNo), { priority: 'normal' });
+                    return { row, costDkk: Number(margin.totalCost || 0) };
+                } catch {
+                    return { row, costDkk: null };
+                }
+            }));
+            for (const item of calculated) {
+                const total = margins.get(String(item.row.CustNo));
+                if (!total) continue;
+                if (item.costDkk === null) total.unknownCount += 1;
+                else { total.costDkk += item.costDkk; total.knownCount += 1; }
+            }
+        }
+        return margins;
+    }
+
     router.get('/ledelsesrapport/config', requireModulePermission('ledelsesrapport'), async (req, res) => {
         try {
             return res.json({ ok: true, accounts: await omsaetningService.getAccounts(), topCustomerOptions: [5, 10, 20, 50], maxLoadDays: 180 });
@@ -454,10 +492,10 @@ function createApiRouter({
             const allAccounts = await omsaetningService.getAccounts();
             const allowedAccounts = new Set(allAccounts.map(account => String(account.acNo)));
             const requestedAccounts = String(req.query.accounts || '').split(',').map(value => value.trim()).filter(Boolean);
-            const selectedAccounts = requestedAccounts.length ? [...new Set(requestedAccounts)] : Array.from(allowedAccounts);
-            if (!selectedAccounts.length || selectedAccounts.some(account => !/^\d+$/.test(account) || !allowedAccounts.has(account))) {
+            if (!allowedAccounts.size || requestedAccounts.some(account => !/^\d+$/.test(account) || !allowedAccounts.has(account))) {
                 return res.status(400).json({ ok: false, error: 'En eller flere omsætningskonti er ugyldige.' });
             }
+            const selectedAccounts = Array.from(allowedAccounts);
             const topCustomers = Number(req.query.topCustomers || 10);
             if (![5, 10, 20, 50].includes(topCustomers)) return res.status(400).json({ ok: false, error: 'Antal kunder skal være 5, 10, 20 eller 50.' });
             const loadDays = hasLoadPeriod ? loadSpan + 1 : Number(req.query.loadDays || 30);
@@ -498,6 +536,17 @@ function createApiRouter({
                 customer.revenueMio += Number(row.revenueMio || 0);
                 customerMap.set(key, customer);
             }
+            const topCustomerRows = Array.from(customerMap.values()).sort((a, b) => b.revenueMio - a.revenueMio).slice(0, topCustomers);
+            const customerMargins = await getLedelsesrapportCustomerMargins(topCustomerRows.map(row => row.custNo),
+                new Date(Date.UTC(customerFrom.year, customerFrom.month - 1, 1)), customerEnd);
+            for (const customer of topCustomerRows) {
+                const margin = customerMargins.get(String(customer.custNo));
+                customer.costMio = margin && margin.knownCount > 0 && margin.unknownCount === 0 ? margin.costDkk / 1000000 : null;
+                customer.dbMio = customer.costMio === null ? null : customer.revenueMio - customer.costMio;
+                customer.dbPct = customer.dbMio === null || customer.revenueMio === 0 ? null : customer.dbMio / customer.revenueMio * 100;
+                customer.dbKnownCount = margin ? margin.knownCount : 0;
+                customer.dbUnknownCount = margin ? margin.unknownCount : 0;
+            }
             const allViaRows = Array.isArray(via.rows) ? via.rows : [];
             const orderDateKey = row => {
                 const value = String(row.OrderDate || '').slice(0, 10);
@@ -520,7 +569,7 @@ function createApiRouter({
                     loadFrom: loadStart, loadTo: loadEnd, viaFrom: hasViaPeriod ? req.query.viaFrom : '', viaTo: hasViaPeriod ? req.query.viaTo : '',
                     orderFrom: fraWeek.slice(0, 4) + '-W' + fraWeek.slice(4), orderTo: tilWeek.slice(0, 4) + '-W' + tilWeek.slice(4) },
                 accounts: allAccounts.filter(account => selectedAccounts.includes(String(account.acNo))),
-                revenue: { totalRevenueMio: revenue.totalRevenueMio, rows: revenue.rows, topCustomers: Array.from(customerMap.values()).sort((a, b) => b.revenueMio - a.revenueMio).slice(0, topCustomers) },
+                revenue: { totalRevenueMio: revenue.totalRevenueMio, rows: revenue.rows, topCustomers: topCustomerRows },
                 orders,
                 load: summarizeLedelsesrapportLoad(loadRows),
                 via: {

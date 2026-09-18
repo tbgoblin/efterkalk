@@ -89,9 +89,19 @@ function reportClientFixture() {
     const source = fs.readFileSync(path.join(root, 'assets/js/ledelsesrapport.js'), 'utf8');
     const body = source.slice(source.indexOf('{') + 1, source.indexOf('    async function loadConfig()'));
     const charts = require('../assets/js/report-charts');
-    return new Function('document', 'window', body + ';return { stackedRevenue, orderReportView, lineChart, resourceLoadPanels, render, report };')(
+    return new Function('document', 'window', body + ';return { stackedRevenue, horizontalBars, customerBars, orderReportView, lineChart, resourceLoadPanels, render, report };')(
         { getElementById: () => ({}) }, { GohReportCharts: charts });
 }
+
+test('top customer rows show their contribution margin', () => {
+    const client = reportClientFixture();
+    const html = client.customerBars([{ name: 'Kunde & Co', revenueMio: 2, costMio: 1.25, dbMio: 0.75, dbPct: 37.5 }]);
+    assert.match(html, /Oms\. 2\.000\.000 kr\. · DB 750\.000 kr\. \(37,5%\)/);
+    assert.doesNotMatch(html, /Oms\. 2\.000\.000 kr\. · Kost/);
+    assert.match(html, /Kost<\/span>.*DB<\/span>.*Negativ DB<\/span>/);
+    const missing = client.customerBars([{ name: 'Ukendt kost', revenueMio: 1, costMio: null }]);
+    assert.match(missing, /DB kan ikke beregnes/);
+});
 
 test('revenue net totals sit above the whole column including when credits reduce the net', () => {
     const charts = require('../assets/js/report-charts');
@@ -206,13 +216,17 @@ function reportFixture(options = {}) {
     const calls = [];
     const dailyRow = { ResGr: '11', Nm: 'Laser', Dato: null, DatoX: '', Kap: 0, Resv: 300, Aften: 10 };
     new Function('router', 'requireModulePermission', 'omsaetningService', 'ordreindgangService', 'fetchBelastningRows',
-        'getViaPayload', 'viaContext', 'getConnection', 'sql', 'logEvent', source.slice(start, end))(
+        'getViaPayload', 'viaContext', 'getConnection', 'sql', 'logEvent', 'getOrComputeOrderMargin', source.slice(start, end))(
         { get(route, guard, handler) { handlers.set(route, { guard, handler }); } },
         permission => (req, res, next) => req.user?.permissions?.[permission] ? next() : res.status(403).json({ error: 'Denied' }),
-        { getAccounts: async () => { calls.push('accounts'); return [{ acNo: 11012 }]; }, getSummary: async params => { calls.push({ revenue: params }); return options.revenue ? options.revenue(params) : { rows: [], totalRevenueMio: 0 }; } },
+        { getAccounts: async () => { calls.push('accounts'); return options.accounts || [{ acNo: 11012 }]; }, getSummary: async params => { calls.push({ revenue: params }); return options.revenue ? options.revenue(params) : { rows: [], totalRevenueMio: 0 }; } },
         { getSummary: async params => { calls.push({ orders: params }); return { weeklyRows: [] }; } },
         async params => { calls.push({ load: params }); return params.parity === 1 ? (options.loadRows || [dailyRow]) : []; },
-        async () => ({ rows: options.viaRows || [] }), () => ({}), () => {}, {}, () => {}
+        async () => ({ rows: options.viaRows || [] }), () => ({}), async () => ({ request: () => {
+            const request = { input() { return request; }, async query() { return { recordset: options.invoiceRows || [] }; } };
+            return request;
+        } }), { Int: 'Int', NVarChar: value => value, MAX: 'MAX' }, () => {},
+        async ordNo => options.margins?.[ordNo] || { totalRevenue: 0, totalCost: 0 }
     );
     return { calls, dailyRow, async request(query, allowed = true) {
         const req = { query, user: { permissions: { ledelsesrapport: allowed } } };
@@ -254,7 +268,7 @@ test('invalid week ranges and unauthorized requests stop before database reads',
 });
 
 test('customer month range has its own ranking and identical ranges reuse the revenue query', async () => {
-    const fixture = reportFixture({ revenue: params => ({ totalRevenueMio: 99, rows: [
+    const fixture = reportFixture({ invoiceRows: [{ OrdNo: 42, CustNo: 2 }], margins: { 42: { totalRevenue: 3000000, totalCost: 1200000 } }, revenue: params => ({ totalRevenueMio: 99, rows: [
         { custNo: params.fra === '202507' ? 1 : 2, customerName: params.fra === '202507' ? 'Year customer' : 'Month customer', revenueMio: 3 }
     ] }) });
     const result = await fixture.request({ from: '2026-01', to: '2026-12', customerFrom: '2026-09', customerTo: '2026-09' });
@@ -262,6 +276,9 @@ test('customer month range has its own ranking and identical ranges reuse the re
     assert.deepEqual(fixture.calls.filter(call => call.revenue).map(call => [call.revenue.fra, call.revenue.til]), [['202507', '202607'], ['202603', '202604']]);
     assert.equal(result.payload.revenue.rows[0].custNo, 1);
     assert.equal(result.payload.revenue.topCustomers[0].custNo, 2);
+    assert.equal(result.payload.revenue.topCustomers[0].costMio, 1.2);
+    assert.equal(result.payload.revenue.topCustomers[0].dbMio, 1.8);
+    assert.equal(result.payload.revenue.topCustomers[0].dbPct, 60);
     assert.equal(result.payload.filters.customerFrom, '2026-09');
     for (const query of [{}, { customerFrom: '2026-01', customerTo: '2026-12' }]) {
         const same = reportFixture();
@@ -308,4 +325,13 @@ test('invalid independent report dates fail before reading accounts or report da
         assert.equal((await fixture.request({ from: '2026-01', to: '2026-12', ...range })).status, 400);
         assert.deepEqual(fixture.calls, []);
     }
+});
+
+test('report always forwards all seven available revenue accounts', async () => {
+    const accounts = [11012, 11013, 11014, 11015, 11016, 11017, 11018].map(acNo => ({ acNo }));
+    const fixture = reportFixture({ accounts });
+    const result = await fixture.request({ from: '2026-01', to: '2026-12', accounts: '11012,11013,11014' });
+    assert.equal(result.status, 200);
+    assert.equal(fixture.calls.find(call => call.revenue).revenue.accountCsv, accounts.map(account => account.acNo).join(','));
+    assert.deepEqual(result.payload.filters.accounts, accounts.map(account => String(account.acNo)));
 });
