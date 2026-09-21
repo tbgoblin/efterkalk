@@ -361,7 +361,7 @@ function updateSalgordreViaStatus() {
     if (salgordreViaMeta.unknownCount > 0) messages.push(salgordreViaMeta.unknownCount + ' ordrer udeladt: fakturahistorik kan ikke afstemmes');
     const missingCosts = salgordreViaRows.filter(row => row.CostDataAvailable === false).length;
     if (missingCosts) messages.push(missingCosts + ' ordrer uden hentede kostdata');
-    if (Math.abs(salgordreViaMeta.excludedResidualDkk || 0) >= 0.005) messages.push('Restbeløb højst 0,01 DKK pr. ordre udeladt: ' + formatNumber(salgordreViaMeta.excludedResidualDkk) + ' DKK');
+    if (Math.abs(salgordreViaMeta.excludedResidualDkk || 0) >= 0.005) messages.push('Restbeløb højst 1,00 DKK pr. ordre udeladt: ' + formatNumber(salgordreViaMeta.excludedResidualDkk) + ' DKK');
     if (salgordreViaMessage) messages.push(salgordreViaMessage);
     status.textContent = messages.join(' · ');
 }
@@ -374,7 +374,7 @@ function validateSalgordreViaPayload(data) {
         const ordNo = Number(row.OrdNo);
         if (!Number.isSafeInteger(ordNo) || ordNo <= 0 || seen.has(ordNo)) throw new Error('Ugyldige eller dublerede VIA-ordrer');
         seen.add(ordNo);
-        if (data.scope === 'open-backlog' && (!Number.isFinite(row.RemainingSalesValue) || row.RemainingSalesValue <= 0.01)) throw new Error('Ugyldig restsaldo for ordre ' + ordNo);
+        if (data.scope === 'open-backlog' && (!Number.isFinite(row.RemainingSalesValue) || row.RemainingSalesValue <= 1)) throw new Error('Ugyldig restsaldo for ordre ' + ordNo);
     }
     if (data.scope === 'open-backlog') {
         const sum = data.rows.reduce((total, row) => total + row.RemainingSalesValue, 0);

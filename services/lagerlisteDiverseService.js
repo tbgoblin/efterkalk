@@ -60,8 +60,8 @@ function createLagerlisteDiverseService({ gohData, getConnection }) {
         if (!await gohData.setAppState('lagerliste_diverse_' + month, payload)) throw new Error('GOH kunne ikke gemme månedens værdier');
         return payload;
     }
-    async function current() {
-        const manual = await load(monthNow());
+    async function current(month = monthNow()) {
+        const manual = await load(month);
         const pool = await getConnection();
         const result = await pool.request().query(`
             SELECT P.ProdNo, P.Inf2 AS TegnNr, P.Descr,

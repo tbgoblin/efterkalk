@@ -137,7 +137,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return out;
     }
 
-    async function getCurrent({ requestedOrdNo = null, forceRefresh = false, forceAftercalc = false } = {}) {
+    async function getCurrent({ requestedOrdNo = null, forceRefresh = false, forceAftercalc = false, valuationDate = new Date() } = {}) {
         const key = requestedOrdNo ? cacheKey + '_stang_v6_' + requestedOrdNo : cacheKey + '_stang_v6';
         if (!forceRefresh) {
             const cached = diskCache.get(key);
@@ -151,12 +151,12 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         }
 
         const pool = await getConnection();
-        const todayInt = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
-        const currentMonthDate = new Date();
-        currentMonthDate.setDate(1);
-        currentMonthDate.setMonth(currentMonthDate.getMonth() - 2);
+        const localDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit', day: '2-digit' }).format(valuationDate);
+        const [year, month] = localDate.split('-').map(Number);
+        const todayInt = Number(localDate.replace(/-/g, ''));
+        const currentMonthDate = new Date(Date.UTC(year, month - 3, 1));
         const currentMonthStart = Number(currentMonthDate.toISOString().slice(0, 7).replace('-', '') + '01');
-        const nextMonthDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1));
+        const nextMonthDate = new Date(Date.UTC(year, month, 1));
         const nextMonthStart = Number(nextMonthDate.toISOString().slice(0, 10).replace(/-/g, ''));
         const plateResult = await pool.request().query(`
             SELECT
@@ -629,14 +629,14 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         };
         payload.totals.total = round(Object.values(payload.totals).reduce((sum, value) => sum + toNumber(value), 0));
         validateValuation(payload);
-        currentMemoryCache = await withDiverse(payload);
+        currentMemoryCache = await withDiverse(payload, localDate.slice(0, 7));
         diskCache.set(key, payload, 5 * 60 * 1000);
         return currentMemoryCache;
     }
 
-    async function withDiverse(base) {
+    async function withDiverse(base, month) {
         if (!getDiverse) return base;
-        const diverse = await getDiverse();
+        const diverse = await getDiverse(month);
         const existing = new Set(['plates', 'gr5Items', 'stang', 'opfolgningvare'].flatMap(key => (base.categories[key] || []).map(row => String(row.ProdNo).trim())));
         if (diverse.rows.some(row => row.ProdNo && existing.has(String(row.ProdNo).trim()))) {
             throw new Error('Diverse overlapper en anden lagerkategori. Kontrollér varenumrene før værdisætning.');
@@ -924,22 +924,16 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         };
     }
 
-    function scheduleMonthlySnapshot({ onError } = {}) {
-        const runIfMonthEnd = async () => {
-            const now = new Date();
-            const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-            if (tomorrow.getMonth() === now.getMonth()) return;
-            const month = now.toISOString().slice(0, 7);
-            if (await loadMonthlySnapshot({ fs, month })) return;
-            try {
-                await getCurrent({ forceRefresh: true, forceAftercalc: true });
-                await saveMonthlySnapshot({ fs, month, diverse: [] });
-            } catch (err) {
-                if (typeof onError === 'function') onError(err);
-            }
-        };
-        runIfMonthEnd();
-        return setInterval(runIfMonthEnd, 6 * 60 * 60 * 1000);
+    function scheduleMonthlySnapshot({ onError, onResult } = {}) {
+        const { startClientMonthlyScheduler, runMonthlyClose } = require('./lagerlisteMonthlyJob');
+        return startClientMonthlyScheduler({
+            run: () => runMonthlyClose({
+                gohData,
+                createService: () => ({ getCurrent }),
+                writeBackup: (month, payload) => writeSnapshotFile(fs, month, payload, { exclusive: true })
+            }),
+            onError, onResult
+        });
     }
 
     return {

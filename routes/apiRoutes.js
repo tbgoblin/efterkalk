@@ -30,6 +30,7 @@ const getConnectionModule = require('../db');
 const { createOmsaetningService } = require('../services/omsaetningService');
 const { createOrdreindgangService } = require('../services/ordreindgangService');
 const { createBomService } = require('../services/bomService');
+const { createBilancioService, validatePeriod: validateBilancioPeriod } = require('../services/bilancioService');
 const { openPdfTarget } = require('../services/pdfOpenService');
 
 function createApiRouter({
@@ -339,7 +340,11 @@ function createApiRouter({
         sql,
         getRestPrices: settingsService.getRestPrices
     });
-    lagerlisteService.scheduleMonthlySnapshot({ onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message) });
+    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs });
+    lagerlisteService.scheduleMonthlySnapshot({
+        onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message),
+        onResult: result => logEvent('Lagerliste monthly snapshot: ' + JSON.stringify(result))
+    });
 
     function parseLedelsesrapportMonth(value) {
         const match = String(value || '').trim().match(/^(\d{4})-(\d{2})$/);
@@ -633,6 +638,22 @@ function createApiRouter({
             if (err && err.statusCode) return res.status(err.statusCode).json({ ok: false, error: err.message });
             logEvent('ERROR ledelsesrapport/data: ' + err.message);
             return res.status(500).json({ ok: false, error: 'Ledelsesrapporten kunne ikke dannes.' });
+        }
+    });
+
+    router.get('/bilancio-trial/data', requireModulePermission('bilancio'), async (req, res) => {
+        const year = Number(req.query.year);
+        const period = Number(req.query.period);
+        try {
+            validateBilancioPeriod(year, period);
+        } catch (err) {
+            return res.status(400).json({ error: err.message });
+        }
+        try {
+            return res.json(await bilancioService.report(year, period));
+        } catch (err) {
+            logEvent('ERROR bilancio-trial/data: ' + err.message);
+            return res.status(500).json({ error: 'Økonomirapporten kunne ikke hentes.' });
         }
     });
 

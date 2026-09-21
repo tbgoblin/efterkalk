@@ -2101,6 +2101,7 @@ app.get('/', (req, res) => {
                             <button type="button" data-module-key="ordreoversigt" onclick="navigateFromSideMenu('ordreoversigt')">Ordreoversigt</button>
                             <button type="button" data-module-key="personalehåndbog" onclick="navigateFromSideMenu('personalehåndbog')">Personalehåndbog</button>
                             <button type="button" data-module-key="salgordre-via" onclick="navigateFromSideMenu('salgordre-via')">SalgOrdre VIA</button>
+                            <button data-module-key="bilancio" type="button" onclick="window.open('/assets/bilancio-trial.html','_blank','noopener')">🪙 Økonomirapport (Prøve)</button>
                         </div>
                     </section>
 
@@ -2174,6 +2175,7 @@ app.get('/', (req, res) => {
                             <article class="dash-card" data-module-key="ordreoversigt"><span class="dash-chip">Produktion</span><h4>Ordreoversigt</h4><p>Produktionsstatus, levering, indkøb og dokumentation pr. ordre.</p><button onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button></article>
                             <article class="dash-card" data-module-key="belastning"><span class="dash-chip">Produktion</span><h4>Belastning</h4><p>Kapacitet, ressourcer, ordreflyt og planlægningsudsving.</p><button onclick="openModule('belastning')">Åbn Belastning</button></article>
                             <article class="dash-card" data-module-key="ledelsesrapport"><span class="dash-chip">Ledelse</span><h4>Ledelsesrapport</h4><p>Samlet økonomi, ordreindgang, kapacitet og VIA klar til udskrivning.</p><button onclick="window.open('/assets/ledelsesrapport.html','_blank','noopener')">Åbn rapport</button></article>
+                            <article class="dash-card" data-module-key="bilancio"><span class="dash-chip">Prøve</span><h4>Resultatopgørelse</h4><p>Omsætning og vareforbrug pr. måned og regnskabsår til dato.</p><button onclick="window.open('/assets/bilancio-trial.html','_blank','noopener')">Åbn Økonomirapport</button></article>
                             <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Bogholderi</span><h4>Lagerliste</h4><p>Lagerværdi, VIA og færdige ikke-fakturerede varer.</p><button onclick="openModule('lagerliste')">Åbn Lagerliste</button></article>
                             <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Beta</span><h4>Lagerliste 2</h4><p>Route- og transaktionsafstemning for lagerbevægelser.</p><button onclick="window.location.href='/assets/lagerliste2.html'">Åbn Lagerliste 2</button></article>
                             <article class="dash-card" data-module-key="bom"><span class="dash-chip">Produktion</span><h4>BOMe+ Beregner</h4><p>Styklister, materialer og beregning i BOM-arbejdsområdet.</p><button onclick="window.location.href='/assets/bom-workspace-v2.html'">Åbn BOMe+</button></article>
@@ -4057,7 +4059,8 @@ app.get('/', (req, res) => {
                 belastning: 'belastning',
                 ledelsesrapport: 'ledelsesrapport',
                 personalehåndbog: 'personalehandbog',
-                lagerliste: 'lagerliste'
+                lagerliste: 'lagerliste',
+                bilancio: 'bilancio'
             };
 
             function canAccessModule(moduleKey) {
@@ -9738,6 +9741,7 @@ app.get('/', (req, res) => {
                 ['ledelsesrapport', 'Ledelsesrapport'],
                 ['personalehandbog', 'Personalehåndbog']
                 ,['lagerliste', 'Lagerliste'],
+                ['bilancio', 'Økonomirapport (Prøve)'],
                 ['bomOverview', 'BOM · Oversigt'],
                 ['bomStykliste', 'BOM · Stykliste'],
                 ['bomComponents', 'BOM · Komponenter'],

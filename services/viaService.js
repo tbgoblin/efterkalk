@@ -73,7 +73,7 @@ function getOpenViaOrders(flow) {
         }
         seen.add(row.ordNo);
     }
-    return flow.rows.filter(row => row.closing > 0.01);
+    return flow.rows.filter(row => row.closing > 1);
 }
 
 function buildViaBacklog(flow, costRows, requestedOrdNo = null) {
