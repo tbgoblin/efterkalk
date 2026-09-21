@@ -30,7 +30,8 @@ const getConnectionModule = require('../db');
 const { createOmsaetningService } = require('../services/omsaetningService');
 const { createOrdreindgangService } = require('../services/ordreindgangService');
 const { createBomService } = require('../services/bomService');
-const { createBilancioService, validatePeriod: validateBilancioPeriod } = require('../services/bilancioService');
+const { createBilancioService, validatePeriod: validateBilancioPeriod, LINES: BILANCIO_LINES } = require('../services/bilancioService');
+const { defaults: bilancioDefaults, createDefinitionStore } = require('../services/bilancioDefinition');
 const { openPdfTarget } = require('../services/pdfOpenService');
 
 function createApiRouter({
@@ -340,7 +341,8 @@ function createApiRouter({
         sql,
         getRestPrices: settingsService.getRestPrices
     });
-    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs });
+    const bilancioDefinitionStore = createDefinitionStore({ gohData, getProfile: settingsService.getActiveProfile, defaultDefinition: bilancioDefaults(BILANCIO_LINES) });
+    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs, definitionStore: bilancioDefinitionStore });
     lagerlisteService.scheduleMonthlySnapshot({
         onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message),
         onResult: result => logEvent('Lagerliste monthly snapshot: ' + JSON.stringify(result))
@@ -641,7 +643,31 @@ function createApiRouter({
         }
     });
 
+    const bilancioAdminGuard = (req, res, next) => { if (requireSuperadmin(req, res)) next(); };
+    router.get('/admin/bilancio-definition', bilancioAdminGuard, async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try {
+            const [definition, catalog] = await Promise.all([bilancioDefinitionStore.load(), bilancioService.catalog()]);
+            return res.json({ definition, catalog });
+        } catch (err) { return res.status(err.statusCode || 503).json({ error: err.message }); }
+    });
+    router.put('/admin/bilancio-definition', bilancioAdminGuard, async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try {
+            const saved = await bilancioDefinitionStore.save(req.body, await bilancioService.catalog(), getSessionUser(req).username);
+            return res.json({ definition: saved });
+        } catch (err) { return res.status(err.statusCode || 503).json({ error: err.message }); }
+    });
+    router.post('/admin/bilancio-definition/preview', bilancioAdminGuard, async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try {
+            if (req.body.definition?.scope !== bilancioDefinitionStore.scope()) return res.status(409).json({ error: 'Databaseprofilen er ændret. Genindlæs opsætningen.' });
+            validateBilancioPeriod(Number(req.body.year), Number(req.body.period));
+            return res.json(await bilancioService.report(Number(req.body.year), Number(req.body.period), req.body.definition));
+        } catch (err) { return res.status(err.statusCode || 400).json({ error: err.message }); }
+    });
     router.get('/bilancio-trial/data', requireModulePermission('bilancio'), async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
         const year = Number(req.query.year);
         const period = Number(req.query.period);
         try {

@@ -27,7 +27,7 @@
         const abbr = i => months[p-1].slice(0,3).toLowerCase()+'-'+String(i).slice(-2);
         const labels = [abbr(calendarYear), abbr(calendarYear-1), `Juli ${y} - ${months[p-1].toLowerCase()} ${calendarYear}`, `Juli ${y-1} - ${months[p-1].toLowerCase()} ${calendarYear-1}`];
         el('pageTitle').textContent = `Gantech A/S – Økonomirapport ${months[p-1].toLowerCase()} ${calendarYear}`;
-        const revenueAmounts = report.rows[0].amounts;
+        const revenueAmounts = report.revenueAmounts || report.rows[0].amounts;
         function buildTable(title, colIndices, showLabels, extraRows) {
             const cells = (amounts, percentages) => colIndices.map((ci,li)=>`<td class="${li===0?'current ':''}${amounts[ci]<0?'negative':''}">${fmt(amounts[ci]/divisor)}</td><td class="${li===0?'current':''}">${pct(percentages[ci])}</td>`).join('');
             const head1 = colIndices.map(ci=>`<th colspan="2">Regnskabsåret ${y-ci%2}-${String(y+1-ci%2).slice(-2)}<br>${esc(labels[ci])}</th>`).join('');
@@ -35,6 +35,7 @@
             const labelHead1 = showLabels ? '<th class="label-col">Kontogruppe / konto</th>' : '';
             const labelHead2 = showLabels ? '<th class="label-col"></th>' : '';
             const body = report.rows.map((r,index)=>{
+                if (r.type === 'heading') return `<tr class="summary">${showLabels?`<td class="label-col">${esc(r.name)}</td>`:''}${colIndices.map(()=>'<td></td><td></td>').join('')}</tr>`;
                 if (r.type === 'subtotal') return `<tr class="summary">${showLabels?`<td class="label-col">${esc(r.name)}</td>`:''}${cells(r.amounts,r.percentages)}</tr>`;
                 if (r.type === 'computed') return `<tr class="computed">${showLabels?`<td class="label-col">${esc(r.name)}</td>`:''}${cells(r.amounts,r.percentages)}</tr>`;
                 const groupLabel = showLabels ? `<td class="label-col"><button type="button" data-group="${index}" aria-expanded="false">▸ ${esc(r.name)}</button></td>` : '';
@@ -43,7 +44,9 @@
             const extraHtml = (extraRows||[]).map((r,i)=>`<tr class="${r.type==='computed'?'computed':'summary'}${i===0?' section-start':''}">${showLabels?`<td class="label-col">${esc(r.name)}</td>`:''}${cells(r.amounts,r.percentages)}</tr>`).join('');
             return `<div class="sheet"><h2 class="table-title">${esc(title)}</h2><table><thead><tr>${labelHead1}${head1}</tr><tr>${labelHead2}${head2}</tr></thead><tbody>${body}${extraHtml}</tbody></table></div>`;
         }
-        el('report').innerHTML = `<div class="tables">${buildTable('Periodens resultat',[0,1],true,report.periodOnly)}${buildTable('År til dato',[2,3],false)}</div>`;
+        const balanceFmt = value => new Intl.NumberFormat('da-DK', { maximumFractionDigits: 2 }).format(value) + ' kr';
+        const assetsHtml = report.assets ? `<section class="sheet assets-sheet" aria-label="${esc(report.assets.title)}"><h2 class="table-title">${esc(report.assets.title)}</h2><table><thead><tr><th class="label-col">År til dato</th><th>${esc(months[p-1])} ${calendarYear}<br>DKK</th><th>${esc(months[p-1])} ${calendarYear-1}<br>DKK</th></tr></thead><tbody>${report.assets.rows.map(row => `<tr class="${['subtotal', 'heading'].includes(row.type) ? 'summary' : 'asset-row'}"><td class="label-col">${esc(row.name)}</td>${row.amounts.map((amount,i) => `<td class="${i===0?'current':''}">${row.type === 'heading' ? '' : balanceFmt(amount)}</td>`).join('')}</tr>`).join('')}</tbody></table></section>` : '';
+        el('report').innerHTML = `<div class="tables">${buildTable('Periodens resultat',[0,1],true,report.periodOnly)}${buildTable('År til dato',[2,3],false)}</div>${assetsHtml}`;
         el('report').querySelectorAll('[data-group]').forEach(button=>button.addEventListener('click',()=>{
             const open = button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));
             el('report').querySelectorAll(`[data-detail="${button.dataset.group}"]`).forEach(row=>row.hidden=!open);

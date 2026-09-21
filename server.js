@@ -2637,7 +2637,7 @@ app.get('/', (req, res) => {
 
         <div class="container main-omsaetning" id="mainAdministration">
             <section class="omsaetning-shell">
-                <div class="omsaetning-head"><div><h3>Administration</h3><p>Administrer adgang, lagergrundlag og økonomiske kalenderdata.</p></div></div>
+                <div class="omsaetning-head"><div><h3>Administration</h3><p>Administrer adgang, lagergrundlag og økonomiske kalenderdata.</p></div><button type="button" onclick="window.open('/assets/bilancio-admin.html','_blank','noopener')">Økonomirapport · Konti og opbygning</button></div>
                 <nav class="admin-section-nav" aria-label="Administrationsområder" role="tablist" onkeydown="handleAdminTabKeydown(event)">
                     <button id="adminTabUsers" class="active" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="adminSectionUsers" onclick="showAdminSection('users')"><span class="admin-section-card-title">Brugere & adgang</span><span class="admin-section-card-text">Opret brugere, styr adgang og vælg moduler.</span></button>
                     <button id="adminTabDiverse" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionDiverse" onclick="showAdminSection('diverse')"><span class="admin-section-card-title">Lagerliste · Diverse</span><span class="admin-section-card-text">Vedligehold manuelle værdier og skrotberegninger.</span></button>

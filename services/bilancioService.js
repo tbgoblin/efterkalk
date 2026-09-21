@@ -1,3 +1,4 @@
+const { defaults, compileDefinition, evaluateRows } = require('./bilancioDefinition');
 // Some lines aggregate several leaf Kontogrupper (e.g. 19_Lønomk_faste = 15+16+17),
 // mirroring the "Aggr. kontogruppe" rollups defined in the chart of accounts.
 const LINES = [
@@ -96,7 +97,89 @@ function buildReport(records, year, period) {
     }
     return { year, period, currency: 'DKK', generatedAt: new Date().toISOString(), rows };
 }
-function createBilancioService({ getConnection, sql, lagerlisteService, fs }) {
+function resolveAssetGroups(chart) {
+    const groups = new Set(['47_Driftsmidler_ialt']);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const row of chart) {
+            const code = String(row.AcGr || '').trim();
+            if (code && groups.has(String(row.AgAcGr || '').trim()) && !groups.has(code)) {
+                groups.add(code); changed = true;
+            }
+        }
+    }
+    return groups;
+}
+function buildAssetRows(records, year, operatingGroups) {
+    const specs = [
+        { name: 'Depusitum husleje + driftsmidler', matches: row => [66980, 66981].includes(Number(row.AcNo)) },
+        { name: 'Grunde og bygninger', matches: row => String(row.AcGr).trim() === '46_Grunde_og_bygninger' },
+        { name: 'Driftsmidler i alt', matches: row => operatingGroups.has(String(row.AcGr).trim()) }
+    ];
+    const seen = new Set();
+    for (const row of records) {
+        const key = row.AcNo + '/' + row.Yr;
+        if (seen.has(key) || row.Balance == null || !Number.isFinite(Number(row.Balance))) throw new Error('Ugyldig eller dubleret kontosaldo: ' + key);
+        seen.add(key);
+    }
+    for (const yr of [year, year - 1]) for (const ac of [66980, 66981, 61100, 61120, 61850, 61900, 66100]) {
+        if (!seen.has(ac + '/' + yr)) throw new Error('Saldo mangler for konto ' + ac);
+    }
+    const rows = specs.map(spec => {
+        const selected = records.filter(spec.matches);
+        return { name: spec.name, accounts: [...new Set(selected.map(row => Number(row.AcNo)))],
+            amounts: [year, year - 1].map(yr => selected.filter(row => Number(row.Yr) === yr).reduce((sum, row) => sum + Number(row.Balance), 0)) };
+    });
+    const allAccounts = rows.flatMap(row => row.accounts);
+    if (new Set(allAccounts).size !== allAccounts.length) throw new Error('En konto indgår i flere aktivposter.');
+    rows.push({ type: 'subtotal', name: 'Anlægsaktiver i alt', amounts: [0, 1].map(i => rows.reduce((sum, row) => sum + row.amounts[i], 0)) });
+    const inventoryAccounts = [61100, 61120, 61850, 61900];
+    rows.push({ name: 'Varebeholdninger', accounts: inventoryAccounts,
+        amounts: [year, year - 1].map(yr => records.filter(row => Number(row.Yr) === yr && inventoryAccounts.includes(Number(row.AcNo))).reduce((sum, row) => sum + Number(row.Balance), 0)) });
+    // Trade receivables use the explicitly selected accounts, not the whole group.
+    const receivables = records.filter(row => Number(row.AcNo) === 66100);
+    rows.push({ name: 'Tilgodehavender fra salg', accounts: [...new Set(receivables.map(row => Number(row.AcNo)))],
+        amounts: [year, year - 1].map(yr => receivables.filter(row => Number(row.Yr) === yr).reduce((sum, row) => sum + Number(row.Balance), 0)) });
+    const detailedAccounts = rows.filter(row => row.type !== 'subtotal').flatMap(row => row.accounts);
+    if (new Set(detailedAccounts).size !== detailedAccounts.length) throw new Error('En konto indgår i flere aktivposter.');
+    return rows;
+}
+function createBilancioService({ getConnection, sql, lagerlisteService, fs, definitionStore }) {
+    async function catalog() {
+        const pool = await getConnection();
+        const result = await pool.request().query('SELECT AcNo,Nm,AcGr FROM Ac ORDER BY AcNo; SELECT AcGr,AgAcGr FROM AcGr ORDER BY AcGr;');
+        return { accounts: result.recordsets[0], groups: result.recordsets[1] };
+    }
+    async function assetBalances(pool, year, period, definition) {
+        const request = pool.request().input('year', sql.Int, year).input('period', sql.Int, period);
+        const ids = [...new Set(definition.balance.flatMap(row => row.selectedAccounts || []))];
+        request.input('accounts', sql.NVarChar(sql.MAX), ids.join(','));
+        const result = await request
+            .query(`SELECT A.AcNo, A.Nm, A.AcGr, Y.Yr,
+                COALESCE(B.DbIB,0)+COALESCE(B.DbCh,0)-COALESCE(B.CrIB,0)-COALESCE(B.CrCh,0) AS Balance
+                FROM Ac A
+                CROSS JOIN (VALUES (@year),(@year-1)) Y(Yr)
+                OUTER APPLY (
+                    SELECT TOP (1) B.DbIB,B.DbCh,B.CrIB,B.CrCh
+                    FROM AcBal B WHERE B.AcNo=A.AcNo
+                        AND (B.Yr<Y.Yr OR (B.Yr=Y.Yr AND B.Pr<=@period))
+                    ORDER BY B.Yr DESC,B.Pr DESC
+                ) B WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
+                ORDER BY Y.Yr DESC,A.AcNo`);
+        const records = result.recordset || [];
+        const byAccount = new Map();
+        const seen = new Set();
+        for (const row of records) {
+            const key = row.AcNo + '/' + row.Yr;
+            if (seen.has(key)) throw new Error('Dubleret kontosaldo: ' + key);
+            seen.add(key);
+            const record = byAccount.get(row.AcNo) || { AcNo: row.AcNo, Nm: row.Nm };
+            record[Number(row.Yr) === year ? 'Current' : 'Previous'] = row.Balance;
+            byAccount.set(row.AcNo, record);
+        }
+        return { title: definition.balanceTitle, currency: 'DKK', rows: evaluateRows(definition.balance, [...byAccount.values()], 2, ['Current', 'Previous']) };
+    }
     // The selected month vs the month before it, mirroring the Lagerliste module: a closed month uses its
     // snapshot, the still-open current month falls back to the live figure (assets/js/lagerliste.js pattern).
     async function workInProgressForMonth(calendarYear, calendarMonth, todayKey) {
@@ -116,15 +199,14 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs }) {
         ]);
         return currentWip === null || previousWip === null ? null : currentWip - previousWip;
     }
-    return { async report(year, period) {
+    return { catalog, async report(year, period, override) {
         validatePeriod(year, period);
+        const config = override || (definitionStore ? await definitionStore.load() : defaults(LINES));
+        const definition = compileDefinition(config, await catalog());
         const pool = await getConnection();
         const request = pool.request().input('year', sql.Int, year).input('period', sql.Int, period);
-        const leafCodes = [...new Set(LINES.filter(l => l.type === 'group').flatMap(l => l.codes))];
-        const groupParams = leafCodes.map((code, i) => {
-            request.input('g' + i, sql.NVarChar, code);
-            return '@g' + i;
-        });
+        const ids = [...new Set(definition.pnl.flatMap(row => row.selectedAccounts || []))];
+        request.input('accounts', sql.NVarChar(sql.MAX), ids.join(','));
         const result = await request.query(`SELECT A.AcNo, A.Nm, A.AcGr,
                 SUM(CASE WHEN T.AcYr=@year AND T.AcPr=@period THEN COALESCE(T.AcAm,0) ELSE 0 END) AS Month,
                 SUM(CASE WHEN T.AcYr=@year-1 AND T.AcPr=@period THEN COALESCE(T.AcAm,0) ELSE 0 END) AS PriorMonth,
@@ -132,11 +214,13 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs }) {
                 SUM(CASE WHEN T.AcYr=@year-1 THEN COALESCE(T.AcAm,0) ELSE 0 END) AS PriorYtd
                 FROM Ac A LEFT JOIN AcTr T ON T.AcNo=A.AcNo
                     AND T.AcYr IN (@year,@year-1) AND T.AcPr BETWEEN 1 AND @period
-                WHERE A.AcGr IN (${groupParams.join(',')})
+                WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
                 GROUP BY A.AcNo,A.Nm,A.AcGr ORDER BY A.AcNo`);
-        const report = buildReport(result.recordset || [], year, period);
-        const revenueAmounts = report.rows[0].amounts;
-        const resultFørSkat = report.rows.find(row => row.name === 'Resultat før SKAT');
+        const rows = evaluateRows(definition.pnl, result.recordset || [], 4, ['Month', 'PriorMonth', 'Ytd', 'PriorYtd']);
+        const revenueAmounts = rows.find(row => row.id === definition.revenueRow).amounts;
+        for (const row of rows) row.percentages = row.amounts.map((v, i) => revenueAmounts[i] === 0 ? null : v / revenueAmounts[i] * 100);
+        const report = { year, period, currency: 'DKK', generatedAt: new Date().toISOString(), rows, revenueAmounts, definitionVersion: definition.version };
+        const resultFørSkat = rows.find(row => row.id === definition.beforeTaxRow);
         const todayKey = todayMonthKeyCopenhagen();
         const wipChange = await Promise.all([
             workInProgressChange(year, period, todayKey),
@@ -161,7 +245,8 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs }) {
                 percentages: [pctOfRevenue(totalAmounts[0], 0), pctOfRevenue(totalAmounts[1], 1), null, null]
             }
         ];
+        report.assets = await assetBalances(pool, year, period, definition);
         return report;
     } };
 }
-module.exports = { LINES, validatePeriod, buildReport, createBilancioService };
+module.exports = { LINES, validatePeriod, buildReport, createBilancioService, resolveAssetGroups, buildAssetRows };
