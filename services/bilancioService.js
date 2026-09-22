@@ -1,4 +1,5 @@
 const { defaults, compileDefinition, evaluateRows } = require('./bilancioDefinition');
+const { createSourceResolver } = require('./bilancioSources');
 // Some lines aggregate several leaf Kontogrupper (e.g. 19_Lønomk_faste = 15+16+17),
 // mirroring the "Aggr. kontogruppe" rollups defined in the chart of accounts.
 const LINES = [
@@ -26,33 +27,20 @@ const LINES = [
 function fiscalPeriodToCalendar(year, period) {
     return { calendarYear: year + (period > 6 ? 1 : 0), calendarMonth: ((period - 1 + 6) % 12) + 1 };
 }
-function previousFiscalPeriod(year, period) {
-    return period === 1 ? { year: year - 1, period: 12 } : { year, period: period - 1 };
-}
 function todayMonthKeyCopenhagen() {
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit'
     }).formatToParts(new Date()).map(part => [part.type, part.value]));
     return `${parts.year}-${parts.month}`;
 }
-// Matches the "Vare i arbejde" formula in assets/js/lagerliste.js: Færdige SO kostpris + VIA Tid + VIA Laser + VIA Stang + indkøbte dele + VIA Plader.
-function computeWorkInProgress(payload) {
-    if (!payload) return null;
-    const totals = payload.totals || {};
-    const categories = payload.categories || {};
-    const viaRows = Array.isArray(categories.salgordreVia) ? categories.salgordreVia : [];
-    const viaTid = viaRows.reduce((sum, row) => sum + Number(row.TimeCost || 0), 0);
-    const viaLaser = viaRows.reduce((sum, row) => sum + Number(row.MaterialCost || 0), 0);
-    const viaStang = viaRows.reduce((sum, row) => sum + Number(row.StangCost || 0), 0);
-    const viaIndkobt = viaRows.reduce((sum, row) => sum + Number(row.PurchasedPartCost || 0), 0);
-    const nestingRows = Array.isArray(categories.nestingCutting) ? categories.nestingCutting : [];
-    const nestingCountedValue = row => {
-        if (row && row.CountedValue !== undefined && row.CountedValue !== null) return Number(row.CountedValue || 0);
-        const value = Number(row && row.Value || 0);
-        return value < 0 ? 0 : value;
-    };
-    const viaPlader = nestingRows.reduce((sum, row) => sum + nestingCountedValue(row), 0);
-    return Number(totals.finishedNotInvoiced || 0) + viaTid + viaLaser + viaStang + viaIndkobt + viaPlader;
+// Same-month whole-order sales value minus the existing finished-order cost.
+// Older snapshots without sales valuation must not be treated as zero sales.
+function computeFinishedOrderMargin(payload) {
+    const totals = payload && payload.totals;
+    if (!totals || totals.finishedNotInvoicedSales == null || totals.finishedNotInvoiced == null) return null;
+    const sales = Number(totals.finishedNotInvoicedSales);
+    const cost = Number(totals.finishedNotInvoiced);
+    return Number.isFinite(sales) && Number.isFinite(cost) ? Math.round((sales - cost) * 100) / 100 : null;
 }
 function validatePeriod(year, period) {
     if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(period) || period < 1 || period > 12) {
@@ -151,7 +139,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
         const result = await pool.request().query('SELECT AcNo,Nm,AcGr FROM Ac ORDER BY AcNo; SELECT AcGr,AgAcGr FROM AcGr ORDER BY AcGr;');
         return { accounts: result.recordsets[0], groups: result.recordsets[1] };
     }
-    async function assetBalances(pool, year, period, definition) {
+    async function assetBalances(pool, year, period, definition, resolveSources, pnlRows) {
         const request = pool.request().input('year', sql.Int, year).input('period', sql.Int, period);
         const ids = [...new Set(definition.balance.flatMap(row => row.selectedAccounts || []))];
         request.input('accounts', sql.NVarChar(sql.MAX), ids.join(','));
@@ -178,31 +166,25 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
             record[Number(row.Yr) === year ? 'Current' : 'Previous'] = row.Balance;
             byAccount.set(row.AcNo, record);
         }
-        return { title: definition.balanceTitle, currency: 'DKK', rows: evaluateRows(definition.balance, [...byAccount.values()], 2, ['Current', 'Previous']) };
+        // Balance formulas may pull in a P&L row: its year-to-date columns line up with this point-in-time snapshot.
+        const crossSection = new Map(pnlRows.map(row => [row.id, [row.amounts[2], row.amounts[3]]]));
+        return { title: definition.balanceTitle, currency: 'DKK', rows: evaluateRows(definition.balance, [...byAccount.values()], 2, ['Current', 'Previous'], await resolveSources(definition.balance, 2), crossSection) };
     }
-    // The selected month vs the month before it, mirroring the Lagerliste module: a closed month uses its
-    // snapshot, the still-open current month falls back to the live figure (assets/js/lagerliste.js pattern).
-    async function workInProgressForMonth(calendarYear, calendarMonth, todayKey) {
+    // Closed months use their snapshot; only the current open month uses live values.
+    async function finishedOrderMarginForMonth(year, period, todayKey) {
         if (!lagerlisteService || !fs) return null;
+        const { calendarYear, calendarMonth } = fiscalPeriodToCalendar(year, period);
         const monthKey = calendarYear + '-' + String(calendarMonth).padStart(2, '0');
-        const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: monthKey });
-        if (snapshot) return computeWorkInProgress(snapshot.current);
-        return monthKey === todayKey ? computeWorkInProgress(await lagerlisteService.getCurrent()) : null;
+        const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: monthKey, includeCurrentSales: true });
+        if (snapshot) return computeFinishedOrderMargin(snapshot.current);
+        return monthKey === todayKey ? computeFinishedOrderMargin(await lagerlisteService.getCurrent()) : null;
     }
-    async function workInProgressChange(year, period, todayKey) {
-        const current = fiscalPeriodToCalendar(year, period);
-        const previous = previousFiscalPeriod(year, period);
-        const previousCalendar = fiscalPeriodToCalendar(previous.year, previous.period);
-        const [currentWip, previousWip] = await Promise.all([
-            workInProgressForMonth(current.calendarYear, current.calendarMonth, todayKey),
-            workInProgressForMonth(previousCalendar.calendarYear, previousCalendar.calendarMonth, todayKey)
-        ]);
-        return currentWip === null || previousWip === null ? null : currentWip - previousWip;
-    }
-    return { catalog, async report(year, period, override) {
+    return { catalog, async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
-        const config = override || (definitionStore ? await definitionStore.load() : defaults(LINES));
+        const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());
+        const todayKey = todayMonthKeyCopenhagen();
+        const resolveSources = createSourceResolver({ lagerlisteService, fs, year, period, today: todayKey });
         const pool = await getConnection();
         const request = pool.request().input('year', sql.Int, year).input('period', sql.Int, period);
         const ids = [...new Set(definition.pnl.flatMap(row => row.selectedAccounts || []))];
@@ -216,17 +198,16 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
                     AND T.AcYr IN (@year,@year-1) AND T.AcPr BETWEEN 1 AND @period
                 WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
                 GROUP BY A.AcNo,A.Nm,A.AcGr ORDER BY A.AcNo`);
-        const rows = evaluateRows(definition.pnl, result.recordset || [], 4, ['Month', 'PriorMonth', 'Ytd', 'PriorYtd']);
+        const rows = evaluateRows(definition.pnl, result.recordset || [], 4, ['Month', 'PriorMonth', 'Ytd', 'PriorYtd'], await resolveSources(definition.pnl, 4));
         const revenueAmounts = rows.find(row => row.id === definition.revenueRow).amounts;
-        for (const row of rows) row.percentages = row.amounts.map((v, i) => revenueAmounts[i] === 0 ? null : v / revenueAmounts[i] * 100);
-        const report = { year, period, currency: 'DKK', generatedAt: new Date().toISOString(), rows, revenueAmounts, definitionVersion: definition.version };
+        for (const row of rows) row.percentages = row.amounts.map((v, i) => v == null || !revenueAmounts[i] ? null : v / revenueAmounts[i] * 100);
+        const report = { year, period, reportId: definition.reportId, reportName: definition.reportName, showPnl: definition.showPnl, currency: 'DKK', generatedAt: new Date().toISOString(), rows, revenueAmounts, definitionVersion: definition.version };
         const resultFørSkat = rows.find(row => row.id === definition.beforeTaxRow);
-        const todayKey = todayMonthKeyCopenhagen();
-        const wipChange = await Promise.all([
-            workInProgressChange(year, period, todayKey),
-            workInProgressChange(year - 1, period, todayKey)
+        const finishedMargin = definition.legacyPeriodRows === false ? [null, null] : await Promise.all([
+            finishedOrderMarginForMonth(year, period, todayKey),
+            finishedOrderMarginForMonth(year - 1, period, todayKey)
         ]);
-        const totalAmounts = wipChange.map((change, i) => change === null ? null : resultFørSkat.amounts[i] + change);
+        const totalAmounts = finishedMargin.map((margin, i) => margin === null || resultFørSkat.amounts[i] == null ? null : resultFørSkat.amounts[i] + margin);
         const pctOfRevenue = (v, i) => v === null || revenueAmounts[i] === 0 ? null : v / revenueAmounts[i] * 100;
         report.periodOnly = [
             {
@@ -236,8 +217,9 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
             },
             {
                 type: 'computed', name: 'Regulering fortjeneste ej realiseret (VIA)',
-                amounts: [wipChange[0], wipChange[1], null, null],
-                percentages: [pctOfRevenue(wipChange[0], 0), pctOfRevenue(wipChange[1], 1), null, null]
+                description: 'Færdige SO salgpris − Færdige SO kostpris. Manglende salgspriser hentes fra den aktuelle ordreværdi i Visma.',
+                amounts: [finishedMargin[0], finishedMargin[1], null, null],
+                percentages: [pctOfRevenue(finishedMargin[0], 0), pctOfRevenue(finishedMargin[1], 1), null, null]
             },
             {
                 type: 'subtotal', name: 'Periodens resultat i alt',
@@ -245,8 +227,9 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
                 percentages: [pctOfRevenue(totalAmounts[0], 0), pctOfRevenue(totalAmounts[1], 1), null, null]
             }
         ];
-        report.assets = await assetBalances(pool, year, period, definition);
+        if (definition.legacyPeriodRows === false) report.periodOnly = [];
+        report.assets = await assetBalances(pool, year, period, definition, resolveSources, rows);
         return report;
     } };
 }
-module.exports = { LINES, validatePeriod, buildReport, createBilancioService, resolveAssetGroups, buildAssetRows };
+module.exports = { LINES, validatePeriod, buildReport, createBilancioService, resolveAssetGroups, buildAssetRows, computeFinishedOrderMargin };

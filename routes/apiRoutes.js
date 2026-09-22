@@ -643,11 +643,16 @@ function createApiRouter({
         }
     });
 
+    router.get('/bilancio-trial/reports', requireModulePermission('bilancio'), async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try { return res.json({ reports: await bilancioDefinitionStore.list() }); }
+        catch (err) { return res.status(err.statusCode || 503).json({ error: err.message }); }
+    });
     const bilancioAdminGuard = (req, res, next) => { if (requireSuperadmin(req, res)) next(); };
     router.get('/admin/bilancio-definition', bilancioAdminGuard, async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
         try {
-            const [definition, catalog] = await Promise.all([bilancioDefinitionStore.load(), bilancioService.catalog()]);
+            const [definition, catalog] = await Promise.all([bilancioDefinitionStore.load(req.query?.reportId || 'default'), bilancioService.catalog()]);
             return res.json({ definition, catalog });
         } catch (err) { return res.status(err.statusCode || 503).json({ error: err.message }); }
     });
@@ -676,7 +681,7 @@ function createApiRouter({
             return res.status(400).json({ error: err.message });
         }
         try {
-            return res.json(await bilancioService.report(year, period));
+            return res.json(await bilancioService.report(year, period, undefined, req.query.reportId || 'default'));
         } catch (err) {
             logEvent('ERROR bilancio-trial/data: ' + err.message);
             return res.status(500).json({ error: 'Økonomirapporten kunne ikke hentes.' });
@@ -3786,7 +3791,7 @@ function createApiRouter({
 
     router.get('/lagerliste/snapshot/:month', requireModulePermission('lagerliste'), async (req, res) => {
         try {
-            const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: req.params.month });
+            const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: req.params.month, includeCurrentSales: true });
             if (!snapshot) return res.status(404).json({ ok: false, error: 'Snapshot ikke fundet' });
             const report = await diverseService.applyToSnapshot(snapshot, req.params.month);
             return res.json({ ok: true, ...report });

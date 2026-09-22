@@ -8,7 +8,7 @@ const { allocateSharedOrders, allocateComponentStock, allocatePurchasedPartsFrom
 function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgordreViaRows, getOrComputeAftercalc, getProductionSummary, getRestPrices, dataDir, gohData = null, getDiverse = null }) {
     const snapshotDir = dataDir || path.join(__dirname, '..', 'data', 'lagerliste');
     const historyDir = path.join(snapshotDir, 'history');
-    const cacheKey = 'lagerliste_v36';
+    const cacheKey = 'lagerliste_v37';
     const excludedOrderNumbers = new Set([61423, 75330, 131790, 140134, 331368]);
     let currentMemoryCache = null;
 
@@ -325,6 +325,8 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 O.CustNo,
                 A.Nm AS CustomerName,
                 O.Gr4,
+                MAX((CONVERT(decimal(28, 6), ISNULL(O.InvoSF, 0)) + CONVERT(decimal(28, 6), ISNULL(O.InvoIF, 0)))
+                    * (CONVERT(decimal(18, 6), ISNULL(NULLIF(O.ExRt, 0), 100)) / 100.0)) AS SalesValue,
                 SUM(
                     COALESCE(TRY_CONVERT(decimal(18, 6), L.NoFin), 0)
                     * COALESCE(TRY_CONVERT(decimal(18, 6), L.CCstPr), 0)
@@ -466,6 +468,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             return {
                 ...row,
                 LegacyValue: legacyValue,
+                SalesValue: round(row.SalesValue),
                 Value: round(effectiveCost)
             };
         });
@@ -623,6 +626,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
                 stang: round(stang.reduce((sum, row) => sum + row.FifoValue, 0)),
                 opfolgningvare: round(opfolgningvare.reduce((sum, row) => sum + toNumber(row._preciseValue), 0)),
                 finishedNotInvoiced: round(finishedNotInvoiced.reduce((sum, row) => sum + row.Value, 0)),
+                finishedNotInvoicedSales: round(finishedNotInvoiced.reduce((sum, row) => sum + row.SalesValue, 0)),
                 salgordreVia: round(salgordreVia.reduce((sum, row) => sum + row.Value, 0)),
                 diverse: 0
             }
@@ -700,17 +704,52 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
         return { ...payload, file };
     }
 
-    async function loadMonthlySnapshot({ fs, month }) {
+    async function withCurrentFinishedSales(snapshot) {
+        const current = snapshot && snapshot.current;
+        const rows = current && current.categories && current.categories.finishedNotInvoiced;
+        if (!Array.isArray(rows)) return snapshot;
+        const missing = rows.filter(row => row.SalesValue == null);
+        if (!missing.length && current.totals?.finishedNotInvoicedSales != null) return snapshot;
+        const orderNos = [...new Set(missing.map(row => Number(row.OrdNo)))];
+        if (orderNos.some(no => !Number.isSafeInteger(no) || no <= 0)) throw new Error('Ugyldigt ordrenummer i Færdige SO.');
+        const sales = new Map();
+        if (orderNos.length) {
+            const pool = await getConnection();
+            const result = await pool.request().input('orderNos', sql.NVarChar(sql.MAX), orderNos.join(','))
+                .query(`SELECT O.OrdNo,
+                    (CONVERT(decimal(28,6), ISNULL(O.InvoSF,0)) + CONVERT(decimal(28,6), ISNULL(O.InvoIF,0)))
+                    * (CONVERT(decimal(18,6), ISNULL(NULLIF(O.ExRt,0),100)) / 100.0) AS SalesValue
+                    FROM Ord O WHERE O.TrTp = 1
+                    AND O.OrdNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@orderNos,','))`);
+            for (const row of result.recordset || []) {
+                const no = Number(row.OrdNo);
+                if (sales.has(no)) throw new Error('Dubleret salgsordre: ' + no);
+                if (row.SalesValue != null && Number.isFinite(Number(row.SalesValue))) sales.set(no, round(row.SalesValue));
+            }
+        }
+        const fetchedAt = new Date().toISOString();
+        const finished = rows.map(row => row.SalesValue != null || !sales.has(Number(row.OrdNo)) ? { ...row } :
+            { ...row, SalesValue: sales.get(Number(row.OrdNo)), SalesValueSource: 'current-order', SalesValueFetchedAt: fetchedAt });
+        const complete = finished.every(row => row.SalesValue != null && Number.isFinite(Number(row.SalesValue)));
+        return { ...snapshot, current: { ...current,
+            categories: { ...current.categories, finishedNotInvoiced: finished },
+            totals: { ...current.totals, finishedNotInvoicedSales: complete ? round(finished.reduce((sum,row) => sum + Number(row.SalesValue), 0)) : null },
+            finishedSalesSource: sales.size ? 'current-order' : current.finishedSalesSource,
+            finishedSalesFetchedAt: sales.size ? fetchedAt : current.finishedSalesFetchedAt
+        } };
+    }
+
+    async function loadMonthlySnapshot({ fs, month, includeCurrentSales = false }) {
         const normalizedMonth = String(month || '').replace(/[^0-9-]/g, '');
         if (gohData && typeof gohData.getAppState === 'function') {
             const shared = await gohData.getAppState('lagerliste_month_' + normalizedMonth);
-            if (shared && shared.payload) return shared.payload;
+            if (shared && shared.payload) return includeCurrentSales ? withCurrentFinishedSales(shared.payload) : shared.payload;
         }
         const local = readSnapshotFile(fs, normalizedMonth);
         if (local && gohData && typeof gohData.setAppState === 'function') {
             await gohData.setAppState('lagerliste_month_' + normalizedMonth, local);
         }
-        return local;
+        return includeCurrentSales ? withCurrentFinishedSales(local) : local;
     }
 
     async function listMonthlySnapshots(fsRef) {
@@ -938,6 +977,7 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
 
     return {
         getCurrent,
+        withCurrentFinishedSales,
         saveMonthlySnapshot,
         loadMonthlySnapshot,
         listMonthlySnapshots,

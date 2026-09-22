@@ -37,6 +37,22 @@ test('overlapping subtotal references cannot double count underlying rows', () =
     const c=config();c.pnl.push({id:'bad',name:'Bad',type:'sum',sources:['result','sales']});
     assert.throws(()=>validateDefinition(c),/flere gange/);
 });
+test('a Balance formula may reference a P&L row, but a P&L formula still cannot reach into Balance', () => {
+    const c=config();c.balance.push({id:'check',name:'Check',type:'formula',formula:'[total] - [result]'});
+    assert.doesNotThrow(()=>validateDefinition(c));
+    const d=config();d.pnl.push({id:'bad',name:'Bad',type:'formula',formula:'[total]'});
+    assert.throws(()=>validateDefinition(d),/ovenfor/);
+});
+test('a Balance formula reading a P&L row picks up its year-to-date columns as Current/Previous', () => {
+    const c=config();c.balance.push({id:'check',name:'Check',type:'formula',formula:'[total] - [result]'});
+    const compiled=compileDefinition(c,catalog);
+    const pnlRows=evaluateRows(compiled.pnl,[{AcNo:100,Month:-10,PriorMonth:-9,Ytd:-1000,PriorYtd:-900},{AcNo:200,Month:4,PriorMonth:3,Ytd:400,PriorYtd:300}],4,['Month','PriorMonth','Ytd','PriorYtd']);
+    // result = sales(Ytd 1000) + cost(Ytd -400) = 600 in both the Ytd and PriorYtd columns.
+    const crossSection=new Map(pnlRows.map(r=>[r.id,[r.amounts[2],r.amounts[3]]]));
+    const balanceRows=evaluateRows(compiled.balance,[{AcNo:66980,Current:100,Previous:90},{AcNo:66981,Current:200,Previous:190},{AcNo:66100,Current:900,Previous:800}],2,['Current','Previous'],new Map(),crossSection);
+    // total = deposits(300/280) + receivables(900/800) = 1200/1080; check = total − result(600/600).
+    assert.deepEqual(balanceRows.find(r=>r.id==='check').amounts,[600,480]);
+});
 test('forward and cyclic references, unknown accounts and groups fail', () => {
     const c=config();c.pnl[2].sources=['later'];assert.throws(()=>validateDefinition(c),/ovenfor/);
     const d=config();d.pnl[0].accounts=[999];assert.throws(()=>compileDefinition(d,catalog),/findes ikke/);

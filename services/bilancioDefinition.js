@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { parseFormula, evaluateFormula } = require('./bilancioFormula');
 
 function defaults(lines) {
     const contributions = [];
@@ -33,12 +34,44 @@ function validateDefinition(input) {
         if (!Array.isArray(values) || values.length > 1000 || values.some(n => !Number.isSafeInteger(n) || n <= 0)) invalid('Kontonumre skal være positive heltal.');
         return [...new Set(values)];
     };
-    const section = (rows, label) => {
+    const section = (rows, label, externalIds = new Set()) => {
         if (!Array.isArray(rows) || rows.length > 150 || !rows.length) invalid(label + ': tilføj mindst én række (maks. 150).');
         const prior = new Map();
         return rows.map(row => {
             if (!row || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(row.id) || prior.has(row.id)) invalid(label + ': ugyldigt eller gentaget række-id.');
             const result = { id: row.id, name: text(row.name, 'Navn'), type: row.type };
+            result.visibility = row.visibility || 'both';
+            if (!['both', 'period', 'ytd', 'hidden'].includes(result.visibility)) invalid('Ugyldig visning.');
+            result.bold = row.bold === true;
+            result.checkZero = row.checkZero === true;
+            if (row.type === 'formula') {
+                let parsed;
+                try { parsed = parseFormula(row.formula); } catch (err) { invalid(result.name + ': ' + err.message); }
+                for (const id of parsed.refs) {
+                    const local = prior.get(id);
+                    if ((!local || local.type === 'heading') && !externalIds.has(id)) invalid(result.name + ': referér kun til talrækker ovenfor' + (externalIds.size ? ' eller i resultatopgørelsen' : '') + '.');
+                }
+                result.formula = row.formula;
+            } else if (row.type === 'lager' || row.type === 'manual') {
+                result.period = row.period || 'selected';
+                if (!['selected', 'previous', 'current', 'fixed'].includes(result.period)) invalid('Ugyldig dataperiode.');
+                if (result.period === 'fixed') {
+                    if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(row.month || '')) invalid('Vælg fast måned.');
+                    result.month = row.month;
+                }
+                if (row.type === 'lager') {
+                    if (!['sales', 'cost', 'margin', 'warehouse', 'via'].includes(row.metric)) invalid('Vælg Lagerliste-værdi.');
+                    result.metric = row.metric;
+                    result.currentSales = row.currentSales === true;
+                } else {
+                    if (!row.monthValues || typeof row.monthValues !== 'object' || Array.isArray(row.monthValues) || Object.keys(row.monthValues).length > 600) invalid('Ugyldige månedsbeløb.');
+                    result.monthValues = {};
+                    for (const [month, value] of Object.entries(row.monthValues)) {
+                        if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month) || typeof value !== 'number' || !Number.isFinite(value)) invalid('Brug YYYY-MM og et gyldigt beløb.');
+                        result.monthValues[month] = value;
+                    }
+                }
+            } else
             if (row.type === 'accounts') {
                 if (!Array.isArray(row.groups) || row.groups.length > 200) invalid('Ugyldige kontogrupper.');
                 result.accounts = numbers(row.accounts);
@@ -68,11 +101,14 @@ function validateDefinition(input) {
         });
     };
     const pnl = section(input.pnl, 'Resultatopgørelse');
-    const balance = section(input.balance, 'Balance');
+    const pnlIds = new Set(pnl.filter(row => row.type !== 'heading').map(row => row.id));
+    const balance = section(input.balance, 'Balance', pnlIds);
     for (const key of ['revenueRow', 'beforeTaxRow']) {
         if (!pnl.some(row => row.id === input[key] && row.type !== 'heading')) invalid('Vælg rækken for ' + (key === 'revenueRow' ? 'omsætning' : 'resultat før skat') + '.');
     }
-    return { schema: 1, version: input.version, revenueRow: input.revenueRow, beforeTaxRow: input.beforeTaxRow,
+    const reportId = input.reportId || 'default';
+    if (typeof reportId !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(reportId)) invalid('Ugyldigt rapport-id.');
+    return { schema: 1, version: input.version, reportId, reportName: text(input.reportName || 'Økonomirapport', 'Rapportnavn'), showPnl: input.showPnl !== false, legacyPeriodRows: input.legacyPeriodRows !== false, revenueRow: input.revenueRow, beforeTaxRow: input.beforeTaxRow,
         balanceTitle: text(input.balanceTitle, 'Balancetitel'), pnl, balance };
 }
 function compileDefinition(input, catalog) {
@@ -107,7 +143,7 @@ function compileDefinition(input, catalog) {
     };
     return { ...config, pnl: compile(config.pnl), balance: compile(config.balance) };
 }
-function evaluateRows(rows, records, dimension, fields) {
+function evaluateRows(rows, records, dimension, fields, external = new Map(), crossSection = new Map()) {
     const data = new Map();
     for (const record of records) {
         const ac = Number(record.AcNo);
@@ -129,10 +165,15 @@ function evaluateRows(rows, records, dimension, fields) {
             });
             amounts = amounts.map((_, i) => details.reduce((sum, d) => sum + d.amounts[i], 0));
         } else if (row.type === 'sum' || row.type === 'percent') {
-            amounts = amounts.map((_, i) => row.sources.reduce((sum, id) => sum + values.get(id)[i], 0) * (row.type === 'percent' ? row.rate / 100 : 1));
+            amounts = amounts.map((_, i) => row.sources.some(id => values.get(id)[i] == null) ? null : row.sources.reduce((sum, id) => sum + values.get(id)[i], 0) * (row.type === 'percent' ? row.rate / 100 : 1));
+        } else if (row.type === 'formula') {
+            const { tree } = parseFormula(row.formula);
+            amounts = amounts.map((_, i) => evaluateFormula(tree, id => values.has(id) ? values.get(id)[i] : (crossSection.get(id) || [])[i] ?? null));
+        } else if (row.type === 'lager' || row.type === 'manual') {
+            amounts = external.get(row.id) || Array(dimension).fill(null);
         }
         values.set(row.id, amounts);
-        return { id: row.id, name: row.name, type: ({ accounts: 'group', sum: 'subtotal', percent: 'computed', heading: 'heading' })[row.type], accounts: details, amounts };
+        return { id: row.id, name: row.name, visibility: row.visibility || 'both', bold: row.bold, checkZero: row.checkZero, type: ({ accounts: 'group', sum: 'subtotal', percent: 'computed', heading: 'heading', formula: 'computed', lager: 'computed', manual: 'computed' })[row.type], accounts: details, amounts };
     });
 }
 function createDefinitionStore({ gohData, getProfile, defaultDefinition }) {
@@ -140,11 +181,25 @@ function createDefinitionStore({ gohData, getProfile, defaultDefinition }) {
         const p = getProfile();
         return 'bilancio_definition_' + crypto.createHash('sha256').update(JSON.stringify([p.server.toLowerCase(), p.database.toLowerCase()])).digest('hex').slice(0, 32);
     };
-    async function load() {
+    function storageKey(id = 'default') {
+        if (typeof id !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(id)) invalid('Ugyldigt rapport-id.');
+        return id === 'default' ? key() : key() + '_report_' + id;
+    }
+    async function load(reportId = 'default') {
         const scope = key();
-        const state = await gohData.getAppState(scope, { strict: true });
-        if (!state) return { ...structuredClone(defaultDefinition), scope };
-        return { ...validateDefinition(state.payload), scope, updatedBy: state.payload.updatedBy, updatedAt: state.payload.updatedAt };
+        const state = await gohData.getAppState(storageKey(reportId), { strict: true });
+        if (!state) {
+            if (reportId !== 'default') { const err = new Error('Rapporten findes ikke.'); err.statusCode = 404; throw err; }
+            return { ...structuredClone(defaultDefinition), reportId, reportName: 'Økonomirapport', scope };
+        }
+        return { ...validateDefinition(state.payload), reportId, scope, updatedBy: state.payload.updatedBy, updatedAt: state.payload.updatedAt };
+    }
+    async function list() {
+        const prefix = key() + '_report_';
+        const keys = await gohData.getAppStateKeysByPrefix(prefix);
+        if (!Array.isArray(keys)) throw new Error('Rapportlisten kunne ikke hentes fra GOH. Prøv igen.');
+        const reports = await Promise.all(['default', ...keys.map(row => row.key.slice(prefix.length))].map(id => load(id)));
+        return reports.map(r => ({ reportId: r.reportId, reportName: r.reportName }));
     }
     async function save(input, catalog, username) {
         const scope = key();
@@ -152,12 +207,12 @@ function createDefinitionStore({ gohData, getProfile, defaultDefinition }) {
         const config = validateDefinition(input);
         compileDefinition(config, catalog);
         const payload = { ...config, scope, version: config.version + 1, updatedBy: username, updatedAt: new Date().toISOString() };
-        if (!await gohData.setAppState(scope, payload, { expectedVersion: config.version })) {
+        if (!await gohData.setAppState(storageKey(config.reportId), payload, { expectedVersion: config.version })) {
             const error = new Error('Opsætningen blev ikke gemt. En anden bruger kan have ændret den, eller GOH er utilgængelig. Genindlæs før du prøver igen.');
             error.statusCode = 409; throw error;
         }
         return payload;
     }
-    return { load, save, scope: key };
+    return { load, save, list, scope: key };
 }
 module.exports = { defaults, validateDefinition, compileDefinition, evaluateRows, createDefinitionStore };

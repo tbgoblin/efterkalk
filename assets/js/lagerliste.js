@@ -254,6 +254,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         ['Varelager uden rest', warehouseWithoutRest, previousWarehouseWithoutRest, null, '', 'Plader + stangmateriale + opfølgningsvarer + lagerkomponenter + Diverse, uden restplader.'],
         ['Varelager', warehouseWithRest, previousWarehouseWithRest, null, '', 'Varelager uden rest + Rest plader.'],
         ['Færdige SO kostpris', totals.finishedNotInvoiced, previousTotals && previousTotals.finishedNotInvoiced, 'lagerliste-ready-invoice-section', '', 'Færdigmeldte salgsordrer, der endnu ikke er faktureret, beregnet med Efterkalk.'],
+        ['Færdige SO salgpris', totals.finishedNotInvoicedSales, previousTotals && previousTotals.finishedNotInvoicedSales, 'lagerliste-ready-invoice-section', '', 'Hele ordreværdien i DKK for ordrerne under Færdige SO. Informationsværdi; indgår ikke i lagertotalen.'],
         ['VIA Tid', viaTid, previousViaRows.length ? previousViaTid : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registrerede minutter × operationspris.'],
         ['VIA Laser', viaLaser, previousViaRows.length ? previousViaLaser : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registreret laser/materialeforbrug.'],
         ['VIA Stang', viaStang, previousViaRows.length ? previousViaStang : null, 'lagerliste-salgordre-via-section', 'lagerliste-summary-subrow', 'Aktive salgsordrer VIA: registreret stangmateriale.'],
@@ -268,7 +269,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         + '<div class="lagerliste-summary-table-wrap"><table class="lagerliste-sheet-table lagerliste-overview-table"><thead><tr><th>Post</th><th>' + lagerlisteEscape(displayLabel) + '</th><th>' + lagerlisteEscape(comparison ? comparison.label : 'Sammenligning') + '</th><th>Ændring</th><th>Info</th></tr></thead><tbody>'
         + rows.map(row => '<tr class="' + (row[4] || (row[0] === 'TOTAL' ? 'lagerliste-sheet-grand' : (row[0] === 'Varelager' ? 'lagerliste-sheet-total' : ''))) + '"><td>'
             + (row[3] ? '<button type="button" class="lagerliste-sheet-link" onclick="lagerlisteOpenSection(\'' + row[3] + '\')">' + lagerlisteEscape(row[0]) + '</button>' : lagerlisteEscape(row[0]))
-            + '</td><td>' + lagerlisteEscape(lagerlisteFormat(row[1])) + '</td><td>' + lagerlisteEscape(previousCell(row[2])) + '</td><td>' + (comparison ? lagerlisteComparisonCell(row[1], row[2], true) : '-') + '</td><td class="lagerliste-explanation"><span class="lagerliste-info-icon" title="' + lagerlisteEscape(row[5]) + '" aria-label="' + lagerlisteEscape(row[5]) + '" role="img">i</span></td></tr>').join('')
+            + '</td><td>' + lagerlisteEscape(previousCell(row[1])) + '</td><td>' + lagerlisteEscape(previousCell(row[2])) + '</td><td>' + (comparison && row[1] != null && row[2] != null ? lagerlisteComparisonCell(row[1], row[2], true) : '-') + '</td><td class="lagerliste-explanation"><span class="lagerliste-info-icon" title="' + lagerlisteEscape(row[5]) + '" aria-label="' + lagerlisteEscape(row[5]) + '" role="img">i</span></td></tr>').join('')
         + '</tbody></table></div></section>';
 }
 
@@ -618,6 +619,7 @@ function lagerlisteReadyToInvoiceTable(rows) {
         { key: 'LineCount', label: 'Linjer', format: value => String(Math.round(Number(value || 0))) },
         { key: 'LegacyValue', label: 'Legacy', format: lagerlisteFormat },
         { key: 'Value', label: 'Kostpris (Efterkalk)', format: lagerlisteFormat },
+        { key: 'SalesValue', label: 'Salgpris (hele ordren)', format: (value, row) => value == null ? '—' : lagerlisteFormat(value) + (row.SalesValueSource === 'current-order' ? ' (aktuel)' : '') },
         {
             key: 'Diff',
             label: 'Dif.',
