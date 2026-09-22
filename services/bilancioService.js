@@ -201,7 +201,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
         const rows = evaluateRows(definition.pnl, result.recordset || [], 4, ['Month', 'PriorMonth', 'Ytd', 'PriorYtd'], await resolveSources(definition.pnl, 4));
         const revenueAmounts = rows.find(row => row.id === definition.revenueRow).amounts;
         for (const row of rows) row.percentages = row.amounts.map((v, i) => v == null || !revenueAmounts[i] ? null : v / revenueAmounts[i] * 100);
-        const report = { year, period, reportId: definition.reportId, reportName: definition.reportName, showPnl: definition.showPnl, currency: 'DKK', generatedAt: new Date().toISOString(), rows, revenueAmounts, definitionVersion: definition.version };
+        const report = { year, period, reportId: definition.reportId, reportName: definition.reportName, showPnl: definition.showPnl, printLayout: definition.printLayout || null, currency: 'DKK', generatedAt: new Date().toISOString(), rows, revenueAmounts, definitionVersion: definition.version };
         const resultFørSkat = rows.find(row => row.id === definition.beforeTaxRow);
         const finishedMargin = definition.legacyPeriodRows === false ? [null, null] : await Promise.all([
             finishedOrderMarginForMonth(year, period, todayKey),

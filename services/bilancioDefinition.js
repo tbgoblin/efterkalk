@@ -24,6 +24,25 @@ function defaults(lines) {
     ] };
 }
 function invalid(message) { const error = new Error(message); error.statusCode = 400; throw error; }
+// Free-form A4 print placement for the two report blocks, saved per page orientation.
+// x/y/width/height are percentages of the printable page area; null means "use the automatic stacked layout".
+function validateLayout(layout) {
+    if (layout == null) return null;
+    if (typeof layout !== 'object' || Array.isArray(layout)) invalid('Ugyldigt udskriftslayout.');
+    const rect = block => {
+        if (!block || typeof block !== 'object') invalid('Ugyldigt udskriftslayout.');
+        const { x, y, width, height } = block;
+        for (const n of [x, y, width, height]) if (typeof n !== 'number' || !Number.isFinite(n)) invalid('Ugyldigt udskriftslayout.');
+        if (x < 0 || y < 0 || width < 5 || height < 5 || x + width > 100.5 || y + height > 100.5) invalid('Udskriftslayout: placeringen skal være inden for siden.');
+        return { x, y, width, height };
+    };
+    const result = {};
+    for (const key of ['portrait', 'landscape']) {
+        const value = layout[key];
+        result[key] = value == null ? null : { pnl: rect(value.pnl), balance: rect(value.balance) };
+    }
+    return result;
+}
 function validateDefinition(input) {
     if (!input || input.schema !== 1 || !Number.isInteger(input.version) || input.version < 0) invalid('Ugyldig rapportversion. Genindlæs opsætningen.');
     const text = (value, label) => {
@@ -109,7 +128,7 @@ function validateDefinition(input) {
     const reportId = input.reportId || 'default';
     if (typeof reportId !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(reportId)) invalid('Ugyldigt rapport-id.');
     return { schema: 1, version: input.version, reportId, reportName: text(input.reportName || 'Økonomirapport', 'Rapportnavn'), showPnl: input.showPnl !== false, legacyPeriodRows: input.legacyPeriodRows !== false, revenueRow: input.revenueRow, beforeTaxRow: input.beforeTaxRow,
-        balanceTitle: text(input.balanceTitle, 'Balancetitel'), pnl, balance };
+        balanceTitle: text(input.balanceTitle, 'Balancetitel'), printLayout: validateLayout(input.printLayout), pnl, balance };
 }
 function compileDefinition(input, catalog) {
     const config = validateDefinition(input);

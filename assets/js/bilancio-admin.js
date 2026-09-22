@@ -163,7 +163,7 @@
         el('catalog').querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>add(Number(b.dataset.add),false));
         el('catalog').querySelectorAll('[data-exclude]').forEach(b=>b.onclick=()=>add(Number(b.dataset.exclude),true));
     }
-    function draw() { drawRows(); drawEditor(); drawRoles(); el('legacyRows').checked=definition.legacyPeriodRows!==false; }
+    function draw() { drawRows(); drawEditor(); drawRoles(); el('legacyRows').checked=definition.legacyPeriodRows!==false; drawLayout(); }
     async function load(reportId) {
         if(typeof reportId!=='string')reportId=definition?.reportId||'default';
         if (dirty && !confirm('Kassér ikke-gemte ændringer og genindlæs?')) {drawReports();return;}
@@ -213,6 +213,54 @@
     el('revenue').onchange=e=>{definition.revenueRow=e.target.value;changed();};
     el('beforeTax').onchange=e=>{definition.beforeTaxRow=e.target.value;changed();};
     el('legacyRows').onchange=e=>{definition.legacyPeriodRows=e.target.checked;changed();};
+    const DEFAULT_LAYOUT = { pnl:{x:0,y:0,width:100,height:48}, balance:{x:0,y:52,width:100,height:48} };
+    let layoutOrientation = 'portrait';
+    const round1 = n => Math.round(n*10)/10;
+    function currentLayoutRect(key) {
+        const stored = definition?.printLayout?.[layoutOrientation];
+        return (stored && stored[key]) || DEFAULT_LAYOUT[key];
+    }
+    function drawLayout() {
+        el('layoutCanvas').classList.toggle('landscape', layoutOrientation==='landscape');
+        for (const key of ['pnl','balance']) {
+            const box = el(key==='pnl'?'layoutPnl':'layoutBalance'), rect = currentLayoutRect(key);
+            box.style.left=rect.x+'%'; box.style.top=rect.y+'%'; box.style.width=rect.width+'%'; box.style.height=rect.height+'%';
+        }
+    }
+    function setLayoutRect(key, rect) {
+        if (!definition.printLayout) definition.printLayout = { portrait:null, landscape:null };
+        const base = { ...(definition.printLayout[layoutOrientation] || DEFAULT_LAYOUT) };
+        base[key] = rect;
+        definition.printLayout = { ...definition.printLayout, [layoutOrientation]: base };
+        changed();
+    }
+    function layoutPointer(key, mode) {
+        const box = el(key==='pnl'?'layoutPnl':'layoutBalance');
+        const handle = mode==='resize' ? box.querySelector('[data-resize]') : box;
+        handle.addEventListener('pointerdown', event => {
+            if (mode==='move' && event.target.closest('[data-resize]')) return;
+            event.preventDefault(); event.stopPropagation();
+            const canvasRect = el('layoutCanvas').getBoundingClientRect();
+            const start = currentLayoutRect(key), startX = event.clientX, startY = event.clientY;
+            const move = ev => {
+                const dx=(ev.clientX-startX)/canvasRect.width*100, dy=(ev.clientY-startY)/canvasRect.height*100;
+                const rect = mode==='resize'
+                    ? { x:start.x, y:start.y, width:Math.min(100-start.x,Math.max(5,round1(start.width+dx))), height:Math.min(100-start.y,Math.max(5,round1(start.height+dy))) }
+                    : { ...start, x:Math.min(100-start.width,Math.max(0,round1(start.x+dx))), y:Math.min(100-start.height,Math.max(0,round1(start.y+dy))) };
+                setLayoutRect(key, rect); drawLayout();
+            };
+            const up = () => { document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up); };
+            document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
+        });
+    }
+    layoutPointer('pnl','move'); layoutPointer('pnl','resize');
+    layoutPointer('balance','move'); layoutPointer('balance','resize');
+    document.querySelectorAll('input[name="layoutOrientation"]').forEach(radio=>radio.onchange=e=>{layoutOrientation=e.target.value;drawLayout();});
+    el('layoutReset').onclick=()=>{
+        if (definition.printLayout) definition.printLayout = { ...definition.printLayout, [layoutOrientation]: null };
+        changed(); drawLayout();
+    };
+    drawLayout();
     el('convertVia').onclick=()=>{
         if(definition.legacyPeriodRows===false) return message('De automatiske rækker er allerede slået fra. Du kan tilføje flere rækker med + Ny række.');
         const suffix=Date.now().toString(36), sales='sales_'+suffix, cost='cost_'+suffix, before='before_'+suffix, margin='margin_'+suffix;

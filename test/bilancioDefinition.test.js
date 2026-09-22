@@ -37,6 +37,16 @@ test('overlapping subtotal references cannot double count underlying rows', () =
     const c=config();c.pnl.push({id:'bad',name:'Bad',type:'sum',sources:['result','sales']});
     assert.throws(()=>validateDefinition(c),/flere gange/);
 });
+test('print layout is optional, validated per orientation, and rejects rectangles that spill off the page', () => {
+    const c=config();
+    assert.equal(validateDefinition(c).printLayout,null);
+    c.printLayout={portrait:{pnl:{x:0,y:0,width:100,height:48},balance:{x:0,y:52,width:100,height:48}},landscape:null};
+    assert.deepEqual(validateDefinition(c).printLayout,{portrait:{pnl:{x:0,y:0,width:100,height:48},balance:{x:0,y:52,width:100,height:48}},landscape:null});
+    const d=config();d.printLayout={portrait:{pnl:{x:60,y:0,width:60,height:48},balance:{x:0,y:52,width:100,height:48}},landscape:null};
+    assert.throws(()=>validateDefinition(d),/udskriftslayout/i);
+    const e=config();e.printLayout={portrait:{pnl:{x:0,y:0,width:2,height:48},balance:{x:0,y:52,width:100,height:48}},landscape:null};
+    assert.throws(()=>validateDefinition(e),/udskriftslayout/i);
+});
 test('a Balance formula may reference a P&L row, but a P&L formula still cannot reach into Balance', () => {
     const c=config();c.balance.push({id:'check',name:'Check',type:'formula',formula:'[total] - [result]'});
     assert.doesNotThrow(()=>validateDefinition(c));

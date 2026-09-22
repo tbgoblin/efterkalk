@@ -9,16 +9,34 @@
     el('year').value = previous.getUTCFullYear() - (m < 6 ? 1 : 0);
     months.forEach((name,i)=>el('period').add(new Option(`${i+1} · ${name}`,i+1)));
     el('period').value = (m+6)%12+1;
+    let report = null;
     function printReport(orientation) {
         const styleEl = el('printOrientation');
         if (styleEl) styleEl.textContent = `@page{size:A4 ${orientation};margin:10mm}`;
+        // A saved admin layout places the two report blocks freely on the A4 page instead of
+        // the default stacked flow; --page-w/h and each block's --x/y/w/h drive the print-only CSS.
+        const container = el('report'), layout = report?.printLayout?.[orientation];
+        container.classList.toggle('custom-layout', !!layout);
+        if (layout) {
+            const [pageW, pageH] = orientation === 'landscape' ? [277, 190] : [190, 277];
+            container.style.setProperty('--page-w', pageW + 'mm');
+            container.style.setProperty('--page-h', pageH + 'mm');
+            for (const key of ['pnl', 'balance']) {
+                const block = container.querySelector(`[data-block="${key}"]`), rect = layout[key];
+                if (!block || !rect) continue;
+                block.style.setProperty('--x', rect.x + '%');
+                block.style.setProperty('--y', rect.y + '%');
+                block.style.setProperty('--w', rect.width + '%');
+                block.style.setProperty('--h', rect.height + '%');
+            }
+        }
         // Give the browser a full reflow for the new @page orientation before printing,
         // otherwise the print pipeline can capture the page mid-reflow and rotate/squeeze it to fit.
         requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
     }
     el('printPortraitBtn').addEventListener('click', () => printReport('portrait'));
     el('printLandscapeBtn').addEventListener('click', () => printReport('landscape'));
-    let report = null;
+    window.addEventListener('afterprint', () => el('report').classList.remove('custom-layout'));
     function render() {
         if (!report) return;
         const divisor = Number(el('unit').value), unit = divisor===1000?'t.kr':'DKK';
@@ -55,10 +73,10 @@
                 return `<tr class="group" style="${r.bold?'font-weight:bold':''}">${groupLabel}${cells(r.amounts,r.percentages,r)}</tr>${r.accounts.map(a=>`<tr class="detail" data-detail="${index}" hidden><td class="label-col">${a.account} · ${esc(a.name)}</td>${cells(a.amounts,a.amounts.map((v,i)=>revenueAmounts[i]===0?null:v/revenueAmounts[i]*100))}</tr>`).join('')}`;
             }).join('');
             const extraHtml = (extraRows||[]).map((r,i)=>`<tr class="${r.type==='computed'?'computed':'summary'}${i===0?' section-start':''}"><td class="label-col" title="${esc(r.description || r.name)}">${esc(r.name)}</td>${cells(r.amounts,r.percentages,r)}</tr>`).join('');
-            return `<div class="sheet"><table><thead><tr><th class="label-col"></th>${groupHead}</tr><tr><th class="label-col">Kontogruppe / konto</th>${head1}</tr><tr><th class="label-col"></th>${head2}</tr></thead><tbody>${body}${extraHtml}</tbody></table></div>`;
+            return `<div class="sheet" data-block="pnl"><table><thead><tr><th class="label-col"></th>${groupHead}</tr><tr><th class="label-col">Kontogruppe / konto</th>${head1}</tr><tr><th class="label-col"></th>${head2}</tr></thead><tbody>${body}${extraHtml}</tbody></table></div>`;
         }
         const balanceFmt = value => value == null ? '—' : new Intl.NumberFormat('da-DK', { minimumFractionDigits: divisor===1?2:0, maximumFractionDigits: divisor===1?2:0 }).format(Object.is(value,-0)?0:value/divisor);
-        const assetsHtml = report.assets ? `<section class="sheet assets-sheet" aria-label="${esc(report.assets.title)}"><h2 class="table-title">${esc(report.assets.title)}</h2><table><thead><tr><th class="label-col">År til dato</th><th>${esc(months[p-1])} ${calendarYear}<br>${unit}</th><th>${esc(months[p-1])} ${calendarYear-1}<br>${unit}</th></tr></thead><tbody>${report.assets.rows.filter(row => !['hidden','period'].includes(row.visibility)).map(row => `<tr class="${(row.bold || ['subtotal', 'heading'].includes(row.type)) ? 'summary' : 'asset-row'}"><td class="label-col">${esc(row.name)}</td>${row.amounts.map((amount,i) => `<td class="${i===0?'current':''}">${row.type === 'heading' ? '' : balanceFmt(amount) + zeroStatus(row,amount)}</td>`).join('')}</tr>`).join('')}</tbody></table></section>` : '';
+        const assetsHtml = report.assets ? `<section class="sheet assets-sheet" data-block="balance" aria-label="${esc(report.assets.title)}"><h2 class="table-title">${esc(report.assets.title)}</h2><table><thead><tr><th class="label-col">År til dato</th><th>${esc(months[p-1])} ${calendarYear}<br>${unit}</th><th>${esc(months[p-1])} ${calendarYear-1}<br>${unit}</th></tr></thead><tbody>${report.assets.rows.filter(row => !['hidden','period'].includes(row.visibility)).map(row => `<tr class="${(row.bold || ['subtotal', 'heading'].includes(row.type)) ? 'summary' : 'asset-row'}"><td class="label-col">${esc(row.name)}</td>${row.amounts.map((amount,i) => `<td class="${i===0?'current':''}">${row.type === 'heading' ? '' : balanceFmt(amount) + zeroStatus(row,amount)}</td>`).join('')}</tr>`).join('')}</tbody></table></section>` : '';
         el('report').innerHTML = `${report.showPnl===false?'':buildTable(report.periodOnly)}${assetsHtml}`;
         el('report').querySelectorAll('[data-group]').forEach(button=>button.addEventListener('click',()=>{
             const open = button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));
