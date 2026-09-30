@@ -236,6 +236,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo = null
                       AND L.ProdNo NOT LIKE '%L'
                       AND ISNULL(P.Gr6, 0) <> 2
                       AND ISNULL(L.PurcNo, 0) = 0
+                      AND ISNULL(P.Gr5, 0) <> 3
                     GROUP BY ProductionOrders.SalesOrderNo
                 ),
                                     StangCosts AS (
@@ -254,6 +255,16 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo = null
                                                     WHERE R.OrdNo = L.OrdNo AND R.OrdLnNo = L.LnNo
                                                 )
                                           )
+                                        GROUP BY ProductionOrders.SalesOrderNo
+                                    ),
+                                    UnderleverandorCosts AS (
+                                        SELECT
+                                            ProductionOrders.SalesOrderNo,
+                                            SUM(CONVERT(float, ISNULL(L.NoFin, 0)) * CONVERT(float, ISNULL(L.CCstPr, 0))) AS UnderleverandorCost
+                                        FROM ProductionOrders
+                                        INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = ProductionOrders.OrdNo
+                                        WHERE L.ProdTp4 = 7
+                                          AND L.ProdNo NOT LIKE '%L'
                                         GROUP BY ProductionOrders.SalesOrderNo
                                     ),
                                     PurchasedPartRawLines AS (
@@ -307,10 +318,12 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo = null
                                                                                               AND R.OrdLnNo = L.LnNo
                                                                                               AND R.ProdNo = L.ProdNo
                                                                                         ) Reservation
-                                                                                WHERE L.PurcNo IS NOT NULL
-                                                                                    AND L.PurcNo <> 0
-                                          AND L.ProdTp4 = 2
+                                                                                WHERE L.ProdTp4 = 2
                                           AND L.ProdNo NOT LIKE '%L'
+                                          AND (
+                                                (L.PurcNo IS NOT NULL AND L.PurcNo <> 0)
+                                             OR ISNULL(PP.Gr5, 0) = 3
+                                          )
                                           AND (
                                                 ISNULL(PP.Gr6, 0) <> 2
                                              OR EXISTS (
@@ -368,6 +381,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo = null
                     Active.EffectiveResourceMinutes,
                     ISNULL(MaterialCosts.MaterialCost, 0) + ISNULL(NestingMaterialCosts.MaterialCost, 0) AS MaterialCost,
                     ISNULL(StangCosts.StangCost, 0) AS StangCost,
+                    ISNULL(UnderleverandorCosts.UnderleverandorCost, 0) AS UnderleverandorCost,
                     CAST(0 AS decimal(18, 6)) AS PurchasedPartCost,
                     ISNULL((
                         SELECT
@@ -404,6 +418,7 @@ async function fetchSalgordreViaRows({ getConnection, sql, requestedOrdNo = null
                 LEFT JOIN ActiveProduction Active ON Active.SalesOrderNo = S.OrdNo
                 LEFT JOIN MaterialCosts ON MaterialCosts.SalesOrderNo = S.OrdNo
                 LEFT JOIN StangCosts ON StangCosts.SalesOrderNo = S.OrdNo
+                LEFT JOIN UnderleverandorCosts ON UnderleverandorCosts.SalesOrderNo = S.OrdNo
                 LEFT JOIN NestingMaterialCosts ON NestingMaterialCosts.SalesOrderNo = S.OrdNo
                 ORDER BY
                     CASE WHEN S.DelDt > 19800101 THEN S.DelDt ELSE 99991231 END,

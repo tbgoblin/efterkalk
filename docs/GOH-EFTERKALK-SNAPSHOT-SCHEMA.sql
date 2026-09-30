@@ -27,6 +27,9 @@ BEGIN
         CreatedAt        datetime2(0) NOT NULL CONSTRAINT DF_EfterkalkSnapshotRun_Created DEFAULT (SYSUTCDATETIME()),
         UpdatedAt        datetime2(0) NOT NULL CONSTRAINT DF_EfterkalkSnapshotRun_Updated DEFAULT (SYSUTCDATETIME()),
         UpdatedBy        nvarchar(100) NULL,
+        VareforbrugGL    decimal(19,4) NULL, -- Vareforbrug fra bogføringen for perioden; sat manuelt eller ved fremtidig afstemning mod materiale/stang/ulev
+        PurchaseMissingInvoiceValue decimal(19,4) NULL, -- Indkøbsordrelinjer modtaget i perioden uden nogen faktura (NoInvo=0)
+        PurchasePartialInvoiceValue decimal(19,4) NULL, -- Indkøbsordrelinjer modtaget i perioden, kun delvist faktureret (0<NoInvo<NoFin)
         CONSTRAINT PK_EfterkalkSnapshotRun PRIMARY KEY (SnapshotId),
         CONSTRAINT UQ_EfterkalkSnapshotRun_PeriodRevision UNIQUE (PeriodStart, RevisionNo),
         CONSTRAINT CK_EfterkalkSnapshotRun_Month CHECK (
@@ -56,6 +59,12 @@ BEGIN
         Revenue         decimal(19,4) NOT NULL,
         Cost            decimal(19,4) NULL,
         StyklisteFallbackCost decimal(19,4) NULL,
+        MaterialCost          decimal(19,4) NULL,
+        StangCost             decimal(19,4) NULL,
+        TimeCost              decimal(19,4) NULL,
+        PurchasedPartCost     decimal(19,4) NULL,
+        UnderleverandorCost   decimal(19,4) NULL,
+        CostBreakdownComplete bit NULL,
         ContributionMargin AS (
             CASE WHEN Cost IS NULL THEN NULL ELSE Revenue - Cost END
         ) PERSISTED,
@@ -98,6 +107,39 @@ BEGIN
     ADD StyklisteFallbackCost decimal(19,4) NULL;
 END;
 
+-- Kost pr. kategori (materiale/stang/tid/indkøbte dele/underleverandør), samme ProdTp4/Gr6-baserede
+-- tal som "Salgsordre VIA" (services/viaService.js), men gemt pr. faktureret ordre i snapshottet.
+IF OBJECT_ID(N'dbo.EfterkalkOrderSnapshot', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.EfterkalkOrderSnapshot', 'MaterialCost') IS NULL
+BEGIN
+    ALTER TABLE dbo.EfterkalkOrderSnapshot
+    ADD MaterialCost decimal(19,4) NULL,
+        StangCost decimal(19,4) NULL,
+        TimeCost decimal(19,4) NULL,
+        PurchasedPartCost decimal(19,4) NULL,
+        UnderleverandorCost decimal(19,4) NULL,
+        CostBreakdownComplete bit NULL;
+END;
+
+-- Vareforbrug fra bogføringen for perioden, til fremtidig afstemning mod materiale/stang/ulev.
+-- Uudnyttet indtil selve afstemningen implementeres.
+IF OBJECT_ID(N'dbo.EfterkalkSnapshotRun', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.EfterkalkSnapshotRun', 'VareforbrugGL') IS NULL
+BEGIN
+    ALTER TABLE dbo.EfterkalkSnapshotRun
+    ADD VareforbrugGL decimal(19,4) NULL;
+END;
+
+-- Indkøbsordrelinjer modtaget i perioden (OrdLn.FinDt), men hvor leverandørfakturaen endnu ikke
+-- er bogført fuldt ud (NoInvo<NoFin) — forklarer en del af Vareforbrug/materiale-mellemværendet.
+IF OBJECT_ID(N'dbo.EfterkalkSnapshotRun', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.EfterkalkSnapshotRun', 'PurchaseMissingInvoiceValue') IS NULL
+BEGIN
+    ALTER TABLE dbo.EfterkalkSnapshotRun
+    ADD PurchaseMissingInvoiceValue decimal(19,4) NULL,
+        PurchasePartialInvoiceValue decimal(19,4) NULL;
+END;
+
 EXEC(N'
 CREATE OR ALTER VIEW dbo.vw_EfterkalkCustomerCurrent
 AS
@@ -128,7 +170,18 @@ AS
                   AND SUM(o.Revenue) <> 0
              THEN ((SUM(o.Revenue) - SUM(o.Cost) - SUM(ISNULL(o.StyklisteFallbackCost, 0))) * CONVERT(decimal(19,6), 100)) / SUM(o.Revenue)
         END AS AdjustedMarginPct,
-        CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete
+        CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.MaterialCost) END AS MaterialCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.StangCost) END AS StangCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.TimeCost) END AS TimeCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.PurchasedPartCost) END AS PurchasedPartCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.UnderleverandorCost) END AS UnderleverandorCost,
+        CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostBreakdownComplete
     FROM dbo.EfterkalkSnapshotRun r
     JOIN dbo.EfterkalkOrderSnapshot o ON o.SnapshotId = r.SnapshotId
     WHERE r.IsCurrent = 1 AND o.IsActive = 1
@@ -164,7 +217,18 @@ AS
                   AND SUM(o.Revenue) <> 0
              THEN ((SUM(o.Revenue) - SUM(o.Cost) - SUM(ISNULL(o.StyklisteFallbackCost, 0))) * CONVERT(decimal(19,6), 100)) / SUM(o.Revenue)
         END AS AdjustedMarginPct,
-        CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete
+        CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostComplete,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.MaterialCost) END AS MaterialCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.StangCost) END AS StangCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.TimeCost) END AS TimeCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.PurchasedPartCost) END AS PurchasedPartCost,
+        CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*)
+             THEN SUM(o.UnderleverandorCost) END AS UnderleverandorCost,
+        CONVERT(bit, CASE WHEN SUM(CASE WHEN o.CostBreakdownComplete = 1 THEN 1 ELSE 0 END) = COUNT_BIG(*) THEN 1 ELSE 0 END) AS CostBreakdownComplete
     FROM dbo.EfterkalkSnapshotRun r
     JOIN dbo.EfterkalkOrderSnapshot o ON o.SnapshotId = r.SnapshotId
     WHERE r.IsCurrent = 1 AND o.IsActive = 1

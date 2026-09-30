@@ -45,6 +45,7 @@ function createApiRouter({
     logEvent,
     getOrComputeAftercalc,
     getOrComputeOrderMargin,
+    getOrComputeOrderCostBreakdown,
     getProductionSummary,
     AFTERCALC_CACHE_KEY_PREFIX,
     ORDER_MARGIN_CACHE_KEY_PREFIX,
@@ -342,7 +343,7 @@ function createApiRouter({
         getRestPrices: settingsService.getRestPrices
     });
     const bilancioDefinitionStore = createDefinitionStore({ gohData, getProfile: settingsService.getActiveProfile, defaultDefinition: bilancioDefaults(BILANCIO_LINES) });
-    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs, definitionStore: bilancioDefinitionStore });
+    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore: bilancioDefinitionStore });
     lagerlisteService.scheduleMonthlySnapshot({
         onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message),
         onResult: result => logEvent('Lagerliste monthly snapshot: ' + JSON.stringify(result))
@@ -1596,6 +1597,18 @@ function createApiRouter({
                 hasInvoiceWarning: Boolean(marginInfo.hasInvoiceWarning),
                 cached: true
             };
+            // Kun beregnet når eksplicit efterspurgt (Månedens DB): sparer et ekstra SQL-opslag
+            // for de andre kaldere af denne rute, som ikke bruger omkostningsopdelingen.
+            if (String((req.query || {}).breakdown || '') === '1') {
+                const forceRefresh = String((req.query || {}).force || '') === '1';
+                const breakdown = await getOrComputeOrderCostBreakdown(ordNo, { forceRefresh });
+                result.materialCost = breakdown.materialCost;
+                result.stangCost = breakdown.stangCost;
+                result.timeCost = breakdown.timeCost;
+                result.purchasedPartCost = breakdown.purchasedPartCost;
+                result.underleverandorCost = breakdown.underleverandorCost;
+                result.costBreakdownAvailable = breakdown.costBreakdownAvailable;
+            }
             return res.json(result);
         } catch (err) {
             logEvent('ERROR order-margin: ' + err.message);
@@ -1611,7 +1624,8 @@ function createApiRouter({
             }
 
             const orderGr4 = Number(req.query.gr4 || 0);
-            const result = await getProductionSummary(ordNo, new Set(), { orderGr4 });
+            const forceRefresh = req.query.force === '1';
+            const result = await getProductionSummary(ordNo, new Set(), { orderGr4, forceRefresh });
             return res.json(result);
         } catch (err) {
             console.error('Errore production-summary:', err);
@@ -1691,8 +1705,9 @@ function createApiRouter({
                 return res.status(400).json({ error: 'Ugyldige parametre: ordine er paakraevet' });
             }
 
+            const forceRefresh = req.query.force === '1';
             const laserCacheKey = 'laser_v4_' + ordine + '_' + (route || 'all') + '_' + (prodNoFilter || 'all') + '_' + (showAllRoutes ? '1' : '0') + '_gr4_' + (useSpecialLaserCost ? '3' : '0');
-            const cachedLaser = diskCache.get(laserCacheKey);
+            const cachedLaser = forceRefresh ? null : diskCache.get(laserCacheKey);
             if (cachedLaser) return res.json(cachedLaser);
 
             const pool = await getConnection();
@@ -2898,11 +2913,21 @@ function createApiRouter({
                 && String(row && row.CustNo || '').length > 0
                 && Number.isFinite(Number(row && row.InvoAm)));
             if (!validRows) return res.status(400).json({ ok:false, error:'Ugyldige snapshot-data' });
+            const rawVareforbrug = req.body && req.body.vareforbrugGL;
+            const vareforbrugGL = rawVareforbrug === null || rawVareforbrug === undefined || rawVareforbrug === '' ? null
+                : (Number.isFinite(Number(rawVareforbrug)) ? Number(rawVareforbrug) : null);
+            const toNullableNumber = value => (value === null || value === undefined || value === '') ? null
+                : (Number.isFinite(Number(value)) ? Number(value) : null);
+            const purchaseMissingInvoiceValue = toNullableNumber(req.body && req.body.purchaseMissingInvoiceValue);
+            const purchasePartialInvoiceValue = toNullableNumber(req.body && req.body.purchasePartialInvoiceValue);
             const user = getSessionUser(req);
             const result = await gohCache.saveEfterkalkMonth({
                 periodStart,
                 periodEnd,
                 rows,
+                vareforbrugGL,
+                purchaseMissingInvoiceValue,
+                purchasePartialInvoiceValue,
                 updatedBy: user && (user.username || user.displayName),
                 calculationVersion: pkgVersion
             });
@@ -2937,6 +2962,23 @@ function createApiRouter({
 
     router.get('/efterkalk/snapshot-backfill-status', requireModulePermission('efterkalk'), (req, res) => {
         res.json({ ok:true, ...efterkalkBackfill });
+    });
+
+    router.get('/efterkalk/vareforbrug', requireModulePermission('efterkalk'), async (req, res) => {
+        try {
+            const month = String(req.query.month || '');
+            if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
+            const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
+            const [vareforbrug, purchaseGap, varelager] = await Promise.all([
+                bilancioService.vareforbrugForMonth(month),
+                bilancioService.purchaseInvoiceGapForMonth(month),
+                bilancioService.varelagerDeltaForMonth(month, plateMode)
+            ]);
+            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager });
+        } catch (err) {
+            logEvent('ERROR efterkalk/vareforbrug: ' + err.message);
+            res.status(500).json({ ok:false, error:err.message });
+        }
     });
 
     router.post('/efterkalk/snapshot-backfill', requireModulePermission('efterkalk'), (req, res) => {
@@ -2979,16 +3021,28 @@ function createApiRouter({
                     for (let i = 0; i < sourceRows.length; i += batchSize) {
                         const batch = sourceRows.slice(i, i + batchSize);
                         const calculated = await Promise.all(batch.map(async row => {
+                            let base;
                             try {
                                 const margin = await getOrComputeOrderMargin(Number(row.OrdNo), { priority:'normal' });
-                                return {
+                                base = {
                                     ...row,
                                     Cost:Number(margin.totalCost || 0),
                                     StyklisteFallbackCost:Number(margin.styklisteFallbackCost || 0),
                                     CostComplete:true
                                 };
                             } catch {
-                                return { ...row, Cost:null, StyklisteFallbackCost:null, CostComplete:false };
+                                base = { ...row, Cost:null, StyklisteFallbackCost:null, CostComplete:false };
+                            }
+                            try {
+                                const breakdown = await getOrComputeOrderCostBreakdown(Number(row.OrdNo));
+                                return {
+                                    ...base,
+                                    MaterialCost:breakdown.materialCost, StangCost:breakdown.stangCost, TimeCost:breakdown.timeCost,
+                                    PurchasedPartCost:breakdown.purchasedPartCost, UnderleverandorCost:breakdown.underleverandorCost,
+                                    CostBreakdownComplete:breakdown.costBreakdownAvailable
+                                };
+                            } catch {
+                                return { ...base, MaterialCost:null, StangCost:null, TimeCost:null, PurchasedPartCost:null, UnderleverandorCost:null, CostBreakdownComplete:false };
                             }
                         }));
                         snapshotRows.push(...calculated);

@@ -49,6 +49,7 @@ const {
 const { createAftercalcService } = require('./services/aftercalcService');
 const aftercalcCostExclusionsService = require('./services/aftercalcCostExclusionsService');
 const { calculateAdjustedCost } = require('./assets/js/aftercalc-cost-exclusions');
+const { fetchSalgordreViaRows } = require('./services/viaService');
 const { createApiRouter } = require('./routes/apiRoutes');
 
 const CACHE_TTL_AFTERCALC_MS        = 8 * 60 * 60 * 1000;  // 8 hours - match background refresh cadence
@@ -57,6 +58,7 @@ const CACHE_TTL_LASER_METRICS_MS    = 60 * 60 * 1000;  // 60 min
 const CACHE_TTL_ORDER_MARGIN_MS     = 30 * 60 * 1000;  // 30 min
 const AFTERCALC_CACHE_KEY_PREFIX = 'aftercalc_v29_';
 const ORDER_MARGIN_CACHE_KEY_PREFIX = 'order_margin_v26_';
+const ORDER_COST_BREAKDOWN_CACHE_KEY_PREFIX = 'order_cost_breakdown_v1_';
 const LEGACY_AFTERCALC_CACHE_KEY_PREFIXES = ['aftercalc_v28_', 'aftercalc_v27_', 'aftercalc_v21_', 'aftercalc_v20_', 'aftercalc_v19_', 'aftercalc_v18_', 'aftercalc_v17_', 'aftercalc_'];
 
 const app = express();
@@ -106,6 +108,8 @@ const orderListCache = {
 
 const orderMarginCache = new Map();
 const orderMarginInFlight = new Map();
+const orderCostBreakdownCache = new Map();
+const orderCostBreakdownInFlight = new Map();
 const afterCalcInFlight = new Map();
 const orderRefreshInFlight = new Map();
 const orderRefreshStatus = new Map();
@@ -403,6 +407,59 @@ async function getOrComputeOrderMargin(ordNo, options = {}) {
     return computePromise;
 }
 
+// Material/stang/tid/indkøbte dele/underleverandør pr. ordre, fra samme ProdTp4/Gr6-baserede
+// SQL som "Salgsordre VIA" (services/viaService.js), men uafhængig cache: ordrer her kan
+// være allerede fakturerede (lukkede), ikke kun åbne som i VIA-backloggen.
+async function getOrComputeOrderCostBreakdown(ordNo, options = {}) {
+    const forceRefresh = Boolean(options.forceRefresh);
+    const key = Number(ordNo);
+    if (!Number.isFinite(key)) {
+        throw new Error('Ordrenummer ugyldigt');
+    }
+
+    if (!forceRefresh && orderCostBreakdownCache.has(key)) {
+        return orderCostBreakdownCache.get(key);
+    }
+
+    if (!forceRefresh) {
+        const diskBreakdown = diskCache.get(ORDER_COST_BREAKDOWN_CACHE_KEY_PREFIX + key);
+        if (diskBreakdown) {
+            orderCostBreakdownCache.set(key, diskBreakdown);
+            return diskBreakdown;
+        }
+    }
+
+    if (!forceRefresh && orderCostBreakdownInFlight.has(key)) {
+        return orderCostBreakdownInFlight.get(key);
+    }
+
+    const computePromise = (async () => {
+        const rows = await fetchSalgordreViaRows({ getConnection, sql, orderNos: [key] });
+        const row = rows[0] || null;
+        const costFields = ['MaterialCost', 'StangCost', 'TimeCost', 'PurchasedPartCost', 'UnderleverandorCost'];
+        const costBreakdownAvailable = !!row && costFields.every(field => row[field] != null && Number.isFinite(Number(row[field])));
+        const breakdown = {
+            ordNo: key,
+            materialCost: costBreakdownAvailable ? Number(row.MaterialCost) : null,
+            stangCost: costBreakdownAvailable ? Number(row.StangCost) : null,
+            timeCost: costBreakdownAvailable ? Number(row.TimeCost) : null,
+            purchasedPartCost: costBreakdownAvailable ? Number(row.PurchasedPartCost) : null,
+            underleverandorCost: costBreakdownAvailable ? Number(row.UnderleverandorCost) : null,
+            costBreakdownAvailable,
+            computedAt: Date.now()
+        };
+
+        orderCostBreakdownCache.set(key, breakdown);
+        diskCache.set(ORDER_COST_BREAKDOWN_CACHE_KEY_PREFIX + key, breakdown, 24 * 60 * 60 * 1000);
+        return breakdown;
+    })().finally(() => {
+        orderCostBreakdownInFlight.delete(key);
+    });
+
+    orderCostBreakdownInFlight.set(key, computePromise);
+    return computePromise;
+}
+
 function warmMarginsInBackground(ordNos) {
     if (!Array.isArray(ordNos) || ordNos.length === 0) return;
     logEvent('WARM-MARGIN: queueing ' + ordNos.length + ' orders');
@@ -649,6 +706,7 @@ app.use(createApiRouter({
     logEvent,
     getOrComputeAftercalc,
     getOrComputeOrderMargin,
+    getOrComputeOrderCostBreakdown,
     getProductionSummary,
     AFTERCALC_CACHE_KEY_PREFIX,
     ORDER_MARGIN_CACHE_KEY_PREFIX,
@@ -937,6 +995,17 @@ app.get('/', (req, res) => {
             .kf-kpi .lbl { font-size:11px; font-weight:700; color:#4f6d8c; text-transform:uppercase; letter-spacing:0.03em; }
             .kf-kpi .val { margin-top:4px; font-size:20px; font-weight:800; color:#0f3560; }
             .kf-kpi .sub { font-size:11px; color:#7a90a8; margin-top:2px; }
+            .kf-kpi-wide { grid-column:span 2; }
+            @media(max-width:700px){ .kf-kpi-wide { grid-column:span 2; } }
+            .kf-kpi-help { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:4px; border-radius:50%; background:#d6e7fb; color:#31577d; font-size:10px; font-weight:800; cursor:help; vertical-align:middle; }
+            .kf-vf-plate-mode { float:right; font-size:11px; padding:2px 4px; border-radius:6px; border:1px solid #d6e7fb; background:#fff; color:#31577d; }
+            .kf-vf-rows { margin-top:6px; display:flex; flex-direction:column; gap:2px; }
+            .kf-vf-row { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; color:#3d5a78; }
+            .kf-vf-row strong { font-weight:700; color:#0f3560; }
+            .kf-vf-row.kf-vf-diff { margin-top:2px; padding-top:4px; border-top:1px solid #d6e7fb; }
+            .kf-vf-row.kf-vf-diff strong { color:#b5451b; }
+            .kf-vf-gap { margin-top:8px; padding-top:6px; border-top:1px dashed #d6e7fb; display:none; }
+            .kf-vf-gap-title { font-size:10px; font-weight:700; color:#7a90a8; text-transform:uppercase; letter-spacing:0.02em; margin-bottom:3px; }
             .kf-table-wrap { overflow-x:auto; border:1px solid #dce8f8; border-radius:10px; max-height:60vh; overflow-y:auto; }
             .kf-table { width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
             .kf-table th { background:linear-gradient(180deg,#eef5ff 0%,#e4efff 100%); color:#0f3560; padding:8px 10px; text-align:left; border-bottom:1px solid #d8e6f8; white-space:nowrap; position:sticky; top:0; z-index:2; }
@@ -953,7 +1022,15 @@ app.get('/', (req, res) => {
             .kf-customer-summary-table tbody { max-height:38vh; overflow-y:scroll; scrollbar-gutter:stable; }
             .kf-customer-summary-table thead,
             .kf-customer-summary-table tfoot { padding-right:15px; }
-            .kf-customer-summary-table tr { display:grid; grid-template-columns:minmax(360px,2.5fr) 70px 120px 110px 120px 90px 120px 90px; width:100%; box-sizing:border-box; }
+            .kf-customer-summary-table tr { display:grid; grid-template-columns:minmax(200px,2fr) 70px 120px 110px 120px 90px 120px 90px 230px; width:100%; box-sizing:border-box; }
+            .kf-cust-name { display:block; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            .kf-breakdown-cell details { font-size:12px; }
+            .kf-breakdown-cell summary { cursor:pointer; color:#1565c0; list-style:none; }
+            .kf-breakdown-cell summary::-webkit-details-marker { display:none; }
+            .kf-breakdown-cell summary::before { content:'▸ '; }
+            .kf-breakdown-cell details[open] summary::before { content:'▾ '; }
+            .kf-breakdown-cell details[open] summary { display:block; margin-bottom:2px; }
+            .kf-breakdown-cell .kf-breakdown-detail { color:#3a5875; white-space:normal; display:block; line-height:1.5; }
             .kf-customer-summary-table th,
             .kf-customer-summary-table td { min-width:0; box-sizing:border-box; }
             .kf-customer-summary-table thead { position:relative!important; top:auto!important; z-index:7; }
@@ -2908,6 +2985,32 @@ app.get('/', (req, res) => {
                         <div class="kf-kpi"><div class="lbl">Samlet faktureret</div><div class="val" id="kfKpiTotal">—</div><div class="sub">DKK</div></div>
                         <div class="kf-kpi"><div class="lbl">Samlet kost</div><div class="val" id="kfKpiCost">—</div><div class="sub" id="kfKpiCostSub">beregner…</div></div>
                         <div class="kf-kpi"><div class="lbl">Dækningsgrad</div><div class="val" id="kfKpiMargin">—</div><div class="sub" id="kfKpiMarginSub">beregner dækningsbidrag…</div></div>
+                        <div class="kf-kpi kf-kpi-wide" id="kfKpiVareforbrugTile" style="display:none;">
+                            <div class="lbl">Vareforbrug vs. materiale
+                                <span class="kf-kpi-help" title="Bogført = Vareforbrug fra bogføringen, kun konto 12070 'Varekøb' (den egentlige materialeindkøbskonto — resten af kontogruppen 12_Vareforbrug er ikke indkøb, fx interne køb og salg af jern/skrot).&#10;Beregnet = materiale + stang + indkøbte dele + underleverandør for de fakturerede ordrer i måneden (Tid tæller ikke med — det hører til lønomkostningerne).&#10;Forskel = Bogført minus beregnet.&#10;Regnestykket herunder forklarer forskellen: lagerændring i måneden + indkøb der endnu ikke er faktureret. Uforklaret rest er det der bliver tilbage — jo tættere på 0, jo bedre stemmer det.">?</span>
+                                <select id="kfVfPlateMode" class="kf-vf-plate-mode" onchange="setKfPlateMode(this.value)" title="Prisgrundlag for Pladelager i Δ Varelager — samme valg som Lagerliste. Gælder kun plader; Opfølgningsvarer og Lager Komponenter er altid FIFO.">
+                                    <option value="fifo" selected>Plader: FIFO</option>
+                                    <option value="standard">Plader: Standardpris</option>
+                                </select>
+                            </div>
+                            <div class="sub" id="kfKpiVareforbrugSub">henter…</div>
+                            <div class="kf-vf-rows" id="kfVfRows" style="display:none;">
+                                <div class="kf-vf-row"><span>Bogført (Vareforbrug)</span><strong id="kfVfBooked">—</strong></div>
+                                <div class="kf-vf-row"><span>Beregnet (materiale)</span><strong id="kfVfCalc">—</strong></div>
+                                <div class="kf-vf-row kf-vf-diff"><span>Forskel</span><strong id="kfVfDelta">—</strong></div>
+                            </div>
+                            <div class="kf-vf-gap" id="kfVfExplain">
+                                <div class="kf-vf-gap-title">Forklaret af</div>
+                                <div class="kf-vf-row" title="Ændring i Varelager (Lagerliste) fra forrige til denne måned. Stigende lager betyder at der er købt mere ind end forbrugt — det trækker Vareforbrug op i forhold til det beregnede materialeforbrug.">
+                                    <span>Δ Varelager <span id="kfVfVarelagerMonths" style="color:#9ab0c6;"></span></span><strong id="kfVfVarelager">—</strong>
+                                </div>
+                                <div class="kf-vf-row" title="Indkøbsordrelinjer modtaget på lager i måneden, hvor leverandørfakturaen endnu ikke er bogført fuldt ud. Materialet tæller allerede med i &quot;beregnet&quot;, men rammer først Vareforbrug når fakturaen bogføres.">
+                                    <span>Ikke fuldt faktureret</span><strong id="kfVfGapTotal">—</strong>
+                                </div>
+                                <div class="kf-vf-row" id="kfVfGapDetailRow" style="display:none;font-size:11px;color:#7a90a8;"><span id="kfVfGapDetail"></span></div>
+                                <div class="kf-vf-row kf-vf-diff" id="kfVfResidualRow" style="display:none;"><span>Uforklaret rest</span><strong id="kfVfResidual">—</strong></div>
+                            </div>
+                        </div>
                     </div>
                     <div id="kfExportActions" class="kf-export-actions" style="display:none;">
                         <span style="font-size:12px;font-weight:700;color:#31577d;align-self:center;">Kostvisning:</span>
@@ -2915,6 +3018,7 @@ app.get('/', (req, res) => {
                         <button id="kfCostModeAdjusted" class="kf-export-btn" type="button" onclick="setKfCostMode('adjusted')" disabled>Inkl. manglende tid fra stykliste</button>
                         <button id="kfExportCustomersBtn" class="kf-export-btn" type="button" onclick="exportKfCustomersCsv()" disabled>Eksportér kunder CSV</button>
                         <button id="kfExportOrdersBtn" class="kf-export-btn" type="button" onclick="exportKfOrdersCsv()" disabled>Eksportér ordrer CSV</button>
+                        <button id="kfRefreshCostsBtn" class="kf-export-btn" type="button" onclick="refreshKfCostBreakdown()" disabled title="Genberegn materiale/stang/tid/indkøbte dele/underleverandør fra Visma, forbi 24-timers cachen">🔄 Opdater omkostninger</button>
                     </div>
                     <div id="kfCostModeHint" class="hint" style="display:none;margin:6px 0 10px;"></div>
                     <div id="kfMarginProgress" class="kf-margin-progress" style="display:none;">
@@ -2940,6 +3044,7 @@ app.get('/', (req, res) => {
                                     <th class="r">Kost %</th>
                                     <th class="r">DB DKK</th>
                                     <th class="r">DG %</th>
+                                    <th>Kostfordeling</th>
                                 </tr></thead>
                                 <tbody id="kfCustomerSummaryBody"></tbody>
                                 <tfoot id="kfCustomerSummaryFoot"></tfoot>
@@ -2979,6 +3084,7 @@ app.get('/', (req, res) => {
                                 <th class="r" id="kfOrderCostHead">Kost</th>
                                 <th class="r">DB DKK</th>
                                 <th class="r">DG %</th>
+                                <th>Kostfordeling</th>
                             </tr></thead>
                             <tbody id="kfTableBody"></tbody>
                         </table>
@@ -3441,10 +3547,21 @@ app.get('/', (req, res) => {
                 removeModalStack('oversigtModal');
             }
 
-            function refreshActiveOversigtModal() {
+            // "Opdater" i Oversigt-modalen: både den overordnede ordredata (Aftercalc) og de
+            // underliggende produktions-/laser-opslag var cachet uden nogen mulighed for at
+            // tvinge en frisk hentning — rettelser i Visma blev derfor aldrig vist, uanset hvor
+            // mange gange man klikkede. Her genindlæses ordren og de tilhørende opslag med tvang.
+            async function refreshActiveOversigtModal() {
                 if (!currentSearchOrderData) return;
+                const ordNo = currentSearchOrderData.orderHeader && currentSearchOrderData.orderHeader.OrdNo;
+                if (ordNo) {
+                    try {
+                        const fresh = await requestAftercalcData(ordNo, { forceReload: true });
+                        if (fresh && !fresh.error) currentSearchOrderData = fresh;
+                    } catch (_) { /* fortsæt med eksisterende data, hvis genindlæsning fejler */ }
+                }
                 if (currentOversigtModalType === 'laser') {
-                    loadSalesOrderLaserSummary(currentSearchOrderData);
+                    loadSalesOrderLaserSummary(currentSearchOrderData, true);
                 } else if (currentOversigtModalType === 'operation') {
                     loadSalesOrderOperationSummary(currentSearchOrderData);
                 }
@@ -4592,15 +4709,35 @@ app.get('/', (req, res) => {
             let _kfCostMode        = 'adjusted';
             let _kfCustomerTimer   = null;
             let _kfMarginAbort     = false;
+            let _kfMarginFetchRunning = false;
             let _kfAllCustomers   = false;
             let _kfTrendRequestId = 0;
             let _kfBackfillRequested = false;
+            let _kfVareforbrugGL = null; // Vareforbrug fra bogføringen (kontogruppe 12_Vareforbrug) for den valgte måned
+            let _kfPurchaseGap = null; // { missingValue, missingOrderCount, partialValue, partialOrderCount, totalValue }
+            let _kfVarelagerDelta = null; // { currentValue, previousValue, currentMonth, previousMonth, delta }
+            let _kfPlateMode = 'fifo'; // Prisgrundlag for Pladelager i Δ Varelager — 'fifo' eller 'standard'
+            let _kfVareforbrugMonth = null; // Måneden sidst sendt til /efterkalk/vareforbrug, så plateMode-skift kan genhente uden fuld reload
 
             function _kfCost(margin, mode) {
                 if (!margin) return null;
                 const registered = Number(margin.totalCost || 0);
                 const fallback = Number(margin.styklisteFallbackCost || 0);
                 return registered + ((mode || _kfCostMode) === 'adjusted' ? fallback : 0);
+            }
+
+            // Kompakt: ét felt der folder sig ud til materiale/stang/tid/indkøbte dele/underleverandør,
+            // i stedet for fem altid-synlige kolonner (sparer bredde, jf. kundenavn-kolonnen).
+            function _kfBreakdownHtml(complete, v) {
+                if (!complete) return '<span style="color:#aaa">…</span>';
+                const parts = [
+                    'Materiale ' + formatNumber(v.materialCost),
+                    'Stang ' + formatNumber(v.stangCost),
+                    'Tid ' + formatNumber(v.timeCost),
+                    'Indkøbte dele ' + formatNumber(v.purchasedPartCost),
+                    'Underleverandør ' + formatNumber(v.underleverandorCost)
+                ];
+                return '<details><summary>Detaljer</summary><span class="kf-breakdown-detail">' + escapeHtml(parts.join(' · ')) + '</span></details>';
             }
 
             function setKfCostMode(mode) {
@@ -4793,6 +4930,7 @@ app.get('/', (req, res) => {
                 _kfInvoiceRows = [];
                 _kfMarginMap   = {};
                 _resetKfKpis();
+                if (_kfAllCustomers) _fetchKfVareforbrug(selectedMonth);
 
                 try {
                     if (_kfAllCustomers && await _loadKfStoredMonth(selectedMonth)) return;
@@ -4852,9 +4990,32 @@ app.get('/', (req, res) => {
                     : null;
             }
 
+            async function _fetchKfVareforbrug(month) {
+                _kfVareforbrugMonth = month;
+                try {
+                    const r = await fetch('/efterkalk/vareforbrug?month=' + encodeURIComponent(month) + '&plateMode=' + encodeURIComponent(_kfPlateMode));
+                    const d = await r.json();
+                    _kfVareforbrugGL = (d.ok && d.vareforbrug !== null && d.vareforbrug !== undefined) ? Number(d.vareforbrug) : null;
+                    _kfPurchaseGap = (d.ok && d.purchaseGap) ? d.purchaseGap : null;
+                    _kfVarelagerDelta = (d.ok && d.varelager) ? d.varelager : null;
+                } catch { _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; }
+                _updateKfKpis();
+            }
+
+            function setKfPlateMode(mode) {
+                _kfPlateMode = mode === 'standard' ? 'standard' : 'fifo';
+                if (_kfVareforbrugMonth) _fetchKfVareforbrug(_kfVareforbrugMonth);
+            }
+
             function _resetKfKpis() {
                 const ids = ['kfKpis','kfExportActions','kfCostModeHint','kfCustomerSummary','kfCustomerTrend','kfTableWrap','kfMarginProgress'];
                 ids.forEach(id => { const el = document.getElementById(id); if(el) el.style.display='none'; });
+                _kfVareforbrugGL = null;
+                _kfPurchaseGap = null;
+                _kfVarelagerDelta = null;
+                _kfVareforbrugMonth = null;
+                const tile = document.getElementById('kfKpiVareforbrugTile');
+                if (tile) tile.style.display = 'none';
             }
 
             function _renderKfCustomerSummary() {
@@ -4880,7 +5041,9 @@ app.get('/', (req, res) => {
                             orders: 0,
                             invoice: 0,
                             cost: 0,
-                            loaded: 0
+                            loaded: 0,
+                            materialCost: 0, stangCost: 0, timeCost: 0, purchasedPartCost: 0, underleverandorCost: 0,
+                            breakdownLoaded: 0
                         });
                     }
                     const group = groups.get(key);
@@ -4890,6 +5053,14 @@ app.get('/', (req, res) => {
                     if (margin) {
                         group.cost += _kfCost(margin);
                         group.loaded++;
+                        if (margin.costBreakdownAvailable) {
+                            group.materialCost += Number(margin.materialCost || 0);
+                            group.stangCost += Number(margin.stangCost || 0);
+                            group.timeCost += Number(margin.timeCost || 0);
+                            group.purchasedPartCost += Number(margin.purchasedPartCost || 0);
+                            group.underleverandorCost += Number(margin.underleverandorCost || 0);
+                            group.breakdownLoaded++;
+                        }
                     }
                 }
 
@@ -4909,8 +5080,11 @@ app.get('/', (req, res) => {
                     const cls = _kfMarginClass(dg);
                     const customerLabel = escapeHtml(String(group.name)) + (group.custNo ? ' <span style="color:#789;font-size:11px;">(' + escapeHtml(String(group.custNo)) + ')</span>' : '');
                     const trendButton = group.custNo ? '<button class="kf-trend-btn" onclick="_loadKfCustomerTrend(' + Number(group.custNo) + ')">Vis trend</button>' : '';
-                    return '<tr data-kf-customer-row="1" data-kf-orders="' + group.orders + '" data-kf-invoice="' + group.invoice + '" data-kf-cost="' + group.cost + '" data-kf-loaded="' + group.loaded + '">' +
-                        '<td><strong>' + customerLabel + '</strong>' + trendButton + '</td>' +
+                    const breakdownComplete = group.breakdownLoaded === group.orders;
+                    return '<tr data-kf-customer-row="1" data-kf-orders="' + group.orders + '" data-kf-invoice="' + group.invoice + '" data-kf-cost="' + group.cost + '" data-kf-loaded="' + group.loaded + '"' +
+                        ' data-kf-material="' + group.materialCost + '" data-kf-stang="' + group.stangCost + '" data-kf-time="' + group.timeCost + '"' +
+                        ' data-kf-parts="' + group.purchasedPartCost + '" data-kf-ulev="' + group.underleverandorCost + '" data-kf-breakdown-loaded="' + group.breakdownLoaded + '">' +
+                        '<td><strong><span class="kf-cust-name" title="' + escapeHtml(String(group.name)) + '">' + customerLabel + '</span></strong>' + trendButton + '</td>' +
                         '<td class="r">' + group.orders + '</td>' +
                         '<td class="r">' + formatNumber(group.invoice) + '</td>' +
                         '<td class="r">' + (share !== null ? share.toFixed(1) + '%' : '—') + '</td>' +
@@ -4918,18 +5092,24 @@ app.get('/', (req, res) => {
                         '<td class="r">' + (costPct !== null ? costPct.toFixed(1) + '%' : pending) + '</td>' +
                         '<td class="r kf-margin-cell ' + (complete ? cls : 'na') + '">' + (db !== null ? formatNumber(db) : pending) + '</td>' +
                         '<td class="r kf-margin-cell ' + (complete ? cls : 'na') + '">' + (dg !== null ? dg.toFixed(1) + '%' : pending) + '</td>' +
+                        '<td class="kf-breakdown-cell">' + _kfBreakdownHtml(breakdownComplete, group) + '</td>' +
                         '</tr>';
                 }).join('');
                 section.style.display = 'block';
                 filterKfCustomerSummary();
             }
 
-            function _kfCustomerTotalRow(label, customerCount, orders, invoice, cost, complete, monthlyInvoice) {
+            function _kfCustomerTotalRow(label, customerCount, orders, invoice, cost, complete, monthlyInvoice, breakdown) {
                 const pending = '<span style="color:#8a9bad" title="Beregner kost…">…</span>';
                 const share = monthlyInvoice !== 0 ? (invoice / monthlyInvoice) * 100 : 0;
                 const db = complete ? invoice - cost : null;
                 const dg = complete && invoice !== 0 ? _kfCalcMarginPct(invoice, cost) : null;
                 const costPct = complete && invoice !== 0 ? (cost / invoice) * 100 : null;
+                const breakdownComplete = !!breakdown && orders > 0 && breakdown.breakdownLoaded === orders;
+                const breakdownValues = breakdown ? {
+                    materialCost: breakdown.material, stangCost: breakdown.stang, timeCost: breakdown.time,
+                    purchasedPartCost: breakdown.parts, underleverandorCost: breakdown.ulev
+                } : {};
                 return '<tr class="total-row">' +
                     '<td><strong>' + label + ' (' + customerCount + ' kunder)</strong></td>' +
                     '<td class="r"><strong>' + orders + '</strong></td>' +
@@ -4939,6 +5119,7 @@ app.get('/', (req, res) => {
                     '<td class="r"><strong>' + (costPct !== null ? costPct.toFixed(1) + '%' : (orders ? pending : '—')) + '</strong></td>' +
                     '<td class="r"><strong>' + (db !== null ? formatNumber(db) : (orders ? pending : '—')) + '</strong></td>' +
                     '<td class="r"><strong>' + (dg !== null ? dg.toFixed(1) + '%' : (orders ? pending : '—')) + '</strong></td>' +
+                    '<td class="kf-breakdown-cell">' + (orders ? _kfBreakdownHtml(breakdownComplete, breakdownValues) : '—') + '</td>' +
                     '</tr>';
             }
 
@@ -4950,24 +5131,27 @@ app.get('/', (req, res) => {
                 if (!tbody || !tfoot) return;
                 const query = String(input ? input.value : '').trim().toLowerCase();
                 const tableRows = Array.from(tbody.querySelectorAll('tr[data-kf-customer-row]'));
-                const total = { customers:0, orders:0, invoice:0, cost:0, loaded:0 };
-                const visible = { customers:0, orders:0, invoice:0, cost:0, loaded:0 };
+                const blank = () => ({ customers:0, orders:0, invoice:0, cost:0, loaded:0, material:0, stang:0, time:0, parts:0, ulev:0, breakdownLoaded:0 });
+                const total = blank();
+                const visible = blank();
                 tableRows.forEach(row => {
                     const values = {
                         orders:Number(row.dataset.kfOrders || 0), invoice:Number(row.dataset.kfInvoice || 0),
-                        cost:Number(row.dataset.kfCost || 0), loaded:Number(row.dataset.kfLoaded || 0)
+                        cost:Number(row.dataset.kfCost || 0), loaded:Number(row.dataset.kfLoaded || 0),
+                        material:Number(row.dataset.kfMaterial || 0), stang:Number(row.dataset.kfStang || 0),
+                        time:Number(row.dataset.kfTime || 0), parts:Number(row.dataset.kfParts || 0),
+                        ulev:Number(row.dataset.kfUlev || 0), breakdownLoaded:Number(row.dataset.kfBreakdownLoaded || 0)
                     };
                     const matches = !query || String(row.cells[0] ? row.cells[0].textContent : '').toLowerCase().includes(query);
                     row.style.display = matches ? '' : 'none';
-                    total.customers++; total.orders += values.orders; total.invoice += values.invoice; total.cost += values.cost; total.loaded += values.loaded;
-                    if (matches) {
-                        visible.customers++; visible.orders += values.orders; visible.invoice += values.invoice; visible.cost += values.cost; visible.loaded += values.loaded;
-                    }
+                    for (const key of Object.keys(values)) total[key] += values[key];
+                    total.customers++;
+                    if (matches) { for (const key of Object.keys(values)) visible[key] += values[key]; visible.customers++; }
                 });
                 const visibleComplete = visible.loaded === visible.orders;
                 const totalComplete = total.loaded === total.orders;
-                const visibleRow = _kfCustomerTotalRow('SYNLIG TOTAL', visible.customers, visible.orders, visible.invoice, visible.cost, visibleComplete, total.invoice);
-                const monthlyRow = _kfCustomerTotalRow('MÅNED TOTAL', total.customers, total.orders, total.invoice, total.cost, totalComplete, total.invoice);
+                const visibleRow = _kfCustomerTotalRow('SYNLIG TOTAL', visible.customers, visible.orders, visible.invoice, visible.cost, visibleComplete, total.invoice, visible);
+                const monthlyRow = _kfCustomerTotalRow('MÅNED TOTAL', total.customers, total.orders, total.invoice, total.cost, totalComplete, total.invoice, total);
                 tfoot.innerHTML = query ? visibleRow + monthlyRow : monthlyRow;
                 if (count) count.textContent = query ? visible.customers + ' af ' + total.customers + ' kunder' : total.customers + ' kunder';
             }
@@ -5072,6 +5256,15 @@ app.get('/', (req, res) => {
                     const missingFallback = payload.rows.some(row => row.CostComplete
                         && (row.StyklisteFallbackCost === null || row.StyklisteFallbackCost === undefined));
                     if (missingFallback) return false;
+                    // Vis straks den gemte værdi; den friske hentning fra bogføringen (allerede i gang) opdaterer den bagefter.
+                    if (payload.vareforbrugGL !== null && payload.vareforbrugGL !== undefined) _kfVareforbrugGL = Number(payload.vareforbrugGL);
+                    if (payload.purchaseMissingInvoiceValue !== null && payload.purchaseMissingInvoiceValue !== undefined) {
+                        _kfPurchaseGap = {
+                            missingValue: Number(payload.purchaseMissingInvoiceValue || 0),
+                            partialValue: Number(payload.purchasePartialInvoiceValue || 0),
+                            totalValue: Number(payload.purchaseMissingInvoiceValue || 0) + Number(payload.purchasePartialInvoiceValue || 0)
+                        };
+                    }
                     const intFromDate = value => Number(String(value || '').slice(0, 10).replace(/-/g, '')) || 0;
                     _kfInvoiceRows = (payload.rows || []).map(row => ({
                         OrdNo:Number(row.OrdNo), OrdDt:intFromDate(row.OrderDate), CustNo:row.CustNo,
@@ -5081,10 +5274,17 @@ app.get('/', (req, res) => {
                     _kfMarginMap = {};
                     (payload.rows || []).forEach(row => {
                         if (row.CostComplete && row.Cost !== null && row.Cost !== undefined) {
+                            const breakdownAvailable = !!row.CostBreakdownComplete;
                             _kfMarginMap[String(row.OrdNo)] = {
                                 totalRevenue:Number(row.Revenue || 0),
                                 totalCost:Number(row.Cost || 0),
-                                styklisteFallbackCost:Number(row.StyklisteFallbackCost || 0)
+                                styklisteFallbackCost:Number(row.StyklisteFallbackCost || 0),
+                                costBreakdownAvailable:breakdownAvailable,
+                                materialCost:breakdownAvailable ? Number(row.MaterialCost || 0) : null,
+                                stangCost:breakdownAvailable ? Number(row.StangCost || 0) : null,
+                                timeCost:breakdownAvailable ? Number(row.TimeCost || 0) : null,
+                                purchasedPartCost:breakdownAvailable ? Number(row.PurchasedPartCost || 0) : null,
+                                underleverandorCost:breakdownAvailable ? Number(row.UnderleverandorCost || 0) : null
                             };
                         }
                     });
@@ -5193,16 +5393,18 @@ app.get('/', (req, res) => {
                     const margDkk  = (cost !== null && rev !== null) ? (rev - cost) : null;
                     const margPct  = _kfCalcMarginPct(rev, cost);
                     const cls      = _kfMarginClass(margPct);
+                    const pending  = '<span style="color:#aaa">…</span>';
                     return '<tr>' +
                         '<td class="ordno-link" onclick="searchOrderByNo(' + row.OrdNo + ')">' + row.OrdNo + '</td>' +
                         '<td>' + _fmtKfDateFromInt(row.LstInvDt) + '</td>' +
                         '<td>' + escapeHtml(String(row.InvoNo || '')) + '</td>' +
-                        '<td>' + escapeHtml(String(row.CustomerName || row.CustomerShrt || '—')) + '</td>' +
+                        '<td class="kf-cust-name" title="' + escapeHtml(String(row.CustomerName || row.CustomerShrt || '—')) + '">' + escapeHtml(String(row.CustomerName || row.CustomerShrt || '—')) + '</td>' +
                         '<td>' + escapeHtml(String(row.SellerUsr || '—')) + '</td>' +
                         '<td class="r">' + formatNumber(row.InvoAm) + '</td>' +
-                        '<td class="r kf-margin-cell ' + (cost !== null ? cls : 'na') + '" id="kf-cost-' + row.OrdNo + '">' + (cost !== null ? formatNumber(cost) : '<span style="color:#aaa">…</span>') + '</td>' +
-                        '<td class="r kf-margin-cell ' + (margDkk !== null ? cls : 'na') + '" id="kf-mdkk-' + row.OrdNo + '">' + (margDkk !== null ? formatNumber(margDkk) : '<span style="color:#aaa">…</span>') + '</td>' +
-                        '<td class="r kf-margin-cell ' + cls + '" id="kf-mpct-' + row.OrdNo + '">' + (margPct !== null ? margPct.toFixed(1) + '%' : '<span style="color:#aaa">…</span>') + '</td>' +
+                        '<td class="r kf-margin-cell ' + (cost !== null ? cls : 'na') + '" id="kf-cost-' + row.OrdNo + '">' + (cost !== null ? formatNumber(cost) : pending) + '</td>' +
+                        '<td class="r kf-margin-cell ' + (margDkk !== null ? cls : 'na') + '" id="kf-mdkk-' + row.OrdNo + '">' + (margDkk !== null ? formatNumber(margDkk) : pending) + '</td>' +
+                        '<td class="r kf-margin-cell ' + cls + '" id="kf-mpct-' + row.OrdNo + '">' + (margPct !== null ? margPct.toFixed(1) + '%' : pending) + '</td>' +
+                        '<td class="kf-breakdown-cell" id="kf-breakdown-' + row.OrdNo + '">' + _kfBreakdownHtml(m && m.costBreakdownAvailable, m || {}) + '</td>' +
                         '</tr>';
                 }).join('');
                 wrap.style.display = 'block';
@@ -5244,6 +5446,82 @@ app.get('/', (req, res) => {
                     exportCustomers.disabled = !exportReady;
                 }
                 if (exportOrders) exportOrders.disabled = !exportReady;
+                const refreshCosts = document.getElementById('kfRefreshCostsBtn');
+                if (refreshCosts) refreshCosts.disabled = !_kfInvoiceRows.length || _kfMarginFetchRunning;
+                const vareforbrugTile = document.getElementById('kfKpiVareforbrugTile');
+                if (vareforbrugTile) {
+                    if (_kfAllCustomers && _kfInvoiceRows.length) {
+                        vareforbrugTile.style.display = '';
+                        let materialSum = 0, breakdownN = 0;
+                        for (const row of _kfInvoiceRows) {
+                            const m = _kfMarginMap[String(row.OrdNo)];
+                            if (m && m.costBreakdownAvailable) {
+                                // Tid (løn/tid-kost) holdes udenfor: det er ikke en del af Vareforbrug, det hører til lønomkostningerne.
+                                materialSum += Number(m.materialCost || 0) + Number(m.stangCost || 0) + Number(m.purchasedPartCost || 0) + Number(m.underleverandorCost || 0);
+                                breakdownN++;
+                            }
+                        }
+                        const breakdownComplete = breakdownN === _kfInvoiceRows.length;
+                        const rowsBlock = document.getElementById('kfVfRows');
+                        const explainBlock = document.getElementById('kfVfExplain');
+                        const gapDetailRow = document.getElementById('kfVfGapDetailRow');
+                        const residualRow = document.getElementById('kfVfResidualRow');
+                        if (_kfVareforbrugGL === null) {
+                            if (rowsBlock) rowsBlock.style.display = 'none';
+                            if (explainBlock) explainBlock.style.display = 'none';
+                            setText('kfKpiVareforbrugSub', 'henter Vareforbrug fra bogføringen…');
+                        } else if (!breakdownComplete) {
+                            if (rowsBlock) rowsBlock.style.display = 'none';
+                            if (explainBlock) explainBlock.style.display = 'none';
+                            setText('kfKpiVareforbrugSub', 'beregner materialesum for ordrerne…');
+                        } else {
+                            const delta = _kfVareforbrugGL - materialSum;
+                            setText('kfKpiVareforbrugSub', '');
+                            if (rowsBlock) rowsBlock.style.display = 'flex';
+                            if (explainBlock) explainBlock.style.display = 'block';
+                            setText('kfVfBooked', formatNumber(_kfVareforbrugGL) + ' DKK');
+                            setText('kfVfCalc', formatNumber(materialSum) + ' DKK');
+                            setText('kfVfDelta', (delta >= 0 ? '+' : '') + formatNumber(delta) + ' DKK');
+
+                            const gapTotal = _kfPurchaseGap ? Number(_kfPurchaseGap.totalValue || 0) : 0;
+                            setText('kfVfGapTotal', _kfPurchaseGap ? (formatNumber(gapTotal) + ' DKK') : 'henter…');
+                            if (gapDetailRow) {
+                                if (_kfPurchaseGap && gapTotal > 0) {
+                                    gapDetailRow.style.display = 'flex';
+                                    setText('kfVfGapDetail', 'mangler ' + formatNumber(_kfPurchaseGap.missingValue) + ' (' + _kfPurchaseGap.missingOrderCount + ' ordrer) · delvis ' + formatNumber(_kfPurchaseGap.partialValue) + ' (' + _kfPurchaseGap.partialOrderCount + ' ordrer)');
+                                } else {
+                                    gapDetailRow.style.display = 'none';
+                                }
+                            }
+
+                            const varelagerReady = _kfVarelagerDelta && _kfVarelagerDelta.delta !== null && _kfVarelagerDelta.delta !== undefined;
+                            setText('kfVfVarelagerMonths', _kfVarelagerDelta ? ('(' + _kfVarelagerDelta.previousMonth + ' → ' + _kfVarelagerDelta.currentMonth + ')') : '');
+                            if (!_kfVarelagerDelta) {
+                                setText('kfVfVarelager', 'henter…');
+                            } else if (!varelagerReady) {
+                                setText('kfVfVarelager', 'ikke tilgængelig (mangler lagerlukning for ' + _kfVarelagerDelta.previousMonth + ')');
+                            } else {
+                                const vd = Number(_kfVarelagerDelta.delta);
+                                setText('kfVfVarelager', (vd >= 0 ? '+' : '') + formatNumber(vd) + ' DKK');
+                            }
+
+                            // Uforklaret rest = Forskel - ΔVarelager + Gap: hvad regnestykket ikke kan
+                            // forklare med lagerændring og udestående indkøbsfakturaer alene. Bogført er
+                            // allerede kun konto 12070 "Varekøb", så der er intet ikke-indkøb at trække fra.
+                            if (residualRow) {
+                                if (_kfPurchaseGap && varelagerReady) {
+                                    residualRow.style.display = 'flex';
+                                    const residual = delta - Number(_kfVarelagerDelta.delta) + gapTotal;
+                                    setText('kfVfResidual', (residual >= 0 ? '+' : '') + formatNumber(residual) + ' DKK');
+                                } else {
+                                    residualRow.style.display = 'none';
+                                }
+                            }
+                        }
+                    } else {
+                        vareforbrugTile.style.display = 'none';
+                    }
+                }
                 _renderKfCustomerSummary();
             }
 
@@ -5281,7 +5559,7 @@ app.get('/', (req, res) => {
                 const groups = new Map();
                 for (const row of _kfInvoiceRows) {
                     const key = String(row.CustNo || row.CustomerName || row.CustomerShrt || 'ukendt');
-                    if (!groups.has(key)) groups.set(key, { custNo:row.CustNo || '', name:row.CustomerName || row.CustomerShrt || 'Ukendt kunde', orders:0, invoice:0, registeredCost:0, fallbackCost:0 });
+                    if (!groups.has(key)) groups.set(key, { custNo:row.CustNo || '', name:row.CustomerName || row.CustomerShrt || 'Ukendt kunde', orders:0, invoice:0, registeredCost:0, fallbackCost:0, materialCost:0, stangCost:0, timeCost:0, purchasedPartCost:0, underleverandorCost:0 });
                     const group = groups.get(key);
                     group.orders++;
                     group.invoice += Number(row.InvoAm || 0);
@@ -5289,9 +5567,16 @@ app.get('/', (req, res) => {
                     if (margin) {
                         group.registeredCost += Number(margin.totalCost || 0);
                         group.fallbackCost += Number(margin.styklisteFallbackCost || 0);
+                        if (margin.costBreakdownAvailable) {
+                            group.materialCost += Number(margin.materialCost || 0);
+                            group.stangCost += Number(margin.stangCost || 0);
+                            group.timeCost += Number(margin.timeCost || 0);
+                            group.purchasedPartCost += Number(margin.purchasedPartCost || 0);
+                            group.underleverandorCost += Number(margin.underleverandorCost || 0);
+                        }
                     }
                 }
-                const lines = ['Kundenr;Kunde;Ordrer;Faktureret DKK;Andel af månedsomsætning %;Registreret kost DKK;Registreret DB DKK;Registreret DG %;Stykliste fallback DKK;Korrigeret kost DKK;Korrigeret DB DKK;Korrigeret DG %'];
+                const lines = ['Kundenr;Kunde;Ordrer;Faktureret DKK;Andel af månedsomsætning %;Registreret kost DKK;Registreret DB DKK;Registreret DG %;Stykliste fallback DKK;Korrigeret kost DKK;Korrigeret DB DKK;Korrigeret DG %;Materiale DKK;Stang DKK;Tid DKK;Indkøbte dele DKK;Underleverandør DKK'];
                 Array.from(groups.values()).sort((a, b) => b.invoice - a.invoice).forEach(group => {
                     const registeredDb = group.invoice - group.registeredCost;
                     const adjustedCost = group.registeredCost + group.fallbackCost;
@@ -5300,7 +5585,8 @@ app.get('/', (req, res) => {
                         _kfCsvText(group.custNo), _kfCsvText(group.name), group.orders,
                         _kfCsvNumber(group.invoice), _kfCsvPercent(totalInvoice ? group.invoice / totalInvoice * 100 : 0),
                         _kfCsvNumber(group.registeredCost), _kfCsvNumber(registeredDb), _kfCsvPercent(group.invoice ? registeredDb / group.invoice * 100 : 0),
-                        _kfCsvNumber(group.fallbackCost), _kfCsvNumber(adjustedCost), _kfCsvNumber(adjustedDb), _kfCsvPercent(group.invoice ? adjustedDb / group.invoice * 100 : 0)
+                        _kfCsvNumber(group.fallbackCost), _kfCsvNumber(adjustedCost), _kfCsvNumber(adjustedDb), _kfCsvPercent(group.invoice ? adjustedDb / group.invoice * 100 : 0),
+                        _kfCsvNumber(group.materialCost), _kfCsvNumber(group.stangCost), _kfCsvNumber(group.timeCost), _kfCsvNumber(group.purchasedPartCost), _kfCsvNumber(group.underleverandorCost)
                     ].join(';'));
                 });
                 _downloadKfCsv(lines, 'kunder');
@@ -5308,7 +5594,7 @@ app.get('/', (req, res) => {
 
             function exportKfOrdersCsv() {
                 if (!_kfInvoiceRows.length) return;
-                const lines = ['Ordrenr;Fakturadato;Fakturanr;Kundenr;Kunde;Sælger;Faktureret DKK;Registreret kost DKK;Registreret DB DKK;Registreret DG %;Stykliste fallback DKK;Korrigeret kost DKK;Korrigeret DB DKK;Korrigeret DG %'];
+                const lines = ['Ordrenr;Fakturadato;Fakturanr;Kundenr;Kunde;Sælger;Faktureret DKK;Registreret kost DKK;Registreret DB DKK;Registreret DG %;Stykliste fallback DKK;Korrigeret kost DKK;Korrigeret DB DKK;Korrigeret DG %;Materiale DKK;Stang DKK;Tid DKK;Indkøbte dele DKK;Underleverandør DKK'];
                 for (const row of _kfInvoiceRows) {
                     const margin = _kfMarginMap[String(row.OrdNo)];
                     const invoice = Number(row.InvoAm || 0);
@@ -5317,17 +5603,21 @@ app.get('/', (req, res) => {
                     const registeredDb = invoice - registeredCost;
                     const adjustedCost = registeredCost + fallbackCost;
                     const adjustedDb = invoice - adjustedCost;
+                    const breakdownAvailable = !!(margin && margin.costBreakdownAvailable);
                     lines.push([
                         _kfCsvText(row.OrdNo), _kfCsvText(_fmtKfDateFromInt(row.LstInvDt)), _kfCsvText(row.InvoNo),
                         _kfCsvText(row.CustNo), _kfCsvText(row.CustomerName || row.CustomerShrt || ''), _kfCsvText(row.SellerUsr || ''),
                         _kfCsvNumber(invoice), _kfCsvNumber(registeredCost), _kfCsvNumber(registeredDb), _kfCsvPercent(invoice ? registeredDb / invoice * 100 : 0),
-                        _kfCsvNumber(fallbackCost), _kfCsvNumber(adjustedCost), _kfCsvNumber(adjustedDb), _kfCsvPercent(invoice ? adjustedDb / invoice * 100 : 0)
+                        _kfCsvNumber(fallbackCost), _kfCsvNumber(adjustedCost), _kfCsvNumber(adjustedDb), _kfCsvPercent(invoice ? adjustedDb / invoice * 100 : 0),
+                        _kfCsvNumber(breakdownAvailable ? margin.materialCost : ''), _kfCsvNumber(breakdownAvailable ? margin.stangCost : ''),
+                        _kfCsvNumber(breakdownAvailable ? margin.timeCost : ''), _kfCsvNumber(breakdownAvailable ? margin.purchasedPartCost : ''),
+                        _kfCsvNumber(breakdownAvailable ? margin.underleverandorCost : '')
                     ].join(';'));
                 }
                 _downloadKfCsv(lines, 'ordrer');
             }
 
-            async function _startKfMarginFetch() {
+            async function _startKfMarginFetch(forceRefresh = false) {
                 const progress  = document.getElementById('kfMarginProgress');
                 const fill      = document.getElementById('kfMarginProgressFill');
                 const pctTxt    = document.getElementById('kfMarginProgressPct');
@@ -5335,6 +5625,7 @@ app.get('/', (req, res) => {
                 if (progress) progress.style.display = 'flex';
                 const total = _kfInvoiceRows.length;
                 let done = 0;
+                _kfMarginFetchRunning = true;
 
                 const updateProgress = () => {
                     const pct = total > 0 ? Math.round((done / total) * 100) : 100;
@@ -5353,14 +5644,20 @@ app.get('/', (req, res) => {
                         if (_kfMarginAbort) return;
                         try {
                             let marginData = null;
-                            const r = await fetch('/order-margin/' + row.OrdNo);
+                            const r = await fetch('/order-margin/' + row.OrdNo + '?breakdown=1' + (forceRefresh ? '&force=1' : ''));
                             if (r.ok) {
                                 const d = await r.json();
                                 if (d && d.totalCost !== null && d.totalCost !== undefined) {
                                     marginData = {
                                         totalRevenue: Number(row.InvoAm || 0),
                                         totalCost: Number(d.totalCost || 0),
-                                        styklisteFallbackCost: Number(d.styklisteFallbackCost || 0)
+                                        styklisteFallbackCost: Number(d.styklisteFallbackCost || 0),
+                                        costBreakdownAvailable: Boolean(d.costBreakdownAvailable),
+                                        materialCost: d.costBreakdownAvailable ? Number(d.materialCost || 0) : null,
+                                        stangCost: d.costBreakdownAvailable ? Number(d.stangCost || 0) : null,
+                                        timeCost: d.costBreakdownAvailable ? Number(d.timeCost || 0) : null,
+                                        purchasedPartCost: d.costBreakdownAvailable ? Number(d.purchasedPartCost || 0) : null,
+                                        underleverandorCost: d.costBreakdownAvailable ? Number(d.underleverandorCost || 0) : null
                                     };
                                 }
                             }
@@ -5377,7 +5674,24 @@ app.get('/', (req, res) => {
                 updateProgress();
                 _updateKfKpis();
                 _addKfTotalRow();
+                _kfMarginFetchRunning = false;
                 if (_kfAllCustomers && !_kfMarginAbort) await _saveKfMonthSnapshot();
+            }
+
+            async function refreshKfCostBreakdown() {
+                if (_kfMarginFetchRunning || !_kfInvoiceRows.length) return;
+                const btn = document.getElementById('kfRefreshCostsBtn');
+                if (btn) { btn.disabled = true; btn.textContent = '⏳ Opdaterer…'; }
+                kfSetStatus('Opdaterer omkostninger fra Visma…');
+                try {
+                    await _startKfMarginFetch(true);
+                    kfSetStatus('Omkostninger opdateret.');
+                } catch (err) {
+                    kfSetStatus('Fejl ved opdatering: ' + err.message);
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Opdater omkostninger'; }
+                    _updateKfKpis();
+                }
             }
 
             async function _saveKfMonthSnapshot() {
@@ -5394,13 +5708,21 @@ app.get('/', (req, res) => {
                         SellerUsr:row.SellerUsr || '', InvoAm:Number(row.InvoAm || 0),
                         Cost:margin ? Number(margin.totalCost || 0) : null,
                         StyklisteFallbackCost:margin ? Number(margin.styklisteFallbackCost || 0) : null,
-                        CostComplete:!!margin
+                        CostComplete:!!margin,
+                        MaterialCost:margin && margin.costBreakdownAvailable ? Number(margin.materialCost || 0) : null,
+                        StangCost:margin && margin.costBreakdownAvailable ? Number(margin.stangCost || 0) : null,
+                        TimeCost:margin && margin.costBreakdownAvailable ? Number(margin.timeCost || 0) : null,
+                        PurchasedPartCost:margin && margin.costBreakdownAvailable ? Number(margin.purchasedPartCost || 0) : null,
+                        UnderleverandorCost:margin && margin.costBreakdownAvailable ? Number(margin.underleverandorCost || 0) : null,
+                        CostBreakdownComplete:!!(margin && margin.costBreakdownAvailable)
                     };
                 });
                 try {
                     const response = await fetch('/efterkalk/month-snapshot', {
                         method:'POST', headers:{ 'Content-Type':'application/json' },
-                        body:JSON.stringify({ periodStart:month + '-01', periodEnd, rows })
+                        body:JSON.stringify({ periodStart:month + '-01', periodEnd, rows, vareforbrugGL:_kfVareforbrugGL,
+                            purchaseMissingInvoiceValue: _kfPurchaseGap ? _kfPurchaseGap.missingValue : null,
+                            purchasePartialInvoiceValue: _kfPurchaseGap ? _kfPurchaseGap.partialValue : null })
                     });
                     const result = await response.json();
                     if (response.ok && result.ok) {
@@ -5434,6 +5756,8 @@ app.get('/', (req, res) => {
                 setCellClass('kf-cost-' + ordNo, formatNumber(cost), cls);
                 setCellClass('kf-mdkk-' + ordNo, formatNumber(margDkk), cls);
                 setCellClass('kf-mpct-' + ordNo, margPct !== null ? margPct.toFixed(1) + '%' : '—', cls);
+                const breakdownCell = document.getElementById('kf-breakdown-' + ordNo);
+                if (breakdownCell) breakdownCell.innerHTML = _kfBreakdownHtml(m.costBreakdownAvailable, m);
             }
 
             function _addKfTotalRow() {
@@ -5445,13 +5769,23 @@ app.get('/', (req, res) => {
 
                 const totalInvo = _kfInvoiceRows.reduce((s, r) => s + (r.InvoAm || 0), 0);
                 let totalCost = 0; let totalRev = 0; let n = 0;
+                let totalMaterial = 0, totalStang = 0, totalTime = 0, totalParts = 0, totalUlev = 0, breakdownN = 0;
                 for (const row of _kfInvoiceRows) {
                     const m = _kfMarginMap[String(row.OrdNo)];
-                    if (m) { totalCost += _kfCost(m); totalRev += Number(row.InvoAm || 0); n++; }
+                    if (m) {
+                        totalCost += _kfCost(m); totalRev += Number(row.InvoAm || 0); n++;
+                        if (m.costBreakdownAvailable) {
+                            totalMaterial += Number(m.materialCost || 0); totalStang += Number(m.stangCost || 0);
+                            totalTime += Number(m.timeCost || 0); totalParts += Number(m.purchasedPartCost || 0);
+                            totalUlev += Number(m.underleverandorCost || 0); breakdownN++;
+                        }
+                    }
                 }
                 const margDkk = n > 0 ? (totalRev - totalCost) : null;
                 const margPct = n > 0 ? _kfCalcMarginPct(totalRev, totalCost) : null;
                 const cls     = _kfMarginClass(margPct);
+                const breakdownComplete = _kfInvoiceRows.length > 0 && breakdownN === _kfInvoiceRows.length;
+                const breakdownValues = { materialCost: totalMaterial, stangCost: totalStang, timeCost: totalTime, purchasedPartCost: totalParts, underleverandorCost: totalUlev };
 
                 const tr = document.createElement('tr');
                 tr.className = 'total-row';
@@ -5460,7 +5794,8 @@ app.get('/', (req, res) => {
                     '<td class="r"><strong>' + formatNumber(totalInvo) + '</strong></td>' +
                     '<td class="r kf-margin-cell ' + (n > 0 ? cls : 'na') + '"><strong>' + (n > 0 ? formatNumber(totalCost) : '—') + '</strong></td>' +
                     '<td class="r kf-margin-cell ' + (margDkk !== null ? cls : 'na') + '"><strong>' + (margDkk !== null ? formatNumber(margDkk) : '—') + '</strong></td>' +
-                    '<td class="r kf-margin-cell ' + (margPct !== null ? cls : 'na') + '"><strong>' + (margPct !== null ? margPct.toFixed(1) + '%' : '—') + '</strong></td>';
+                    '<td class="r kf-margin-cell ' + (margPct !== null ? cls : 'na') + '"><strong>' + (margPct !== null ? margPct.toFixed(1) + '%' : '—') + '</strong></td>' +
+                    '<td class="kf-breakdown-cell"><strong>' + _kfBreakdownHtml(breakdownComplete, breakdownValues) + '</strong></td>';
                 tbody.appendChild(tr);
             }
 
@@ -13256,7 +13591,7 @@ app.get('/', (req, res) => {
                 }
             }
 
-            async function loadSalesOrderLaserSummary(orderData) {
+            async function loadSalesOrderLaserSummary(orderData, forceRefresh) {
                 const body = document.getElementById('laserOrderSummaryBody');
                 const totals = document.getElementById('laserOrderSummaryTotals');
                 const teaser = document.getElementById('laserOversigtSummaryTeaser');
@@ -13319,7 +13654,8 @@ app.get('/', (req, res) => {
 
                     async function fetchProductionSummarySafe(childOrdNo) {
                         try {
-                            const response = await fetch('/production-summary/' + childOrdNo + (orderGr4 === 3 ? '?gr4=3' : ''));
+                            const params = (orderGr4 === 3 ? ['gr4=3'] : []).concat(forceRefresh ? ['force=1'] : []);
+                            const response = await fetch('/production-summary/' + childOrdNo + (params.length ? '?' + params.join('&') : ''));
                             const data = await response.json();
                             if (!response.ok || !data || data.error) return null;
                             return data;
@@ -13365,7 +13701,8 @@ app.get('/', (req, res) => {
                         const endpoint = '/laser-route-metrics?ordine=' + encodeURIComponent(target.ordNo)
                             + '&prodNo=' + encodeURIComponent(target.prodNo)
                             + '&showAllRoutes=1'
-                            + (orderGr4 === 3 ? '&gr4=3' : '');
+                            + (orderGr4 === 3 ? '&gr4=3' : '')
+                            + (forceRefresh ? '&force=1' : '');
 
                         requests.push(
                             fetch(endpoint)
@@ -13394,11 +13731,12 @@ app.get('/', (req, res) => {
                             const effective = p.KgPerPezzoEffettivo;
                             const hintedNestCost = getLaserNestCostHint(item.prodOrderNo, p.ProdNo);
                             const hasHintedNestCost = hintedNestCost !== null && hintedNestCost !== undefined && Number(hintedNestCost) > 0;
-                            const routeSpecificCostPerPiece = hasHintedNestCost
-                                ? hintedNestCost
-                                : ((p.CostoPerPezzo !== null && p.CostoPerPezzo !== undefined)
-                                    ? p.CostoPerPezzo
-                                    : null);
+                            // Dokumenteret rækkefølge (docs/MANUALE_OPERATIVO_E_MANUTENZIONE.md §4.9/§5.7): det
+                            // specialiserede per-rute-kostpris fra backend har forrang; NestingCost-hintet er kun
+                            // et fallback, når den specialiserede beregning mangler — ikke omvendt.
+                            const routeSpecificCostPerPiece = (p.CostoPerPezzo !== null && p.CostoPerPezzo !== undefined)
+                                ? p.CostoPerPezzo
+                                : (hasHintedNestCost ? hintedNestCost : null);
                             const extraPct = (expected !== null && expected !== undefined && expected > 0 && effective !== null && effective !== undefined)
                                 ? (((effective - expected) / expected) * 100)
                                 : null;

@@ -1209,7 +1209,7 @@ function createAftercalcService({
 
         const useSpecialLaserCost = Number(options && options.orderGr4 || 0) === 3;
         const summaryCacheKey = 'prod_summary_' + numericOrdNo + (useSpecialLaserCost ? '_gr4_3' : '');
-        const cachedSummary = diskCache.get(summaryCacheKey);
+        const cachedSummary = (options && options.forceRefresh) ? null : diskCache.get(summaryCacheKey);
         if (cachedSummary && cachedSummary.cacheSchemaVersion === PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION) {
             return cachedSummary;
         }

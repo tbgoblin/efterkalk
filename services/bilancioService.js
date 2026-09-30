@@ -27,6 +27,13 @@ const LINES = [
 function fiscalPeriodToCalendar(year, period) {
     return { calendarYear: year + (period > 6 ? 1 : 0), calendarMonth: ((period - 1 + 6) % 12) + 1 };
 }
+// Inverse of fiscalPeriodToCalendar: a calendar "YYYY-MM" key to its fiscal year/period.
+function calendarMonthToFiscal(monthKey) {
+    const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthKey || ''));
+    if (!match) return null;
+    const calendarYear = Number(match[1]), calendarMonth = Number(match[2]);
+    return calendarMonth > 6 ? { year: calendarYear, period: calendarMonth - 6 } : { year: calendarYear - 1, period: calendarMonth + 6 };
+}
 function todayMonthKeyCopenhagen() {
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit'
@@ -133,7 +140,7 @@ function buildAssetRows(records, year, operatingGroups) {
     if (new Set(detailedAccounts).size !== detailedAccounts.length) throw new Error('En konto indgår i flere aktivposter.');
     return rows;
 }
-function createBilancioService({ getConnection, sql, lagerlisteService, fs, definitionStore }) {
+function createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore }) {
     async function catalog() {
         const pool = await getConnection();
         const result = await pool.request().query('SELECT AcNo,Nm,AcGr FROM Ac ORDER BY AcNo; SELECT AcGr,AgAcGr FROM AcGr ORDER BY AcGr;');
@@ -179,7 +186,121 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, defi
         if (snapshot) return computeFinishedOrderMargin(snapshot.current);
         return monthKey === todayKey ? computeFinishedOrderMargin(await lagerlisteService.getCurrent()) : null;
     }
-    return { catalog, async report(year, period, override, reportId = 'default') {
+    // Vareforbrug fra bogføringen for én kalendermåned, til afstemning mod Månedens DB-omkostninger.
+    // Bruger kun konto 12070 "Varekøb" — kontogruppen 12_Vareforbrug dækker også over konti der ikke
+    // er materialeindkøb (12085 "Intern køb", 12092 "Salg jern/skrot" — en salgsindtægt, det modsatte
+    // af et indkøb, m.fl.), verificeret direkte i Ac-tabellen. 12070 er den egentlige indkøbskonto.
+    const VAREFORBRUG_PURCHASE_ACCOUNT = 12070;
+    async function vareforbrugForMonth(monthKey) {
+        const fiscal = calendarMonthToFiscal(monthKey);
+        if (!fiscal) throw new Error('Ugyldig måned.');
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('year', sql.Int, fiscal.year)
+            .input('period', sql.Int, fiscal.period)
+            .input('purchaseAccount', sql.Int, VAREFORBRUG_PURCHASE_ACCOUNT)
+            .query(`SELECT SUM(CASE WHEN T.AcYr=@year AND T.AcPr=@period THEN COALESCE(T.AcAm,0) ELSE 0 END) AS Amount
+                    FROM Ac A LEFT JOIN AcTr T ON T.AcNo=A.AcNo AND T.AcYr=@year AND T.AcPr=@period
+                    WHERE A.AcNo=@purchaseAccount`);
+        const raw = result.recordset && result.recordset[0] ? Number(result.recordset[0].Amount || 0) : 0;
+        // Rå AcTr-sum for Vareforbrug er allerede positiv (bilancioens PNL bruger sign:-1 for at
+        // vise den negativt i sin egen sum-visning — det er kun relevant der, ikke her). Til denne
+        // sammenligning skal Vareforbrug være et positivt beløb, ligesom materiale/stang-summen.
+        return raw;
+    }
+    // Indkøbsordrelinjer modtaget på lager i kalendermåneden (OrdLn.FinDt), men hvor
+    // leverandørfakturaen endnu ikke er bogført fuldt ud (NoInvo < NoFin). Forklarer en del af
+    // Vareforbrug/materiale-mellemværendet: materialet er talt med i materialesummen (forbrugt),
+    // men rammer først Vareforbrug-kontoen når fakturaen bogføres. ProdNo der starter med 'U' er
+    // underleverandørarbejde (fx varmgalvanisering, pulverlak), ikke materialeindkøb — udelades.
+    async function purchaseInvoiceGapForMonth(monthKey) {
+        const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthKey || ''));
+        if (!match) throw new Error('Ugyldig måned.');
+        const year = Number(match[1]), month = Number(match[2]);
+        const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+        const fromInt = year * 10000 + month * 100 + 1;
+        const toInt = year * 10000 + month * 100 + lastDay;
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('from', sql.Int, fromInt)
+            .input('to', sql.Int, toInt)
+            .query(`SELECT
+                        CASE WHEN ISNULL(L.NoInvo,0) = 0 THEN 'missing' ELSE 'partial' END AS Status,
+                        COUNT(DISTINCT O.OrdNo) AS OrderCount,
+                        SUM((ISNULL(L.NoFin,0) - ISNULL(L.NoInvo,0)) * ISNULL(L.CCstPr,0)) AS UninvoicedValue
+                    FROM Ord O WITH(NOLOCK)
+                    INNER JOIN OrdLn L WITH(NOLOCK) ON L.OrdNo = O.OrdNo
+                    WHERE O.TrTp = 6
+                      AND L.FinDt >= @from AND L.FinDt <= @to
+                      AND ISNULL(L.NoFin,0) > ISNULL(L.NoInvo,0)
+                      AND L.ProdNo NOT LIKE 'U%'
+                    GROUP BY CASE WHEN ISNULL(L.NoInvo,0) = 0 THEN 'missing' ELSE 'partial' END`);
+        const rows = result.recordset || [];
+        const missing = rows.find(row => row.Status === 'missing');
+        const partial = rows.find(row => row.Status === 'partial');
+        const missingValue = missing ? Number(missing.UninvoicedValue || 0) : 0;
+        const partialValue = partial ? Number(partial.UninvoicedValue || 0) : 0;
+        return {
+            missingValue,
+            missingOrderCount: missing ? Number(missing.OrderCount || 0) : 0,
+            partialValue,
+            partialOrderCount: partial ? Number(partial.OrderCount || 0) : 0,
+            totalValue: missingValue + partialValue
+        };
+    }
+    function previousMonthKey(monthKey) {
+        const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthKey || ''));
+        if (!match) return null;
+        const year = Number(match[1]), month = Number(match[2]);
+        return month === 1 ? (year - 1) + '-12' : year + '-' + String(month - 1).padStart(2, '0');
+    }
+    // "Varelager" (med rest plader) — samme formel som assets/js/lagerliste.js's warehouseWithRest
+    // (lagerlisteSummaryTable). payload.totals.plates er som standard standardpris (Prod.Inf) — kun
+    // lagerlistePlateTotals(payload,'fifo') i klienten bytter den ud med categories.plates[].FifoValue
+    // (verificeret i assets/js/lagerliste.js:14-24). Samme valg tilbydes her (plateMode), da brugeren
+    // selv vil kunne vælge — standard blander med FIFO (resten), mens Materiale/CCstPr er FIFO-baseret.
+    function computeVarelagerTotal(payload, plateMode = 'fifo') {
+        if (!payload || !payload.totals) return null;
+        const totals = payload.totals;
+        let platesValue;
+        if (plateMode === 'standard') {
+            platesValue = Number(totals.plates || 0);
+        } else {
+            const plateRows = Array.isArray(payload.categories && payload.categories.plates) ? payload.categories.plates : [];
+            platesValue = plateRows.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
+        }
+        const gr5Items = Array.isArray(payload.categories && payload.categories.gr5Items) ? payload.categories.gr5Items : [];
+        const lagerKomponenterValue = gr5Items.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
+        const warehouseWithoutRest = platesValue + Number(totals.opfolgningvare || 0)
+            + Number(totals.stang || 0) + lagerKomponenterValue + Number(totals.diverse || 0);
+        return warehouseWithoutRest + Number(totals.restPlates || 0);
+    }
+    // Lukkede måneder bruger deres Lagerliste-snapshot; kun indeværende kalendermåned bruger den
+    // levende beregning — samme fallback-mønster som finishedOrderMarginForMonth ovenfor. Diverse er
+    // administrative værdier der kan rettes efterfølgende, så snapshottet skal lægges ovenpå den
+    // nyeste Diverse-revision (samme applyToSnapshot som /lagerliste/snapshot/:month bruger) — uden
+    // dette overlay er "diverse" indfrosset til 0/den værdi der var, da måneden blev lukket.
+    async function varelagerValueForMonth(monthKey, plateMode = 'fifo') {
+        if (!lagerlisteService || !fs) return null;
+        const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: monthKey });
+        if (snapshot) {
+            const withDiverse = diverseService ? await diverseService.applyToSnapshot(snapshot, monthKey) : snapshot;
+            return computeVarelagerTotal(withDiverse.current, plateMode);
+        }
+        return monthKey === todayMonthKeyCopenhagen() ? computeVarelagerTotal(await lagerlisteService.getCurrent(), plateMode) : null;
+    }
+    async function varelagerDeltaForMonth(monthKey, plateMode = 'fifo') {
+        const previousMonth = previousMonthKey(monthKey);
+        if (!previousMonth) throw new Error('Ugyldig måned.');
+        const mode = plateMode === 'standard' ? 'standard' : 'fifo';
+        const [currentValue, previousValue] = await Promise.all([
+            varelagerValueForMonth(monthKey, mode),
+            varelagerValueForMonth(previousMonth, mode)
+        ]);
+        const delta = (currentValue === null || previousValue === null) ? null : currentValue - previousValue;
+        return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
+    }
+    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());
