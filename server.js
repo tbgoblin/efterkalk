@@ -10399,7 +10399,9 @@ app.get('/', (req, res) => {
                             : ADMIN_MODULES.map(([key, label]) => '<label><input type="checkbox" data-permission="' + key + '" ' + (permissions[key] ? 'checked' : '') + '> ' + label + '</label>').join('');
                         return '<div class="admin-user" data-username="' + escapeHtml(String(user.username)) + '">'
                             + '<div class="admin-user-head"><div><span class="admin-user-name">' + escapeHtml(String(user.displayName || user.username)) + '</span> <small>(' + escapeHtml(String(user.username)) + ')</small></div>'
-                            + '<label><input type="checkbox" data-active ' + (user.active ? 'checked' : '') + '> Aktiv</label></div>'
+                            + '<div style="display:flex;gap:12px;align-items:center;">'
+                            + (user.username === 'admin' ? '' : '<label><input type="checkbox" data-superadmin ' + (user.role === 'superadmin' ? 'checked' : '') + '> Superadmin</label>')
+                            + '<label><input type="checkbox" data-active ' + (user.active ? 'checked' : '') + '> Aktiv</label></div></div>'
                             + '<div class="admin-permissions">' + checks + '</div>'
                             + '<div class="admin-user-actions">'
                             + (user.username === 'admin' ? '<span>Bootstrap superadmin</span>' : '<input type="password" data-new-password placeholder="Ny kode (valgfri)" style="padding:5px 7px;border:1px solid #c7d7ea;border-radius:5px;">'
@@ -10441,13 +10443,16 @@ app.get('/', (req, res) => {
                 row.querySelectorAll('[data-permission]').forEach(input => { permissions[input.dataset.permission] = input.checked; });
                 const activeInput = row.querySelector('[data-active]');
                 const passwordInput = row.querySelector('[data-new-password]');
+                const superadminInput = row.querySelector('[data-superadmin]');
+                const role = superadminInput && superadminInput.checked ? 'superadmin' : 'user';
                 try {
                     const response = await fetch('/admin/users/' + encodeURIComponent(username), {
-                        method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ active: !!(activeInput && activeInput.checked), role: 'user', permissions, password: String(passwordInput && passwordInput.value || '') })
+                        method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ active: !!(activeInput && activeInput.checked), role, permissions, password: String(passwordInput && passwordInput.value || '') })
                     });
                     const data = await response.json();
                     if (!response.ok || data.error) throw new Error(data.error || 'Kunne ikke gemme bruger');
-                    setAdminStatus('Rettigheder gemt for ' + username + '.');
+                    setAdminStatus('Rettigheder gemt for ' + username + '. Rolleændringer gælder efter næste login.');
+                    loadAdminUsers();
                 } catch (error) {
                     setAdminStatus(String(error.message || error), true);
                 }
