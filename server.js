@@ -4720,6 +4720,8 @@ app.get('/', (req, res) => {
             let _kfVarelagerDelta = null; // { currentValue, previousValue, currentMonth, previousMonth, delta }
             let _kfPlateMode = 'fifo'; // Prisgrundlag for Pladelager i Δ Varelager — 'fifo' eller 'standard'
             let _kfVareforbrugMonth = null; // Måneden sidst sendt til /efterkalk/vareforbrug, så plateMode-skift kan genhente uden fuld reload
+            let _kfLoadSeq = 0; // Stiger ved hver ny indlæsning; ældre asynkrone svar må ikke skrive over den nyere
+            let _kfLoadedMonth = null; // Måneden de viste rækker tilhører — ikke input-feltet, som kan have ændret sig under en igangværende hentning
 
             function _kfCost(margin, mode) {
                 if (!margin) return null;
@@ -4939,28 +4941,32 @@ app.get('/', (req, res) => {
                 if (btn) { btn.disabled = true; btn.textContent = '⏳ Henter…'; }
                 kfSetStatus(_kfAllCustomers ? 'Henter alle fakturaer for den valgte måned…' : 'Henter fakturaer for ' + _kfSelectedCustNm + '…');
                 _kfMarginAbort = false;
+                const seq = ++_kfLoadSeq;
+                _kfLoadedMonth = _kfAllCustomers ? selectedMonth : null;
                 _kfInvoiceRows = [];
                 _kfMarginMap   = {};
                 _resetKfKpis();
-                if (_kfAllCustomers) _fetchKfVareforbrug(selectedMonth);
+                if (_kfAllCustomers) _fetchKfVareforbrug(selectedMonth, seq);
 
                 try {
-                    if (_kfAllCustomers && await _loadKfStoredMonth(selectedMonth)) return;
+                    const storedLoaded = _kfAllCustomers && await _loadKfStoredMonth(selectedMonth, seq);
+                    if (seq !== _kfLoadSeq || storedLoaded) return;
                     const url = '/efterkalk/customer-invoices?' + (_kfAllCustomers ? 'scope=all' : 'custno=' + _kfSelectedCustNo) +
                         '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to || new Date().toISOString().slice(0,10));
                     const r = await fetch(url);
                     const d = await r.json();
+                    if (seq !== _kfLoadSeq) return;
                     if (!d.ok) throw new Error(d.error || 'Fejl');
                     _kfInvoiceRows = d.rows || [];
                     kfSetStatus(_kfInvoiceRows.length + ' fakturaordrer fundet' + (_kfAllCustomers ? '' : ' for ' + _kfSelectedCustNm) +
                         ' (' + _fmtKfDate(d.fromInt) + ' – ' + _fmtKfDate(d.toInt) + ')');
                     _renderKfTable();
                     _updateKfKpis();
-                    if (_kfInvoiceRows.length > 0) _startKfMarginFetch();
+                    if (_kfInvoiceRows.length > 0) _startKfMarginFetch(false, seq);
                 } catch (err) {
-                    kfSetStatus('Fejl: ' + err.message);
+                    if (seq === _kfLoadSeq) kfSetStatus('Fejl: ' + err.message);
                 } finally {
-                    if (btn) { btn.disabled = false; btn.textContent = _kfAllCustomers ? 'Hent måned' : 'Hent fakturaer'; }
+                    if (btn && seq === _kfLoadSeq) { btn.disabled = false; btn.textContent = _kfAllCustomers ? 'Hent måned' : 'Hent fakturaer'; }
                 }
             }
 
@@ -5002,21 +5008,23 @@ app.get('/', (req, res) => {
                     : null;
             }
 
-            async function _fetchKfVareforbrug(month) {
+            async function _fetchKfVareforbrug(month, seq = _kfLoadSeq) {
                 _kfVareforbrugMonth = month;
                 try {
                     const r = await fetch('/efterkalk/vareforbrug?month=' + encodeURIComponent(month) + '&plateMode=' + encodeURIComponent(_kfPlateMode));
                     const d = await r.json();
+                    if (seq !== _kfLoadSeq) return;
+                    if (d.ok && d.month !== month) throw new Error('Forkert måned i svar: ' + d.month);
                     _kfVareforbrugGL = (d.ok && d.vareforbrug !== null && d.vareforbrug !== undefined) ? Number(d.vareforbrug) : null;
                     _kfPurchaseGap = (d.ok && d.purchaseGap) ? d.purchaseGap : null;
                     _kfVarelagerDelta = (d.ok && d.varelager) ? d.varelager : null;
-                } catch { _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; }
+                } catch { if (seq !== _kfLoadSeq) return; _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; }
                 _updateKfKpis();
             }
 
             function setKfPlateMode(mode) {
                 _kfPlateMode = mode === 'standard' ? 'standard' : 'fifo';
-                if (_kfVareforbrugMonth) _fetchKfVareforbrug(_kfVareforbrugMonth);
+                if (_kfLoadedMonth) _fetchKfVareforbrug(_kfLoadedMonth);
             }
 
             function _resetKfKpis() {
@@ -5190,7 +5198,7 @@ app.get('/', (req, res) => {
                 if (!Number.isInteger(customerNo) || customerNo <= 0) return;
                 const selectedRow = _kfInvoiceRows.find(row => Number(row.CustNo) === customerNo);
                 const customerName = selectedRow ? (selectedRow.CustomerName || selectedRow.CustomerShrt || String(customerNo)) : String(customerNo);
-                const selectedMonth = (document.getElementById('kfMonth') || {}).value || new Date().toISOString().slice(0, 7);
+                const selectedMonth = _kfLoadedMonth || _kfPreviousMonthKey();
                 const monthParts = selectedMonth.split('-').map(Number);
                 const endDate = new Date(monthParts[0], monthParts[1], 0);
                 const startDate = new Date(monthParts[0], monthParts[1] - 12, 1);
@@ -5259,11 +5267,12 @@ app.get('/', (req, res) => {
                 }
             }
 
-            async function _loadKfStoredMonth(month) {
+            async function _loadKfStoredMonth(month, seq) {
                 try {
                     const response = await fetch('/efterkalk/month-snapshot?month=' + encodeURIComponent(month));
                     if (!response.ok) return false;
                     const payload = await response.json();
+                    if (seq !== _kfLoadSeq) return false;
                     if (!payload.ok || !payload.found || !Array.isArray(payload.rows) || payload.rows.length === 0) return false;
                     const missingFallback = payload.rows.some(row => row.CostComplete
                         && (row.StyklisteFallbackCost === null || row.StyklisteFallbackCost === undefined));
@@ -5554,7 +5563,7 @@ app.get('/', (req, res) => {
             }
 
             function _downloadKfCsv(lines, suffix) {
-                const month = ((document.getElementById('kfMonth') || {}).value || new Date().toISOString().slice(0, 7)).replace(/[^0-9-]/g, '');
+                const month = (_kfLoadedMonth || _kfPreviousMonthKey()).replace(/[^0-9-]/g, '');
                 const blob = new Blob(['\uFEFFsep=;\\r\\n' + lines.join('\\r\\n')], { type:'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
@@ -5629,14 +5638,16 @@ app.get('/', (req, res) => {
                 _downloadKfCsv(lines, 'ordrer');
             }
 
-            async function _startKfMarginFetch(forceRefresh = false) {
+            async function _startKfMarginFetch(forceRefresh = false, seq = _kfLoadSeq) {
                 const progress  = document.getElementById('kfMarginProgress');
                 const fill      = document.getElementById('kfMarginProgressFill');
                 const pctTxt    = document.getElementById('kfMarginProgressPct');
                 const progTxt   = document.getElementById('kfMarginProgressText');
                 if (progress) progress.style.display = 'flex';
-                const total = _kfInvoiceRows.length;
+                const rows = _kfInvoiceRows;
+                const total = rows.length;
                 let done = 0;
+                const isStale = () => seq !== _kfLoadSeq || _kfMarginAbort;
                 _kfMarginFetchRunning = true;
 
                 const updateProgress = () => {
@@ -5649,11 +5660,11 @@ app.get('/', (req, res) => {
 
                 // Process in batches of 3 (same as existing margin queue)
                 const BATCH = 3;
-                for (let i = 0; i < _kfInvoiceRows.length; i += BATCH) {
-                    if (_kfMarginAbort) break;
-                    const batch = _kfInvoiceRows.slice(i, i + BATCH);
+                for (let i = 0; i < rows.length; i += BATCH) {
+                    if (isStale()) break;
+                    const batch = rows.slice(i, i + BATCH);
                     await Promise.all(batch.map(async row => {
-                        if (_kfMarginAbort) return;
+                        if (isStale()) return;
                         try {
                             let marginData = null;
                             const r = await fetch('/order-margin/' + row.OrdNo + '?breakdown=1' + (forceRefresh ? '&force=1' : ''));
@@ -5673,21 +5684,26 @@ app.get('/', (req, res) => {
                                     };
                                 }
                             }
-                            if (marginData) {
+                            if (marginData && !isStale()) {
                                 _kfMarginMap[String(row.OrdNo)] = marginData;
                                 _updateKfRowMargin(row.OrdNo, marginData);
                             }
                         } catch { /* silent */ }
                         done++;
+                        if (isStale()) return;
                         updateProgress();
                         _updateKfKpis();
                     }));
+                }
+                if (isStale()) {
+                    if (seq === _kfLoadSeq) _kfMarginFetchRunning = false;
+                    return;
                 }
                 updateProgress();
                 _updateKfKpis();
                 _addKfTotalRow();
                 _kfMarginFetchRunning = false;
-                if (_kfAllCustomers && !_kfMarginAbort) await _saveKfMonthSnapshot();
+                if (_kfAllCustomers) await _saveKfMonthSnapshot();
             }
 
             async function refreshKfCostBreakdown() {
@@ -5707,7 +5723,9 @@ app.get('/', (req, res) => {
             }
 
             async function _saveKfMonthSnapshot() {
-                const month = (document.getElementById('kfMonth') || {}).value || '';
+                // Måneden kommer fra de indlæste data, ikke fra input-feltet: feltet kan være ændret
+                // siden hentningen startede, og så ville dataene gemmes under forkert måned i GOHCache.
+                const month = _kfLoadedMonth || '';
                 if (!/^\\d{4}-\\d{2}$/.test(month) || !_kfInvoiceRows.length) return;
                 const parts = month.split('-').map(Number);
                 const periodEnd = month + '-' + String(new Date(parts[0], parts[1], 0).getDate()).padStart(2, '0');
