@@ -141,11 +141,16 @@ function validateValuation(payload) {
     return true;
 }
 
-function validateClosure(payload, month, now = new Date()) {
+function validateClosure(payload, month, now = new Date(), { allowPreviousMonth = false } = {}) {
     validateValuation(payload);
     const generated = new Date(payload.generatedAt);
     const monthInDenmark = date => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit' }).format(date);
-    if (!Number.isFinite(generated.getTime()) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || monthInDenmark(generated) !== month || monthInDenmark(now) !== month) {
+    const currentMonth = monthInDenmark(now);
+    const [year, monthNumber] = currentMonth.split('-').map(Number);
+    const previousMonth = new Date(Date.UTC(year, monthNumber - 2, 15)).toISOString().slice(0, 7);
+    const lateClose = allowPreviousMonth === true && month === previousMonth;
+    if (!Number.isFinite(generated.getTime()) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
+        (lateClose ? monthInDenmark(generated) !== currentMonth : monthInDenmark(generated) !== month || currentMonth !== month)) {
         throw new Error('Måneden passer ikke til beregningsdatoen. Historiske lukninger kræver en særskilt revision.');
     }
     if (now - generated > 5 * 60 * 1000 || generated - now > 60000) throw new Error('Lagerberegningen er for gammel. Tryk Opdater lagerliste før lukning.');

@@ -148,6 +148,34 @@ test('failed or conflicting GOH closure save never writes a local replacement', 
     assert.equal(localWrites, 0);
 });
 
+test('manual previous-month closure requires opt-in and fresh data, including year rollover', () => {
+    for (const [date, month] of [['2026-09-30T22:02:00Z', '2026-09'], ['2026-01-01T10:00:00Z', '2025-12']]) {
+        const now = new Date(date);
+        assert.throws(() => validateClosure(validPayload(now), month, now), /Måneden passer/);
+        validateClosure(validPayload(now), month, now, { allowPreviousMonth: true });
+        assert.throws(() => validateClosure(validPayload(new Date(now - 360000)), month, now, { allowPreviousMonth: true }));
+        for (const invalid of ['2025-10', '2027-01', '2026-13']) {
+            assert.throws(() => validateClosure(validPayload(now), invalid, now, { allowPreviousMonth: true }), /Måneden passer/);
+        }
+    }
+});
+
+test('manual closure loads selected-month Diverse and records the actual valuation time', async () => {
+    const now = new Date();
+    const currentMonth = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit' }).format(now);
+    const [year, number] = currentMonth.split('-').map(Number);
+    const month = new Date(Date.UTC(year, number - 2, 15)).toISOString().slice(0, 7);
+    const fs = { existsSync: () => false, mkdirSync: () => {}, promises: { writeFile: async () => {} } };
+    const service = createLagerlisteService({ getDiverse: async selected => {
+        assert.equal(selected, month);
+        return { month, rows: [], complete: true, total: 0 };
+    } });
+    const saved = await service.saveMonthlySnapshot({ fs, month, currentOverride: validPayload(now), allowPreviousMonth: true });
+    assert.equal(saved.current.diverseStatus.month, month);
+    assert.equal(saved.manualClose.valuationMode, 'live-at-save');
+    assert.equal(saved.manualClose.generatedAt, now.toISOString());
+});
+
 test('successful monthly closure waits for persistence and uses exclusive local creation', async () => {
     const events = [];
     const fs = { existsSync: () => false, mkdirSync: () => {}, promises: { writeFile: async (file, data, options) => {

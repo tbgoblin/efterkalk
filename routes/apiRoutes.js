@@ -3865,11 +3865,13 @@ function createApiRouter({
                 return res.status(400).json({ ok: false, error: 'Måned skal være YYYY-MM' });
             }
             const diverse = Array.isArray(req.body && req.body.diverse) ? req.body.diverse : [];
-            const saved = await lagerlisteService.saveMonthlySnapshot({ fs, month, diverse });
+            const allowPreviousMonth = req.body?.allowPreviousMonth === true;
+            const saved = await lagerlisteService.saveMonthlySnapshot({ fs, month, diverse, allowPreviousMonth });
             return res.json({
                 ok: true,
                 month: saved.month,
-                createdAt: saved.createdAt
+                createdAt: saved.createdAt,
+                current: saved.current
             });
         } catch (err) {
             logEvent('ERROR lagerliste/snapshot create: ' + err.message);

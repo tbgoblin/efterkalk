@@ -745,12 +745,18 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
     const viaRows = categories.salgordreVia || [];
     const sumRows = (rows, key = 'Value') => (Array.isArray(rows) ? rows : []).reduce((sum, row) => sum + Number(row[key] || 0), 0);
     const generatedAt = lagerlisteFormatDateTime(payload.generatedAt);
+    const diverseRows = categories.diverse || [];
+    const diverseBreakdown = payload.diverseStatus ? '<p>Diverse · måned ' + lagerlisteEscape(payload.diverseStatus.month)
+        + ': Administration ' + lagerlisteFormat(sumRows(diverseRows.filter(row => row.mode !== 'visma')))
+        + ' + Visma 44/45/46/63 ' + lagerlisteFormat(sumRows(diverseRows.filter(row => row.mode === 'visma')))
+        + ' = ' + lagerlisteFormat(totals.diverse || 0) + '</p>' : '';
     root.innerHTML = '<div class="lagerliste-price-controls" style="margin-bottom:12px"><label>Pladelager – prisgrundlag: '
         + '<select onchange="lagerlisteSetPlatePrice(this.value)" aria-label="Pladelager prisgrundlag">'
         + '<option value="standard"' + (lagerlistePlatePriceMode === 'standard' ? ' selected' : '') + '>Standardpris (Prod.Inf)</option>'
         + '<option value="fifo"' + (lagerlistePlatePriceMode === 'fifo' ? ' selected' : '') + '>FIFO (StcBal.PhCstPr)</option></select></label>'
         + '<small style="display:block">Gælder Pladelager, oversigt og PDF. Gemte lukninger ændres ikke. Begge priser vises i detaljerne.</small></div>'
-        + (payload.diverseStatus && !payload.diverseStatus.complete ? '<p role="alert" style="color:#b45309">FORELØBIG TOTAL: Diverse er ikke færdigudfyldt. Manglende beløb er ikke medregnet.</p>' : '')
+        + diverseBreakdown
+        + (payload.diverseStatus && !payload.diverseStatus.complete ? '<p role="alert" style="color:#b45309">FORELØBIG TOTAL: Diverse for ' + lagerlisteEscape(payload.diverseStatus.month) + ' er ikke færdigudfyldt. Manglende beløb er ikke medregnet.</p>' : '')
         + (payload.diverseStatus && payload.diverseStatus.overlay ? '<p>Diverse: månedens administrative tillæg (' + lagerlisteEscape(payload.diverseStatus.month) + '). Original månedslukning er bevaret.</p>' : '')
         + lagerlisteSummaryTable({ generatedAt, totals, categories, comparison, displayLabel: lagerlisteDisplayedLabel })
         + lagerlisteCollapsibleSection('Pladelager', lagerlistePlateGroupsTable(plateGroups), 'lagerliste-plates-section', totals.plates)
@@ -778,7 +784,8 @@ function lagerlisteRender(payload, comparison = lagerlistePreviousMonth, display
 async function loadLagerliste(forceAftercalc = false) {
     const root = document.getElementById('lagerlisteResults');
     if (root) root.innerHTML = '<div class="loading">' + (forceAftercalc ? 'Genberegner Efterkalk og henter lagerdata...' : 'Henter lagerdata...') + '</div>';
-    refreshLagerlisteSnapshotList().then(() => refreshLagerlisteCompareOptions()).catch(() => {});
+    refreshLagerlisteCompareOptions().catch(() => {});
+    refreshLagerlisteSnapshotList().catch(() => {});
     try {
         const headers = { Authorization: 'Bearer ' + String(authToken || '') };
         const [lagerResponse, reservationResponse] = await Promise.allSettled([
@@ -1246,24 +1253,41 @@ async function refreshLagerlisteCompareOptions() {
     const selects = [document.getElementById('lagerlisteCompareA'), document.getElementById('lagerlisteCompareB')];
     if (!selects[0] || !selects[1]) return;
     const options = ['<option value="">Vælg periode...</option>', '<option value="current">Aktuel (live)</option>'];
+    const renderOptions = () => {
+        for (const select of selects) {
+            const previous = select.value;
+            select.innerHTML = options.join('');
+            if (previous && Array.from(select.options).some(option => option.value === previous)) select.value = previous;
+        }
+    };
+    // Keep the controls usable while the shared month list is loading.
+    if (selects.every(select => select.options.length <= 1)) renderOptions();
     try {
         const response = await fetch('/lagerliste/snapshot-months', { headers: { Authorization: 'Bearer ' + String(authToken || '') } });
         const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
         if (response.ok && data.ok) {
+            const status = document.getElementById('lagerlistePeriodStatus');
+            if (status) status.textContent = '';
             for (const month of data.months || []) {
                 options.push('<option value="month:' + lagerlisteEscape(month) + '">Måned ' + lagerlisteEscape(month) + '</option>');
             }
         }
-    } catch (_err) { /* months optional */ }
+    } catch (err) {
+        const status = document.getElementById('lagerlistePeriodStatus');
+        if (status) status.textContent = 'Måneder kunne ikke hentes: ' + String(err.message || err) + '. Tryk Opdater perioder for at prøve igen.';
+    }
     for (const row of lagerlisteSnapshotRows || []) {
         const id = String(row.snapshotId || '');
         options.push('<option value="snap:' + lagerlisteEscape(id) + '">Snapshot ' + lagerlisteEscape(id) + '</option>');
     }
-    for (const select of selects) {
-        const previous = select.value;
-        select.innerHTML = options.join('');
-        if (previous && Array.from(select.options).some(option => option.value === previous)) select.value = previous;
-    }
+    renderOptions();
+}
+
+async function refreshLagerlistePeriods() {
+    const status = document.getElementById('lagerlistePeriodStatus');
+    if (status) status.textContent = '';
+    await Promise.all([refreshLagerlisteCompareOptions(), refreshLagerlisteSnapshotList()]);
 }
 
 function lagerlisteCompareClear() {
@@ -1601,16 +1625,27 @@ async function saveLagerlisteSnapshot() {
         alert('Vælg en måned.');
         return;
     }
+    const currentMonth = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Copenhagen', year: 'numeric', month: '2-digit' }).format(new Date());
+    const [year, monthNumber] = currentMonth.split('-').map(Number);
+    const previousMonth = new Date(Date.UTC(year, monthNumber - 2, 15)).toISOString().slice(0, 7);
+    const allowPreviousMonth = month === previousMonth;
+    if (allowPreviousMonth && !confirm('Gem månedslukning for ' + month + ' med den aktuelle lagerberegning? Lagerbeholdningen er fra beregningstidspunktet, ikke fra månedens sidste dag. Diverse hentes for ' + month + '.')) return;
     try {
         const response = await fetch('/lagerliste/snapshot/' + encodeURIComponent(month), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + String(authToken || '') },
-            body: JSON.stringify({ diverse: [] })
+            body: JSON.stringify({ diverse: [], allowPreviousMonth })
         });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
         const status = document.getElementById('lagerlisteSnapshotStatus');
         if (status) status.textContent = 'Snapshot gemt for ' + month;
+        if (data.current) lagerlisteRender(data.current, null, 'Måned ' + month);
+        await refreshLagerlisteCompareOptions();
+        const periodA = document.getElementById('lagerlisteCompareA');
+        const periodB = document.getElementById('lagerlisteCompareB');
+        if (periodA) periodA.value = 'month:' + month;
+        if (periodB) periodB.value = '';
     } catch (err) {
         const status = document.getElementById('lagerlisteSnapshotStatus');
         if (status) status.textContent = 'Fejl: ' + String(err.message || err);
@@ -1779,6 +1814,17 @@ async function refreshLagerlisteSnapshotList() {
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
         lagerlisteSnapshotRows = Array.isArray(data.rows) ? data.rows : [];
+        // Add daily snapshots independently of the monthly list request.
+        for (const id of ['lagerlisteCompareA', 'lagerlisteCompareB']) {
+            const period = document.getElementById(id);
+            if (!period) continue;
+            for (const row of lagerlisteSnapshotRows) {
+                const value = 'snap:' + String(row.snapshotId || '');
+                if (!Array.from(period.options).some(option => option.value === value)) {
+                    period.insertAdjacentHTML('beforeend', '<option value="' + lagerlisteEscape(value) + '">Snapshot ' + lagerlisteEscape(row.snapshotId) + '</option>');
+                }
+            }
+        }
         const select = document.getElementById('lagerlisteSnapshotSelect');
         if (!select) return;
         select.innerHTML = '<option value="">Vælg snapshot...</option>'

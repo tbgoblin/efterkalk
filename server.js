@@ -2683,10 +2683,11 @@ app.get('/', (req, res) => {
                     </div>
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-compare">
                         <label for="lagerlisteCompareA">Periode A</label>
-                        <select id="lagerlisteCompareA" class="filter-select"><option value="">Vælg periode...</option></select>
+                        <select id="lagerlisteCompareA" class="filter-select"><option value="">Vælg periode...</option><option value="current">Aktuel (live)</option></select>
                         <label for="lagerlisteCompareB">Periode B (valgfri)</label>
-                        <select id="lagerlisteCompareB" class="filter-select"><option value="">Vælg periode...</option></select>
+                        <select id="lagerlisteCompareB" class="filter-select"><option value="">Vælg periode...</option><option value="current">Aktuel (live)</option></select>
                         <button type="button" onclick="lagerlisteComparePeriods()">Vis / sammenlign</button>
+                        <button type="button" onclick="refreshLagerlistePeriods()">Opdater perioder</button>
                     </div>
                     <div class="lagerliste-toolbar-group lagerliste-toolbar-history">
                         <label for="lagerlisteSnapshotSelect">Historik</label>
@@ -2705,6 +2706,7 @@ app.get('/', (req, res) => {
                         <button type="button" onclick="lagerlisteVareopslag()">Søg</button>
                     </div>
                     <span id="lagerlisteSnapshotStatus" class="via-status"></span>
+                    <span id="lagerlistePeriodStatus" class="via-status" role="status"></span>
                 </div>
                 <div id="lagerlisteVareopslagResults"></div>
                 <div id="lagerlisteCompareResults"></div>
@@ -4807,12 +4809,22 @@ app.get('/', (req, res) => {
                 pushModalStack('kfModalOverlay');
             }
 
+            function _kfPreviousMonthKey(date = new Date()) {
+                // Forrige kalendermåned, ikke indeværende: på dag 1 i en ny måned er indeværende
+                // måned praktisk talt tom (ingen fakturaer, intet Vareforbrug endnu bogført), så den
+                // er næsten aldrig den relevante standardmåned for et månedligt fakturaoverblik.
+                const year = date.getFullYear(), month = date.getMonth(); // 0-indexed
+                const prevYear = month === 0 ? year - 1 : year;
+                const prevMonth = month === 0 ? 12 : month;
+                return prevYear + '-' + String(prevMonth).padStart(2, '0');
+            }
+
             function openMaanedsfakturaModal() {
                 _kfAllCustomers = true;
                 const overlay = document.getElementById('kfModalOverlay');
                 if (overlay) overlay.classList.add('open');
                 const month = document.getElementById('kfMonth');
-                if (month && !month.value) month.value = new Date().toISOString().slice(0, 7);
+                if (month && !month.value) month.value = _kfPreviousMonthKey();
                 _kfSelectedCustNo = null;
                 _kfSelectedCustNm = '';
                 _kfInvoiceRows = [];

@@ -650,16 +650,20 @@ function createLagerlisteService({ getConnection, sql, diskCache, fs, getSalgord
             totals: { ...base.totals, diverse: diverse.total, total: Number(base.totals.total || 0) - Number(base.totals.diverse || 0) + diverse.total } };
     }
 
-    async function saveMonthlySnapshot({ fs, month, diverse = [], currentOverride = null }) {
+    async function saveMonthlySnapshot({ fs, month, diverse = [], currentOverride = null, allowPreviousMonth = false }) {
         let current = currentOverride && typeof currentOverride === 'object'
             ? currentOverride
             : currentMemoryCache;
         if (!current) throw new Error('Lagerliste cache er ikke klar. Tryk Opdater lagerliste først.');
-        validateClosure(current, month);
-        current = await withDiverse(current);
+        const now = new Date();
+        validateClosure(current, month, now, { allowPreviousMonth });
+        current = await withDiverse(current, month);
         if (current.diverseStatus && (!current.diverseStatus.complete || current.diverseStatus.month !== month)) throw new Error('Diverse er ikke færdigudfyldt for måneden. Udfyld administrationen før lukning.');
         if (readSnapshotFile(fs, month)) throw new Error('Månedslukningen findes allerede. Brug en særskilt revision.');
         const payload = { month, createdAt: new Date().toISOString(), current, diverse };
+        if (allowPreviousMonth === true) {
+            payload.manualClose = { valuationMode: 'live-at-save', generatedAt: current.generatedAt, requestedMonth: month };
+        }
         const file = path.join(snapshotDir, String(month || '').replace(/[^0-9-]/g, '') + '.json');
         if (gohData && typeof gohData.setAppState === 'function') {
             const saved = await gohData.setAppState('lagerliste_month_' + month, payload, { createOnly: true });
