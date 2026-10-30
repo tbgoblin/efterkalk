@@ -81,7 +81,7 @@ test('includes MixLine with the configured N2/O2 blend and excludes incomplete r
     ], { cutLengthM: 10, piercings: 1, machineRate: 15,
         nitrogenPricePerKg: 10, oxygenPricePerKg: 20, mixLineOxygenPercent: 22 });
     assert.equal(result.selected.row.Technology, 'ST000-01.00M-MIX-S0');
-    assert.equal(result.selected.gasPricePerKg, 12.2);
+    assert.ok(Math.abs(result.selected.gasPricePerKg - 12.2) < 1e-9);
     assert.equal(result.alternatives.length, 1);
 });
 

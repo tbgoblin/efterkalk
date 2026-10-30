@@ -104,12 +104,15 @@ function getAllNotes() {
     return { ..._notes };
 }
 
-function setNote(ordNo, { status = '', text = '', isCreditNote = false, isUB = false } = {}) {
+function setNote(ordNo, { status = '', text = '', isCreditNote = false, isUB = false, ubMonth, ubText } = {}) {
     _load();
     const key = String(ordNo);
     const creditFlag = Boolean(isCreditNote);
-    const ubFlag = creditFlag ? Boolean(isUB) : false;
-    if (!status && !text.trim() && !creditFlag) {
+    const ubFlag = Boolean(isUB);
+    const previous = _notes[key] || {};
+    const savedUbMonth = ubFlag ? String(ubMonth === undefined ? previous.ubMonth || '' : ubMonth) : '';
+    const savedUbText = ubFlag ? String(ubText === undefined ? previous.ubText || '' : ubText).slice(0, 2000) : '';
+    if (!status && !String(text || '').trim() && !creditFlag && !ubFlag) {
         delete _notes[key];
     } else {
         _notes[key] = {
@@ -117,6 +120,8 @@ function setNote(ordNo, { status = '', text = '', isCreditNote = false, isUB = f
             text: String(text || '').slice(0, 2000),
             isCreditNote: creditFlag,
             isUB: ubFlag,
+            ubMonth: savedUbMonth,
+            ubText: savedUbText,
             updatedAt: new Date().toISOString()
         };
     }

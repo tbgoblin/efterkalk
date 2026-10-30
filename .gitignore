@@ -26,3 +26,11 @@ tmp_margin_*.json
 inspect_*.js
 _page_dump.html
 tmp_page.html
+
+# Local agent worktrees, validation artifacts and live accounting extracts
+.claude/worktrees/
+.verify-*
+/docs/audits/
+/data/lagerliste/
+/scripts/audit-*.js
+/scripts/verify-*.js

@@ -223,9 +223,12 @@ test('desktop credentials use encrypted bytes, stay in their own store and can b
 function accessClientFixture(options = {}) {
     const fs = require('node:fs');
     const path = require('node:path');
-    const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
-    const start = source.indexOf('            let _accessLoginInProgress = false;');
-    const end = source.indexOf('            const ADMIN_MODULES =', start);
+    // _accessLoginInProgress..submitAccessCode used to be a slice of server.js's inline script;
+    // that whole Access gate section was extracted verbatim to assets/js/access-gate.js (no more
+    // ADMIN_MODULES marker after it there, so we just take the rest of the file from the marker on).
+    const source = fs.readFileSync(path.join(__dirname, '../assets/js/access-gate.js'), 'utf8');
+    const start = source.indexOf('let _accessLoginInProgress = false;');
+    const end = source.length;
     const fields = new Map();
     const storage = new Map();
     let shown = 0;

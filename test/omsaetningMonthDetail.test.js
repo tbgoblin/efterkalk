@@ -35,10 +35,14 @@ test('order flow separates current rest from historical rest and never invents m
         { OrdNo: 4, OrderDate: 20260801, OrderValueDkk: -600, InvoicedDkk: -600, RemainingDkk: 0 }
     ], [
         { OrdNo: 1, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 300, InvoicedTotalDkk: 1000 },
-        { OrdNo: 3, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 100, InvoicedTotalDkk: 100 }
+        { OrdNo: 3, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: 100, InvoicedTotalDkk: 100 },
+        { OrdNo: 4, InvoicedBeforeDkk: 0, InvoicedInMonthDkk: -600, InvoicedTotalDkk: -600 }
     ], 20260801);
     assert.equal(result.unknownCount, 2);
-    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows.length, 2);
+    assert.equal(result.total.invoiced, -300);
+    assert.equal(result.total.incoming, -600);
+    assert.equal(result.total.completed, 0);
     assert.equal(result.total.closing, 700);
     assert.equal(result.total.current, 0);
 });

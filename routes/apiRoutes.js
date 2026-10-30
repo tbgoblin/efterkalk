@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const orderNotesService = require('../services/orderNotesService');
+const { createUbOrdersService } = require('../services/ubOrdersService');
+const { createMonthlySummaryService } = require('../services/monthlySummaryService');
 const aftercalcCostExclusionsService = require('../services/aftercalcCostExclusionsService');
 const lagerlisteReconciliationService = require('../services/lagerlisteReconciliationService');
 const phCrawler = require('../services/phCrawlerService');
@@ -69,6 +71,7 @@ function createApiRouter({
     pkgVersion
 }) {
     const router = express.Router();
+    const ubOrdersService = createUbOrdersService({ getConnection, sql, orderNotes:orderNotesService });
     const efterkalkBackfill = { running:false, completed:0, total:12, current:null, error:null, startedAt:null, finishedAt:null };
     const {
         authSessions,
@@ -344,6 +347,8 @@ function createApiRouter({
     });
     const bilancioDefinitionStore = createDefinitionStore({ gohData, getProfile: settingsService.getActiveProfile, defaultDefinition: bilancioDefaults(BILANCIO_LINES) });
     const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore: bilancioDefinitionStore });
+    const monthlySummaryService=createMonthlySummaryService({ gohData,getProfile:settingsService.getActiveProfile,
+        getConnection,sql,getCatalog:bilancioService.catalog });
     lagerlisteService.scheduleMonthlySnapshot({
         onError: err => logEvent('ERROR lagerliste monthly snapshot: ' + err.message),
         onResult: result => logEvent('Lagerliste monthly snapshot: ' + JSON.stringify(result))
@@ -2818,7 +2823,7 @@ function createApiRouter({
                       SELECT 1 FROM Ord O
                       WHERE O.CustNo = A.CustNo
                         AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
-                        AND O.InvoAm > 0
+                        AND O.InvoAm <> 0
                   )
                 ORDER BY A.Nm
             `);
@@ -2874,7 +2879,7 @@ function createApiRouter({
                     WHERE (@custNo IS NULL OR O.CustNo = @custNo)
                                             AND O.TrTp = 1
                       AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
-                      AND (@includeAllAmounts = 1 OR O.InvoAm > 0)
+                      AND (@includeAllAmounts = 1 OR O.InvoAm <> 0)
                       AND O.LstInvDt >= @fromDate
                       AND O.LstInvDt <= @toDate
                     ORDER BY O.LstInvDt DESC, O.OrdNo DESC
@@ -2889,7 +2894,8 @@ function createApiRouter({
                 InvoNo:       r.InvoNo,
                 CustomerName: r.CustomerName,
                 CustomerShrt: r.CustomerShrt,
-                SellerUsr:    r.SellerUsr
+                SellerUsr:    r.SellerUsr,
+                IsUB: Boolean(orderNotesService.getNote(r.OrdNo)?.isUB)
             }));
             const totalInvoAm = rows.reduce((s, r) => s + r.InvoAm, 0);
             res.json({ ok: true, rows, count: rows.length, totalInvoAm, custNo: allCustomers ? null : custNo, allCustomers, fromInt, toInt });
@@ -2946,6 +2952,42 @@ function createApiRouter({
         const snapshot = await gohCache.getEfterkalkMonth(month + '-01');
         if (snapshot === null) return res.status(503).json({ ok:false, unavailable:true, error:'GOHCache er ikke tilgængelig' });
         res.json({ ok:true, ...snapshot });
+    });
+
+    router.get('/efterkalk/summary', requireModulePermission('efterkalk'), async (req,res) => {
+        res.setHeader('Cache-Control','no-store');
+        try { res.json({ok:true,...await monthlySummaryService.data(String(req.query.month || '')),canEdit:getSessionUser(req)?.role==='superadmin'}); }
+        catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
+    });
+    router.get('/efterkalk/summary-definition', requireModulePermission('efterkalk'),bilancioAdminGuard,async (req,res) => {
+        res.setHeader('Cache-Control','no-store');
+        try { res.json({ok:true,...await monthlySummaryService.editor()}); }
+        catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
+    });
+    router.put('/efterkalk/summary-definition', requireModulePermission('efterkalk'),bilancioAdminGuard,express.json(),async (req,res) => {
+        try { res.json({ok:true,definition:await monthlySummaryService.save(req.body,getSessionUser(req).username)}); }
+        catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
+    });
+    router.post('/efterkalk/summary-definition/preview', requireModulePermission('efterkalk'),bilancioAdminGuard,express.json(),async (req,res) => {
+        res.setHeader('Cache-Control','no-store');
+        try { res.json({ok:true,...await monthlySummaryService.data(req.body.month,req.body.definition)}); }
+        catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
+    });
+
+    router.get('/efterkalk/ub-orders', requireModulePermission('efterkalk'), async (req, res) => {
+        try {
+            res.json({ ok:true, rows:await ubOrdersService.list(req.query.month) });
+        } catch (error) { res.status(error.statusCode || 500).json({ ok:false, error:error.message }); }
+    });
+    router.post('/efterkalk/ub-orders', requireModulePermission('efterkalk'), express.json(), async (req, res) => {
+        try {
+            res.json({ ok:true, ...await ubOrdersService.add(req.body || {}) });
+        } catch (error) { res.status(error.statusCode || 500).json({ ok:false, error:error.message }); }
+    });
+    router.delete('/efterkalk/ub-orders/:ordno', requireModulePermission('efterkalk'), async (req, res) => {
+        try {
+            res.json({ ok:true, note:await ubOrdersService.remove({ ordNo:req.params.ordno, month:req.query.month }) });
+        } catch (error) { res.status(error.statusCode || 500).json({ ok:false, error:error.message }); }
     });
 
     router.get('/efterkalk/customer-trend-snapshots', requireModulePermission('efterkalk'), async (req, res) => {
@@ -3013,7 +3055,7 @@ function createApiRouter({
                                 LEFT JOIN Actor A ON A.CustNo=O.CustNo
                                 OUTER APPLY (SELECT TOP 1 AX.Usr FROM Actor AX
                                   WHERE LTRIM(RTRIM(CONVERT(VARCHAR(50),AX.EmpNo)))=LTRIM(RTRIM(CONVERT(VARCHAR(50),O.SelBuy)))) SU
-                                WHERE O.InvoNo IS NOT NULL AND O.InvoNo<>'' AND O.InvoAm>0
+                                WHERE O.TrTp=1 AND O.InvoNo IS NOT NULL AND O.InvoNo<>'' AND O.InvoAm<>0
                                   AND O.LstInvDt>=@fromDate AND O.LstInvDt<=@toDate`);
                     const sourceRows = result.recordset || [];
                     const snapshotRows = [];

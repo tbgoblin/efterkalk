@@ -1,6 +1,6 @@
 {
   "name": "efterkalk",
-  "version": "1.1.81",
+  "version": "1.1.88",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
@@ -42,6 +42,7 @@
       "services/**/*.js",
       "routes/**/*.js",
       "assets/**/*",
+      "views/**/*",
       "users.json",
       "electron-main.js",
       "electron-preload.js",

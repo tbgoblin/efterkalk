@@ -77,6 +77,7 @@ if ($latestYml -notmatch [regex]::Escape($exeName)) {
 
 $tag = "v$version"
 $title = "Gantech Operations Hub $tag"
+$notesPath = Join-Path $PSScriptRoot ("docs/releases/{0}.md" -f $tag)
 
 $releaseExists = $true
 try {
@@ -89,7 +90,10 @@ if ($releaseExists) {
     Invoke-Gh -Args @('release', 'upload', $tag, $exePath, $blockmapPath, $latestYmlPath, '--repo', $repo, '--clobber')
     Write-Host "Release $tag aggiornata con gli asset latest." -ForegroundColor Green
 } else {
-    Invoke-Gh -Args @('release', 'create', $tag, $exePath, $blockmapPath, $latestYmlPath, '--repo', $repo, '--title', $title, '--notes', "Release $tag")
+    $releaseArgs = @('release', 'create', $tag, $exePath, $blockmapPath, $latestYmlPath, '--repo', $repo, '--title', $title, '--verify-tag', '--latest')
+    if (Test-Path -LiteralPath $notesPath) { $releaseArgs += @('--notes-file', $notesPath) }
+    else { $releaseArgs += @('--notes', "Release $tag") }
+    Invoke-Gh -Args $releaseArgs
     Write-Host "Release $tag creata." -ForegroundColor Green
 }
 

@@ -28,7 +28,8 @@ test('standard overrides retain their identity and do not consume the 12 custom 
 test('sidebar entries are alphabetical by their Danish names', () => {
     const fs = require('node:fs');
     const path = require('node:path');
-    const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+    // The page markup was extracted verbatim from server.js's inline template to views/index.html.
+    const source = fs.readFileSync(path.join(__dirname, '../views/index.html'), 'utf8');
     const start = source.indexOf('<div class="side-menu-module-list">');
     const menu = source.slice(start, source.indexOf('</div>', start));
     const names = [...menu.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map(match => match[1].replace(/^[^\p{L}\p{N}]+/u, '').trim());
@@ -133,7 +134,7 @@ test('fiscal invoice query restricts every scope and amount mode to sales transa
             await handler({ query: { ...scope, includeAllAmounts, from: '2026-07-01', to: '2026-09-15' } }, response);
             assert.equal(payload.ok, true);
             assert.match(queryText, /WHERE\s+\(@custNo IS NULL OR O\.CustNo = @custNo\)\s+AND O\.TrTp = 1\s+AND O\.InvoNo/);
-            assert.match(queryText, /AND \(@includeAllAmounts = 1 OR O\.InvoAm > 0\)/);
+            assert.match(queryText, /AND \(@includeAllAmounts = 1 OR O\.InvoAm <> 0\)/);
             assert.match(queryText, /AND O\.LstInvDt >= @fromDate\s+AND O\.LstInvDt <= @toDate/);
             assert.doesNotMatch(queryText, /SELECT\s+TOP\s+\d+\s+O\.OrdNo/i);
             assert.equal(parameters.includeAllAmounts, Number(includeAllAmounts));
@@ -213,21 +214,24 @@ test('cached margins are checked against current aftercalc before reuse without 
 test('generated dashboard shell keeps the login and source bridge valid JavaScript', () => {
     const fs = require('node:fs');
     const path = require('node:path');
-    const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
-    const start = source.indexOf('res.send(`', source.indexOf("app.get('/',")) + 'res.send('.length;
-    const end = source.indexOf('\n    `);', start) + '\n    `'.length;
-    assert.ok(start > 0 && end > start);
-    const html = new Function('pkgVersion', 'APP_VERSION', 'return ' + source.slice(start, end))('test', 'GOH test');
+    // The page markup/CSS used to live inline in server.js's res.send(`...`) template literal;
+    // it was extracted verbatim to views/index.html, with pkgVersion/APP_VERSION as placeholders
+    // substituted at request time instead of template interpolation.
+    const html = fs.readFileSync(path.join(__dirname, '../views/index.html'), 'utf8')
+        .split('__PKG_VERSION__').join('test').split('__APP_VERSION__').join('GOH test');
     const inline = html.slice(html.indexOf('<script>') + '<script>'.length, html.lastIndexOf('</script>'));
     assert.doesNotThrow(() => new Function(inline));
     assert.ok(inline.includes('function ensureDashboardSources('));
-    assert.ok(inline.includes('async function submitAccessCode('));
-    assert.ok(html.includes('/assets/js/dashboard.js?v=test-13'));
+    const access = fs.readFileSync(path.join(__dirname, '../assets/js/access-gate.js'), 'utf8');
+    const revenue = fs.readFileSync(path.join(__dirname, '../assets/js/omsaetning.js'), 'utf8');
+    assert.doesNotThrow(() => new Function(access));
+    assert.ok(access.includes('async function submitAccessCode('));
+    assert.match(html, /\/assets\/js\/dashboard\.js\?v=test-\d+/);
     assert.ok(html.includes('/assets/js/theme.js?v=test-1'));
     assert.ok(html.includes('name="gohTheme" value="dark"'));
     assert.ok(html.includes('/assets/js/order-flow.js?v=test-4'));
     assert.ok(inline.includes("getOrderFlowRequest(month, [])"));
-    assert.ok(inline.includes("scope: flowScope, month, today, fixedMonth: true"));
+    assert.ok(revenue.includes("scope: flowScope, month, today, fixedMonth: true"));
     const bridge = inline.slice(inline.indexOf('function renderDashboardWidgets()'), inline.indexOf('function scheduleDashboardWidgets()'));
     assert.ok(!bridge.includes('orderListData'));
     assert.ok(!bridge.includes('marginStateByOrdNo'));
@@ -242,9 +246,12 @@ test('generated dashboard shell keeps the login and source bridge valid JavaScri
     assert.ok(inline.includes("const filters = { today, dage: days, resGr: '', ord: '', kunde: '' };"));
     assert.ok(inline.includes('days = 20'));
     assert.ok(inline.includes("['best', 'risk', 'coverage', 'sellers'].includes(id)"));
+    const margins = fs.readFileSync(path.join(__dirname, '../assets/js/order-list-margin.js'), 'utf8');
+    assert.doesNotThrow(() => new Function(margins));
+    assert.doesNotThrow(() => new Function(revenue));
     assert.ok(inline.includes('synchronizeDashboardOrderMargin(detailOrdNo, marginStateByOrdNo[detailOrdNo])'));
-    assert.ok(inline.includes('class="omsaetning-month-total"'));
-    assert.ok(inline.includes('appendMonthTotalLabel'));
+    assert.ok(revenue.includes('class="omsaetning-month-total"'));
+    assert.ok(revenue.includes('appendMonthTotalLabel'));
 });
 
 test('VIA renders per-row residuals instead of comparing an unrelated gross-sales KPI', () => {
@@ -272,9 +279,10 @@ test('interactive order flow uses a separate refresh source and economic permiss
 test('calendar source requests and manual refresh use January dates and separate cache keys', async () => {
     const fs = require('node:fs');
     const path = require('node:path');
-    const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
-    const start = source.indexOf('            function getDashboardSourceRequest(');
-    const end = source.indexOf('            function ensureDashboardSources(', start);
+    // Dashboard glue functions deliberately left inline now live in views/index.html.
+    const source = fs.readFileSync(path.join(__dirname, '../views/index.html'), 'utf8');
+    const start = source.indexOf('function getDashboardSourceRequest(');
+    const end = source.indexOf('function ensureDashboardSources(', start);
     assert.ok(start >= 0 && end > start);
     const requests = [];
     const summaries = [];
@@ -409,11 +417,17 @@ test('widget preferences cannot be silently saved by a backend without the requi
 test('closing an order returns to its origin without changing report back navigation', () => {
     const fs = require('node:fs');
     const path = require('node:path');
-    const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
-    const openStart = source.indexOf('            function openDashboardOrder(');
-    const closeStart = source.indexOf('            function closeOrderDetailModal(');
-    const openSource = source.slice(openStart, source.indexOf('\n            //', openStart));
-    const closeSource = source.slice(closeStart, source.indexOf('            function buildStandaloneReportPrintCss(', closeStart));
+    // openDashboardOrder is one of the "dashboard glue" functions deliberately left inline (not
+    // extracted to its own assets/js/*.js file); it now lives in views/index.html instead of
+    // server.js, along with the rest of the page's still-inline script.
+    const source = fs.readFileSync(path.join(__dirname, '../views/index.html'), 'utf8');
+    const openStart = source.indexOf('function openDashboardOrder(');
+    const openSource = source.slice(openStart, source.indexOf('function searchOrderByNo(', openStart));
+    // closeOrderDetailModal was extracted verbatim to assets/js/order-print-preview.js along
+    // with the rest of the print-preview cluster (no more leading indent in that file).
+    const printPreviewSource = fs.readFileSync(path.join(__dirname, '../assets/js/order-print-preview.js'), 'utf8');
+    const closeStart = printPreviewSource.indexOf('function closeOrderDetailModal(');
+    const closeSource = printPreviewSource.slice(closeStart, printPreviewSource.indexOf('function buildStandaloneReportPrintCss(', closeStart));
     const elements = {
         orderInput: { value: '' }, mainWorkspace: { style: { display: 'none' } },
         orderDetailModal: { style: { display: 'flex' } }, orderDetailModalBody: { innerHTML: 'order' }
@@ -662,7 +676,7 @@ test('fiscal revenue includes zero months, filters customers and never crosses i
         { date: '2026-07-01T00:00:00.000Z', revenueMio: 1, custNo: 1, customerName: 'Alpha' },
         { date: '2026-07-01', revenueMio: 2, custNo: 2, customerName: 'Beta' }
     ] };
-    const result = dashboard.buildData({ today: '2026-09-15', revenue, query: 'alpha', period: 'year' });
+    const result = dashboard.buildData({ today: '2026-09-15', revenue, query: 'alpha', period: 'all' });
     assert.deepEqual(result.widgets.trend.map(row => row.value), [1000000, 0, 0]);
     assert.equal(result.widgets.customers[0].label, 'Alpha');
     assert.equal(result.widgets['invoice-kpi'][2].value, 1);

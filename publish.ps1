@@ -1,201 +1,90 @@
 param(
-    [string]$Message = "Release update"
+    [string]$Message = "Release update",
+    [switch]$UseCurrentVersion
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+Push-Location $PSScriptRoot
 
-function Stop-WorkspaceLockingProcesses {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RootPath
-    )
+function Assert-Command {
+    param([string]$Action)
+    if ($LASTEXITCODE -ne 0) { throw "$Action failed (exit $LASTEXITCODE). Publication stopped." }
+}
 
-    try {
-        $escapedRoot = [Regex]::Escape($RootPath)
-        $workspacePatterns = @(
-            $escapedRoot,
-            'server\.js',
-            'npm(?:\.cmd)?[\\/].*npm-cli\.js"?\s+start',
-            'electron(?:\.exe)?"?\s+\.',
-            'Gantech Operations Hub',
-            'Gantech Efterkalk'
-        )
+try {
+    Write-Host 'Gantech Operations Hub - Release publisher' -ForegroundColor Cyan
+    Write-Host 'Checking repository and GitHub authentication...'
+    $status = git status --porcelain
+    Assert-Command 'git status'
+    if ($status) { $status | Write-Host }
+    gh auth status
+    Assert-Command 'GitHub authentication'
+    # Older local tags may intentionally differ; fetching main must not rewrite them.
+    git fetch origin main --no-tags
+    Assert-Command 'git fetch'
+    $branch = git branch --show-current
+    Assert-Command 'Reading current branch'
+    if ($branch -ne 'main') { throw 'Publish from main after integrating the intended changes.' }
+    $behind = git rev-list --count HEAD..origin/main
+    Assert-Command 'Checking origin/main'
+    if ([int]$behind -gt 0) { throw 'origin/main contains new commits. Integrate them before publishing.' }
 
-        $candidates = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            if ($_.ProcessId -eq $PID) { return $false }
-            if ($_.Name -notin @('node.exe', 'electron.exe', 'Gantech Operations Hub.exe', 'Gantech Efterkalk.exe')) { return $false }
+    Write-Host 'Running tests...' -ForegroundColor Yellow
+    npm test
+    Assert-Command 'Tests'
 
-            $commandLine = [string]($_.CommandLine)
-            $exePath = [string]($_.ExecutablePath)
-            foreach ($pattern in $workspacePatterns) {
-                if (($commandLine -and $commandLine -match $pattern) -or ($exePath -and $exePath -match $pattern)) {
-                    return $true
-                }
-            }
-            return $false
-        }
-
-        if ($candidates) {
-            Write-Host "🛑 Stopping workspace app/server processes before build..." -ForegroundColor Yellow
-            foreach ($proc in $candidates) {
-                try {
-                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
-                    Write-Host "   Stopped PID $($proc.ProcessId) ($($proc.Name))" -ForegroundColor DarkGray
-                } catch {
-                    Write-Host "   Could not stop PID $($proc.ProcessId) ($($proc.Name))" -ForegroundColor Yellow
-                }
-            }
-            Start-Sleep -Milliseconds 1500
-        }
-    } catch {
-        Write-Host "⚠️ Process cleanup skipped: $($_.Exception.Message)" -ForegroundColor Yellow
+    if (-not $UseCurrentVersion) {
+        npm version patch --no-git-tag-version
+        Assert-Command 'Version bump'
     }
-}
+    $version = [string](Get-Content package.json -Raw | ConvertFrom-Json).version
+    if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid package version.' }
+    $tag = "v$version"
+    git show-ref --verify --quiet "refs/tags/$tag"
+    if ($LASTEXITCODE -eq 0) { throw "$tag already exists. Bump the version before publishing." }
+    if ($LASTEXITCODE -ne 1) { Assert-Command 'Checking release tag' }
 
-Write-Host "🚀 Gantech Operations Hub - Automated Release Publisher" -ForegroundColor Cyan
-Write-Host "================================================" -ForegroundColor Cyan
-Write-Host ""
-
-# Step 1: Check git status
-Write-Host "📋 Step 1: Checking git status..." -ForegroundColor Yellow
-$status = git status --porcelain
-if ($status) {
-    Write-Host "✅ Changes detected:"
-    git status --short
-} else {
-    Write-Host "✅ No changes to commit"
-}
-Write-Host ""
-
-# Step 2: Check package.json for current version
-$pkg = Get-Content package.json | ConvertFrom-Json
-$currentVersion = $pkg.version
-Write-Host "📦 Current version in package.json: $currentVersion" -ForegroundColor Cyan
-Write-Host ""
-
-# Step 3: Git add and commit
-if ($status) {
-    Write-Host "📝 Step 2: Adding and committing changes..." -ForegroundColor Yellow
-    git add .
-    if ($LASTEXITCODE -ne 0) {
-        throw "❌ Git add failed"
+    # Fresh output avoids locks from an already-running win-unpacked application.
+    $buildRelative = "dist/release-$version-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    $buildPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $buildRelative))
+    $distPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'dist'))
+    if (-not $buildPath.StartsWith($distPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Build directory must stay inside this workspace dist directory.'
     }
-    
-    git commit -m $Message
-    if ($LASTEXITCODE -ne 0) {
-        throw "❌ Git commit failed"
-    }
-    Write-Host "✅ Changes committed" -ForegroundColor Green
-    Write-Host ""
-}
+    Write-Host "Building $tag..." -ForegroundColor Yellow
+    # Invoke the installed CLI directly: PowerShell's npm.ps1 can consume the --
+    # separator and accidentally turn "never" into a Windows build target.
+    node (Join-Path $PSScriptRoot 'node_modules/electron-builder/cli.js') --win nsis --publish never "--config.directories.output=$buildRelative"
+    Assert-Command 'Windows installer build (use -UseCurrentVersion to retry the prepared version)'
+    node scripts/check-release-package.js $buildPath $version
+    Assert-Command 'Packaged application validation'
 
-# Step 4: Git push
-Write-Host "🔄 Step 3: Pushing to GitHub..." -ForegroundColor Yellow
-git push
-if ($LASTEXITCODE -ne 0) {
-    throw "❌ Git push failed"
-}
-Write-Host "✅ Pushed to GitHub" -ForegroundColor Green
-Write-Host ""
-
-# Step 5: Version bump
-Write-Host "⬆️  Step 4: Bumping version (patch)..." -ForegroundColor Yellow
-npm version patch
-if ($LASTEXITCODE -ne 0) {
-    throw "❌ npm version patch failed"
-}
-
-# Get new version
-$pkg = Get-Content package.json | ConvertFrom-Json
-$newVersion = $pkg.version
-Write-Host "✅ Version bumped: $currentVersion → $newVersion" -ForegroundColor Green
-Write-Host ""
-
-# Step 6: Push tags
-Write-Host "🏷️  Step 5: Pushing tags..." -ForegroundColor Yellow
-git push --follow-tags
-if ($LASTEXITCODE -ne 0) {
-    throw "❌ Git push --follow-tags failed"
-}
-Write-Host "✅ Tags pushed" -ForegroundColor Green
-Write-Host ""
-
-# Step 7: Build
-Write-Host "🔨 Step 6: Building Windows installer..." -ForegroundColor Yellow
-
-# Stop local workspace processes that may lock native modules like msnodesqlv8/sqlserver.node
-Stop-WorkspaceLockingProcesses -RootPath $PSScriptRoot
-
-# Remove stale artifacts for this target version to avoid NSIS "Can't open output file"
-$distDir = Join-Path $PSScriptRoot 'dist'
-$installerPath = Join-Path $distDir ("Gantech-Operations-Hub-Setup-{0}.exe" -f $newVersion)
-$blockmapPath = "$installerPath.blockmap"
-$uninstallerPath = Join-Path $distDir '__uninstaller-nsis-efterkalk.exe'
-
-$legacyInstallerPath = Join-Path $distDir ("Gantech-Efterkalk-Setup-{0}.exe" -f $newVersion)
-$legacyBlockmapPath = "$legacyInstallerPath.blockmap"
-
-foreach ($p in @($installerPath, $blockmapPath, $legacyInstallerPath, $legacyBlockmapPath, $uninstallerPath)) {
-    if (Test-Path $p) {
-        try {
-            Remove-Item $p -Force -ErrorAction Stop
-            Write-Host "🧹 Removed stale build artifact: $p" -ForegroundColor DarkGray
-        } catch {
-            Write-Host "⚠️ Could not remove artifact before build: $p" -ForegroundColor Yellow
-        }
-    }
-}
-
-$buildSucceeded = $false
-for ($attempt = 1; $attempt -le 2; $attempt++) {
-    if ($attempt -gt 1) {
-        Write-Host "🔁 Retrying build after additional cleanup..." -ForegroundColor Yellow
-        Stop-WorkspaceLockingProcesses -RootPath $PSScriptRoot
+    $installerName = "Gantech-Operations-Hub-Setup-$version.exe"
+    foreach ($name in @($installerName, "$installerName.blockmap", 'latest.yml')) {
+        $source = Join-Path $buildPath $name
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing release artifact: $source" }
+        Copy-Item -LiteralPath $source -Destination (Join-Path $distPath $name) -Force
     }
 
-    npm run build:win
-    if ($LASTEXITCODE -eq 0) {
-        $buildSucceeded = $true
-        break
-    }
-}
+    Write-Host 'Committing the verified source and version...' -ForegroundColor Yellow
+    # Exclusion pathspecs naming .gitignored folders make git add exit 1, so unstage those paths afterwards instead.
+    git add --all -- .
+    Assert-Command 'git add'
+    git reset -q -- data/lagerliste docs/audits
+    Assert-Command 'Unstaging local data'
+    git commit -m "$Message ($tag)"
+    Assert-Command 'git commit'
+    git tag -a $tag -m "Gantech Operations Hub $tag"
+    Assert-Command 'git tag'
+    git push --atomic origin main "refs/tags/$tag"
+    Assert-Command 'git push'
 
-if (-not $buildSucceeded) {
-    throw "❌ npm run build:win failed"
+    & (Join-Path $PSScriptRoot 'release-github.ps1')
+    Assert-Command 'GitHub release'
+    gh release view $tag --repo tbgoblin/efterkalk --json url,tagName,isDraft,assets
+    Assert-Command 'Release verification'
+    Write-Host "Published $tag successfully." -ForegroundColor Green
+} finally {
+    Pop-Location
 }
-Write-Host "✅ Build complete" -ForegroundColor Green
-Write-Host ""
-
-# Step 8: Release to GitHub
-Write-Host "📤 Step 7: Publishing to GitHub..." -ForegroundColor Yellow
-$releaseScript = Join-Path $PSScriptRoot 'release-github.ps1'
-& powershell -ExecutionPolicy Bypass -File $releaseScript
-if ($LASTEXITCODE -ne 0) {
-    throw "❌ Release script failed"
-}
-Write-Host "✅ Release published" -ForegroundColor Green
-Write-Host ""
-
-# Step 9: Verify release
-Write-Host "✔️  Step 8: Verifying release..." -ForegroundColor Yellow
-$verifyPath = "C:\Program Files\GitHub CLI\gh.exe"
-if (-not (Test-Path $verifyPath)) {
-    $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
-    if ($ghCmd) {
-        $verifyPath = $ghCmd.Source
-    }
-}
-
-if (Test-Path $verifyPath) {
-    & $verifyPath release list --repo tbgoblin/efterkalk -L 1 | Select-Object -First 5
-    Write-Host ""
-}
-
-Write-Host "================================================" -ForegroundColor Green
-Write-Host "✅ SUCCESS: v$newVersion published!" -ForegroundColor Green
-Write-Host "================================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "Next steps:" -ForegroundColor Cyan
-Write-Host "  1. Check the release on GitHub: https://github.com/tbgoblin/efterkalk/releases" -ForegroundColor Cyan
-Write-Host "  2. Install the new version or wait for auto-update" -ForegroundColor Cyan
-Write-Host ""

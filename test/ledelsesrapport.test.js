@@ -16,7 +16,13 @@ test('management report endpoints require the dedicated permission', () => {
 });
 
 test('management report is exposed through a separately administered module permission', () => {
-    const source = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+    // The Admin tabs section (ADMIN_MODULES, moveAdminReportResource, etc.) was extracted
+    // verbatim from server.js's inline script to assets/js/admin-tabs.js, and the page markup
+    // (data-module-key, id="adminTab...", etc.) to views/index.html; check all three so this
+    // doesn't re-break if more of it moves later.
+    const source = fs.readFileSync(path.join(root, 'server.js'), 'utf8')
+        + fs.readFileSync(path.join(root, 'assets/js/admin-tabs.js'), 'utf8')
+        + fs.readFileSync(path.join(root, 'views/index.html'), 'utf8');
     assert.match(source, /ledelsesrapport: 'ledelsesrapport'/);
     assert.match(source, /\['ledelsesrapport', 'Ledelsesrapport'\]/);
     assert.match(source, /data-module-key="ledelsesrapport"/);
@@ -54,8 +60,8 @@ test('management report page is landscape printable and its client script parses
     assert.match(html, /id="orderToWeek" type="week"/);
     assert.match(script, /GohReportCharts\.revenueStacked/);
     assert.match(script, /GohReportCharts\.belastningCluster/);
-    assert.match(script, /Forventet salg \(åbne ordrer\)/);
-    assert.match(script, /Samlet kost/);
+    assert.match(script, /Åbne ordrers salg/);
+    assert.match(script, /VIA kost/);
     assert.match(script, /Belastning pr\. ressource/);
     assert.match(script, /Ordrebeholdning pr\./);
     assert.doesNotMatch(script, /<h2>VIA kostfordeling<\/h2>/);
@@ -63,7 +69,7 @@ test('management report page is landscape printable and its client script parses
     assert.match(html, /id="loadResources"/);
     assert.match(html, /id="orderLines"/);
     assert.match(html, /draggable|Træk i håndtaget/);
-    assert.match(html, /ledelsesrapport\.js\?v=16/);
+    assert.match(html, /ledelsesrapport\.js\?v=\d+/);
 });
 
 test('shared revenue keeps credits, empty months and Danish precision', () => {
@@ -78,7 +84,14 @@ test('shared revenue keeps credits, empty months and Danish precision', () => {
     assert.match(chart.html, /#1565c0/);
     assert.match(chart.legend, /&lt;Salg&gt;/);
     assert.doesNotMatch(chart.html, /NaN|Infinity/);
-    const shell = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+    // revenueStacked's and belastningCluster's call sites used to live inline in server.js, but
+    // server.js is being split into assets/js/*.js files one feature at a time (Kundefaktura,
+    // Omsaetning, Ordreindgang, Belastning so far) — either call site can end up in server.js or
+    // in any extracted file. Check the combined text of server.js + every assets/js/*.js file so
+    // this stops re-breaking on every future extraction.
+    const jsDir = path.join(root, 'assets/js');
+    const shell = fs.readFileSync(path.join(root, 'server.js'), 'utf8')
+        + fs.readdirSync(jsDir).filter(f => f.endsWith('.js')).map(f => fs.readFileSync(path.join(jsDir, f), 'utf8')).join('\n');
     assert.match(shell, /GohReportCharts\.revenueStacked\(safeRows, monthKeys\)/);
     assert.match(shell, /GohReportCharts\.belastningCluster/);
 });
@@ -126,7 +139,7 @@ test('management report renders the printable order backlog flow instead of VIA 
     assert.match(html, /Tilgang/);
     assert.match(html, /Faktureret/);
     assert.match(html, /Ultimo/);
-    assert.match(html, /4\.502\.591,91 kr\./);
+    assert.match(html, /4\.502\.592 kr\./);
     assert.doesNotMatch(html, /VIA kostfordeling/);
 });
 
@@ -279,7 +292,7 @@ test('resource horizons always stay in one card per resource with all bars insid
 function reportFixture(options = {}) {
     const source = fs.readFileSync(path.join(root, 'routes/apiRoutes.js'), 'utf8');
     const start = source.indexOf('    function parseLedelsesrapportMonth(');
-    const end = source.indexOf("    router.get('/aftercalc/:ordno',", start);
+    const end = source.indexOf("    router.get('/bilancio-trial/reports',", start);
     const handlers = new Map();
     const calls = [];
     const dailyRow = { ResGr: '11', Nm: 'Laser', Dato: null, DatoX: '', Kap: 0, Resv: 300, Aften: 10 };

@@ -7,7 +7,7 @@
         let unknownCount = 0;
         for (const order of rawOrders) {
             const value = Number(order.OrderValueDkk || 0);
-            if (value <= 0) continue;
+            if (value === 0) continue;
             const invoiceHistory = histories.get(Number(order.OrdNo));
             const currentInvoiced = Number(order.InvoicedDkk || 0);
             if ((!invoiceHistory && Math.abs(currentInvoiced) > 0.01)

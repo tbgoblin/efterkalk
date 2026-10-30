@@ -319,13 +319,19 @@ function createOmsaetningService({ getConnection, sql }) {
                     WHERE revenue.InvoNo IS NOT NULL
                       AND revenue.InvoNo <> ''
                       AND o.InvoNo = revenue.InvoNo
+                      AND o.TrTp = 1 AND o.OrdTp = 1
+                      AND (revenue.CustNo IS NULL OR o.CustNo = revenue.CustNo)
                     UNION
                     SELECT customerTransaction.OrdNo
                     FROM CustTr customerTransaction
+                    INNER JOIN Ord transactionOrder
+                      ON transactionOrder.OrdNo = customerTransaction.OrdNo
+                     AND transactionOrder.TrTp = 1 AND transactionOrder.OrdTp = 1
                     WHERE customerTransaction.OrdNo > 0
                       AND revenue.InvoNo IS NOT NULL
                       AND revenue.InvoNo <> ''
                       AND customerTransaction.InvoNo = revenue.InvoNo
+                      AND (revenue.CustNo IS NULL OR transactionOrder.CustNo = revenue.CustNo)
                 ) candidate
             ) orderMatch
             LEFT JOIN Ord matchedOrder
@@ -501,7 +507,7 @@ function createOmsaetningService({ getConnection, sql }) {
                 WHERE o.TrTp = 1 AND o.OrdTp = 1
                     AND o.OrdDt > 0 AND o.OrdDt <= @asOf
                     AND (o.InvoIF > 0 OR o.LstInvDt >= @firstDate OR o.OrdDt >= @firstDate)
-                    AND (ISNULL(o.InvoSF, 0) + ISNULL(o.InvoIF, 0)) > 0
+                    AND (ISNULL(o.InvoSF, 0) + ISNULL(o.InvoIF, 0)) <> 0
                     AND (@customerCsv = '' OR EXISTS (
                         SELECT 1 FROM STRING_SPLIT(@customerCsv, ',') selectedCustomer
                         WHERE TRY_CAST(LTRIM(RTRIM(selectedCustomer.value)) AS int) = o.CustNo
