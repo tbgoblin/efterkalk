@@ -67,7 +67,7 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 
 - Con accesso Omsætning, la lista usa gli ordini con residuo `closing > 0,01 DKK` del modello Ordreflow, non tutti i candidati mensili. Tabella, KPI filtrato e CSV espongono il residuo, non il lordo.
 - Lagerliste conserva il filtro storico e le regole di costo/allocazione. Costi mancanti, storico non riconciliato e residui minimi esclusi sono espliciti; il refresh singolo verifica l'identità dell'ordine.
-- Verificati nel browser filtri/CSV, risposta errata, metadati, costi sconosciuti anche nel dashboard e recupero da errore. Dopo riavvio: 170/170 ordini e residui coincidenti con Ordreflow, totale 5.329.032,91 DKK; il residuo escluso di 0,00811 DKK spiega il centesimo rispetto alla totalizzazione Ordreflow. Refresh singolo 413646 verificato senza modifiche agli altri ordini. Suite Node e confronto numerico di Lagerliste non eseguiti; nessun rilascio incluso.
+- Verificati nel browser filtri/CSV, risposta errata, metadati, costi sconosciuti anche nel dashboard e recupero da errore. Dopo riavvio: 170/170 ordini e residui coincidenti con Ordreflow, t spiega il centesimo rispetto alla totalizzazione Ordreflow. Refresh singolo 413646 verificato senza modifiche agli altri ordini. Suite Node e confronto numerico di Lagerliste non eseguiti; nessun rilascio incluso.
 
 ---
 
