@@ -58,12 +58,36 @@ function _refreshKfConfigurableSummary() {
 }
 
 // U/B orders are not invoiced, so their consumed material sits in booked Vareforbrug but not in "material".
+function _kfUbOrderMaterial(ordNo) {
+    const margin = _kfUbMarginMap[String(ordNo)];
+    if (!margin || !margin.costBreakdownAvailable) return null;
+    return margin.materialCost + margin.stangCost + margin.purchasedPartCost + margin.underleverandorCost;
+}
+
 function _kfUbMaterial() {
     if (!_kfUbLoaded) return null;
-    const margins = _kfUbRows.map(row => _kfUbMarginMap[String(row.OrdNo)]);
-    if (!margins.every(margin => margin && margin.costBreakdownAvailable)) return null;
-    return margins.reduce((total, margin) => total + margin.materialCost + margin.stangCost
-        + margin.purchasedPartCost + margin.underleverandorCost, 0);
+    const values = _kfUbRows.map(row => _kfUbOrderMaterial(row.OrdNo));
+    return values.every(value => value !== null) ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+function _renderKfUbMaterial(finished) {
+    const pending = finished ? '—' : '…';
+    for (const row of _kfUbRows) {
+        const cell = document.querySelector('[data-kf-ub-material="' + Number(row.OrdNo) + '"]');
+        if (!cell) continue;
+        const value = _kfUbOrderMaterial(row.OrdNo);
+        const margin = _kfUbMarginMap[String(row.OrdNo)];
+        cell.textContent = value === null ? pending : formatNumber(value);
+        cell.title = value === null ? (finished ? 'Materialet kunne ikke beregnes for ordren.' : '')
+            : 'Materiale ' + formatNumber(margin.materialCost) + ' · Stang ' + formatNumber(margin.stangCost)
+                + ' · Indkøbte dele ' + formatNumber(margin.purchasedPartCost) + ' · Underleverandør ' + formatNumber(margin.underleverandorCost);
+    }
+    const foot = document.getElementById('kfUbFoot');
+    if (!foot) return;
+    const total = _kfUbMaterial();
+    foot.innerHTML = _kfUbRows.length
+        ? '<tr><td colspan="4"><strong>I alt</strong></td><td class="r"><strong>' + (total === null ? pending : escapeHtml(formatNumber(total))) + '</strong></td><td></td></tr>'
+        : '';
 }
 
 function _kfMarginFromResponse(d, revenue) {
@@ -78,6 +102,24 @@ function _kfMarginFromResponse(d, revenue) {
         purchasedPartCost: d.costBreakdownAvailable ? Number(d.purchasedPartCost || 0) : null,
         underleverandorCost: d.costBreakdownAvailable ? Number(d.underleverandorCost || 0) : null
     };
+}
+
+async function printKfReconciliation() {
+    const summary = window.GohMonthlySummary && window.GohMonthlySummary.current();
+    if (!summary || !_kfLoadedMonth || summary.month !== _kfLoadedMonth) { kfSetStatus('Hent en måned først.'); return; }
+    const button = document.getElementById('kfReconPdf');
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch('/efterkalk/reconciliation-details?month=' + encodeURIComponent(summary.month) + '&plateMode=' + encodeURIComponent(_kfPlateMode));
+        const details = await response.json();
+        if (!response.ok || !details.ok) throw new Error(details.error || 'Kunne ikke hente detaljerne.');
+        const ubOrders = _kfUbRows.map(row => ({ ...row, material:_kfUbOrderMaterial(row.OrdNo) }));
+        window.GohReconciliationReport.print({ ...summary, plateMode:_kfPlateMode, details, ubOrders });
+    } catch (error) {
+        kfSetStatus('Fejl: ' + error.message);
+    } finally {
+        if (button) button.disabled = false;
+    }
 }
 
 async function _fetchKfUbMargins(seq, request) {
@@ -95,8 +137,11 @@ async function _fetchKfUbMargins(seq, request) {
                 }
             } catch { /* the source stays empty until every U/B order has a cost */ }
         }));
+        if (!isStale()) _renderKfUbMaterial(false);
     }
-    if (!isStale()) _refreshKfConfigurableSummary();
+    if (isStale()) return;
+    _renderKfUbMaterial(true);
+    _refreshKfConfigurableSummary();
 }
 
 async function _loadKfUbOrders(month, seq = _kfLoadSeq) {
@@ -107,8 +152,10 @@ async function _loadKfUbOrders(month, seq = _kfLoadSeq) {
     _kfUbLoaded=false;
     const status = document.getElementById('kfUbStatus');
     const tbody = document.getElementById('kfUbBody');
+    const foot = document.getElementById('kfUbFoot');
     if (status) status.textContent = 'Henter U/B-ordrer…';
     if (tbody) tbody.innerHTML = '';
+    if (foot) foot.innerHTML = '';
     try {
         const response = await fetch('/efterkalk/ub-orders?month=' + encodeURIComponent(month));
         const payload = await response.json();
@@ -117,15 +164,17 @@ async function _loadKfUbOrders(month, seq = _kfLoadSeq) {
         _kfUbRows = payload.rows || [];
         _kfUbLoaded=true;
         _refreshKfConfigurableSummary();
-        _fetchKfUbMargins(seq, request);
         if (status) status.textContent = _kfUbRows.length + ' U/B-ordrer · ' + _kfMonthLabel(month);
         if (tbody) tbody.innerHTML = _kfUbRows.map(row => '<tr>'
             + '<td><button type="button" class="kf-trend-btn" onclick="searchOrderByNo(' + Number(row.OrdNo) + ')">' + Number(row.OrdNo) + '</button></td>'
             + '<td>' + escapeHtml(_fmtKfDateFromInt(row.OrdDt)) + '</td>'
             + '<td>' + escapeHtml(String(row.CustomerName || row.CustNo || '—')) + '</td>'
             + '<td class="kf-ub-note">' + escapeHtml(String(row.text || '')) + '</td>'
+            + '<td class="r" data-kf-ub-material="' + Number(row.OrdNo) + '">…</td>'
             + '<td><button type="button" class="kf-trend-btn" onclick="removeKfUbOrder(' + Number(row.OrdNo) + ')">Fjern fra U/B</button></td></tr>').join('')
-            || '<tr><td colspan="5">Ingen U/B-ordrer registreret i måneden.</td></tr>';
+            || '<tr><td colspan="6">Ingen U/B-ordrer registreret i måneden.</td></tr>';
+        _renderKfUbMaterial(false);
+        _fetchKfUbMargins(seq, request);
     } catch (error) {
         if (seq === _kfLoadSeq && request === _kfUbRequest && status) status.textContent = error.message;
     }

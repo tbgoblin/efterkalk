@@ -140,6 +140,8 @@ test('configurable summary receives signed invoices, separate U/B and complete c
     assert.equal(last.material,100);assert.equal(last.time,60);
     assert.equal(last.purchase_gap,40);assert.equal(last.warehouse_delta,10);assert.equal(last.ub_orders,1);
     assert.equal(last.ub_material,50);
+    assert.match(client.document.getElementById('kfUbBody').innerHTML,/data-kf-ub-material="99"/);
+    assert.match(client.document.getElementById('kfUbFoot').innerHTML,/I alt.*<strong>50<\/strong>/);
 });
 
 test('a month switch while a load is in flight never leaves the older month\'s data showing', async () => {

@@ -3023,6 +3023,23 @@ function createApiRouter({
         }
     });
 
+    router.get('/efterkalk/reconciliation-details', requireModulePermission('efterkalk'), async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try {
+            const month = String(req.query.month || '');
+            if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
+            const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
+            const [varelager, purchaseGap] = await Promise.all([
+                bilancioService.varelagerBreakdownForMonth(month, plateMode),
+                bilancioService.purchaseInvoiceGapForMonth(month)
+            ]);
+            res.json({ ok:true, month, varelager, purchaseGap });
+        } catch (err) {
+            logEvent('ERROR efterkalk/reconciliation-details: ' + err.message);
+            res.status(500).json({ ok:false, error:err.message });
+        }
+    });
+
     router.post('/efterkalk/snapshot-backfill', requireModulePermission('efterkalk'), (req, res) => {
         if (efterkalkBackfill.running) return res.json({ ok:true, started:false, ...efterkalkBackfill });
         const user = getSessionUser(req);

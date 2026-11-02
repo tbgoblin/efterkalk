@@ -45,6 +45,31 @@
 .kfs-catalog label { padding:6px 3px; margin:0; border-bottom:1px solid #8296a344; }
 .kfs-catalog small { display:block; opacity:.65; }
 #kfs-preview { margin-top:16px; }
+#kfReconPrint { display:none; }
+@media print {
+    @page { size:A4 portrait; margin:12mm; }
+    body.kf-recon-printing { background:#fff!important; }
+    body.kf-recon-printing>*:not(#kfReconPrint) { display:none!important; }
+    body.kf-recon-printing #kfReconPrint { display:block; color:#000; background:#fff; font:10pt/1.4 Arial,Helvetica,sans-serif; }
+    #kfReconPrint h1 { font-size:16pt; margin:0 0 2px; }
+    #kfReconPrint header p { margin:0 0 10px; color:#444; }
+    #kfReconPrint h2 { font-size:12pt; margin:16px 0 6px; padding-bottom:3px; border-bottom:1.5px solid #175a91; color:#175a91; break-after:avoid; }
+    #kfReconPrint h3 { font-size:10.5pt; margin:10px 0 4px; break-after:avoid; }
+    #kfReconPrint p { margin:4px 0 6px; }
+    #kfReconPrint table { width:100%; border-collapse:collapse; margin:4px 0 8px; break-inside:auto; }
+    #kfReconPrint tr { break-inside:avoid; }
+    #kfReconPrint th,#kfReconPrint td { padding:3px 6px; border-bottom:1px solid #ddd; text-align:left; vertical-align:top; }
+    #kfReconPrint th { font-size:9pt; color:#444; border-bottom:1px solid #999; }
+    #kfReconPrint .num { text-align:right; white-space:nowrap; }
+    #kfReconPrint .note { font-size:8.5pt; color:#555; }
+    #kfReconPrint tr.total td { font-weight:bold; border-top:1px solid #333; }
+    #kfReconPrint tr.heading td { font-weight:bold; padding-top:8px; }
+    #kfReconPrint tr.flag td { background:#fdf0e6; }
+    #kfReconPrint table.movers { font-size:9pt; table-layout:fixed; }
+    #kfReconPrint .warning { padding:6px 8px; border-left:3px solid #bc4b47; background:#fbeaea; }
+    #kfReconPrint ul.meta { margin:4px 0 6px; padding-left:18px; }
+    #kfReconPrint ol li { margin-bottom:6px; }
+}
 @media(max-width:700px) {
     .kfs-editor-layout,.kfs-grid { grid-template-columns:1fr; }
     #kfs-list { max-height:180px; }

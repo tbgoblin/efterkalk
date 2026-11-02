@@ -187,6 +187,7 @@
     window.GohMonthlySummary={
         load,
         update(values){metrics=values;render();},
+        current(){return payload && month ? {month,title:payload.definition.title,metrics,rows:model.evaluate(payload.definition,{...payload,month,metrics})} : null;},
         mode(monthly){el('kfSummaryTools').hidden=!monthly;if(!monthly){requestId++;month='';payload=null;el('kfSummaryReport').hidden=true;el('kfSummaryLegacy').classList.remove('kfs-configured');}}
     };
 }());

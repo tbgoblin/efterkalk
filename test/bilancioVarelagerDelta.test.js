@@ -146,3 +146,32 @@ test('an invalid month is rejected', async () => {
     await assert.rejects(service.varelagerDeltaForMonth('2026-13'));
     await assert.rejects(service.varelagerDeltaForMonth(''));
 });
+
+test('the breakdown splits the delta by category, lists the items that moved and adds work in progress', async () => {
+    const september = { createdAt: '2026-10-01T03:55:35Z', manualClose: { valuationMode: 'live-at-save' }, current: {
+        totals: { plates: 0, opfolgningvare: 100, stang: 0, diverse: 0, restPlates: 0, salgordreVia: 500, finishedNotInvoiced: 20 },
+        categories: { plates: [{ ProdNo: 'P1', Descr: '12 mm', FifoValue: 1000 }], opfolgningvare: [{ ProdNo: 'G1', Descr: 'Guide', _preciseValue: 100 }], gr5Items: [] } } };
+    const october = { createdAt: '2026-11-01T19:51:31Z', manualClose: { valuationMode: 'live-at-save' }, current: {
+        totals: { plates: 0, opfolgningvare: 700, stang: 0, diverse: 0, restPlates: 0, salgordreVia: 800, finishedNotInvoiced: 10 },
+        categories: { plates: [{ ProdNo: 'P1', Descr: '12 mm', FifoValue: 400 }, { ProdNo: 'P2', Descr: '15 mm', FifoValue: 50 }],
+            opfolgningvare: [{ ProdNo: 'G1', Descr: 'Guide', _preciseValue: 300 }, { ProdNo: 'G2', Descr: 'Rail', _preciseValue: 400 }], gr5Items: [] } } };
+    const { service } = fixture({ snapshots: { '2026-09': september, '2026-10': october } });
+    const result = await service.varelagerBreakdownForMonth('2026-10');
+    const byKey = Object.fromEntries(result.categories.map(item => [item.key, item]));
+    assert.equal(byKey.plates.delta, -550);
+    assert.deepEqual(byKey.plates.movers.map(item => [item.key, item.delta]), [['P1', -600], ['P2', 50]]);
+    assert.deepEqual(byKey.opfolgningvare.movers.map(item => [item.key, item.delta]), [['G2', 400], ['G1', 200]]);
+    const total = result.categories.reduce((sum, item) => sum + item.delta, 0);
+    assert.equal(total, (await service.varelagerDeltaForMonth('2026-10')).delta);
+    assert.deepEqual(result.workInProgress.map(item => [item.key, item.delta]), [['salgordreVia', 300], ['finishedNotInvoiced', -10]]);
+    assert.equal(result.current.valuationMode, 'live-at-save');
+    assert.equal(result.previous.createdAt, '2026-10-01T03:55:35Z');
+});
+
+test('the breakdown is empty but still labelled when a month has no closing', async () => {
+    const { service } = fixture({ snapshots: {} });
+    const result = await service.varelagerBreakdownForMonth('2025-10');
+    assert.equal(result.previousMonth, '2025-09');
+    assert.deepEqual(result.categories, []);
+    assert.equal(result.current, null);
+});

@@ -259,7 +259,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
     // lagerlistePlateTotals(payload,'fifo') i klienten bytter den ud med categories.plates[].FifoValue
     // (verificeret i assets/js/lagerliste.js:14-24). Samme valg tilbydes her (plateMode), da brugeren
     // selv vil kunne vælge — standard blander med FIFO (resten), mens Materiale/CCstPr er FIFO-baseret.
-    function computeVarelagerTotal(payload, plateMode = 'fifo') {
+    function computeVarelagerParts(payload, plateMode = 'fifo') {
         if (!payload || !payload.totals) return null;
         const totals = payload.totals;
         let platesValue;
@@ -270,24 +270,81 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
             platesValue = plateRows.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
         }
         const gr5Items = Array.isArray(payload.categories && payload.categories.gr5Items) ? payload.categories.gr5Items : [];
-        const lagerKomponenterValue = gr5Items.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0);
-        const warehouseWithoutRest = platesValue + Number(totals.opfolgningvare || 0)
-            + Number(totals.stang || 0) + lagerKomponenterValue + Number(totals.diverse || 0);
-        return warehouseWithoutRest + Number(totals.restPlates || 0);
+        return {
+            plates: platesValue,
+            opfolgningvare: Number(totals.opfolgningvare || 0),
+            stang: Number(totals.stang || 0),
+            gr5Items: gr5Items.reduce((sum, row) => sum + Number(row.FifoValue || 0), 0),
+            diverse: Number(totals.diverse || 0),
+            restPlates: Number(totals.restPlates || 0)
+        };
+    }
+    function computeVarelagerTotal(payload, plateMode = 'fifo') {
+        const parts = computeVarelagerParts(payload, plateMode);
+        return parts ? Object.values(parts).reduce((sum, value) => sum + value, 0) : null;
+    }
+    // Per-item value with the same basis as computeVarelagerParts, so category movers add up to the category delta.
+    function varelagerItemValue(category, row, plateMode) {
+        if (category === 'plates') return Number((plateMode === 'standard' ? row.Value : row.FifoValue) || 0);
+        if (category === 'gr5Items' || category === 'stang') return Number(row.FifoValue || 0);
+        if (category === 'opfolgningvare') return Number(row._preciseValue ?? row.Value ?? 0);
+        return Number(row.Value || 0);
     }
     // Lukkede måneder bruger deres Lagerliste-snapshot; kun indeværende kalendermåned bruger den
     // levende beregning — samme fallback-mønster som finishedOrderMarginForMonth ovenfor. Diverse er
     // administrative værdier der kan rettes efterfølgende, så snapshottet skal lægges ovenpå den
     // nyeste Diverse-revision (samme applyToSnapshot som /lagerliste/snapshot/:month bruger) — uden
     // dette overlay er "diverse" indfrosset til 0/den værdi der var, da måneden blev lukket.
-    async function varelagerValueForMonth(monthKey, plateMode = 'fifo') {
+    async function varelagerSourceForMonth(monthKey) {
         if (!lagerlisteService || !fs) return null;
         const snapshot = await lagerlisteService.loadMonthlySnapshot({ fs, month: monthKey });
         if (snapshot) {
             const withDiverse = diverseService ? await diverseService.applyToSnapshot(snapshot, monthKey) : snapshot;
-            return computeVarelagerTotal(withDiverse.current, plateMode);
+            const close = snapshot.manualClose || snapshot.automaticClose || {};
+            return { payload: withDiverse.current, month: monthKey, live: false, createdAt: snapshot.createdAt || null,
+                generatedAt: withDiverse.current && withDiverse.current.generatedAt || null, valuationMode: close.valuationMode || null };
         }
-        return monthKey === todayMonthKeyCopenhagen() ? computeVarelagerTotal(await lagerlisteService.getCurrent(), plateMode) : null;
+        if (monthKey !== todayMonthKeyCopenhagen()) return null;
+        const current = await lagerlisteService.getCurrent();
+        return { payload: current, month: monthKey, live: true, createdAt: null, generatedAt: current && current.generatedAt || null, valuationMode: 'live' };
+    }
+    async function varelagerValueForMonth(monthKey, plateMode = 'fifo') {
+        const source = await varelagerSourceForMonth(monthKey);
+        return source ? computeVarelagerTotal(source.payload, plateMode) : null;
+    }
+    // Explains Δ Varelager: per category, plus the items that moved most, plus work-in-progress
+    // figures that are not part of Varelager but often explain the remaining difference.
+    async function varelagerBreakdownForMonth(monthKey, plateMode = 'fifo') {
+        const previousMonth = previousMonthKey(monthKey);
+        if (!previousMonth) throw new Error('Ugyldig måned.');
+        const mode = plateMode === 'standard' ? 'standard' : 'fifo';
+        const [current, previous] = await Promise.all([varelagerSourceForMonth(monthKey), varelagerSourceForMonth(previousMonth)]);
+        const meta = source => source && { month: source.month, live: source.live, createdAt: source.createdAt, generatedAt: source.generatedAt, valuationMode: source.valuationMode };
+        const result = { month: monthKey, previousMonth, plateMode: mode, current: meta(current), previous: meta(previous), categories: [], workInProgress: [] };
+        if (!current || !previous) return result;
+        const currentParts = computeVarelagerParts(current.payload, mode), previousParts = computeVarelagerParts(previous.payload, mode);
+        for (const category of Object.keys(currentParts)) {
+            const items = new Map();
+            for (const [side, source] of [['previous', previous], ['current', current]]) {
+                for (const row of (source.payload.categories && source.payload.categories[category]) || []) {
+                    const key = String(row.ProdNo || row.Descr || row.category || '').trim();
+                    const item = items.get(key) || { key, descr: String(row.Descr || row.category || ''), previous: 0, current: 0 };
+                    item[side] += varelagerItemValue(category, row, mode);
+                    items.set(key, item);
+                }
+            }
+            const movers = [...items.values()].map(item => ({ ...item, delta: item.current - item.previous }))
+                .filter(item => Math.abs(item.delta) >= 0.5)
+                .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 8);
+            result.categories.push({ key: category, previous: previousParts[category], current: currentParts[category],
+                delta: currentParts[category] - previousParts[category], movers });
+        }
+        for (const key of ['salgordreVia', 'finishedNotInvoiced']) {
+            const before = Number(previous.payload.totals && previous.payload.totals[key] || 0);
+            const after = Number(current.payload.totals && current.payload.totals[key] || 0);
+            result.workInProgress.push({ key, previous: before, current: after, delta: after - before });
+        }
+        return result;
     }
     async function varelagerDeltaForMonth(monthKey, plateMode = 'fifo') {
         const previousMonth = previousMonthKey(monthKey);
@@ -300,7 +357,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         const delta = (currentValue === null || previousValue === null) ? null : currentValue - previousValue;
         return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
     }
-    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, async report(year, period, override, reportId = 'default') {
+    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());
