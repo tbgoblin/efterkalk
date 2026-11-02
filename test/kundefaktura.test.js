@@ -139,6 +139,7 @@ test('configurable summary receives signed invoices, separate U/B and complete c
     assert.equal(last.cost,200);assert.equal(last.db,600);assert.equal(last.dg,75);
     assert.equal(last.material,100);assert.equal(last.time,60);
     assert.equal(last.purchase_gap,40);assert.equal(last.warehouse_delta,10);assert.equal(last.ub_orders,1);
+    assert.equal(last.ub_material,50);
 });
 
 test('a month switch while a load is in flight never leaves the older month\'s data showing', async () => {

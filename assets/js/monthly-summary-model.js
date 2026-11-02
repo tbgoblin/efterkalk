@@ -8,7 +8,8 @@
         db:'Dækningsbidrag', dg:'Dækningsgrad', credits:'Kreditnotaer, beløb', credit_count:'Antal kreditnotaer',
         material:'Materiale, stang, indkøbte dele og underleverandør', material_only:'Materiale', stang:'Stang',
         time:'Tid', parts:'Indkøbte dele', subcontract:'Underleverandør',
-        warehouse_delta:'Ændring i varelager', purchase_gap:'Modtaget indkøb, ikke fuldt faktureret', ub_orders:'Antal U/B-ordrer'
+        warehouse_delta:'Ændring i varelager', purchase_gap:'Modtaget indkøb, ikke fuldt faktureret', ub_orders:'Antal U/B-ordrer',
+        ub_material:'Materiale i U/B-ordrer'
     };
     function defaults() {
         const source = (id, name, metric, display='card', unit='dkk') => ({ id,name,type:'source',source:metric,display,unit,section:'Vareforbrug vs. materiale' });
@@ -22,7 +23,8 @@
             {id:'explanation',name:'Forklaret af',type:'heading',display:'row',unit:'dkk',section:'Vareforbrug vs. materiale'},
             source('warehouse','Δ Varelager','warehouse_delta','row'),
             source('gap','Ikke fuldt faktureret','purchase_gap','row'),
-            calculation('residual','Uforklaret rest','[difference] - [warehouse] + [gap]')
+            source('ub_material','Materiale i U/B-ordrer','ub_material','row'),
+            calculation('residual','Uforklaret rest','[difference] - [warehouse] + [gap] - [ub_material]')
         ] };
     }
     function invalid(message) { throw Object.assign(new Error(message), { statusCode:400 }); }

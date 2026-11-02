@@ -25,6 +25,7 @@ let _kfLoadedMonth = null; // Måneden de viste rækker tilhører — ikke input
 let _kfUbRows = [];
 let _kfUbRequest = 0;
 let _kfUbLoaded = false;
+let _kfUbMarginMap = {}; // Separate from _kfMarginMap, which the stored-month load resets while U/B loads in parallel
 let _kfSummaryInvoicesReady = false;
 let _kfVareforbrugRequest = 0;
 
@@ -51,8 +52,51 @@ function _refreshKfConfigurableSummary() {
         time:breakdown ? sum('timeCost') : null,parts:breakdown ? sum('purchasedPartCost') : null,
         subcontract:breakdown ? sum('underleverandorCost') : null,
         warehouse_delta:_kfVarelagerDelta?.delta ?? null,purchase_gap:_kfPurchaseGap?.totalValue ?? null,
-        ub_orders:_kfUbLoaded ? _kfUbRows.length : null
+        ub_orders:_kfUbLoaded ? _kfUbRows.length : null,
+        ub_material:_kfUbMaterial()
     });
+}
+
+// U/B orders are not invoiced, so their consumed material sits in booked Vareforbrug but not in "material".
+function _kfUbMaterial() {
+    if (!_kfUbLoaded) return null;
+    const margins = _kfUbRows.map(row => _kfUbMarginMap[String(row.OrdNo)]);
+    if (!margins.every(margin => margin && margin.costBreakdownAvailable)) return null;
+    return margins.reduce((total, margin) => total + margin.materialCost + margin.stangCost
+        + margin.purchasedPartCost + margin.underleverandorCost, 0);
+}
+
+function _kfMarginFromResponse(d, revenue) {
+    return {
+        totalRevenue: Number(revenue || 0),
+        totalCost: Number(d.totalCost || 0),
+        styklisteFallbackCost: Number(d.styklisteFallbackCost || 0),
+        costBreakdownAvailable: Boolean(d.costBreakdownAvailable),
+        materialCost: d.costBreakdownAvailable ? Number(d.materialCost || 0) : null,
+        stangCost: d.costBreakdownAvailable ? Number(d.stangCost || 0) : null,
+        timeCost: d.costBreakdownAvailable ? Number(d.timeCost || 0) : null,
+        purchasedPartCost: d.costBreakdownAvailable ? Number(d.purchasedPartCost || 0) : null,
+        underleverandorCost: d.costBreakdownAvailable ? Number(d.underleverandorCost || 0) : null
+    };
+}
+
+async function _fetchKfUbMargins(seq, request) {
+    const isStale = () => seq !== _kfLoadSeq || request !== _kfUbRequest;
+    const rows = _kfUbRows.filter(row => !_kfUbMarginMap[String(row.OrdNo)]?.costBreakdownAvailable);
+    for (let i = 0; i < rows.length; i += 3) {
+        if (isStale()) return;
+        await Promise.all(rows.slice(i, i + 3).map(async row => {
+            try {
+                const response = await fetch('/order-margin/' + Number(row.OrdNo) + '?breakdown=1');
+                if (!response.ok) return;
+                const d = await response.json();
+                if (!isStale() && d && d.totalCost !== null && d.totalCost !== undefined) {
+                    _kfUbMarginMap[String(row.OrdNo)] = _kfMarginFromResponse(d, 0);
+                }
+            } catch { /* the source stays empty until every U/B order has a cost */ }
+        }));
+    }
+    if (!isStale()) _refreshKfConfigurableSummary();
 }
 
 async function _loadKfUbOrders(month, seq = _kfLoadSeq) {
@@ -73,6 +117,7 @@ async function _loadKfUbOrders(month, seq = _kfLoadSeq) {
         _kfUbRows = payload.rows || [];
         _kfUbLoaded=true;
         _refreshKfConfigurableSummary();
+        _fetchKfUbMargins(seq, request);
         if (status) status.textContent = _kfUbRows.length + ' U/B-ordrer · ' + _kfMonthLabel(month);
         if (tbody) tbody.innerHTML = _kfUbRows.map(row => '<tr>'
             + '<td><button type="button" class="kf-trend-btn" onclick="searchOrderByNo(' + Number(row.OrdNo) + ')">' + Number(row.OrdNo) + '</button></td>'
@@ -358,6 +403,7 @@ async function loadKundefakturaInvoices() {
     _kfLoadedMonth = _kfAllCustomers ? selectedMonth : null;
     _kfInvoiceRows = [];
     _kfMarginMap   = {};
+    _kfUbMarginMap = {};
     _resetKfKpis();
     if (_kfAllCustomers) {
         if (window.GohMonthlySummary) window.GohMonthlySummary.load(selectedMonth);
@@ -1096,17 +1142,7 @@ async function _startKfMarginFetch(forceRefresh = false, seq = _kfLoadSeq) {
                 if (r.ok) {
                     const d = await r.json();
                     if (d && d.totalCost !== null && d.totalCost !== undefined) {
-                        marginData = {
-                            totalRevenue: Number(row.InvoAm || 0),
-                            totalCost: Number(d.totalCost || 0),
-                            styklisteFallbackCost: Number(d.styklisteFallbackCost || 0),
-                            costBreakdownAvailable: Boolean(d.costBreakdownAvailable),
-                            materialCost: d.costBreakdownAvailable ? Number(d.materialCost || 0) : null,
-                            stangCost: d.costBreakdownAvailable ? Number(d.stangCost || 0) : null,
-                            timeCost: d.costBreakdownAvailable ? Number(d.timeCost || 0) : null,
-                            purchasedPartCost: d.costBreakdownAvailable ? Number(d.purchasedPartCost || 0) : null,
-                            underleverandorCost: d.costBreakdownAvailable ? Number(d.underleverandorCost || 0) : null
-                        };
+                        marginData = _kfMarginFromResponse(d, row.InvoAm);
                     }
                 }
                 if (marginData && !isStale()) {
