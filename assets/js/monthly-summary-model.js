@@ -9,7 +9,9 @@
         material:'Materiale, stang, indkøbte dele og underleverandør', material_only:'Materiale', stang:'Stang',
         time:'Tid', parts:'Indkøbte dele', subcontract:'Underleverandør',
         warehouse_delta:'Ændring i varelager', purchase_gap:'Modtaget indkøb, ikke fuldt faktureret', ub_orders:'Antal U/B-ordrer',
-        ub_material:'Materiale i U/B-ordrer', finished_material:'Ændring i materiale i færdige, ikke fakturerede ordrer'
+        ub_material:'Materiale i U/B-ordrer', finished_material:'Ændring i materiale i færdige, ikke fakturerede ordrer',
+        via_material:'Ændring i materiale i igangværende ordrer (VIA)',
+        purchase_timing:'Fakturaer bogført i en anden måned end varemodtagelsen'
     };
     function defaults() {
         const source = (id, name, metric, display='card', unit='dkk') => ({ id,name,type:'source',source:metric,display,unit,section:'Vareforbrug vs. materiale' });
@@ -25,7 +27,8 @@
             source('gap','Ikke fuldt faktureret','purchase_gap','row'),
             source('ub_material','Materiale i U/B-ordrer','ub_material','row'),
             source('finished_material','Δ Færdige, ikke fakturerede ordrer','finished_material','row'),
-            calculation('residual','Uforklaret rest','[difference] - [warehouse] + [gap] - [ub_material] - [finished_material]')
+            source('timing','Faktureret i anden måned end modtaget','purchase_timing','row'),
+            calculation('residual','Uforklaret rest','[difference] - [warehouse] + [gap] - [ub_material] - [finished_material] - [timing]')
         ] };
     }
     function invalid(message) { throw Object.assign(new Error(message), { statusCode:400 }); }

@@ -18,6 +18,7 @@ let _kfBackfillRequested = false;
 let _kfVareforbrugGL = null; // Vareforbrug fra bogføringen (kontogruppe 12_Vareforbrug) for den valgte måned
 let _kfPurchaseGap = null; // { missingValue, missingOrderCount, partialValue, partialOrderCount, totalValue }
 let _kfVarelagerDelta = null; // { currentValue, previousValue, currentMonth, previousMonth, delta }
+let _kfPurchaseTiming = null; // 12070/12075/12078 booked this month for goods received in other months, minus the reverse: { value, items }
 let _kfWipMaterial = null; // Change in material (no time) in finished, not invoiced orders: { delta, current, previous, viaDelta }
 let _kfPlateMode = 'fifo'; // Prisgrundlag for Pladelager i Δ Varelager — 'fifo' eller 'standard'
 let _kfVareforbrugMonth = null; // Måneden sidst sendt til /efterkalk/vareforbrug, så plateMode-skift kan genhente uden fuld reload
@@ -55,7 +56,9 @@ function _refreshKfConfigurableSummary() {
         warehouse_delta:_kfVarelagerDelta?.delta ?? null,purchase_gap:_kfPurchaseGap?.totalValue ?? null,
         ub_orders:_kfUbLoaded ? _kfUbRows.length : null,
         ub_material:_kfUbMaterial(),
-        finished_material:_kfWipMaterial?.delta ?? null
+        finished_material:_kfWipMaterial?.delta ?? null,
+        via_material:_kfWipMaterial?.viaDelta ?? null,
+        purchase_timing:_kfPurchaseTiming?.value ?? null
     });
 }
 
@@ -537,7 +540,8 @@ async function _fetchKfVareforbrug(month, seq = _kfLoadSeq) {
         _kfPurchaseGap = (d.ok && d.purchaseGap) ? d.purchaseGap : null;
         _kfVarelagerDelta = (d.ok && d.varelager) ? d.varelager : null;
         _kfWipMaterial = (d.ok && d.wip) ? d.wip : null;
-    } catch { if (seq !== _kfLoadSeq || request!==_kfVareforbrugRequest) return; _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; _kfWipMaterial = null; }
+        _kfPurchaseTiming = (d.ok && d.timing) ? d.timing : null;
+    } catch { if (seq !== _kfLoadSeq || request!==_kfVareforbrugRequest) return; _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; _kfWipMaterial = null; _kfPurchaseTiming = null; }
     _updateKfKpis();
 }
 
@@ -558,6 +562,7 @@ function _resetKfKpis() {
     _kfPurchaseGap = null;
     _kfVarelagerDelta = null;
     _kfWipMaterial = null;
+    _kfPurchaseTiming = null;
     _kfVareforbrugMonth = null;
     const tile = document.getElementById('kfKpiVareforbrugTile');
     if (tile) tile.style.display = 'none';

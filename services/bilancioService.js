@@ -248,6 +248,45 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
             totalValue: missingValue + partialValue
         };
     }
+    // Bookings on the purchase accounts are linked to purchase-order lines by supplier invoice number,
+    // so a month can be put on a goods-receipt basis: bookings for goods received in other months are
+    // taken out, and bookings made elsewhere (±3 months) for goods received this month are put back.
+    const PURCHASE_TIMING_ACCOUNTS = [12070, 12075, 12078];
+    async function purchaseTimingForMonth(monthKey) {
+        const fiscal = calendarMonthToFiscal(monthKey);
+        if (!fiscal) throw new Error('Ugyldig måned.');
+        const key = month => { const value = calendarMonthToFiscal(month); return value.year * 100 + value.period; };
+        const pool = await getConnection();
+        const postingRows = (await pool.request()
+            .input('from', sql.Int, key(shiftMonthKey(monthKey, -3)))
+            .input('to', sql.Int, key(shiftMonthKey(monthKey, 3)))
+            .input('accounts', sql.NVarChar(sql.MAX), PURCHASE_TIMING_ACCOUNTS.join(','))
+            .query(`SELECT AcYr, AcPr, AcAm, LTRIM(RTRIM(ISNULL(InvoNo, ''))) AS InvoNo, Txt FROM AcTr
+                    WHERE AcNo IN (SELECT TRY_CONVERT(int, value) FROM STRING_SPLIT(@accounts, ','))
+                      AND AcYr * 100 + AcPr BETWEEN @from AND @to`)).recordset || [];
+        const postings = postingRows.map(row => {
+            const calendar = fiscalPeriodToCalendar(Number(row.AcYr), Number(row.AcPr));
+            return { month: calendar.calendarYear + '-' + String(calendar.calendarMonth).padStart(2, '0'),
+                amount: Number(row.AcAm || 0), invoNo: String(row.InvoNo || ''), text: String(row.Txt || '').trim() };
+        });
+        const invoiceNos = [...new Set(postings.flatMap(posting => [posting.invoNo, referencedInvoiceNo(posting.text)]).filter(Boolean))];
+        // Supplier invoice numbers are not unique over the years, so only recent receipts can match.
+        const lineRows = invoiceNos.length ? (await pool.request()
+            .input('invoices', sql.NVarChar(sql.MAX), invoiceNos.join(','))
+            .input('receivedFrom', sql.Int, Number(shiftMonthKey(monthKey, -12).replace('-', '') + '01'))
+            .query(`SELECT LTRIM(RTRIM(L.InvoNo)) AS InvoNo, L.FinDt,
+                        CONVERT(float, ISNULL(L.NoInvo, 0)) * CONVERT(float, ISNULL(L.CCstPr, 0)) AS Value
+                    FROM OrdLn L WITH(NOLOCK) INNER JOIN Ord O WITH(NOLOCK) ON O.OrdNo = L.OrdNo
+                    WHERE O.TrTp = 6 AND ISNULL(L.NoInvo, 0) > 0 AND L.FinDt >= @receivedFrom
+                      AND LTRIM(RTRIM(L.InvoNo)) IN (SELECT LTRIM(RTRIM(value)) FROM STRING_SPLIT(@invoices, ','))`)).recordset || [] : [];
+        const lines = lineRows.map(row => {
+            const date = String(row.FinDt || '');
+            return { invoNo: String(row.InvoNo || ''), value: Number(row.Value || 0),
+                receiptMonth: /^\d{8}$/.test(date) ? date.slice(0, 4) + '-' + date.slice(4, 6) : null };
+        });
+        const result = classifyPurchaseTiming(monthKey, postings, lines);
+        return { ...result, items: result.items.slice(0, 15) };
+    }
     function previousMonthKey(monthKey) {
         const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthKey || ''));
         if (!match) return null;
@@ -393,7 +432,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         const delta = (currentValue === null || previousValue === null) ? null : currentValue - previousValue;
         return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
     }
-    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, async report(year, period, override, reportId = 'default') {
+    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, purchaseTimingForMonth, async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());
@@ -446,4 +485,52 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         return report;
     } };
 }
-module.exports = { LINES, validatePeriod, buildReport, createBilancioService, resolveAssetGroups, buildAssetRows, computeFinishedOrderMargin };
+function shiftMonthKey(monthKey, months) {
+    const [year, month] = String(monthKey).split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1 + months, 1));
+    return date.getUTCFullYear() + '-' + String(date.getUTCMonth() + 1).padStart(2, '0');
+}
+// A credit note without its own purchase-order link usually names the invoice it corrects ("KN, Inox, vedr. fa. 30609690").
+function referencedInvoiceNo(text) {
+    const match = /\bfa(?:ktura)?\.?\s*(\d{4,})/i.exec(String(text || ''));
+    return match ? match[1] : null;
+}
+// Pure classification for purchaseTimingForMonth. postings: { month, amount, invoNo, text };
+// lines: { invoNo, receiptMonth, value }. Each posting is spread over its invoice's purchase lines by value.
+function classifyPurchaseTiming(monthKey, postings, lines) {
+    const byInvoice = new Map();
+    for (const line of lines) {
+        if (!line.invoNo || !line.receiptMonth || !(Math.abs(line.value) > 0)) continue;
+        const list = byInvoice.get(line.invoNo) || [];
+        list.push(line);
+        byInvoice.set(line.invoNo, list);
+    }
+    const result = { month: monthKey, bookedForOtherMonths: 0, bookedElsewhereForThisMonth: 0, creditNotes: 0, items: [] };
+    for (const posting of postings) {
+        let invoNo = posting.invoNo, viaCreditNote = false;
+        if (!byInvoice.has(invoNo) && posting.amount < 0 && referencedInvoiceNo(posting.text)) {
+            invoNo = referencedInvoiceNo(posting.text);
+            viaCreditNote = true;
+        }
+        const invoiceLines = byInvoice.get(invoNo);
+        if (!invoiceLines) continue;
+        const weight = invoiceLines.reduce((sum, line) => sum + Math.abs(line.value), 0);
+        let outside = 0, inside = 0;
+        for (const line of invoiceLines) {
+            const part = posting.amount * Math.abs(line.value) / weight;
+            if (posting.month === monthKey && line.receiptMonth !== monthKey) outside += part;
+            if (posting.month !== monthKey && line.receiptMonth === monthKey) inside += part;
+        }
+        if (Math.abs(outside) < 0.005 && Math.abs(inside) < 0.005) continue;
+        result.bookedForOtherMonths += outside;
+        result.bookedElsewhereForThisMonth += inside;
+        if (viaCreditNote) result.creditNotes += outside;
+        result.items.push({ invoNo: posting.invoNo, referencedInvoNo: viaCreditNote ? invoNo : null, bookedMonth: posting.month,
+            receiptMonths: [...new Set(invoiceLines.map(line => line.receiptMonth))].sort(), text: posting.text, amount: outside - inside });
+    }
+    result.value = result.bookedForOtherMonths - result.bookedElsewhereForThisMonth;
+    result.items.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    return result;
+}
+
+module.exports = { LINES, validatePeriod, buildReport, createBilancioService, resolveAssetGroups, buildAssetRows, computeFinishedOrderMargin, classifyPurchaseTiming };

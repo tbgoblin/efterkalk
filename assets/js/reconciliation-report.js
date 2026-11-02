@@ -96,7 +96,15 @@
             items.push('<b>Færdige, afsendte ordrer, der endnu ikke er faktureret.</b> Deres kost er ændret med ' + esc(signed(finished.delta))
                 + '. Det er købt og forbrugt, men hverken med i det beregnede materiale eller i Varelager. Værdien indeholder også tid, så kun en del er materiale.' + direction(finished.delta));
         }
-        items.push('<b>Leverandørfakturaer for varer modtaget i en tidligere måned.</b> De øger Bogført i denne måned uden at være med i "Ikke fuldt faktureret". Kan ikke beregnes bagud, fordi faktureringsstatus kun kendes, som den er i dag.');
+        const timing = details.timing && Number.isFinite(details.timing.value) ? details.timing.value : null;
+        if (info.bySource('purchase_timing')) {
+            // Already part of the formula above.
+        } else if (timing != null) {
+            items.push('<b>Fakturaer bogført i en anden måned end varemodtagelsen.</b> Målt til ' + esc(signed(timing))
+                + ' (se afsnit 8). Medregnet ville resten være ' + esc(dkk(residual == null ? null : residual - timing)) + '.');
+        } else {
+            items.push('<b>Leverandørfakturaer for varer modtaget i en tidligere måned.</b> De øger Bogført i denne måned uden at være med i "Ikke fuldt faktureret".');
+        }
         items.push('<b>Spild, skrot og prisforskelle.</b> Spild af plader og stang, der ikke er registreret på ordrerne, og forskellen mellem FIFO-kostprisen i ordrerne og den fakturerede indkøbspris.');
         if (!data.ubOrders || !data.ubOrders.length) items.push('<b>Ordrer leveret uden faktura.</b> Der er ingen U/B-ordrer registreret i måneden. Hvis der er leveret ordrer uden faktura (garanti, prøver, internt brug), bør de registreres som U/B, så deres materiale kommer med.');
         return items;
@@ -192,12 +200,28 @@
                 + esc(wip.previous[key] == null || wip.current[key] == null ? '—' : signed(wip.current[key] - wip.previous[key])) + '</td></tr>';
             parts.push('<table><thead><tr><th>Materiale (antal ordrer)</th><th class="num">' + esc(monthName(wip.previousMonth)) + '</th><th class="num">' + esc(monthName(wip.month))
                 + '</th><th class="num">Ændring</th></tr></thead><tbody>' + line('Færdige salgsordrer, ikke faktureret', 'finished', 'finishedOrders', 'total')
-                + line('Til orientering: salgsordrer i arbejde (VIA), ikke medregnet', 'via', 'viaOrders', 'note') + '</tbody></table>');
+                + (info.bySource('via_material') ? line('Salgsordrer i arbejde (VIA)', 'via', 'viaOrders', 'total')
+                    : line('Til orientering: salgsordrer i arbejde (VIA), ikke medregnet', 'via', 'viaOrders', 'note')) + '</tbody></table>');
             const missing = [...(wip.previous.missing || []), ...(wip.current.missing || [])];
             if (missing.length) parts.push('<p class="warning">Materialet kunne ikke beregnes for ordre ' + esc(missing.join(', ')) + '.</p>');
         } else parts.push('<p class="warning">Kan ikke beregnes, fordi en af månederne mangler en lagerliste-lukning.</p>');
 
-        parts.push('<h2>8. Mulige forklaringer på resten</h2><p>Punkterne er ikke beregnet ind i resten. De er de mest sandsynlige årsager, med beløb hvor de kan måles.</p><ol>'
+        const timing = details.timing;
+        parts.push('<h2>8. Fakturaer bogført i en anden måned end varemodtagelsen</h2><p>Bogføringer på 12070, 12075 og 12078 er koblet til indkøbsordrelinjerne via leverandørens fakturanummer. '
+            + 'Det, der er bogført i måneden for varer modtaget i andre måneder, trækkes ud, og det, der er bogført i andre måneder (±3) for varer modtaget i måneden, lægges til. '
+            + 'Kreditnotaer uden egen indkøbsordre følges til den faktura, de henviser til. Varer modtaget men endnu ikke faktureret står i afsnit 5.</p>');
+        if (timing && Number.isFinite(timing.value)) {
+            parts.push('<table><tbody><tr><td>Bogført i måneden for varer modtaget i andre måneder</td><td class="num">' + esc(dkk(timing.bookedForOtherMonths)) + '</td></tr>'
+                + '<tr><td>Bogført i andre måneder for varer modtaget i måneden</td><td class="num">' + esc(dkk(timing.bookedElsewhereForThisMonth)) + '</td></tr>'
+                + '<tr class="total"><td>Periodeforskydning (trækkes fra)</td><td class="num">' + esc(dkk(timing.value)) + '</td></tr></tbody></table>');
+            if ((timing.items || []).length) {
+                parts.push('<table class="movers"><colgroup><col style="width:14%"><col style="width:16%"><col style="width:18%"><col style="width:36%"><col style="width:16%"></colgroup><thead><tr><th>Bogført</th><th>Faktura</th><th>Modtaget</th><th>Tekst</th><th class="num">Effekt</th></tr></thead><tbody>'
+                    + timing.items.map(item => '<tr><td>' + esc(monthName(item.bookedMonth)) + '</td><td>' + esc(item.invoNo) + (item.referencedInvoNo ? '<div class="note">vedr. ' + esc(item.referencedInvoNo) + '</div>' : '')
+                        + '</td><td>' + esc(item.receiptMonths.map(monthName).join(', ')) + '</td><td>' + esc(item.text) + '</td><td class="num">' + esc(signed(item.amount)) + '</td></tr>').join('') + '</tbody></table>');
+            }
+        } else parts.push('<p>—</p>');
+
+        parts.push('<h2>9. Mulige forklaringer på resten</h2><p>Punkterne er ikke beregnet ind i resten. De er de mest sandsynlige årsager, med beløb hvor de kan måles.</p><ol>'
             + explanations(data, info).map(item => '<li>' + item + '</li>').join('') + '</ol>');
         // Opt out of assets/js/table-sort.js, which otherwise adds sort arrows and resizers to the printed tables.
         return parts.join('').replace(/<table(?=[\s>])/g, '<table data-universal-sort="off"');

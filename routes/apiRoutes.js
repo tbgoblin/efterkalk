@@ -3014,13 +3014,14 @@ function createApiRouter({
             const month = String(req.query.month || '');
             if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
             const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
-            const [vareforbrug, purchaseGap, varelager, wip] = await Promise.all([
+            const [vareforbrug, purchaseGap, varelager, wip, timing] = await Promise.all([
                 bilancioService.vareforbrugForMonth(month),
                 bilancioService.purchaseInvoiceGapForMonth(month),
                 bilancioService.varelagerDeltaForMonth(month, plateMode),
-                wipMaterialDelta(month)
+                wipMaterialDelta(month),
+                bilancioService.purchaseTimingForMonth(month)
             ]);
-            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager, wip });
+            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager, wip, timing });
         } catch (err) {
             logEvent('ERROR efterkalk/vareforbrug: ' + err.message);
             res.status(500).json({ ok:false, error:err.message });
@@ -3033,12 +3034,13 @@ function createApiRouter({
             const month = String(req.query.month || '');
             if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
             const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
-            const [varelager, purchaseGap, wip] = await Promise.all([
+            const [varelager, purchaseGap, wip, timing] = await Promise.all([
                 bilancioService.varelagerBreakdownForMonth(month, plateMode),
                 bilancioService.purchaseInvoiceGapForMonth(month),
-                wipMaterialDelta(month)
+                wipMaterialDelta(month),
+                bilancioService.purchaseTimingForMonth(month)
             ]);
-            res.json({ ok:true, month, varelager, purchaseGap, wip });
+            res.json({ ok:true, month, varelager, purchaseGap, wip, timing });
         } catch (err) {
             logEvent('ERROR efterkalk/reconciliation-details: ' + err.message);
             res.status(500).json({ ok:false, error:err.message });

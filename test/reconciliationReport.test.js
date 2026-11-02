@@ -83,7 +83,23 @@ test('measured finished-order material gets its own section, VIA only for inform
     assert.match(html, /47\.320 \(13\).*53\.738 \(12\).*\+6\.418/);
     assert.match(html, /Til orientering: salgsordrer i arbejde \(VIA\), ikke medregnet/);
     assert.match(html, /Medregnet ville resten være 20\.644,30 DKK/);
-    measured.rows.splice(6, 0, { id: 'finished', name: 'Δ Færdige, ikke fakturerede ordrer', type: 'source', source: 'finished_material', display: 'row', unit: 'dkk', value: 6418 });
+    measured.rows.splice(6, 0, { id: 'finished', name: 'Δ Færdige, ikke fakturerede ordrer', type: 'source', source: 'finished_material', display: 'row', unit: 'dkk', value: 6418 },
+        { id: 'via', name: 'Δ VIA', type: 'source', source: 'via_material', display: 'row', unit: 'dkk', value: 181452 });
+    assert.doesNotMatch(report.buildHtml(measured), /ikke medregnet/);
     html = report.buildHtml(measured);
     assert.doesNotMatch(html, /Medregnet ville resten være/);
+});
+
+test('measured invoice timing gets its own section with the invoices behind it', () => {
+    const withTiming = data();
+    withTiming.details.timing = { value: -49923, bookedForOtherMonths: -33047, bookedElsewhereForThisMonth: 16877,
+        items: [{ invoNo: '30615703', referencedInvoNo: '30609690', bookedMonth: '2026-10', receiptMonths: ['2026-09'], text: 'KN, Inox, vedr. fa. 30609690', amount: -32341 }] };
+    let html = report.buildHtml(withTiming);
+    assert.match(html, /8\. Fakturaer bogført i en anden måned end varemodtagelsen/);
+    assert.match(html, /vedr\. 30609690/);
+    assert.match(html, /Målt til -49\.923/);
+    assert.match(html, /Medregnet ville resten være 76\.985,30 DKK/);
+    withTiming.rows.splice(6, 0, { id: 'timing', name: 'Faktureret i anden måned', type: 'source', source: 'purchase_timing', display: 'row', unit: 'dkk', value: -49923 });
+    html = report.buildHtml(withTiming);
+    assert.doesNotMatch(html, /Målt til/);
 });
