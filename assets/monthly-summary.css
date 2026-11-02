@@ -51,6 +51,13 @@
     body.kf-recon-printing { background:#fff!important; }
     body.kf-recon-printing>*:not(#kfReconPrint) { display:none!important; }
     body.kf-recon-printing #kfReconPrint { display:block; color:#000; background:#fff; font:10pt/1.4 Arial,Helvetica,sans-serif; }
+    /* The app's own font and table styles win on specificity; the report must not inherit them. */
+    #kfReconPrint * { font-family:Arial,Helvetica,sans-serif!important; letter-spacing:normal!important; text-transform:none!important; color:inherit; background:none; box-shadow:none!important; }
+    #kfReconPrint th,#kfReconPrint td { position:static!important; }
+    #kfReconPrint h3 { border:0!important; padding:0!important; }
+    #kfReconPrint table { border:0!important; border-radius:0!important; overflow:visible!important; }
+    #kfReconPrint ol { list-style:decimal!important; padding-left:22px!important; margin:4px 0!important; }
+    #kfReconPrint ol li { display:list-item!important; }
     #kfReconPrint h1 { font-size:16pt; margin:0 0 2px; }
     #kfReconPrint header p { margin:0 0 10px; color:#444; }
     #kfReconPrint h2 { font-size:12pt; margin:16px 0 6px; padding-bottom:3px; border-bottom:1.5px solid #175a91; color:#175a91; break-after:avoid; }

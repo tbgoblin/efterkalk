@@ -23,11 +23,11 @@ test('monthly account rows use Økonomirapport groups, descendants, exclusions a
 test('default formulas reconcile material, inventory and purchase gap; missing figures remain missing',()=>{
     const {definition,selections}=compile(model.defaults(),catalog);
     const context={month:'2026-10',metrics:{orders:287,invoiced:5081521.32,cost:3367998.58,dg:33.7,
-        material:1980062.19,warehouse_delta:416367.11,purchase_gap:576084.06,ub_material:12345.67},
+        material:1980062.19,warehouse_delta:416367.11,purchase_gap:576084.06,ub_material:12345.67,finished_material:-1000},
         selections,accounts:[{AcNo:12070,Nm:'Varekøb',Amount:1628020.74}]};
     const result=new Map(model.evaluate(definition,context).map(row=>[row.id,row.value]));
     assert.equal(Math.round(result.get('difference')*100),-35204145);
-    assert.equal(Math.round(result.get('residual')*100),-20467017);
+    assert.equal(Math.round(result.get('residual')*100),-20367017);
     context.metrics.warehouse_delta=null;
     assert.equal(model.evaluate(definition,context).find(row=>row.id==='residual').value,null);
     context.accounts=[];

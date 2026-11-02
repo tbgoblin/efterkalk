@@ -175,3 +175,32 @@ test('the breakdown is empty but still labelled when a month has no closing', as
     assert.deepEqual(result.categories, []);
     assert.equal(result.current, null);
 });
+
+test('work-in-progress material uses the VIA split, the order breakdown for finished orders and skips current U/B orders', async () => {
+    const snapshot = (via, finished) => ({ current: { totals: {}, categories: { plates: [], gr5Items: [], salgordreVia: via, finishedNotInvoiced: finished } } });
+    const snapshots = {
+        '2026-09': snapshot([{ OrdNo: 1, MaterialCost: 100, StangCost: 10, PurchasedPartCost: 5, TimeCost: 999 }], [{ OrdNo: 7, Value: 5000 }]),
+        '2026-10': snapshot([{ OrdNo: 2, MaterialCost: 300, StangCost: 0, PurchasedPartCost: 0, TimeCost: 999 }, { OrdNo: 9, MaterialCost: 50, StangCost: 0, PurchasedPartCost: 0 }], [{ OrdNo: 8, Value: 5000 }])
+    };
+    const breakdowns = { 7: { costBreakdownAvailable: true, materialCost: 40, stangCost: 0, purchasedPartCost: 0, underleverandorCost: 2, timeCost: 4958 },
+        8: { costBreakdownAvailable: true, materialCost: 60, stangCost: 0, purchasedPartCost: 0, underleverandorCost: 0, timeCost: 4940 } };
+    const service = createBilancioService({ getConnection: async () => ({}), sql: {}, fs: {}, diverseService: null,
+        lagerlisteService: { loadMonthlySnapshot: async ({ month }) => snapshots[month] || null, getCurrent: async () => null },
+        getOrderCostBreakdown: async ordNo => breakdowns[ordNo] });
+    const result = await service.wipMaterialDeltaForMonth('2026-10', { excludeOrders: [9] });
+    assert.equal(result.previous.finished, 42);
+    assert.equal(result.current.finished, 60);
+    assert.equal(result.delta, 60 - 42);
+    assert.equal(result.viaDelta, 300 - 115);
+    assert.equal(result.current.viaOrders, 1);
+});
+
+test('work-in-progress material stays unknown when a finished order has no breakdown', async () => {
+    const snapshot = finished => ({ current: { totals: {}, categories: { salgordreVia: [], finishedNotInvoiced: finished } } });
+    const service = createBilancioService({ getConnection: async () => ({}), sql: {}, fs: {}, diverseService: null,
+        lagerlisteService: { loadMonthlySnapshot: async ({ month }) => month === '2026-10' ? snapshot([{ OrdNo: 5 }]) : snapshot([]), getCurrent: async () => null },
+        getOrderCostBreakdown: async () => ({ costBreakdownAvailable: false }) });
+    const result = await service.wipMaterialDeltaForMonth('2026-10');
+    assert.equal(result.delta, null);
+    assert.deepEqual(result.current.missing, [5]);
+});

@@ -6,7 +6,6 @@
     'use strict';
     const MONTHS = ['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
     const CATEGORY_LABELS = { plates:'Pladelager', opfolgningvare:'Opfølgningsvarer', stang:'Stang', gr5Items:'Lagerkomponenter (gr. 5)', diverse:'Diverse', restPlates:'Restplader' };
-    const WIP_LABELS = { salgordreVia:'Salgsordrer i arbejde (VIA)', finishedNotInvoiced:'Færdige salgsordrer, ikke faktureret (kost)' };
     // Accounts in this chart of accounts that are not material purchases comparable with the orders' calculated material.
     const ACCOUNT_NOTES = {
         12070: { text:'Hovedkontoen for materialeindkøb.' },
@@ -85,12 +84,17 @@
             if (days != null && days > 1.5) items.push('<b>Lagerlisten for ' + esc(monthName(meta.month)) + ' er gemt ' + esc(number(days, 0))
                 + ' dage efter månedens udgang.</b> Bevægelser i de dage (modtagelser, forbrug) er talt med i månedens lagerværdi.');
         }
-        const wip = (varelager.workInProgress || []).filter(item => Math.abs(item.delta) >= 0.5);
-        if (wip.length) {
-            const total = wip.reduce((sum, item) => sum + item.delta, 0);
-            items.push('<b>Materiale i ordrer, der endnu ikke er faktureret.</b> Det er købt og bogført, men hverken med i det beregnede materiale eller i Varelager. Ændring i måneden: '
-                + wip.map(item => esc(WIP_LABELS[item.key] || item.key) + ' ' + esc(signed(item.delta))).join(', ')
-                + '. Værdierne indeholder også tid, så kun en del er materiale.' + direction(total));
+        const measured = details.wip && details.wip.delta != null ? details.wip.delta : null;
+        const finished = (varelager.workInProgress || []).find(item => item.key === 'finishedNotInvoiced' && Math.abs(item.delta) >= 0.5);
+        if (info.bySource('finished_material')) {
+            // Already part of the formula above; nothing left to explain here.
+        } else if (measured != null) {
+            items.push('<b>Færdige, afsendte ordrer, der endnu ikke er faktureret.</b> Materialet (uden tid) i dem er ændret med '
+                + esc(signed(measured)) + ' (se afsnit 7). Det er købt og forbrugt, men hverken med i det beregnede materiale eller i Varelager. Medregnet ville resten være '
+                + esc(dkk(residual == null ? null : residual - measured)) + '.');
+        } else if (finished) {
+            items.push('<b>Færdige, afsendte ordrer, der endnu ikke er faktureret.</b> Deres kost er ændret med ' + esc(signed(finished.delta))
+                + '. Det er købt og forbrugt, men hverken med i det beregnede materiale eller i Varelager. Værdien indeholder også tid, så kun en del er materiale.' + direction(finished.delta));
         }
         items.push('<b>Leverandørfakturaer for varer modtaget i en tidligere måned.</b> De øger Bogført i denne måned uden at være med i "Ikke fuldt faktureret". Kan ikke beregnes bagud, fordi faktureringsstatus kun kendes, som den er i dag.');
         items.push('<b>Spild, skrot og prisforskelle.</b> Spild af plader og stang, der ikke er registreret på ordrerne, og forskellen mellem FIFO-kostprisen i ordrerne og den fakturerede indkøbspris.');
@@ -178,9 +182,25 @@
             + '<tr class="total"><td colspan="3">I alt</td><td class="num">' + esc(number(ub.every(order => order.material != null) ? ub.reduce((total, order) => total + order.material, 0) : null)) + '</td></tr></tbody></table>'
             : '<p>Ingen U/B-ordrer registreret i måneden.</p>');
 
-        parts.push('<h2>7. Mulige forklaringer på resten</h2><p>Punkterne er ikke beregnet ind i resten. De er de mest sandsynlige årsager, med beløb hvor de kan måles.</p><ol>'
+        const wip = details.wip;
+        parts.push('<h2>7. Færdige, afsendte ordrer, der endnu ikke er faktureret</h2><p>Materiale, stang, indkøbte dele og underleverandør (uden tid) i ordrer, der ved månedens udgang er færdige og afsendt, men ikke faktureret. '
+            + 'Materialet er taget fra lageret, så Varelager er faldet, men det kommer først med i det beregnede materiale, når ordren faktureres. Ændringen i måneden er det, der påvirker resten.'
+            + (data.ubOrders && data.ubOrders.length ? ' Månedens U/B-ordrer er udeladt, da de står i afsnit 6.' : '') + '</p>');
+        if (wip && wip.current && wip.previous) {
+            const line = (label, key, count, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + esc(label) + '</td><td class="num">' + esc(number(wip.previous[key], 0)) + ' (' + esc(wip.previous[count]) + ')</td><td class="num">'
+                + esc(number(wip.current[key], 0)) + ' (' + esc(wip.current[count]) + ')</td><td class="num">'
+                + esc(wip.previous[key] == null || wip.current[key] == null ? '—' : signed(wip.current[key] - wip.previous[key])) + '</td></tr>';
+            parts.push('<table><thead><tr><th>Materiale (antal ordrer)</th><th class="num">' + esc(monthName(wip.previousMonth)) + '</th><th class="num">' + esc(monthName(wip.month))
+                + '</th><th class="num">Ændring</th></tr></thead><tbody>' + line('Færdige salgsordrer, ikke faktureret', 'finished', 'finishedOrders', 'total')
+                + line('Til orientering: salgsordrer i arbejde (VIA), ikke medregnet', 'via', 'viaOrders', 'note') + '</tbody></table>');
+            const missing = [...(wip.previous.missing || []), ...(wip.current.missing || [])];
+            if (missing.length) parts.push('<p class="warning">Materialet kunne ikke beregnes for ordre ' + esc(missing.join(', ')) + '.</p>');
+        } else parts.push('<p class="warning">Kan ikke beregnes, fordi en af månederne mangler en lagerliste-lukning.</p>');
+
+        parts.push('<h2>8. Mulige forklaringer på resten</h2><p>Punkterne er ikke beregnet ind i resten. De er de mest sandsynlige årsager, med beløb hvor de kan måles.</p><ol>'
             + explanations(data, info).map(item => '<li>' + item + '</li>').join('') + '</ol>');
-        return parts.join('');
+        // Opt out of assets/js/table-sort.js, which otherwise adds sort arrows and resizers to the printed tables.
+        return parts.join('').replace(/<table(?=[\s>])/g, '<table data-universal-sort="off"');
     }
 
     function print(data) {

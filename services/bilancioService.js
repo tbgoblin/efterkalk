@@ -140,7 +140,7 @@ function buildAssetRows(records, year, operatingGroups) {
     if (new Set(detailedAccounts).size !== detailedAccounts.length) throw new Error('En konto indgår i flere aktivposter.');
     return rows;
 }
-function createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore }) {
+function createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore, getOrderCostBreakdown = null }) {
     async function catalog() {
         const pool = await getConnection();
         const result = await pool.request().query('SELECT AcNo,Nm,AcGr FROM Ac ORDER BY AcNo; SELECT AcGr,AgAcGr FROM AcGr ORDER BY AcGr;');
@@ -312,6 +312,42 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         const source = await varelagerSourceForMonth(monthKey);
         return source ? computeVarelagerTotal(source.payload, plateMode) : null;
     }
+    // Material (no time) in unbilled orders at month end: VIA rows carry their split in the snapshot;
+    // finished-not-invoiced rows only store a total, so their split comes from the order's cost breakdown
+    // (fixed once the order is finished). Orders registered as U/B this month are left out of the current
+    // side, since the U/B row already counts their material.
+    async function workInProgressMaterial(source, exclude) {
+        const categories = source.payload.categories || {};
+        const material = row => Number(row.MaterialCost || 0) + Number(row.StangCost || 0)
+            + Number(row.PurchasedPartCost || 0) + Number(row.UnderleverandorCost || 0);
+        const via = (categories.salgordreVia || []).filter(row => !exclude.has(Number(row.OrdNo)));
+        const finished = (categories.finishedNotInvoiced || []).filter(row => !exclude.has(Number(row.OrdNo)));
+        let finishedMaterial = getOrderCostBreakdown ? 0 : null;
+        const missing = [];
+        for (const row of getOrderCostBreakdown ? finished : []) {
+            let breakdown = null;
+            try { breakdown = await getOrderCostBreakdown(Number(row.OrdNo)); } catch { /* reported as missing */ }
+            if (breakdown && breakdown.costBreakdownAvailable) {
+                finishedMaterial += Number(breakdown.materialCost) + Number(breakdown.stangCost)
+                    + Number(breakdown.purchasedPartCost) + Number(breakdown.underleverandorCost);
+            } else missing.push(Number(row.OrdNo));
+        }
+        return { via: via.reduce((sum, row) => sum + material(row), 0), viaOrders: via.length,
+            finished: missing.length ? null : finishedMaterial, finishedOrders: finished.length, missing };
+    }
+    // delta counts only finished, shipped and not yet invoiced orders; VIA is returned for information.
+    async function wipMaterialDeltaForMonth(monthKey, { excludeOrders = [] } = {}) {
+        const previousMonth = previousMonthKey(monthKey);
+        if (!previousMonth) throw new Error('Ugyldig måned.');
+        const [current, previous] = await Promise.all([varelagerSourceForMonth(monthKey), varelagerSourceForMonth(previousMonth)]);
+        if (!current || !previous) return { month: monthKey, previousMonth, current: null, previous: null, delta: null };
+        const [after, before] = await Promise.all([
+            workInProgressMaterial(current, new Set(excludeOrders.map(Number))),
+            workInProgressMaterial(previous, new Set())
+        ]);
+        const delta = after.finished === null || before.finished === null ? null : after.finished - before.finished;
+        return { month: monthKey, previousMonth, current: after, previous: before, delta, viaDelta: after.via - before.via };
+    }
     // Explains Δ Varelager: per category, plus the items that moved most, plus work-in-progress
     // figures that are not part of Varelager but often explain the remaining difference.
     async function varelagerBreakdownForMonth(monthKey, plateMode = 'fifo') {
@@ -357,7 +393,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         const delta = (currentValue === null || previousValue === null) ? null : currentValue - previousValue;
         return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
     }
-    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, async report(year, period, override, reportId = 'default') {
+    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());

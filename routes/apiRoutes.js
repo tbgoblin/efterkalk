@@ -346,7 +346,10 @@ function createApiRouter({
         getRestPrices: settingsService.getRestPrices
     });
     const bilancioDefinitionStore = createDefinitionStore({ gohData, getProfile: settingsService.getActiveProfile, defaultDefinition: bilancioDefaults(BILANCIO_LINES) });
-    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore: bilancioDefinitionStore });
+    const bilancioService = createBilancioService({ getConnection, sql, lagerlisteService, fs, diverseService, definitionStore: bilancioDefinitionStore,
+        getOrderCostBreakdown: ordNo => getOrComputeOrderCostBreakdown(ordNo) });
+    const wipMaterialDelta = async month => bilancioService.wipMaterialDeltaForMonth(month,
+        { excludeOrders: (await ubOrdersService.list(month)).map(row => Number(row.OrdNo)) });
     const monthlySummaryService=createMonthlySummaryService({ gohData,getProfile:settingsService.getActiveProfile,
         getConnection,sql,getCatalog:bilancioService.catalog });
     lagerlisteService.scheduleMonthlySnapshot({
@@ -3011,12 +3014,13 @@ function createApiRouter({
             const month = String(req.query.month || '');
             if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
             const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
-            const [vareforbrug, purchaseGap, varelager] = await Promise.all([
+            const [vareforbrug, purchaseGap, varelager, wip] = await Promise.all([
                 bilancioService.vareforbrugForMonth(month),
                 bilancioService.purchaseInvoiceGapForMonth(month),
-                bilancioService.varelagerDeltaForMonth(month, plateMode)
+                bilancioService.varelagerDeltaForMonth(month, plateMode),
+                wipMaterialDelta(month)
             ]);
-            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager });
+            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager, wip });
         } catch (err) {
             logEvent('ERROR efterkalk/vareforbrug: ' + err.message);
             res.status(500).json({ ok:false, error:err.message });
@@ -3029,11 +3033,12 @@ function createApiRouter({
             const month = String(req.query.month || '');
             if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
             const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
-            const [varelager, purchaseGap] = await Promise.all([
+            const [varelager, purchaseGap, wip] = await Promise.all([
                 bilancioService.varelagerBreakdownForMonth(month, plateMode),
-                bilancioService.purchaseInvoiceGapForMonth(month)
+                bilancioService.purchaseInvoiceGapForMonth(month),
+                wipMaterialDelta(month)
             ]);
-            res.json({ ok:true, month, varelager, purchaseGap });
+            res.json({ ok:true, month, varelager, purchaseGap, wip });
         } catch (err) {
             logEvent('ERROR efterkalk/reconciliation-details: ' + err.message);
             res.status(500).json({ ok:false, error:err.message });

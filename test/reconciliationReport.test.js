@@ -26,7 +26,8 @@ function data(overrides = {}) {
                     { key: 'plates', previous: 3315305, current: 3033019, delta: -282286, movers: [{ key: '30101200355485', descr: '12 mm S355', previous: 284902, current: 98715, delta: -186187 }] },
                     { key: 'opfolgningvare', previous: 609721, current: 1197764, delta: 588043, movers: [{ key: '1005401474', descr: 'Rail <storage>', previous: 51315, current: 179959, delta: 128644 }] }
                 ],
-                workInProgress: [{ key: 'salgordreVia', previous: 890425, current: 1104007, delta: 213582 }]
+                workInProgress: [{ key: 'salgordreVia', previous: 890425, current: 1104007, delta: 213582 },
+                    { key: 'finishedNotInvoiced', previous: 127188, current: 142398, delta: 15210 }]
             }
         },
         ubOrders: [{ OrdNo: 99, CustomerName: 'Kunde A/S', text: 'Prøve', material: 1234.5 }],
@@ -46,12 +47,13 @@ test('the report shows the result, every booked account and the formulas with ro
     assert.doesNotMatch(html, /Nogle tal var ikke færdigberegnet/);
 });
 
-test('explanations quantify non-material accounts and work in progress', () => {
+test('explanations quantify non-material accounts and finished, not invoiced orders but not VIA', () => {
     const html = report.buildHtml(data());
     // Flagged accounts: -50.000 + 131.100,22 = 81.100,22, so the residual would be 27.062,30 - 81.100,22.
     assert.match(html, /Uden dem ville resten være -54\.037,92 DKK i stedet for 27\.062,30 DKK/);
-    assert.match(html, /Salgsordrer i arbejde \(VIA\) \+213\.582/);
+    assert.match(html, /Deres kost er ændret med \+15\.210/);
     assert.match(html, /Går i samme retning som resten/);
+    assert.doesNotMatch(html, /\+213\.582/);
     assert.doesNotMatch(html, /dage efter månedens udgang/);
 });
 
@@ -69,4 +71,19 @@ test('a late closing, missing values and a missing Varelager closing are called 
     assert.match(html, /mangler en lagerliste-lukning/);
     assert.match(html, /Ingen U\/B-ordrer registreret/);
     assert.match(html, /bør de registreres som U\/B/);
+});
+
+test('measured finished-order material gets its own section, VIA only for information, and the adjusted residual', () => {
+    const measured = data();
+    measured.details.wip = { month: '2026-10', previousMonth: '2026-09', delta: 6418, viaDelta: 181452,
+        previous: { via: 539026, viaOrders: 122, finished: 47320, finishedOrders: 13, missing: [] },
+        current: { via: 720478, viaOrders: 85, finished: 53738, finishedOrders: 12, missing: [] } };
+    let html = report.buildHtml(measured);
+    assert.match(html, /7\. Færdige, afsendte ordrer, der endnu ikke er faktureret/);
+    assert.match(html, /47\.320 \(13\).*53\.738 \(12\).*\+6\.418/);
+    assert.match(html, /Til orientering: salgsordrer i arbejde \(VIA\), ikke medregnet/);
+    assert.match(html, /Medregnet ville resten være 20\.644,30 DKK/);
+    measured.rows.splice(6, 0, { id: 'finished', name: 'Δ Færdige, ikke fakturerede ordrer', type: 'source', source: 'finished_material', display: 'row', unit: 'dkk', value: 6418 });
+    html = report.buildHtml(measured);
+    assert.doesNotMatch(html, /Medregnet ville resten være/);
 });
