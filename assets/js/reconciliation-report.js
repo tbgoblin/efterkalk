@@ -127,7 +127,7 @@
 
         parts.push('<h2>1. Resultat</h2><table><tbody>' + rows.filter(row => row.display !== 'hidden').map(row => row.type === 'heading'
             ? '<tr class="heading"><td colspan="2">' + esc(row.name) + '</td></tr>'
-            : '<tr' + (row === info.residualRow ? ' class="total"' : '') + '><td>' + esc(row.name)
+            : '<tr' + (row === info.residualRow ? ' class="total"' : '') + '><td>' + (data.signs && data.signs[row.id] ? '<span class="sign">' + esc(data.signs[row.id]) + '</span>' : '') + esc(row.name)
                 + (row.type === 'formula' ? '<div class="note">= ' + esc(formulaText(row.formula, names)) + '</div>' : '')
                 + '</td><td class="num">' + esc(valueText(row)) + '</td></tr>').join('') + '</tbody></table>');
         const booked = info.accountRows[0];

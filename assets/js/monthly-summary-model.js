@@ -13,6 +13,37 @@
         via_material:'Ændring i materiale i igangværende ordrer (VIA)',
         purchase_timing:'Fakturaer bogført i en anden måned end varemodtagelsen'
     };
+    const descriptions = {
+        orders:'Antal fakturerede ordrer i måneden, inkl. kreditnotaer. U/B-ordrer tælles ikke med.',
+        invoiced:'Fakturerede beløb i måneden, inkl. kreditnotaer og uden U/B-ordrer.',
+        cost:'Ordrernes samlede kost efter den valgte kostvisning (kun registreret eller inkl. manglende tid fra stykliste).',
+        db:'Faktureret minus kost.',
+        dg:'Dækningsbidrag i procent af faktureret.',
+        credits:'Summen af månedens kreditnotaer (negativt beløb).',
+        credit_count:'Antal kreditnotaer i måneden.',
+        material:'Materiale, stang, indkøbte dele og underleverandør fra efterkalkulationen på månedens fakturerede ordrer: forbrugt antal × kostpris (FIFO). Uden tid.',
+        material_only:'Plademateriale fra efterkalkulationen på månedens fakturerede ordrer.',
+        stang:'Stang fra efterkalkulationen på månedens fakturerede ordrer.',
+        time:'Registreret tid på månedens fakturerede ordrer.',
+        parts:'Indkøbte dele på månedens fakturerede ordrer.',
+        subcontract:'Underleverandørarbejde på månedens fakturerede ordrer.',
+        warehouse_delta:'Lagerværdi ved månedens udgang minus forrige måneds udgang, fra lagerliste-lukningerne: plader, stang, opfølgningsvarer, lagerkomponenter, restplader og diverse. Positiv = lageret er steget. Ordrer i arbejde og færdige ordrer er ikke med.',
+        purchase_gap:'Indkøbsordrelinjer modtaget i måneden, hvor leverandørfakturaen endnu ikke er bogført (som det ser ud i dag). Underleverandørvarer (U…) er udeladt.',
+        ub_orders:'Antal ordrer registreret som U/B (uden beregning) i måneden.',
+        ub_material:'Materiale (uden tid) i månedens U/B-ordrer. Det er købt og bogført, men kommer aldrig med i det beregnede materiale.',
+        finished_material:'Ændring i materiale (uden tid) i ordrer, der er færdige og afsendt, men ikke faktureret: månedens udgang minus forrige måneds. Månedens U/B-ordrer er udeladt.',
+        via_material:'Ændring i materiale (uden tid) i ordrer, der stadig er i produktion (VIA): månedens udgang minus forrige måneds.',
+        purchase_timing:'Bogført på 12070, 12075 og 12078 i måneden for varer modtaget i andre måneder, minus det, der er bogført i andre måneder (±3) for varer modtaget i måneden. Koblet via leverandørens fakturanummer; kreditnotaer følger den faktura, de henviser til. Positiv = der er bogført mere end månedens modtagelser.'
+    };
+    // Tooltip text for a row: what it is and how it is calculated.
+    function describe(row, names = new Map()) {
+        if (row.type === 'source') return descriptions[row.source] || '';
+        if (row.type === 'accounts') return 'Bogførte beløb i måneden på de valgte konti'
+            + (row.accounts && row.accounts.length ? ': ' + row.accounts.map(account => account.AcNo + ' ' + account.Nm).join(', ') : '') + '.';
+        if (row.type === 'formula') return '= ' + String(row.formula || '').replace(/\[([A-Za-z][A-Za-z0-9_-]*)\]/g, (match, id) => names.has(id) ? '[' + names.get(id) + ']' : match);
+        if (row.type === 'manual') return 'Beløb indtastet manuelt for måneden.';
+        return '';
+    }
     function defaults() {
         const source = (id, name, metric, display='card', unit='dkk') => ({ id,name,type:'source',source:metric,display,unit,section:'Vareforbrug vs. materiale' });
         const calculation = (id, name, expression) => ({ id,name,type:'formula',formula:expression,display:'row',unit:'dkk',section:'Vareforbrug vs. materiale' });
@@ -97,5 +128,16 @@
             return { ...row,value,accounts:details.filter(Boolean) };
         });
     }
-    return { sources,defaults,validate,evaluate };
+    // Sign each row carries in the formula that uses it ("[a] - [b] + [c]"). Formulas with other
+    // operators, numbers or parentheses give no signs, since a single +/− would be misleading there.
+    function formulaSigns(rows) {
+        const signs=new Map();
+        for (const row of rows) {
+            const text=String(row.type==='formula' && row.formula || '').trim();
+            if (!text || !/^[+-]?\s*\[[A-Za-z][A-Za-z0-9_-]*\](\s*[+-]\s*\[[A-Za-z][A-Za-z0-9_-]*\])*$/.test(text)) continue;
+            for (const match of text.matchAll(/([+-]?)\s*\[([A-Za-z][A-Za-z0-9_-]*)\]/g)) signs.set(match[2],match[1]==='-'?'−':'+');
+        }
+        return signs;
+    }
+    return { sources,descriptions,describe,defaults,validate,evaluate,formulaSigns };
 }));

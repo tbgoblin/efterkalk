@@ -20,6 +20,10 @@
     }
     function renderReport(data,target) {
         const rows=model.evaluate(data.definition,{...data,month,metrics});
+        const signs=model.formulaSigns(rows);
+        const names=new Map(rows.map(row => [row.id,row.name]));
+        const label=row => { const help=model.describe(row,names); return help ? '<span class="kfs-name" title="'+esc(help)+'">'+esc(row.name)+'</span>' : esc(row.name); };
+        const sign=row => signs.has(row.id) ? '<span class="kfs-sign" title="'+(signs.get(row.id)==='−'?'Trækkes fra':'Lægges til')+'">'+signs.get(row.id)+'</span>' : '';
         const details=row => row.type==='accounts' ? '<details class="kfs-details"><summary>Bogføring · '+row.accounts.length+' konti</summary>'
             + row.accounts.map(account => '<div>'+esc(account.AcNo)+' '+esc(account.Nm)+' <b>'+esc(valueText({...row,value:Number(account.Amount)*row.sign}))+'</b></div>').join('')+'</details>' : '';
         const cards=rows.filter(row => row.display==='card' && row.type!=='heading');
@@ -30,9 +34,9 @@
             sections.get(name).push(row);
         }
         target.innerHTML='<h3>'+esc(data.definition.title)+'</h3><div class="kfs-cards">'
-            +cards.map(row => '<article class="kfs-card"><span>'+esc(row.name)+'</span><strong>'+esc(valueText(row))+'</strong>'+details(row)+'</article>').join('')+'</div><div class="kfs-sections">'
+            +cards.map(row => '<article class="kfs-card"><span>'+label(row)+'</span><strong>'+esc(valueText(row))+'</strong>'+details(row)+'</article>').join('')+'</div><div class="kfs-sections">'
             +[...sections].map(([name,items]) => '<section class="kfs-section"><h4>'+esc(name)+'</h4>'
-                +items.map(row => row.type==='heading' ? '<h5>'+esc(row.name)+'</h5>' : '<div class="kfs-row"><div>'+esc(row.name)+details(row)+'</div><strong class="'+(row.value<0 ? 'kfs-negative' : '')+'">'+esc(valueText(row))+'</strong></div>').join('')+'</section>').join('')+'</div>';
+                +items.map(row => row.type==='heading' ? '<h5>'+esc(row.name)+'</h5>' : '<div class="kfs-row"><div>'+sign(row)+label(row)+details(row)+'</div><strong class="'+(row.value<0 ? 'kfs-negative' : '')+'">'+esc(valueText(row))+'</strong></div>').join('')+'</section>').join('')+'</div>';
     }
     function render() {
         if (!payload || !month) return;
@@ -96,7 +100,8 @@
         nav(); el('kfs-preview').innerHTML='';
         const field=(label,id,content) => '<label>'+label+content+'</label>';
         let extra='';
-        if (row.type==='source') extra=field('Datakilde','source','<select id="kfs-source">'+options(model.sources,row.source)+'</select>');
+        if (row.type==='source') extra=field('Datakilde','source','<select id="kfs-source">'+options(model.sources,row.source)+'</select>')
+            +'<p id="kfs-source-help" class="kfs-muted">'+esc(model.descriptions[row.source] || '')+'</p>';
         if (row.type==='accounts') extra='<div class="kfs-grid">'+field('Fortegn','sign','<select id="kfs-sign">'+options({'1':'Som bogført (+1)','-1':'Vend fortegn (−1)'},String(row.sign))+'</select>')
             +'<label class="kfs-check"><input id="kfs-children" type="checkbox"'+(row.children?' checked':'')+'>Medtag undergrupper</label></div>'
             +'<div id="kfs-selected" class="kfs-chips"></div><div class="kfs-grid"><input id="kfs-search" type="search" placeholder="Søg kontonummer, navn eller gruppe…" aria-label="Søg konti og grupper">'
@@ -173,6 +178,7 @@
             if(event.target.id==='kfs-source'){
                 row.unit=['orders','credit_count','ub_orders'].includes(row.source)?'count':row.source==='dg'?'percent':'dkk';
                 el('kfs-unit').value=row.unit;
+                el('kfs-source-help').textContent=model.descriptions[row.source] || '';
             }
             if(event.target.dataset.kind){const kind=event.target.dataset.kind,value=kind==='groups'?event.target.dataset.value:Number(event.target.dataset.value);row[kind]=row[kind].filter(item=>item!==value);if(event.target.checked)row[kind].push(value);dirty=true;drawCatalog();}
             nav();
@@ -187,7 +193,11 @@
     window.GohMonthlySummary={
         load,
         update(values){metrics=values;render();},
-        current(){return payload && month ? {month,title:payload.definition.title,metrics,rows:model.evaluate(payload.definition,{...payload,month,metrics})} : null;},
+        current(){
+            if (!payload || !month) return null;
+            const rows=model.evaluate(payload.definition,{...payload,month,metrics});
+            return {month,title:payload.definition.title,metrics,rows,signs:Object.fromEntries(model.formulaSigns(rows))};
+        },
         mode(monthly){el('kfSummaryTools').hidden=!monthly;if(!monthly){requestId++;month='';payload=null;el('kfSummaryReport').hidden=true;el('kfSummaryLegacy').classList.remove('kfs-configured');}}
     };
 }());

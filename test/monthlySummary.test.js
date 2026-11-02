@@ -88,3 +88,19 @@ test('profile switches during catalog reads and invalid months stop before savin
     await assert.rejects(()=>f.service.save(config,'admin'),{statusCode:409});
     assert.equal(f.writes(),0);
 });
+
+test('formula signs mark each row as added or subtracted, and skip formulas that are not plain sums',()=>{
+    const signs=model.formulaSigns(model.defaults().rows);
+    assert.equal(signs.get('booked'),'+');assert.equal(signs.get('material'),'−');
+    assert.equal(signs.get('difference'),'+');assert.equal(signs.get('warehouse'),'−');
+    assert.equal(signs.get('gap'),'+');assert.equal(signs.get('timing'),'−');
+    const other=model.formulaSigns([{id:'x',type:'formula',formula:'[a] * 2 - [b]'}]);
+    assert.equal(other.size,0);
+});
+
+test('every data source has a tooltip, and account and formula rows describe themselves',()=>{
+    for(const key of Object.keys(model.sources)) assert.ok(model.descriptions[key],'missing description: '+key);
+    assert.match(model.describe({type:'accounts',accounts:[{AcNo:12070,Nm:'Varekøb'}]}),/12070 Varekøb/);
+    const names=new Map([['difference','Forskel'],['warehouse','Δ Varelager']]);
+    assert.equal(model.describe({type:'formula',formula:'[difference] - [warehouse]'},names),'= [Forskel] - [Δ Varelager]');
+});

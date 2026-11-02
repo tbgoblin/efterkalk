@@ -16,6 +16,8 @@
 .kfs-row>div { flex:1; min-width:0; }
 .kfs-row>strong { text-align:right; white-space:nowrap; }
 .kfs-negative { color:var(--goh-red,#bc4b47); }
+.kfs-sign { display:inline-block; width:1.1em; font-weight:700; color:var(--goh-blue,#456383); }
+.kfs-name[title] { cursor:help; text-decoration:underline dotted; text-decoration-color:rgba(130,150,163,.7); text-underline-offset:3px; }
 .kfs-details { margin-top:5px; font-size:11px; font-weight:400; }
 .kfs-details summary { cursor:pointer; opacity:.8; }
 .kfs-details div { margin-top:5px; overflow-wrap:anywhere; }
@@ -69,6 +71,7 @@
     #kfReconPrint th { font-size:9pt; color:#444; border-bottom:1px solid #999; }
     #kfReconPrint .num { text-align:right; white-space:nowrap; }
     #kfReconPrint .note { font-size:8.5pt; color:#555; }
+    #kfReconPrint .sign { display:inline-block; width:1.1em; font-weight:bold; color:#175a91; }
     #kfReconPrint tr.total td { font-weight:bold; border-top:1px solid #333; }
     #kfReconPrint tr.heading td { font-weight:bold; padding-top:8px; }
     #kfReconPrint tr.flag td { background:#fdf0e6; }
