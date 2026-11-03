@@ -35,3 +35,14 @@ test('a credit note without its own order follows the invoice it refers to', () 
     // Seen from September, the same credit note is booked elsewhere for September's goods.
     assert.equal(classifyPurchaseTiming('2026-09', withNumber, [{ invoNo: '30609690', receiptMonth: '2026-09', value: 80 }]).value, 40);
 });
+
+test('postings this month without any purchase-order link are listed with their supplier', () => {
+    const postings = [
+        { month: '2026-10', amount: 24133, invoNo: '482326', text: 'Indkøbs faktura', supplier: 'Midtjydsk Fornikling' },
+        { month: '2026-09', amount: 500, invoNo: 'Q', text: 'Indkøbs faktura', supplier: 'Andet' },
+        { month: '2026-10', amount: -40, invoNo: 'KN', text: 'KN vedr. fa. 999', supplier: 'Inox' }
+    ];
+    const result = classifyPurchaseTiming('2026-10', postings, []);
+    assert.deepEqual(result.unlinked.map(item => item.invoNo), ['482326', 'KN']);
+    assert.equal(result.unlinkedTotal, 24093);
+});

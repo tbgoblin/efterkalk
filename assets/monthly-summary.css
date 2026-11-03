@@ -17,6 +17,16 @@
 .kfs-row>strong { text-align:right; white-space:nowrap; }
 .kfs-negative { color:var(--goh-red,#bc4b47); }
 .kfs-sign { display:inline-block; width:1.1em; font-weight:700; color:var(--goh-blue,#456383); }
+.kfs-controls { margin:-6px 0 18px; padding:12px 14px; border:1px solid #8296a3; border-radius:10px; font-size:12.5px; }
+.kfs-controls[hidden] { display:none!important; }
+.kfs-controls h2 { font-size:13px; margin:0 0 8px; }
+.kfs-controls table { width:100%; border-collapse:collapse; }
+.kfs-controls td { padding:6px 4px; border-top:1px solid #8296a344; vertical-align:top; }
+.kfs-controls td.ctl-status { width:78px; font-weight:700; white-space:nowrap; }
+.kfs-controls tr.ctl-ok td.ctl-status { color:#2f7d4f; }
+.kfs-controls tr.ctl-warn td.ctl-status { color:var(--goh-red,#bc4b47); }
+.kfs-controls tr.ctl-info td.ctl-status { color:var(--goh-blue,#456383); }
+.kfs-controls ul { margin:4px 0 0; padding-left:18px; opacity:.85; }
 .kfs-name[title] { cursor:help; text-decoration:underline dotted; text-decoration-color:rgba(130,150,163,.7); text-underline-offset:3px; }
 .kfs-details { margin-top:5px; font-size:11px; font-weight:400; }
 .kfs-details summary { cursor:pointer; opacity:.8; }
@@ -60,6 +70,16 @@
     #kfReconPrint table { border:0!important; border-radius:0!important; overflow:visible!important; }
     #kfReconPrint ol { list-style:decimal!important; padding-left:22px!important; margin:4px 0!important; }
     #kfReconPrint ol li { display:list-item!important; }
+    #kfReconPrint section.summary { padding:8px 12px 4px; border:1px solid #c9d6e2; background:#f4f8fb; margin:6px 0 4px; break-inside:avoid; }
+    #kfReconPrint section.summary h2 { margin-top:2px; border:0; padding:0; }
+    #kfReconPrint ul.summary-list { list-style:none!important; margin:4px 0 8px!important; padding:0!important; }
+    #kfReconPrint ul.summary-list li { display:block!important; margin:2px 0; }
+    #kfReconPrint table.controls td.ctl-status { width:62pt; font-weight:bold; white-space:nowrap; }
+    #kfReconPrint table.controls tr.ctl-ok td.ctl-status { color:#2f7d4f; }
+    #kfReconPrint table.controls tr.ctl-warn td.ctl-status { color:#bc4b47; }
+    #kfReconPrint table.controls tr.ctl-info td.ctl-status { color:#175a91; }
+    #kfReconPrint table.controls ul { margin:3px 0 0!important; padding-left:16px!important; list-style:disc!important; font-size:9pt; color:#444; }
+    #kfReconPrint table.controls ul li { display:list-item!important; }
     #kfReconPrint h1 { font-size:16pt; margin:0 0 2px; }
     #kfReconPrint header p { margin:0 0 10px; color:#444; }
     #kfReconPrint h2 { font-size:12pt; margin:16px 0 6px; padding-bottom:3px; border-bottom:1.5px solid #175a91; color:#175a91; break-after:avoid; }

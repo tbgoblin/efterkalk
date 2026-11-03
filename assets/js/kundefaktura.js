@@ -18,6 +18,7 @@ let _kfBackfillRequested = false;
 let _kfVareforbrugGL = null; // Vareforbrug fra bogføringen (kontogruppe 12_Vareforbrug) for den valgte måned
 let _kfPurchaseGap = null; // { missingValue, missingOrderCount, partialValue, partialOrderCount, totalValue }
 let _kfVarelagerDelta = null; // { currentValue, previousValue, currentMonth, previousMonth, delta }
+let _kfControlsData = null; // Server figures for the monthly controls: booked revenue, stock closings, unchanged Diverse rows
 let _kfPurchaseTiming = null; // 12070/12075/12078 booked this month for goods received in other months, minus the reverse: { value, items }
 let _kfWipMaterial = null; // Change in material (no time) in finished, not invoiced orders: { delta, current, previous, viaDelta }
 let _kfPlateMode = 'fifo'; // Prisgrundlag for Pladelager i Δ Varelager — 'fifo' eller 'standard'
@@ -60,6 +61,26 @@ function _refreshKfConfigurableSummary() {
         via_material:_kfWipMaterial?.viaDelta ?? null,
         purchase_timing:_kfPurchaseTiming?.value ?? null
     });
+    _renderKfControls(complete);
+}
+
+function _kfControlInput() {
+    return {
+        month:_kfLoadedMonth, controls:_kfControlsData, timing:_kfPurchaseTiming,
+        invoicedAll:_kfInvoiceRows.reduce((total,row) => total + Number(row.InvoAm || 0),0),
+        multiMonth:_kfInvoiceRows.filter(row => row.InvoiceShare !== undefined && row.InvoiceShare !== null),
+        missingCost:_kfBillableRows().filter(row => !_kfMarginMap[String(row.OrdNo)]?.costBreakdownAvailable).map(row => row.OrdNo)
+    };
+}
+
+function _renderKfControls(complete) {
+    const host = document.getElementById('kfControls');
+    if (!host || !window.GohReconciliationReport) return;
+    host.hidden = !_kfAllCustomers || !_kfLoadedMonth;
+    if (host.hidden) return;
+    host.innerHTML = complete && _kfControlsData
+        ? window.GohReconciliationReport.controlsHtml(window.GohReconciliationReport.buildControls(_kfControlInput()))
+        : '<p class="kfs-muted">Kontroller beregnes, når alle ordrer er hentet…</p>';
 }
 
 // U/B orders are not invoiced, so their consumed material sits in booked Vareforbrug but not in "material".
@@ -109,6 +130,15 @@ function _kfMarginFromResponse(d, revenue) {
     };
 }
 
+// Orders invoiced in several months carry InvoiceShare: the part of their cost and material that belongs to this month.
+function _kfScaleMargin(margin, share) {
+    if (share === null || share === undefined || share === 1) return margin;
+    const scale = value => value === null || value === undefined ? value : value * share;
+    return { ...margin, totalCost:scale(margin.totalCost), styklisteFallbackCost:scale(margin.styklisteFallbackCost),
+        materialCost:scale(margin.materialCost), stangCost:scale(margin.stangCost), timeCost:scale(margin.timeCost),
+        purchasedPartCost:scale(margin.purchasedPartCost), underleverandorCost:scale(margin.underleverandorCost), invoiceShare:share };
+}
+
 async function printKfReconciliation() {
     const summary = window.GohMonthlySummary && window.GohMonthlySummary.current();
     if (!summary || !_kfLoadedMonth || summary.month !== _kfLoadedMonth) { kfSetStatus('Hent en måned først.'); return; }
@@ -119,7 +149,8 @@ async function printKfReconciliation() {
         const details = await response.json();
         if (!response.ok || !details.ok) throw new Error(details.error || 'Kunne ikke hente detaljerne.');
         const ubOrders = _kfUbRows.map(row => ({ ...row, material:_kfUbOrderMaterial(row.OrdNo) }));
-        window.GohReconciliationReport.print({ ...summary, plateMode:_kfPlateMode, details, ubOrders });
+        const controlList = window.GohReconciliationReport.buildControls(_kfControlInput());
+        window.GohReconciliationReport.print({ ...summary, plateMode:_kfPlateMode, details, ubOrders, controlList });
     } catch (error) {
         kfSetStatus('Fejl: ' + error.message);
     } finally {
@@ -541,7 +572,8 @@ async function _fetchKfVareforbrug(month, seq = _kfLoadSeq) {
         _kfVarelagerDelta = (d.ok && d.varelager) ? d.varelager : null;
         _kfWipMaterial = (d.ok && d.wip) ? d.wip : null;
         _kfPurchaseTiming = (d.ok && d.timing) ? d.timing : null;
-    } catch { if (seq !== _kfLoadSeq || request!==_kfVareforbrugRequest) return; _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; _kfWipMaterial = null; _kfPurchaseTiming = null; }
+        _kfControlsData = (d.ok && d.controls) ? d.controls : null;
+    } catch { if (seq !== _kfLoadSeq || request!==_kfVareforbrugRequest) return; _kfVareforbrugGL = null; _kfPurchaseGap = null; _kfVarelagerDelta = null; _kfWipMaterial = null; _kfPurchaseTiming = null; _kfControlsData = null; }
     _updateKfKpis();
 }
 
@@ -563,6 +595,7 @@ function _resetKfKpis() {
     _kfVarelagerDelta = null;
     _kfWipMaterial = null;
     _kfPurchaseTiming = null;
+    _kfControlsData = null;
     _kfVareforbrugMonth = null;
     const tile = document.getElementById('kfKpiVareforbrugTile');
     if (tile) tile.style.display = 'none';
@@ -1191,7 +1224,8 @@ async function _startKfMarginFetch(forceRefresh = false, seq = _kfLoadSeq) {
             if (isStale()) return;
             try {
                 const cached = _kfMarginMap[String(row.OrdNo)];
-                if (!forceRefresh && cached && cached.costBreakdownAvailable) {
+                const sameShare = row.InvoiceShare === undefined || row.InvoiceShare === null || cached?.invoiceShare === row.InvoiceShare;
+                if (!forceRefresh && cached && cached.costBreakdownAvailable && sameShare) {
                     _updateKfRowMargin(row.OrdNo, cached);
                     return;
                 }
@@ -1200,7 +1234,7 @@ async function _startKfMarginFetch(forceRefresh = false, seq = _kfLoadSeq) {
                 if (r.ok) {
                     const d = await r.json();
                     if (d && d.totalCost !== null && d.totalCost !== undefined) {
-                        marginData = _kfMarginFromResponse(d, row.InvoAm);
+                        marginData = _kfScaleMargin(_kfMarginFromResponse(d, row.InvoAm), row.InvoiceShare);
                     }
                 }
                 if (marginData && !isStale()) {

@@ -261,13 +261,14 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
             .input('from', sql.Int, key(shiftMonthKey(monthKey, -3)))
             .input('to', sql.Int, key(shiftMonthKey(monthKey, 3)))
             .input('accounts', sql.NVarChar(sql.MAX), PURCHASE_TIMING_ACCOUNTS.join(','))
-            .query(`SELECT AcYr, AcPr, AcAm, LTRIM(RTRIM(ISNULL(InvoNo, ''))) AS InvoNo, Txt FROM AcTr
-                    WHERE AcNo IN (SELECT TRY_CONVERT(int, value) FROM STRING_SPLIT(@accounts, ','))
-                      AND AcYr * 100 + AcPr BETWEEN @from AND @to`)).recordset || [];
+            .query(`SELECT T.AcYr, T.AcPr, T.AcAm, LTRIM(RTRIM(ISNULL(T.InvoNo, ''))) AS InvoNo, T.Txt, S.Nm AS Supplier FROM AcTr T
+                    LEFT JOIN Actor S WITH(NOLOCK) ON T.Sup <> 0 AND S.SupNo = T.Sup
+                    WHERE T.AcNo IN (SELECT TRY_CONVERT(int, value) FROM STRING_SPLIT(@accounts, ','))
+                      AND T.AcYr * 100 + T.AcPr BETWEEN @from AND @to`)).recordset || [];
         const postings = postingRows.map(row => {
             const calendar = fiscalPeriodToCalendar(Number(row.AcYr), Number(row.AcPr));
             return { month: calendar.calendarYear + '-' + String(calendar.calendarMonth).padStart(2, '0'),
-                amount: Number(row.AcAm || 0), invoNo: String(row.InvoNo || ''), text: String(row.Txt || '').trim() };
+                amount: Number(row.AcAm || 0), invoNo: String(row.InvoNo || ''), text: String(row.Txt || '').trim(), supplier: String(row.Supplier || '').trim() };
         });
         const invoiceNos = [...new Set(postings.flatMap(posting => [posting.invoNo, referencedInvoiceNo(posting.text)]).filter(Boolean))];
         // Supplier invoice numbers are not unique over the years, so only recent receipts can match.
@@ -285,7 +286,42 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
                 receiptMonth: /^\d{8}$/.test(date) ? date.slice(0, 4) + '-' + date.slice(4, 6) : null };
         });
         const result = classifyPurchaseTiming(monthKey, postings, lines);
-        return { ...result, items: result.items.slice(0, 15) };
+        return { ...result, items: result.items.slice(0, 15), unlinked: result.unlinked.slice(0, 15), unlinkedCount: result.unlinked.length };
+    }
+    // Figures for the monthly controls that only the server can see: revenue booked by invoice date,
+    // when the stock closings were saved, and Diverse rows carried over unchanged from the month before.
+    async function controlsDataForMonth(monthKey) {
+        const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthKey || ''));
+        if (!match) throw new Error('Ugyldig måned.');
+        const year = Number(match[1]), month = Number(match[2]);
+        const fromInt = year * 10000 + month * 100 + 1;
+        const toInt = year * 10000 + month * 100 + new Date(Date.UTC(year, month, 0)).getUTCDate();
+        const pool = await getConnection();
+        // Only revenue carrying an invoice number is comparable with the invoices; other revenue postings
+        // (e.g. 11050 "Regulering igangværende arbejde") are returned separately for information.
+        const revenueRows = (await pool.request().input('from', sql.Int, fromInt).input('to', sql.Int, toInt)
+            .query(`SELECT T.AcNo, A.Nm, T.VoNo, T.Txt, -CONVERT(float, T.AcAm) AS Revenue,
+                        CASE WHEN LTRIM(RTRIM(ISNULL(T.InvoNo, ''))) = '' THEN 0 ELSE 1 END AS HasInvoice
+                    FROM AcTr T WITH(NOLOCK)
+                    INNER JOIN Ac A WITH(NOLOCK) ON A.AcNo = T.AcNo AND A.AcGr = '10_Omsætning'
+                    WHERE T.VoDt BETWEEN @from AND @to`)).recordset || [];
+        const revenueBooked = revenueRows.filter(row => row.HasInvoice).reduce((sum, row) => sum + Number(row.Revenue || 0), 0);
+        const otherRevenue = revenueRows.filter(row => !row.HasInvoice && Math.abs(Number(row.Revenue || 0)) >= 0.005)
+            .map(row => ({ account: Number(row.AcNo), name: String(row.Nm || '').trim(), voucher: row.VoNo, text: String(row.Txt || '').trim(), amount: Number(row.Revenue) }));
+        const previousMonth = previousMonthKey(monthKey);
+        const [current, previous] = await Promise.all([varelagerSourceForMonth(monthKey), varelagerSourceForMonth(previousMonth)]);
+        const meta = (source, key) => source
+            ? { month: key, live: source.live, createdAt: source.createdAt, valuationMode: source.valuationMode }
+            : { month: key, missing: true };
+        const diverseRows = source => (source && source.payload.categories && source.payload.categories.diverse) || [];
+        const keyOf = row => String(row.category || '') + '|' + String(row.Descr || row.ProdNo || '');
+        const before = new Map(diverseRows(previous).map(row => [keyOf(row), Number(row.Value || 0)]));
+        const unchanged = current && previous ? diverseRows(current)
+            .filter(row => Number(row.Value || 0) >= 5000 && before.has(keyOf(row)) && Math.abs(before.get(keyOf(row)) - Number(row.Value || 0)) < 0.5)
+            .map(row => ({ category: String(row.category || ''), descr: String(row.Descr || ''), value: Number(row.Value || 0) }))
+            .sort((a, b) => b.value - a.value) : [];
+        return { month: monthKey, revenueBooked, otherRevenue,
+            snapshots: { current: meta(current, monthKey), previous: meta(previous, previousMonth) }, diverseUnchanged: unchanged };
     }
     function previousMonthKey(monthKey) {
         const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthKey || ''));
@@ -432,7 +468,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         const delta = (currentValue === null || previousValue === null) ? null : currentValue - previousValue;
         return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
     }
-    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, purchaseTimingForMonth, async report(year, period, override, reportId = 'default') {
+    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, purchaseTimingForMonth, controlsDataForMonth, async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());
@@ -505,15 +541,20 @@ function classifyPurchaseTiming(monthKey, postings, lines) {
         list.push(line);
         byInvoice.set(line.invoNo, list);
     }
-    const result = { month: monthKey, bookedForOtherMonths: 0, bookedElsewhereForThisMonth: 0, creditNotes: 0, items: [] };
+    const result = { month: monthKey, bookedForOtherMonths: 0, bookedElsewhereForThisMonth: 0, creditNotes: 0, items: [], unlinked: [] };
     for (const posting of postings) {
         let invoNo = posting.invoNo, viaCreditNote = false;
-        if (!byInvoice.has(invoNo) && posting.amount < 0 && referencedInvoiceNo(posting.text)) {
+        if (!byInvoice.has(invoNo) && posting.amount < 0 && referencedInvoiceNo(posting.text) && byInvoice.has(referencedInvoiceNo(posting.text))) {
             invoNo = referencedInvoiceNo(posting.text);
             viaCreditNote = true;
         }
         const invoiceLines = byInvoice.get(invoNo);
-        if (!invoiceLines) continue;
+        if (!invoiceLines) {
+            if (posting.month === monthKey && Math.abs(posting.amount) >= 0.005) {
+                result.unlinked.push({ invoNo: posting.invoNo, supplier: posting.supplier || '', text: posting.text, amount: posting.amount });
+            }
+            continue;
+        }
         const weight = invoiceLines.reduce((sum, line) => sum + Math.abs(line.value), 0);
         let outside = 0, inside = 0;
         for (const line of invoiceLines) {
@@ -530,6 +571,8 @@ function classifyPurchaseTiming(monthKey, postings, lines) {
     }
     result.value = result.bookedForOtherMonths - result.bookedElsewhereForThisMonth;
     result.items.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    result.unlinked.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    result.unlinkedTotal = result.unlinked.reduce((sum, item) => sum + item.amount, 0);
     return result;
 }
 

@@ -103,3 +103,45 @@ test('measured invoice timing gets its own section with the invoices behind it',
     html = report.buildHtml(withTiming);
     assert.doesNotMatch(html, /Målt til/);
 });
+
+test('the PDF file name is the report month', () => {
+    assert.equal(report.fileTitle('2026-10'), 'Report oktober 2026');
+    assert.equal(report.fileTitle('2027-01'), 'Report januar 2027');
+});
+
+test('the summary states revenue, cost, the difference, each explaining row with its effect and what the residual sign means', () => {
+    const model = require('../assets/js/monthly-summary-model');
+    const summary = data();
+    summary.metrics = { ...summary.metrics, invoiced: 5232623.05, cost: 3488135.78 };
+    summary.rows.splice(6, 0, { id: 'timing', name: 'Faktureret i anden måned', type: 'source', source: 'purchase_timing', display: 'row', unit: 'dkk', value: -49923.37 });
+    summary.rows[7] = { ...summary.rows[7], formula: '[difference] - [warehouse] + [gap] - [timing]', value: 77000 };
+    summary.signs = Object.fromEntries(model.formulaSigns(summary.rows));
+    summary.details.timing = { value: -49923.37, items: [{ invoNo: '30615703', referencedInvoNo: '30609690', bookedMonth: '2026-10', receiptMonths: ['2026-09'], text: 'KN, Inox, vedr. fa. 30609690', amount: -32341 }] };
+    const text = report.buildHtml(summary).replace(/<[^>]+>/g, '');
+    assert.match(text, /faktureret 5,2 mio\. kr\. \(317 ordrer\) med en kost på 3,5 mio\. kr\., svarende til et dækningsbidrag på 1,7 mio\. kr\. \(ca\. 33 %\)/);
+    assert.match(text, /bogført 342\.800 kr\. mere, end der er brugt/);
+    assert.match(text, /− 335\.914 kr\. Lageret er steget/);
+    assert.match(text, /\+ 49\.923 kr\. Der er bogført mindre end månedens varemodtagelser, især en kreditnota på 32\.341 kr\. for varer modtaget i september 2026 \(KN, Inox/);
+    assert.match(text, /Resten er positiv\. Det betyder, at der er bogført mere/);
+    assert.match(text, /En negativ rest ville betyde/);
+});
+
+test('controls flag revenue gaps, postings without purchase order, missing costs, late closings and unchanged Diverse rows', () => {
+    const controls = { revenueBooked: 5325775.65,
+        snapshots: { current: { month: '2026-10', createdAt: '2026-11-01T19:51:31Z' }, previous: { month: '2026-09', createdAt: '2026-10-01T03:55:35Z' } },
+        diverseUnchanged: [{ category: 'Paller', descr: 'Paller 1/1', value: 164437.6 }] };
+    const timing = { unlinkedCount: 1, unlinkedTotal: 24133, unlinked: [{ supplier: 'Midtjydsk Fornikling', invoNo: '482326', amount: 24133, text: 'Indkøbs faktura' }] };
+    const list = report.buildControls({ month: '2026-10', invoicedAll: 5325775.65, controls, timing, missingCost: [],
+        multiMonth: [{ OrdNo: 414764, InvoAm: 11326.4, InvoAmTotal: 9326.4, InvoiceShare: 1 }] });
+    const status = Object.fromEntries(list.map(item => [item.key, item.status]));
+    assert.deepEqual(status, { revenue: 'ok', unlinked: 'warn', orders: 'info', snapshot: 'ok', diverse: 'warn' });
+    assert.match(list.find(item => item.key === 'unlinked').items[0], /Midtjydsk Fornikling · faktura 482326 · \+24\.133/);
+    const off = report.buildControls({ month: '2026-10', invoicedAll: 5232623.05, controls: { ...controls,
+        snapshots: { current: { month: '2026-10', createdAt: '2026-11-06T10:00:00Z' }, previous: { month: '2026-09', missing: true } } }, timing, missingCost: [417001] });
+    const byKey = Object.fromEntries(off.map(item => [item.key, item]));
+    assert.equal(byKey.revenue.status, 'warn');
+    assert.match(byKey.revenue.text, /forskel \+93\.152,60/);
+    assert.equal(byKey.orders.status, 'warn');
+    assert.match(byKey.snapshot.text, /lukningen for oktober 2026 er gemt 5 dage efter månedens udgang; mangler lagerliste-lukning for september 2026/);
+    assert.match(report.controlsHtml(list), /<td class="ctl-status">Afvigelse<\/td>/);
+});

@@ -35,6 +35,7 @@ const { createBomService } = require('../services/bomService');
 const { createBilancioService, validatePeriod: validateBilancioPeriod, LINES: BILANCIO_LINES } = require('../services/bilancioService');
 const { defaults: bilancioDefaults, createDefinitionStore } = require('../services/bilancioDefinition');
 const { openPdfTarget } = require('../services/pdfOpenService');
+const { periodRevenueForOrders } = require('../services/invoicePeriodService');
 
 function createApiRouter({
     getConnection,
@@ -2856,11 +2857,14 @@ function createApiRouter({
             }
 
             const pool = await getConnection();
+            // Orders invoiced in several periods: revenue and cost share of this period from the revenue postings.
+            const periodRevenue = await periodRevenueForOrders({ pool, sql, fromInt, toInt, custNo: allCustomers ? null : custNo });
             const result = await pool.request()
                 .input('custNo',   sql.Int, allCustomers ? null : custNo)
                 .input('fromDate', sql.Int, fromInt)
                 .input('toDate',   sql.Int, toInt)
                 .input('includeAllAmounts', sql.Bit, includeAllAmounts ? 1 : 0)
+                .input('periodOrders', sql.NVarChar(sql.MAX), [...periodRevenue.keys()].join(','))
                 .query(`
                     SELECT
                         O.OrdNo,
@@ -2883,8 +2887,8 @@ function createApiRouter({
                                             AND O.TrTp = 1
                       AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
                       AND (@includeAllAmounts = 1 OR O.InvoAm <> 0)
-                      AND O.LstInvDt >= @fromDate
-                      AND O.LstInvDt <= @toDate
+                      AND ((O.LstInvDt >= @fromDate AND O.LstInvDt <= @toDate)
+                        OR O.OrdNo IN (SELECT TRY_CONVERT(int, value) FROM STRING_SPLIT(@periodOrders, ',') WHERE value <> ''))
                     ORDER BY O.LstInvDt DESC, O.OrdNo DESC
                 `);
             const rows = (result.recordset || []).map(r => ({
@@ -2892,7 +2896,8 @@ function createApiRouter({
                 OrdDt:        r.OrdDt,
                 CustNo:       r.CustNo,
                 LstInvDt:     r.LstInvDt,
-                InvoAm:       Number(r.InvoAm || 0),
+                InvoAm:       periodRevenue.has(Number(r.OrdNo)) ? periodRevenue.get(Number(r.OrdNo)).revenueInPeriod : Number(r.InvoAm || 0),
+                ...(periodRevenue.has(Number(r.OrdNo)) ? { InvoAmTotal: Number(r.InvoAm || 0), InvoiceShare: periodRevenue.get(Number(r.OrdNo)).share } : {}),
                 Gr4:          r.Gr4,
                 InvoNo:       r.InvoNo,
                 CustomerName: r.CustomerName,
@@ -3014,14 +3019,15 @@ function createApiRouter({
             const month = String(req.query.month || '');
             if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ ok:false, error:'Ugyldig måned' });
             const plateMode = String(req.query.plateMode || '') === 'standard' ? 'standard' : 'fifo';
-            const [vareforbrug, purchaseGap, varelager, wip, timing] = await Promise.all([
+            const [vareforbrug, purchaseGap, varelager, wip, timing, controls] = await Promise.all([
                 bilancioService.vareforbrugForMonth(month),
                 bilancioService.purchaseInvoiceGapForMonth(month),
                 bilancioService.varelagerDeltaForMonth(month, plateMode),
                 wipMaterialDelta(month),
-                bilancioService.purchaseTimingForMonth(month)
+                bilancioService.purchaseTimingForMonth(month),
+                bilancioService.controlsDataForMonth(month)
             ]);
-            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager, wip, timing });
+            res.json({ ok:true, month, vareforbrug, purchaseGap, varelager, wip, timing, controls });
         } catch (err) {
             logEvent('ERROR efterkalk/vareforbrug: ' + err.message);
             res.status(500).json({ ok:false, error:err.message });

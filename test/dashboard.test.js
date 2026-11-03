@@ -120,11 +120,13 @@ test('fiscal invoice query restricts every scope and amount mode to sales transa
         input(name, _type, value) { parameters[name] = value; return this; },
         async query(text) { queryText = text; return { recordset: [] }; }
     };
-    new Function('router', 'getConnection', 'sql', 'logEvent', source.slice(start, end))(
+    const periodCalls = [];
+    new Function('router', 'getConnection', 'sql', 'logEvent', 'periodRevenueForOrders', source.slice(start, end))(
         { get(_route, callback) { handler = callback; } },
         async () => ({ request: () => request }),
-        { Int: 'Int', Bit: 'Bit' },
-        () => {}
+        { Int: 'Int', Bit: 'Bit', NVarChar: () => 'NVarChar', MAX: 'MAX' },
+        () => {},
+        async options => { periodCalls.push(options); return new Map(); }
     );
     for (const scope of [{ scope: 'all' }, { custno: '123' }]) {
         for (const includeAllAmounts of ['0', '1']) {
@@ -135,7 +137,9 @@ test('fiscal invoice query restricts every scope and amount mode to sales transa
             assert.equal(payload.ok, true);
             assert.match(queryText, /WHERE\s+\(@custNo IS NULL OR O\.CustNo = @custNo\)\s+AND O\.TrTp = 1\s+AND O\.InvoNo/);
             assert.match(queryText, /AND \(@includeAllAmounts = 1 OR O\.InvoAm <> 0\)/);
-            assert.match(queryText, /AND O\.LstInvDt >= @fromDate\s+AND O\.LstInvDt <= @toDate/);
+            assert.match(queryText, /AND \(\(O\.LstInvDt >= @fromDate AND O\.LstInvDt <= @toDate\)\s+OR O\.OrdNo IN \(SELECT TRY_CONVERT\(int, value\) FROM STRING_SPLIT\(@periodOrders, ','\)/);
+            assert.equal(parameters.periodOrders, '');
+            assert.deepEqual([periodCalls.at(-1).fromInt, periodCalls.at(-1).toInt, periodCalls.at(-1).custNo], [20260701, 20260915, scope.scope === 'all' ? null : 123]);
             assert.doesNotMatch(queryText, /SELECT\s+TOP\s+\d+\s+O\.OrdNo/i);
             assert.equal(parameters.includeAllAmounts, Number(includeAllAmounts));
             assert.equal(parameters.fromDate, 20260701);

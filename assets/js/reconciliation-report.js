@@ -110,6 +110,128 @@
         return items;
     }
 
+    const millions = (value, decimals) => new Intl.NumberFormat('da-DK', { minimumFractionDigits:decimals, maximumFractionDigits:decimals }).format(Number(value) / 1e6) + ' mio. kr.';
+    const kroner = value => number(Math.abs(value), 0) + ' kr.';
+
+    // Largest invoice pushing the timing in the same direction as its total.
+    function timingDetail(timing, value) {
+        const top = (timing && timing.items || []).find(item => Math.sign(item.amount) === Math.sign(value)) || null;
+        if (!top) return '';
+        const received = top.receiptMonths.map(monthName).join(' og ');
+        const text = top.text && !/^indkøbs faktura$/i.test(top.text) ? ' (' + top.text + ')' : '';
+        return ', især ' + (top.referencedInvoNo ? 'en kreditnota' : 'faktura ' + top.invoNo) + ' på ' + kroner(top.amount)
+            + ' for varer modtaget i ' + received + text;
+    }
+
+    // One sentence per explaining row; wording follows the sign of the row's value.
+    function explainRow(row, details) {
+        const v = row.value;
+        switch (row.source) {
+            case 'warehouse_delta': return v >= 0 ? 'Lageret er steget: en del af det købte ligger stadig på lager.'
+                : 'Lageret er faldet: der er brugt materiale fra lageret, som er købt i tidligere måneder.';
+            case 'purchase_gap': return 'Varer er modtaget, men leverandørfakturaen er endnu ikke bogført.';
+            case 'finished_material': return v >= 0 ? 'Mere materiale sidder i færdige, afsendte ordrer, der endnu ikke er faktureret, end ved månedens start.'
+                : 'Færdige ordrer fra tidligere måneder er faktureret i måneden, så deres materiale er nu med i det beregnede.';
+            case 'via_material': return v >= 0 ? 'Mere materiale sidder i ordrer i produktion end ved månedens start.'
+                : 'Ordrer i produktion er blevet færdige, så mindre materiale sidder i igangværende ordrer.';
+            case 'ub_material': return 'Materiale er brugt på ordrer leveret uden faktura (U/B).';
+            case 'purchase_timing': return (v >= 0 ? 'Der er bogført mere end månedens varemodtagelser' : 'Der er bogført mindre end månedens varemodtagelser')
+                + timingDetail(details.timing, v) + '.';
+            default: return row.name + '.';
+        }
+    }
+
+    function buildSummary(data, info) {
+        const rows = data.rows || [];
+        const metrics = data.metrics || {};
+        const signs = data.signs || {};
+        const booked = info.accountRows[0];
+        const material = info.bySource('material');
+        const residual = info.residualRow;
+        if (!booked || !material || !residual || [booked.value, material.value, residual.value, metrics.invoiced, metrics.cost].some(v => v == null)) return '';
+        const difference = booked.value - material.value;
+        const start = rows.findIndex(row => row.type === 'formula');
+        const explaining = rows.slice(start + 1, rows.indexOf(residual))
+            .filter(row => row.type !== 'heading' && row.type !== 'formula' && signs[row.id] && row.value != null && Math.abs(row.value) >= 0.5);
+        const db = metrics.invoiced - metrics.cost;
+        const parts = [];
+        parts.push('<p>I ' + esc(monthName(data.month)) + ' er der faktureret <b>' + esc(millions(metrics.invoiced, 1)) + '</b>'
+            + (metrics.orders != null ? ' (' + esc(number(metrics.orders, 0)) + ' ordrer)' : '') + ' med en kost på <b>' + esc(millions(metrics.cost, 1))
+            + '</b>, svarende til et dækningsbidrag på <b>' + esc(millions(db, 1)) + ' (ca. ' + esc(number(metrics.invoiced ? db / metrics.invoiced * 100 : 0, 0)) + ' %)</b>.</p>');
+        parts.push('<p>Materialet på de fakturerede ordrer udgør <b>' + esc(millions(material.value, 2)) + '</b>, mens der i bogføringen er <b>'
+            + esc(millions(booked.value, 2)) + '</b> på vareforbrugskontiene. Der er altså bogført <b>' + esc(kroner(difference)) + ' '
+            + (difference >= 0 ? 'mere' : 'mindre') + '</b>, end der er brugt på ordrerne.' + (explaining.length ? ' Forskellen forklares således:' : '') + '</p>');
+        if (explaining.length) {
+            parts.push('<ul class="summary-list">' + explaining.map(row => {
+                const effect = (signs[row.id] === '−' ? -1 : 1) * row.value;
+                return '<li><b>' + (effect < 0 ? '−' : '+') + ' ' + esc(kroner(effect)) + '</b> ' + esc(explainRow(row, data.details || {})) + '</li>';
+            }).join('') + '</ul>');
+        }
+        const share = booked.value ? Math.abs(residual.value) / Math.abs(booked.value) * 100 : null;
+        const positive = 'der er bogført mere, end der er brugt eller ligger på lager, fx spild eller køb, der ikke er registreret på ordrerne';
+        const negative = 'ordrerne bærer mere materiale, end der er bogført, fx fordi varer er forbrugt til en højere kostpris end den endelige fakturapris';
+        const meaning = residual.value < 0
+            ? 'Resten er negativ. Det betyder, at ' + negative + '. En positiv rest ville betyde, at ' + positive + '.'
+            : 'Resten er positiv. Det betyder, at ' + positive + '. En negativ rest ville betyde, at ' + negative + '.';
+        parts.push('<p>Tilbage er en uforklaret rest på <b>' + esc(number(residual.value, 0)) + ' kr.</b>'
+            + (share != null ? ', svarende til <b>' + esc(number(share, 1)) + ' %</b> af det bogførte vareforbrug' : '') + '. ' + esc(meaning) + '</p>');
+        return '<section class="summary"><h2>Sammenfatning</h2>' + parts.join('') + '</section>';
+    }
+
+    // Monthly controls. input: { month, invoicedAll (incl. U/B), controls (server), timing, multiMonth, missingCost }
+    function buildControls(input) {
+        const controls = input.controls;
+        if (!controls) return [];
+        const list = [];
+        const revenueDiff = controls.revenueBooked - Number(input.invoicedAll || 0);
+        const other = controls.otherRevenue || [];
+        const otherItems = other.map(item => item.account + ' ' + item.name + ' · ' + signed(item.amount, 2) + (item.text ? ' · ' + item.text : '') + ' (ikke en faktura, indgår ikke)');
+        list.push(Math.abs(revenueDiff) < 1
+            ? { key:'revenue', title:'Faktureret = bogført omsætning', status:'ok', text:'Fakturaerne i Månedens DB (inkl. U/B) svarer til den bogførte omsætning på fakturaer: ' + dkk(controls.revenueBooked) + '.', items: otherItems }
+            : { key:'revenue', title:'Faktureret = bogført omsætning', status:'warn', text:'Bogført omsætning på fakturaer ' + dkk(controls.revenueBooked) + ', fakturaer i Månedens DB ' + dkk(input.invoicedAll)
+                + ' (forskel ' + signed(revenueDiff, 2) + '). En ordre mangler eller er talt med forkert beløb.', items: otherItems });
+        const timing = input.timing;
+        if (timing && Array.isArray(timing.unlinked)) {
+            const count = timing.unlinkedCount ?? timing.unlinked.length;
+            list.push(count ? { key:'unlinked', title:'Bogføringer uden indkøbsordre', status:'warn',
+                text:count + ' bogføringer på 12070, 12075 og 12078 uden tilknyttet indkøbsordre, i alt ' + dkk(timing.unlinkedTotal) + '. Kontrollér om de er materiale til ordrerne eller hører på en anden konto.',
+                items: timing.unlinked.slice(0, 8).map(item => (item.supplier || 'Ukendt leverandør') + ' · faktura ' + item.invoNo + ' · ' + signed(item.amount) + (item.text && !/^indkøbs faktura$/i.test(item.text) ? ' · ' + item.text : '')) }
+                : { key:'unlinked', title:'Bogføringer uden indkøbsordre', status:'ok', text:'Alle bogføringer på 12070, 12075 og 12078 er koblet til en indkøbsordre.' });
+        }
+        const missing = input.missingCost || [], multi = input.multiMonth || [];
+        list.push(missing.length
+            ? { key:'orders', title:'Ordrer med kostdata', status:'warn', text:missing.length + ' fakturerede ordrer mangler kostdata, så det beregnede materiale er ufuldstændigt: ' + missing.slice(0, 12).join(', ') + '.' }
+            : { key:'orders', title:'Ordrer med kostdata', status: multi.length ? 'info' : 'ok',
+                text:'Alle fakturerede ordrer har kostdata.' + (multi.length ? ' ' + multi.length + ' ordrer er faktureret over flere måneder; kun månedens andel er talt med.' : ''),
+                items: multi.slice(0, 8).map(order => 'Ordre ' + order.OrdNo + ': ' + signed(order.InvoAm, 2) + ' af ' + number(order.InvoAmTotal, 2) + ' i måneden, kostandel ' + number(order.InvoiceShare * 100, 0) + ' %') });
+        const snapshot = meta => {
+            if (!meta || meta.missing) return 'mangler lagerliste-lukning for ' + monthName(meta && meta.month);
+            if (meta.live) return null;
+            const days = daysAfterMonthEnd(meta);
+            return days != null && days > 1.5 ? 'lukningen for ' + monthName(meta.month) + ' er gemt ' + number(Math.floor(days), 0) + ' dage efter månedens udgang' : null;
+        };
+        const problems = [snapshot(controls.snapshots.current), snapshot(controls.snapshots.previous)].filter(Boolean);
+        list.push(problems.length
+            ? { key:'snapshot', title:'Lagerliste-lukninger', status:'warn', text:problems.join('; ') + '.' }
+            : { key:'snapshot', title:'Lagerliste-lukninger', status: controls.snapshots.current.live ? 'info' : 'ok',
+                text: controls.snapshots.current.live ? 'Måneden er ikke lukket; Varelager er den levende beregning.'
+                    : 'Begge lukninger er gemt ved månedsskiftet (' + dateTime(controls.snapshots.previous.createdAt) + ' og ' + dateTime(controls.snapshots.current.createdAt) + ').' });
+        const unchanged = controls.diverseUnchanged || [];
+        list.push(unchanged.length
+            ? { key:'diverse', title:'Diverse optalt', status:'warn', text:unchanged.length + ' rækker i Diverse (over 5.000 kr.) har nøjagtig samme værdi som sidste måned. Kontrollér om de er optalt.',
+                items: unchanged.slice(0, 8).map(row => row.descr + ' · ' + number(row.value, 0) + ' kr.') }
+            : { key:'diverse', title:'Diverse optalt', status:'ok', text:'Alle større rækker i Diverse er ændret siden sidste måned.' });
+        return list;
+    }
+
+    function controlsHtml(list) {
+        if (!list.length) return '';
+        const label = { ok:'OK', warn:'Afvigelse', info:'Info' };
+        return '<h2>Kontroller</h2><table class="controls" data-universal-sort="off"><tbody>' + list.map(item => '<tr class="ctl-' + item.status + '"><td class="ctl-status">' + label[item.status]
+            + '</td><td><b>' + esc(item.title) + '.</b> ' + esc(item.text)
+            + (item.items && item.items.length ? '<ul>' + item.items.map(text => '<li>' + esc(text) + '</li>').join('') + '</ul>' : '') + '</td></tr>').join('') + '</tbody></table>';
+    }
+
     function buildHtml(data) {
         const info = analyse(data);
         const details = data.details || {};
@@ -124,6 +246,8 @@
         parts.push('<header><h1>Afstemning af Vareforbrug · ' + esc(monthName(data.month)) + '</h1>'
             + '<p>Udskrevet ' + esc(dateTime(new Date().toISOString())) + ' · pladelager vurderet til ' + esc(plateLabel) + '</p></header>');
         if (missing) parts.push('<p class="warning">Nogle tal var ikke færdigberegnet, da rapporten blev lavet (vist som —). Vent til alle ordrer er beregnet, og udskriv igen.</p>');
+        parts.push(buildSummary(data, info));
+        parts.push(controlsHtml(data.controlList || []));
 
         parts.push('<h2>1. Resultat</h2><table><tbody>' + rows.filter(row => row.display !== 'hidden').map(row => row.type === 'heading'
             ? '<tr class="heading"><td colspan="2">' + esc(row.name) + '</td></tr>'
@@ -227,6 +351,10 @@
         return parts.join('').replace(/<table(?=[\s>])/g, '<table data-universal-sort="off"');
     }
 
+    function fileTitle(month) {
+        return 'Report ' + monthName(month);
+    }
+
     function print(data) {
         let host = document.getElementById('kfReconPrint');
         if (!host) {
@@ -236,10 +364,17 @@
         }
         host.innerHTML = buildHtml(data);
         document.body.classList.add('kf-recon-printing');
-        const done = () => { document.body.classList.remove('kf-recon-printing'); window.removeEventListener('afterprint', done); };
+        // The print dialog proposes the document title as the PDF file name.
+        const previousTitle = document.title;
+        document.title = fileTitle(data.month);
+        const done = () => {
+            document.body.classList.remove('kf-recon-printing');
+            document.title = previousTitle;
+            window.removeEventListener('afterprint', done);
+        };
         window.addEventListener('afterprint', done);
         requestAnimationFrame(() => window.print());
     }
 
-    return { buildHtml, print };
+    return { buildHtml, buildControls, controlsHtml, print, fileTitle };
 }));
