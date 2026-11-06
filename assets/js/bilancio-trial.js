@@ -10,6 +10,26 @@
     months.forEach((name,i)=>el('period').add(new Option(`${i+1} · ${name}`,i+1)));
     el('period').value = (m+6)%12+1;
     let report = null;
+    let extras = { monthly: null, yearly: null, error: '' };
+    let extrasToken = 0;
+    async function loadExtras(year, period, reportId) {
+        const token = ++extrasToken;
+        extras = { monthly: null, yearly: null, error: '' };
+        try {
+            const [monthly, yearly] = await Promise.all(['monthly', 'yearly'].map(async name => {
+                const response = await fetch(`/bilancio-trial/${name}?year=${encodeURIComponent(year)}&period=${encodeURIComponent(period)}&reportId=${encodeURIComponent(reportId)}`, { cache: 'no-store' });
+                const data = await response.json();
+                if (!response.ok) throw Error(data.error || 'Oversigten kunne ikke hentes.');
+                return data;
+            }));
+            if (token !== extrasToken) return;
+            extras = { monthly, yearly, error: '' };
+        } catch (error) {
+            if (token !== extrasToken) return;
+            extras = { monthly: null, yearly: null, error: error.message };
+        }
+        render();
+    }
     function printReport(orientation) {
         const styleEl = el('printOrientation');
         if (styleEl) styleEl.textContent = `@page{size:A4 ${orientation};margin:10mm}`;
@@ -24,11 +44,13 @@
         container.classList.toggle('fit-width', !layout);
         container.style.setProperty('--page-w', pageW + 'mm');
         container.style.setProperty('--page-h', pageH + 'mm');
-        for (const key of ['pnl', 'balance']) {
-            const block = container.querySelector(`[data-block="${key}"]`);
-            const inner = block?.querySelector('.block-inner');
+        const fitBlocks = [...container.querySelectorAll('[data-block], .extra-sheet')];
+        for (const block of fitBlocks) {
+            const inner = block.querySelector('.block-inner');
             if (!block || !inner) continue;
             inner.style.transform = '';
+            if (block.matches('.extra-sheet')) continue;
+            const key = block.dataset.block;
             const rect = layout && layout[key];
             if (!rect) continue;
             block.style.setProperty('--x', rect.x + '%');
@@ -39,10 +61,10 @@
         // Give the browser a full reflow for the new @page orientation before printing,
         // otherwise the print pipeline can capture the page mid-reflow and rotate/squeeze it to fit.
         requestAnimationFrame(() => {
-            for (const key of ['pnl', 'balance']) {
-                const block = container.querySelector(`[data-block="${key}"]`);
-                const inner = block?.querySelector('.block-inner');
+            for (const block of fitBlocks) {
+                const inner = block.querySelector('.block-inner');
                 if (!block || !inner || !inner.scrollWidth || !inner.scrollHeight) continue;
+                if (block.matches('.extra-sheet')) continue;
                 const scaleX = block.clientWidth / inner.scrollWidth, scaleY = block.clientHeight / inner.scrollHeight;
                 // With a saved layout, fill the chosen box on both axes (may enlarge). Without one,
                 // only ever shrink to the page width and let height flow/paginate naturally.
@@ -54,7 +76,30 @@
     }
     el('printPortraitBtn').addEventListener('click', () => printReport('portrait'));
     el('printLandscapeBtn').addEventListener('click', () => printReport('landscape'));
-    window.addEventListener('afterprint', () => el('report').classList.remove('custom-layout', 'fit-width'));
+    function printFourPageReport() {
+        if (!report || !extras.monthly || !extras.yearly) {
+            el('status').textContent = extras.error || 'Attendi il caricamento delle quattro tabelle prima di stampare.';
+            return;
+        }
+        const styleEl = el('printOrientation');
+        if (styleEl) styleEl.textContent = '@page{margin:10mm}';
+        const container = el('report');
+        container.classList.remove('custom-layout', 'fit-width');
+        container.classList.add('mixed-print');
+        container.closest('main').classList.add('mixed-print');
+        container.querySelectorAll('.block-inner').forEach(inner => { inner.style.transform = ''; });
+        requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+    }
+    el('printFourPageBtn').addEventListener('click', printFourPageReport);
+    window.addEventListener('afterprint', () => {
+        const styleEl = el('printOrientation');
+        if (styleEl) styleEl.textContent = '@page{size:A4 portrait;margin:10mm}';
+        const container = el('report');
+        container.classList.remove('custom-layout', 'fit-width');
+        container.classList.remove('mixed-print');
+        container.closest('main').classList.remove('mixed-print');
+        container.querySelectorAll('.block-inner').forEach(inner => { inner.style.transform = ''; });
+    });
     function render() {
         if (!report) return;
         const divisor = Number(el('unit').value), unit = divisor===1000?'t.kr':'DKK';
@@ -95,7 +140,28 @@
         }
         const balanceFmt = value => value == null ? '—' : new Intl.NumberFormat('da-DK', { minimumFractionDigits: divisor===1?2:0, maximumFractionDigits: divisor===1?2:0 }).format(Object.is(value,-0)?0:value/divisor);
         const assetsHtml = report.assets ? `<section class="sheet assets-sheet" data-block="balance" aria-label="${esc(report.assets.title)}"><div class="block-inner"><h2 class="table-title">${esc(report.assets.title)}</h2><table><thead><tr><th class="label-col">År til dato</th><th>${esc(months[p-1])} ${calendarYear}<br>${unit}</th><th>${esc(months[p-1])} ${calendarYear-1}<br>${unit}</th></tr></thead><tbody>${report.assets.rows.filter(row => !['hidden','period'].includes(row.visibility)).map(row => `<tr class="${(row.bold || ['subtotal', 'heading'].includes(row.type)) ? 'summary' : 'asset-row'}"><td class="label-col">${esc(row.name)}</td>${row.amounts.map((amount,i) => `<td class="${i===0?'current':''}">${row.type === 'heading' ? '' : balanceFmt(amount) + zeroStatus(row,amount)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>` : '';
-        el('report').innerHTML = `${report.showPnl===false?'':buildTable(report.periodOnly)}${assetsHtml}`;
+        // Fiscal periods start in July: period 1 = juli. "okt-26"-style labels for month columns.
+        const monthLabel = c => months[c.period-1].slice(0,3).toLowerCase()+'-'+String(c.year+(c.period>6?1:0)).slice(-2);
+        const yearLabel = c => `${c.year}-${String(c.year+1).slice(-2)}` + (c.year===report.year && report.period<12 ? ' (ÅTD)' : '');
+        // One t.kr column per month/year — no comparison columns and no % columns by design.
+        function extraTable(data, key, title, columnLabel, skipVisibility) {
+            if (extras.error) return `<section class="sheet extra-sheet"><div class="empty">${esc(title)}: ${esc(extras.error)}</div></section>`;
+            if (!data) return `<section class="sheet extra-sheet"><div class="empty">Henter ${esc(title.toLowerCase())}…</div></section>`;
+            const blank = data.columns.map(()=>'<td></td>').join('');
+            const cells = (amounts,row={}) => amounts.map(v=>`<td class="${v<0?'negative':''}">${fmt(v==null?null:v/divisor)+zeroStatus(row,v)}</td>`).join('');
+            const body = data.rows.map((r,index)=>{
+                if (r.visibility==='hidden'||r.visibility===skipVisibility) return '';
+                if (r.type==='heading') return `<tr class="summary"><td class="label-col">${esc(r.name)}</td>${blank}</tr>`;
+                if (r.type==='subtotal') return `<tr class="summary"><td class="label-col">${esc(r.name)}</td>${cells(r.amounts,r)}</tr>`;
+                if (r.type==='computed') return `<tr class="${r.bold?'summary':'computed'}"><td class="label-col">${esc(r.name)}</td>${cells(r.amounts,r)}</tr>`;
+                return `<tr class="group" style="${r.bold?'font-weight:bold':''}"><td class="label-col"><button type="button" data-group="${key}${index}" aria-expanded="false">▸ ${esc(r.name)}</button></td>${cells(r.amounts,r)}</tr>`+
+                    r.accounts.map(a=>`<tr class="detail" data-detail="${key}${index}" hidden><td class="label-col">${a.account} · ${esc(a.name)}</td>${cells(a.amounts)}</tr>`).join('');
+            }).join('');
+            return `<section class="sheet extra-sheet" aria-label="${esc(title)}"><div class="block-inner"><h2 class="table-title">${esc(title)}</h2><table><thead><tr><th class="label-col">Kontogruppe / konto</th>${data.columns.map(c=>`<th>${esc(columnLabel(c))}</th>`).join('')}</tr><tr><th class="label-col"></th>${data.columns.map(()=>`<th>${unit}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div></section>`;
+        }
+        const monthlyHtml = extraTable(extras.monthly, 'm', 'Seneste 12 måneder', monthLabel, 'ytd');
+        const yearlyHtml = extraTable(extras.yearly, 'y', 'Seneste 12 regnskabsår', yearLabel, 'period');
+        el('report').innerHTML = `${report.showPnl===false?'':buildTable(report.periodOnly)}${assetsHtml}${monthlyHtml}${yearlyHtml}`;
         el('report').querySelectorAll('[data-group]').forEach(button=>button.addEventListener('click',()=>{
             const open = button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));
             el('report').querySelectorAll(`[data-detail="${button.dataset.group}"]`).forEach(row=>row.hidden=!open);
@@ -103,12 +169,13 @@
     }
     el('unit').addEventListener('change',render);
     el('filters').addEventListener('submit',async event=>{
-        event.preventDefault();el('load').disabled=true;el('error').textContent='';el('status').textContent='Henter bogførte beløb…';report=null;el('report').innerHTML='';
+        event.preventDefault();el('load').disabled=true;el('error').textContent='';el('status').textContent='Henter bogførte beløb…';report=null;el('report').innerHTML='';extrasToken++;extras={monthly:null,yearly:null,error:''};
         try {
             const response=await fetch(`/bilancio-trial/data?year=${encodeURIComponent(el('year').value)}&period=${encodeURIComponent(el('period').value)}&reportId=${encodeURIComponent(el('reportSelect').value)}`,{cache:'no-store'});
             const data=await response.json();
             if(!response.ok)throw Error(response.status===401||response.status===403?'Log ind i Operations Hub med adgang til Økonomirapport for at åbne rapporten.':data.error||'Kunne ikke hente rapporten.');
             report=data;render();el('status').textContent=`Opdateret ${new Date(data.generatedAt).toLocaleString('da-DK')} · ${data.rows.reduce((n,r)=>n+(r.accounts?r.accounts.length:0),0)} konti`;
+            loadExtras(el('year').value,el('period').value,el('reportSelect').value);
         } catch(error){el('status').textContent='';el('error').textContent=error.message;}
         finally{el('load').disabled=false;}
     });

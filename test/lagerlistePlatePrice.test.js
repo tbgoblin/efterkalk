@@ -38,3 +38,28 @@ test('FIFO updates warehouse/grand totals and uses same basis for previous perio
     assert.match(html, /StcBal.PhCstPr/);
     assert.doesNotMatch(html, /200,00 DKK/);
 });
+
+test('monthly summary shows standard plate value minus FIFO value for current and comparison months', () => {
+    vm.runInContext("lagerlistePlatePriceMode = 'standard'", context);
+    const html = context.lagerlisteSummaryTable({
+        generatedAt: 'today', totals: context.lagerlistePlateTotals(payload), categories: payload.categories,
+        comparison: {
+            totals: { plates: 200 },
+            categories: { plates: [{ Value: 200, FifoValue: 160 }] }
+        },
+        displayLabel: 'Måned 2026-10'
+    });
+    assert.match(html, /Pladelager – forskel standard\/FIFO/);
+    assert.match(html, /25,00 DKK/);
+    assert.match(html, /40,00 DKK/);
+    assert.match(html, /Månedlig værdi af pladelageret/);
+});
+
+test('monthly plate price difference supports group-only snapshots and reports missing FIFO as unavailable', () => {
+    assert.equal(context.lagerlistePlateStandardFifoDifference({
+        categories: { plateGroups: [{ Value: 120, FifoValue: 75 }] }
+    }), 45);
+    assert.equal(context.lagerlistePlateStandardFifoDifference({
+        categories: { plates: [{ Value: 120 }] }
+    }), null);
+});

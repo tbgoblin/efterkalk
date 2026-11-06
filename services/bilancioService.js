@@ -1,5 +1,5 @@
 const { defaults, compileDefinition, evaluateRows } = require('./bilancioDefinition');
-const { createSourceResolver } = require('./bilancioSources');
+const { createSourceResolver, createColumnSourceResolver } = require('./bilancioSources');
 // Some lines aggregate several leaf Kontogrupper (e.g. 19_Lønomk_faste = 15+16+17),
 // mirroring the "Aggr. kontogruppe" rollups defined in the chart of accounts.
 const LINES = [
@@ -468,7 +468,74 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         const delta = (currentValue === null || previousValue === null) ? null : currentValue - previousValue;
         return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
     }
-    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, purchaseTimingForMonth, controlsDataForMonth, async report(year, period, override, reportId = 'default') {
+    return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, purchaseTimingForMonth, controlsDataForMonth,
+    // Evaluates the P&L with one column per fiscal { year, period }; queryFor returns
+    // (AcNo, Nm, AcGr, AcYr[, AcPr], Amount) rows that keyOf maps onto the columns.
+    async pnlByColumns(reportId, columns, queryFor, keyOf) {
+        const config = definitionStore ? await definitionStore.load(reportId) : defaults(LINES);
+        const definition = compileDefinition(config, await catalog());
+        const resolveColumns = createColumnSourceResolver({ lagerlisteService, fs, today: todayMonthKeyCopenhagen() });
+        const pool = await getConnection();
+        const ids = [...new Set(definition.pnl.flatMap(row => row.selectedAccounts || []))];
+        const fields = columns.map((_, i) => 'C' + i);
+        const fieldOf = new Map(columns.map((column, i) => [column.year + '/' + column.period, 'C' + i]));
+        const byAccount = new Map();
+        for (const row of await queryFor(pool, ids)) {
+            let record = byAccount.get(row.AcNo);
+            if (!record) {
+                record = { AcNo: row.AcNo, Nm: row.Nm, AcGr: row.AcGr };
+                for (const field of fields) record[field] = 0;
+                byAccount.set(row.AcNo, record);
+            }
+            if (row.AcYr == null) continue;
+            const field = fieldOf.get(keyOf(row));
+            if (!field) throw new Error('Uventet regnskabsperiode i kontodata.');
+            record[field] += Number(row.Amount || 0);
+        }
+        const rows = evaluateRows(definition.pnl, [...byAccount.values()], columns.length, fields, await resolveColumns(definition.pnl, columns));
+        const revenueAmounts = rows.find(row => row.id === definition.revenueRow).amounts;
+        for (const row of rows) row.percentages = row.amounts.map((v, i) => v == null || !revenueAmounts[i] ? null : v / revenueAmounts[i] * 100);
+        return { reportId: definition.reportId, reportName: definition.reportName, currency: 'DKK', generatedAt: new Date().toISOString(), columns, rows, revenueAmounts, definitionVersion: definition.version };
+    },
+    // Rolling window: the selected period and the 11 fiscal months before it, oldest first.
+    async monthly(year, period, reportId = 'default') {
+        validatePeriod(year, period);
+        const columns = [];
+        for (let i = 11; i >= 0; i--) {
+            const p = period - i;
+            columns.push(p >= 1 ? { year, period: p } : { year: year - 1, period: p + 12 });
+        }
+        const report = await this.pnlByColumns(reportId, columns, async (pool, accountIds) => {
+            const request = pool.request().input('year', sql.Int, year).input('period', sql.Int, period)
+                .input('accounts', sql.NVarChar(sql.MAX), accountIds.join(','));
+            const result = await request.query(`SELECT A.AcNo, A.Nm, A.AcGr, T.AcYr, T.AcPr, SUM(COALESCE(T.AcAm,0)) AS Amount
+                FROM Ac A LEFT JOIN AcTr T ON T.AcNo=A.AcNo
+                    AND ((T.AcYr=@year AND T.AcPr BETWEEN 1 AND @period) OR (T.AcYr=@year-1 AND T.AcPr BETWEEN @period+1 AND 12))
+                WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
+                GROUP BY A.AcNo,A.Nm,A.AcGr,T.AcYr,T.AcPr ORDER BY A.AcNo`);
+            return result.recordset || [];
+        }, row => Number(row.AcYr) + '/' + Number(row.AcPr));
+        return { year, period, ...report };
+    },
+    // One column per fiscal year, the selected year last. Closed years are full years
+    // (periods 1–12); the selected year only counts up to the selected period.
+    async yearly(year, period, reportId = 'default') {
+        validatePeriod(year, period);
+        const columns = [];
+        for (let yr = year - 11; yr <= year; yr++) columns.push({ year: yr, period: yr === year ? period : 12 });
+        const report = await this.pnlByColumns(reportId, columns, async (pool, accountIds) => {
+            const request = pool.request().input('year', sql.Int, year).input('period', sql.Int, period)
+                .input('accounts', sql.NVarChar(sql.MAX), accountIds.join(','));
+            const result = await request.query(`SELECT A.AcNo, A.Nm, A.AcGr, T.AcYr, SUM(COALESCE(T.AcAm,0)) AS Amount
+                FROM Ac A LEFT JOIN AcTr T ON T.AcNo=A.AcNo
+                    AND ((T.AcYr BETWEEN @year-11 AND @year-1 AND T.AcPr BETWEEN 1 AND 12) OR (T.AcYr=@year AND T.AcPr BETWEEN 1 AND @period))
+                WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
+                GROUP BY A.AcNo,A.Nm,A.AcGr,T.AcYr ORDER BY A.AcNo`);
+            return result.recordset || [];
+        }, row => Number(row.AcYr) + '/' + (Number(row.AcYr) === year ? period : 12));
+        return { year, period, ...report };
+    },
+    async report(year, period, override, reportId = 'default') {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
         const definition = compileDefinition(config, await catalog());

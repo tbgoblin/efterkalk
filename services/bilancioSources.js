@@ -32,9 +32,9 @@ function lagerValue(payload, metric) {
     }
     return null;
 }
-function createSourceResolver({ lagerlisteService, fs, year, period, today }) {
+function createPayloadLoader({ lagerlisteService, fs, today }) {
     const cache = new Map();
-    function payload(month, currentSales) {
+    return function payload(month, currentSales) {
         const key = month + '/' + currentSales;
         if (!cache.has(key)) cache.set(key, (async () => {
             if (!lagerlisteService || !fs) return null;
@@ -43,7 +43,10 @@ function createSourceResolver({ lagerlisteService, fs, year, period, today }) {
             return month === today ? lagerlisteService.getCurrent() : null;
         })());
         return cache.get(key);
-    }
+    };
+}
+function createSourceResolver({ lagerlisteService, fs, year, period, today }) {
+    const payload = createPayloadLoader({ lagerlisteService, fs, today });
     return async (rows, dimension) => {
         const values = new Map();
         for (const row of rows.filter(r => ['lager','manual'].includes(r.type))) {
@@ -57,4 +60,21 @@ function createSourceResolver({ lagerlisteService, fs, year, period, today }) {
         return values;
     };
 }
-module.exports = { sourceMonth, lagerValue, createSourceResolver };
+// One value per column, each column being its own fiscal { year, period } — used by the
+// rolling-12-months and 12-years tables where every column is a different period.
+function createColumnSourceResolver({ lagerlisteService, fs, today }) {
+    const payload = createPayloadLoader({ lagerlisteService, fs, today });
+    return async (rows, columns) => {
+        const values = new Map();
+        for (const row of rows.filter(r => ['lager', 'manual'].includes(r.type))) {
+            const amounts = await Promise.all(columns.map(async column => {
+                const month = sourceMonth(row, column.year, column.period, 0, today);
+                const value = row.type === 'manual' ? row.monthValues[month] ?? null : lagerValue(await payload(month, row.currentSales), row.metric);
+                return value != null && Number.isFinite(value) ? value : null;
+            }));
+            values.set(row.id, amounts);
+        }
+        return values;
+    };
+}
+module.exports = { sourceMonth, lagerValue, createSourceResolver, createColumnSourceResolver };

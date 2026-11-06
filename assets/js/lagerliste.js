@@ -23,6 +23,18 @@ function lagerlistePlateTotals(payload, mode = lagerlistePlatePriceMode) {
     return totals;
 }
 
+function lagerlistePlateStandardFifoDifference(payload) {
+    const categories = payload && payload.categories || {};
+    const rows = Array.isArray(categories.plates)
+        ? categories.plates
+        : Array.isArray(categories.plateGroups) ? categories.plateGroups : null;
+    if (!rows || rows.some(row => row.Value == null || !Number.isFinite(Number(row.Value))
+        || row.FifoValue == null || !Number.isFinite(Number(row.FifoValue)))) return null;
+    const standard = rows.reduce((sum, row) => sum + Number(row.Value), 0);
+    const fifo = rows.reduce((sum, row) => sum + Number(row.FifoValue), 0);
+    return Math.round((standard - fifo) * 100) / 100;
+}
+
 function lagerlisteSetPlatePrice(mode) {
     const next = mode === 'fifo' ? 'fifo' : 'standard';
     try {
@@ -210,6 +222,8 @@ function lagerlisteComparisonCell(value, previousValue, isChange = false) {
 
 function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = null, displayLabel = 'Aktuel' }) {
     const previousTotals = comparison && comparison.totals ? lagerlistePlateTotals(comparison) : null;
+    const plateStandardFifoDifference = lagerlistePlateStandardFifoDifference({ categories });
+    const previousPlateStandardFifoDifference = comparison ? lagerlistePlateStandardFifoDifference(comparison) : null;
     const viaRows = Array.isArray(categories && categories.salgordreVia) ? categories.salgordreVia : [];
     const previousViaRows = Array.isArray(comparison && comparison.categories && comparison.categories.salgordreVia)
         ? comparison.categories.salgordreVia
@@ -246,6 +260,7 @@ function lagerlisteSummaryTable({ generatedAt, totals, categories, comparison = 
         : previousWarehouseWithoutRest + Number(previousTotals.restPlates || 0);
     const rows = [
         ['Pladelager', totals.plates, previousTotals && previousTotals.plates, 'lagerliste-plates-section', '', 'Plader på lager: beholdning × ' + (lagerlistePlatePriceMode === 'fifo' ? 'FIFO-pris (StcBal.PhCstPr).' : 'standardpris (Prod.Inf).')],
+        ['Pladelager – forskel standard/FIFO', plateStandardFifoDifference, previousPlateStandardFifoDifference, null, 'lagerliste-summary-subrow', 'Månedlig værdi af pladelageret beregnet til standardpris (Prod.Inf) minus FIFO-pris (StcBal.PhCstPr). Positivt beløb betyder, at standardværdien er højere.'],
         ['Rest plader', totals.restPlates, previousTotals && previousTotals.restPlates, 'lagerliste-rest-section', '', 'Restplader: vægt × fast pris pr. kg.'],
         ['Diverse', Number(totals.diverse || 0), previousTotals && Number(previousTotals.diverse || 0), 'lagerliste-diverse-section', '', 'Månedens manuelle værdier og Visma 44/45/46/63, lager 1. Stangmateriale er ikke inkluderet.'],
         ['Stang materiale', totals.stang, previousTotals && previousTotals.stang, 'lagerliste-stang-section', '', 'Stangmateriale: lagerbevægelse til og med i dag × pris/FIFO-pris.'],

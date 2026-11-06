@@ -697,6 +697,24 @@ function createApiRouter({
             return res.status(500).json({ error: 'Økonomirapporten kunne ikke hentes.' });
         }
     });
+    for (const table of ['monthly', 'yearly']) {
+        router.get('/bilancio-trial/' + table, requireModulePermission('bilancio'), async (req, res) => {
+            res.setHeader('Cache-Control', 'no-store');
+            const year = Number(req.query.year);
+            const period = Number(req.query.period);
+            try {
+                validateBilancioPeriod(year, period);
+            } catch (err) {
+                return res.status(400).json({ error: err.message });
+            }
+            try {
+                return res.json(await bilancioService[table](year, period, req.query.reportId || 'default'));
+            } catch (err) {
+                logEvent('ERROR bilancio-trial/' + table + ': ' + err.message);
+                return res.status(500).json({ error: 'Oversigten kunne ikke hentes.' });
+            }
+        });
+    }
 
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {
