@@ -137,7 +137,7 @@ test('fiscal invoice query restricts every scope and amount mode to sales transa
             assert.equal(payload.ok, true);
             assert.match(queryText, /WHERE\s+\(@custNo IS NULL OR O\.CustNo = @custNo\)\s+AND O\.TrTp = 1\s+AND O\.InvoNo/);
             assert.match(queryText, /AND \(@includeAllAmounts = 1 OR O\.InvoAm <> 0\)/);
-            assert.match(queryText, /AND \(\(O\.LstInvDt >= @fromDate AND O\.LstInvDt <= @toDate\)\s+OR O\.OrdNo IN \(SELECT TRY_CONVERT\(int, value\) FROM STRING_SPLIT\(@periodOrders, ','\)/);
+            assert.match(queryText, /AND \(\(O\.LstInvDt >= @fromDate AND O\.LstInvDt <= @toDate\s+AND \(@includeAllAmounts = 1 OR O\.InvoAm <> 0\)\)\s+OR O\.OrdNo IN \(SELECT TRY_CONVERT\(int, value\) FROM STRING_SPLIT\(@periodOrders, ','\)/);
             assert.equal(parameters.periodOrders, '');
             assert.deepEqual([periodCalls.at(-1).fromInt, periodCalls.at(-1).toInt, periodCalls.at(-1).custNo], [20260701, 20260915, scope.scope === 'all' ? null : 123]);
             assert.doesNotMatch(queryText, /SELECT\s+TOP\s+\d+\s+O\.OrdNo/i);
@@ -1088,4 +1088,3 @@ test('strict AppState reads distinguish missing data from GOH failure without ch
     assert.match(source, /expectedVersion = -1/);
     assert.match(source, /WHEN NOT MATCHED AND @expectedVersion IN \(-1, 0\)/);
 });
-

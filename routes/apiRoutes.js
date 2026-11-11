@@ -2950,8 +2950,8 @@ function createApiRouter({
                     WHERE (@custNo IS NULL OR O.CustNo = @custNo)
                                             AND O.TrTp = 1
                       AND O.InvoNo IS NOT NULL AND O.InvoNo <> ''
-                      AND (@includeAllAmounts = 1 OR O.InvoAm <> 0)
-                      AND ((O.LstInvDt >= @fromDate AND O.LstInvDt <= @toDate)
+                      AND ((O.LstInvDt >= @fromDate AND O.LstInvDt <= @toDate
+                            AND (@includeAllAmounts = 1 OR O.InvoAm <> 0))
                         OR O.OrdNo IN (SELECT TRY_CONVERT(int, value) FROM STRING_SPLIT(@periodOrders, ',') WHERE value <> ''))
                     ORDER BY O.LstInvDt DESC, O.OrdNo DESC
                 `);
