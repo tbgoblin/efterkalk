@@ -469,11 +469,24 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         return { currentValue, previousValue, currentMonth: monthKey, previousMonth, delta, plateMode: mode };
     }
     return { catalog, vareforbrugForMonth, purchaseInvoiceGapForMonth, varelagerDeltaForMonth, varelagerBreakdownForMonth, wipMaterialDeltaForMonth, purchaseTimingForMonth, controlsDataForMonth,
+    async bundle(year, period, reportId = 'default', template = null) {
+        validatePeriod(year, period);
+        const config = template ? { ...template.definition, scope: template.scope } : await definitionStore.load(reportId);
+        if (config.scope !== definitionStore.scope()) throw new Error('Databaseprofilen er ændret. Hent rapporten igen.');
+        const definition = template ? template.definition : compileDefinition(config, await catalog());
+        const revision = template ? template.configurationRevision : await definitionStore.freeze(config);
+        const [report, monthly, yearly] = await Promise.all([
+            this.report(year, period, config, reportId, definition),
+            this.monthly(year, period, reportId, definition),
+            this.yearly(year, period, reportId, definition)
+        ]);
+        if (config.scope !== definitionStore.scope()) throw new Error('Databaseprofilen er ændret. Hent rapporten igen.');
+        return { report, monthly, yearly, definition, configurationRevision: revision, scope: config.scope };
+    },
     // Evaluates the P&L with one column per fiscal { year, period }; queryFor returns
     // (AcNo, Nm, AcGr, AcYr[, AcPr], Amount) rows that keyOf maps onto the columns.
-    async pnlByColumns(reportId, columns, queryFor, keyOf) {
-        const config = definitionStore ? await definitionStore.load(reportId) : defaults(LINES);
-        const definition = compileDefinition(config, await catalog());
+    async pnlByColumns(reportId, columns, queryFor, keyOf, compiledDefinition) {
+        const definition = compiledDefinition || compileDefinition(definitionStore ? await definitionStore.load(reportId) : defaults(LINES), await catalog());
         const resolveColumns = createColumnSourceResolver({ lagerlisteService, fs, today: todayMonthKeyCopenhagen() });
         const pool = await getConnection();
         const ids = [...new Set(definition.pnl.flatMap(row => row.selectedAccounts || []))];
@@ -498,7 +511,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
         return { reportId: definition.reportId, reportName: definition.reportName, currency: 'DKK', generatedAt: new Date().toISOString(), columns, rows, revenueAmounts, definitionVersion: definition.version };
     },
     // Rolling window: the selected period and the 11 fiscal months before it, oldest first.
-    async monthly(year, period, reportId = 'default') {
+    async monthly(year, period, reportId = 'default', compiledDefinition) {
         validatePeriod(year, period);
         const columns = [];
         for (let i = 11; i >= 0; i--) {
@@ -514,12 +527,12 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
                 WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
                 GROUP BY A.AcNo,A.Nm,A.AcGr,T.AcYr,T.AcPr ORDER BY A.AcNo`);
             return result.recordset || [];
-        }, row => Number(row.AcYr) + '/' + Number(row.AcPr));
+        }, row => Number(row.AcYr) + '/' + Number(row.AcPr), compiledDefinition);
         return { year, period, ...report };
     },
     // One column per fiscal year, the selected year last. Closed years are full years
     // (periods 1–12); the selected year only counts up to the selected period.
-    async yearly(year, period, reportId = 'default') {
+    async yearly(year, period, reportId = 'default', compiledDefinition) {
         validatePeriod(year, period);
         const columns = [];
         for (let yr = year - 11; yr <= year; yr++) columns.push({ year: yr, period: yr === year ? period : 12 });
@@ -532,13 +545,13 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
                 WHERE A.AcNo IN (SELECT TRY_CONVERT(int,value) FROM STRING_SPLIT(@accounts,','))
                 GROUP BY A.AcNo,A.Nm,A.AcGr,T.AcYr ORDER BY A.AcNo`);
             return result.recordset || [];
-        }, row => Number(row.AcYr) + '/' + (Number(row.AcYr) === year ? period : 12));
+        }, row => Number(row.AcYr) + '/' + (Number(row.AcYr) === year ? period : 12), compiledDefinition);
         return { year, period, ...report };
     },
-    async report(year, period, override, reportId = 'default') {
+    async report(year, period, override, reportId = 'default', compiledDefinition) {
         validatePeriod(year, period);
         const config = override || (definitionStore ? await definitionStore.load(reportId) : defaults(LINES));
-        const definition = compileDefinition(config, await catalog());
+        const definition = compiledDefinition || compileDefinition(config, await catalog());
         const todayKey = todayMonthKeyCopenhagen();
         const resolveSources = createSourceResolver({ lagerlisteService, fs, year, period, today: todayKey });
         const pool = await getConnection();

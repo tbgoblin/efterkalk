@@ -34,6 +34,8 @@ const { createOrdreindgangService } = require('../services/ordreindgangService')
 const { createBomService } = require('../services/bomService');
 const { createBilancioService, validatePeriod: validateBilancioPeriod, LINES: BILANCIO_LINES } = require('../services/bilancioService');
 const { defaults: bilancioDefaults, createDefinitionStore } = require('../services/bilancioDefinition');
+const { createBilancioArchiveService } = require('../services/bilancioArchiveService');
+const { generateBilancioPdf } = require('../services/bilancioPdf');
 const { openPdfTarget } = require('../services/pdfOpenService');
 const { periodRevenueForOrders } = require('../services/invoicePeriodService');
 
@@ -715,6 +717,50 @@ function createApiRouter({
             }
         });
     }
+
+    const bilancioArchive = createBilancioArchiveService({
+        gohData, definitionStore: bilancioDefinitionStore, bilancioService,
+        generatePdf: generateBilancioPdf, appVersion: pkgVersion
+    });
+    const archiveHandler = handler => async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        try { await handler(req, res); }
+        catch (err) {
+            logEvent('ERROR bilancio archive: ' + err.message);
+            res.status(err.statusCode || 503).json({ error: err.statusCode ? err.message : 'Rapportarkivet kunne ikke behandles. Prøv igen.' });
+        }
+    };
+    router.get('/bilancio-trial/draft', requireModulePermission('bilancio'), archiveHandler(async (req, res) => {
+        try { validateBilancioPeriod(Number(req.query.year), Number(req.query.period)); }
+        catch (err) { return res.status(400).json({ error: err.message }); }
+        res.json(await bilancioArchive.draft(Number(req.query.year), Number(req.query.period), req.query.reportId || 'default', getSessionUser(req).username));
+    }));
+    router.get('/bilancio-trial/archive', requireModulePermission('bilancio'), archiveHandler(async (req, res) => {
+        res.json({ reports: await bilancioArchive.list(req.query.reportId || 'default') });
+    }));
+    router.post('/bilancio-trial/archive', requireModulePermission('bilancio'), archiveHandler(async (req, res) => {
+        const saved = await bilancioArchive.save(req.body || {}, getSessionUser(req).username);
+        const { pdfBase64, ...data } = saved;
+        res.status(201).json(data);
+    }));
+    router.get('/bilancio-trial/archive/:id', requireModulePermission('bilancio'), archiveHandler(async (req, res) => {
+        const { pdfBase64, ...saved } = await bilancioArchive.load(req.query.reportId || 'default', req.params.id);
+        res.json(saved);
+    }));
+    router.get('/bilancio-trial/archive/:id/download', requireModulePermission('bilancio'), archiveHandler(async (req, res) => {
+        const saved = await bilancioArchive.load(req.query.reportId || 'default', req.params.id);
+        const filename = `${saved.report.reportId}-${saved.report.year}-P${saved.report.period}-Rev${saved.revision}`;
+        if (req.query.format === 'json') {
+            const { pdfBase64, ...data } = saved;
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}.json"`);
+            return res.json(data);
+        }
+        const pdf = Buffer.from(saved.pdfBase64, 'base64');
+        if (crypto.createHash('sha256').update(pdf).digest('hex') !== saved.pdfSha256) throw new Error('Arkiveret PDF-integritet fejlede.');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
+        res.send(pdf);
+    }));
 
     router.get('/aftercalc/:ordno', async (req, res) => {
         try {

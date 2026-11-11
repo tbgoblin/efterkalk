@@ -884,9 +884,10 @@ async function setAppState(key, payload, { createOnly = false, expectedVersion =
             .input('createOnly', sql.Bit, createOnly)
             .input('expectedVersion', sql.Int, expectedVersion)
             .input('protectRevision', sql.Bit, /^lagerliste_month_\d{4}-\d{2}$/.test(String(key)))
+            .input('immutable', sql.Bit, /^bilancio_(revision|snapshot|template)_/.test(String(key)))
             .query(`MERGE dbo.AppState WITH (HOLDLOCK) AS t
                 USING (SELECT @key AS StateKey) AS s ON t.StateKey = s.StateKey
-                WHEN MATCHED AND @createOnly = 0
+                WHEN MATCHED AND @createOnly = 0 AND @immutable = 0
                     AND (@expectedVersion = -1 OR TRY_CONVERT(int, JSON_VALUE(CASE WHEN ISJSON(t.Payload) = 1 THEN t.Payload ELSE '{}' END, '$.version')) = @expectedVersion)
                     AND (@protectRevision = 0 OR JSON_VALUE(CASE WHEN ISJSON(t.Payload) = 1 THEN t.Payload ELSE '{}' END, '$.revision.number') IS NULL)
                     THEN UPDATE SET Payload = @payload, UpdatedAt = SYSUTCDATETIME()

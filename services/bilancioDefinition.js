@@ -225,13 +225,41 @@ function createDefinitionStore({ gohData, getProfile, defaultDefinition }) {
         if (input?.scope !== scope) invalid('Databaseprofilen er ændret. Genindlæs opsætningen.');
         const config = validateDefinition(input);
         compileDefinition(config, catalog);
+        const previous = await gohData.getAppState(storageKey(config.reportId), { strict: true });
+        if ((previous?.payload.version || 0) !== config.version) {
+            const error = new Error('Opsætningen er ændret af en anden bruger. Genindlæs opsætningen.');
+            error.statusCode = 409; throw error;
+        }
+        if (previous) await freeze({ ...previous.payload, scope });
+        else if (config.reportId === 'default') await freeze({ ...defaultDefinition, reportId: 'default', reportName: 'Økonomirapport', scope });
         const payload = { ...config, scope, version: config.version + 1, updatedBy: username, updatedAt: new Date().toISOString() };
+        const revision = await freeze(payload);
+        if (scope !== key()) invalid('Databaseprofilen er ændret. Genindlæs opsætningen.');
         if (!await gohData.setAppState(storageKey(config.reportId), payload, { expectedVersion: config.version })) {
             const error = new Error('Opsætningen blev ikke gemt. En anden bruger kan have ændret den, eller GOH er utilgængelig. Genindlæs før du prøver igen.');
             error.statusCode = 409; throw error;
         }
-        return payload;
+        return { ...payload, revision };
     }
-    return { load, save, list, scope: key };
+    async function freeze(input) {
+        const scope = key();
+        if (input.scope !== scope) invalid('Databaseprofilen er ændret. Genindlæs opsætningen.');
+        const definition = validateDefinition(input);
+        const hash = crypto.createHash('sha256').update(JSON.stringify({ scope, definition })).digest('hex');
+        const revisionKey = 'bilancio_revision_' + hash;
+        const revision = { id: hash, number: definition.version };
+        const existing = await gohData.getAppState(revisionKey, { strict: true });
+        if (!existing && !await gohData.setAppState(revisionKey, {
+            definition, revision, scope, createdAt: new Date().toISOString(), createdBy: input.updatedBy || null
+        }, { createOnly: true })) {
+            const concurrent = await gohData.getAppState(revisionKey, { strict: true });
+            if (!concurrent) {
+                const error = new Error('Konfigurationsrevisionen kunne ikke arkiveres på GOH.');
+                error.statusCode = 503; throw error;
+            }
+        }
+        return revision;
+    }
+    return { load, save, list, freeze, scope: key };
 }
 module.exports = { defaults, validateDefinition, compileDefinition, evaluateRows, createDefinitionStore };

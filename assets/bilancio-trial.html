@@ -37,8 +37,18 @@
 <header><div><span class="badge">Prøve</span><h1 id="pageTitle">Gantech A/S – Økonomirapport</h1></div><a class="back" href="/">← Operations Hub</a></header>
 <form id="filters" class="controls"><label>Regnskabsår (startår)<input id="year" type="number" min="2000" max="2100" required></label><label>Periode<select id="period"></select></label><label>Vis beløb i<select id="unit"><option value="1000">t.kr</option><option value="1">DKK</option></select></label><button id="load" type="submit">Hent rapport</button><button id="printPortraitBtn" type="button">🖨️ Print stående</button><button id="printLandscapeBtn" type="button">🖨️ Print liggende</button><button id="printFourPageBtn" type="button">🖨️ Print 4 sider (misto)</button></form>
 <p class="controls"><label>Rapport<select id="reportSelect"><option value="default">Økonomirapport</option></select></label></p>
+<section class="controls" aria-label="Rapportarkiv">
+<label>Begrundelse / note (kræves ved rettelse)<input id="archiveNote" type="text" maxlength="1000"></label>
+<button id="saveReportBtn" type="button" disabled>Gem endelig rapport</button>
+<label>Gemte rapportrevisioner<select id="archiveSelect"><option value="">Vælg en gemt rapport</option></select></label>
+<button id="openArchiveBtn" type="button">Åbn gemt rapport</button>
+<button id="downloadPdfBtn" type="button" disabled>Download PDF</button>
+<button id="downloadJsonBtn" type="button" disabled>Download data (JSON)</button>
+</section>
+<p id="revisionInfo" role="status"></p>
 <p id="status" role="status"></p><p id="error" role="alert"></p><div id="report"><div class="sheet empty">Vælg år og periode for at hente tallene.</div></div>
 <p class="note">Regnskabsår: juli–juni. Procent beregnes af omsætningen i samme kolonne. Klik på en gruppe for at se kontiene. Afrunding sker kun i visningen.</p>
 <p class="note">Seneste 12 måneder viser hver måned for sig; Seneste 12 regnskabsår viser hvert regnskabsårs samlede tal (igangværende år til og med den valgte periode).</p>
+<p class="note">Månedens skabelon låses automatisk ved første indlæsning for hver rapport. Hent rapport opdaterer beløbene, men bevarer den låste skabelon. Gem endelig rapport arkiverer alle fire tabeller og en PDF med faste beløb. Rettelser oprettes som nye revisioner; gemte rapporter og PDF-filer overskrives aldrig. Historik fra før arkivfunktionen kan ikke genskabes automatisk.</p>
 <p class="note">Prøvevisning: grupper fra den aktuelle kontoplan anvendes også på sidste års posteringer. Periode 13 og øvrige reguleringsperioder er ikke inkluderet.</p>
 </main><script src="/assets/js/bilancio-trial.js"></script></body></html>

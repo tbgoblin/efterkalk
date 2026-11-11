@@ -36,7 +36,7 @@
         document.querySelector('a[href^="/assets/bilancio-trial.html"]').href='/assets/bilancio-trial.html?reportId='+encodeURIComponent(id);
     }
     const message = (value, error = false) => { el('message').textContent = value; el('message').className = error ? 'error' : ''; };
-    function changed() { dirty = true; el('preview').innerHTML = ''; el('revision').textContent = `Version ${definition.version} · Ikke gemte ændringer`; }
+    function changed() { dirty = true; el('preview').innerHTML = ''; el('revision').textContent = `Konfiguration Rev. ${definition.version} · Ikke gemte ændringer (ny revision ved gem)`; }
     async function api(url, options) {
         const response = await fetch(url, { cache: 'no-store', ...options });
         const data = await response.json();
@@ -171,7 +171,7 @@
         try {
             const [data,list] = await Promise.all([api('/admin/bilancio-definition?reportId='+encodeURIComponent(reportId)),api('/bilancio-trial/reports')]); definition = data.definition; catalog = data.catalog;reportList=list.reports;drawReports();
             dirty=false; selected=0; el('balanceTitle').value=definition.balanceTitle; el('workspace').hidden=false;
-            draw();drawCatalog(); el('preview').innerHTML='';el('revision').textContent=`Version ${definition.version}${definition.updatedBy?' · '+definition.updatedBy:''}`; message('Opsætningen er hentet.');
+            draw();drawCatalog(); el('preview').innerHTML='';el('revision').textContent=`Konfiguration Rev. ${definition.version}${definition.updatedBy?' · '+definition.updatedBy:''}`; message('Opsætningen er hentet. Gem opretter en ny revision; arkiverede rapporter ændres ikke.');
         } catch(error) { message(error.message,true); } finally { lock(false); }
     }
     el('reload').onclick=load;
@@ -278,7 +278,7 @@
     el('up').onclick=()=>move(-1); el('down').onclick=()=>move(1);
     el('save').onclick=async()=>{
         lock(true);message('Kontrollerer og gemmer…');
-        try { const data=await api('/admin/bilancio-definition',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(definition)});definition=data.definition;dirty=false;reportList=reportList.filter(r=>r.reportId!==definition.reportId).concat([{reportId:definition.reportId,reportName:definition.reportName}]);drawReports();draw();el('revision').textContent=`Version ${definition.version} · Gemt`;message('Gemt på GOH. Genindlæs rapporten for at bruge opsætningen.'); }
+        try { const data=await api('/admin/bilancio-definition',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(definition)});definition=data.definition;dirty=false;reportList=reportList.filter(r=>r.reportId!==definition.reportId).concat([{reportId:definition.reportId,reportName:definition.reportName}]);drawReports();draw();el('revision').textContent=`Konfiguration Rev. ${definition.version} · Gemt`;message('Ny revision gemt på GOH. Tidligere arkiverede rapporter er uændrede.'); }
         catch(error){message(error.message,true);}finally{lock(false);}
     };
     const fmt=v=>v==null?'—':new Intl.NumberFormat('da-DK',{maximumFractionDigits:2}).format(v);

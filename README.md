@@ -63,6 +63,16 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 - VIA, Lagerliste e CSV includono lo stesso valore dei componenti acquistati e il relativo dettaglio espandibile
 - cache Lagerliste `v36`, cache VIA `v35` separata per database/data/perimetro; schema di valutazione `35` invariato
 
+### Revisioni e archivio Økonomirapport
+
+- **Hent rapport** blocca automaticamente il template alla prima lettura di ciascun rapporto/anno/periodo: righe, formule, impaginazione e selezione dei conti rimangono quelle, anche se la configurazione viene modificata successivamente. I mesi non ancora aperti usano il nuovo template. Gli importi della bozza vengono invece ricalcolati ad ogni lettura. La bozza resta salvabile per due ore, finché il server non viene riavviato.
+- **Gem endelig rapport** conserva su GOH dati, conti di dettaglio, configurazione, revisione, autore, nota, versione dell'app e PDF. Il salvataggio avviene sulla copia server mostrata in anteprima, non su importi inviati dal browser.
+- Ogni modifica alla configurazione crea una nuova revisione. Ogni nuovo definitivo dello stesso rapporto/anno/periodo crea **Rev. 2, Rev. 3, ...** e richiede una motivazione; non modifica le revisioni precedenti.
+- **Gemte rapportrevisioner / Åbn gemt rapport** riapre la copia archiviata senza interrogare Visma. **Download PDF** restituisce gli stessi byte PDF salvati; **Download data (JSON)** esporta dati e configurazione.
+- Il PDF usa A4 orizzontale per risultato e tabelle a 12 colonne, verticale per balance. Tabelle lunghe continuano su altre pagine con le intestazioni ripetute.
+- Archivi e revisioni sono separati per profilo database e rapporto. Non esistono comandi per modificarli o eliminarli; GOH non disponibile o conflitti di salvataggio producono un errore esplicito.
+- Le stampe precedenti all'introduzione dell'archivio non possono essere ricostruite retroattivamente: i primi definitivi vanno salvati dalla nuova funzione.
+
 ### VIA: rettifica del perimetro (`2026-09-16`)
 
 - Con accesso Omsætning, la lista usa gli ordini con residuo `closing > 0,01 DKK` del modello Ordreflow, non tutti i candidati mensili. Tabella, KPI filtrato e CSV espongono il residuo, non il lordo.

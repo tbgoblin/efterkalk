@@ -6,7 +6,9 @@ function fixture() {
     const base={schema:1,version:0,balanceTitle:'Aktiver',revenueRow:'base',beforeTaxRow:'base',pnl:[{id:'base',name:'Base',type:'formula',formula:'0'}],balance:[{id:'heading',name:'Aktiver',type:'heading'}]};
     const gohData={getAppState:async key=>states.has(key)?{payload:structuredClone(states.get(key))}:null,
         getAppStateKeysByPrefix:async prefix=>[...states.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key})),
-        setAppState:async(key,payload,{expectedVersion})=>{if((states.get(key)?.version||0)!==expectedVersion)return false;states.set(key,structuredClone(payload));return true;}};
+        setAppState:async(key,payload,{expectedVersion,createOnly})=>{
+            if(createOnly ? states.has(key) : (states.get(key)?.version||0)!==expectedVersion)return false;
+            states.set(key,structuredClone(payload));return true;}};
     return {store:createDefinitionStore({gohData,getProfile:()=>({server:'s',database}),defaultDefinition:base}),states,switchDb:()=>{database='other';}};
 }
 const catalog={accounts:[],groups:[]};

@@ -16,11 +16,12 @@ const definition = {
 };
 function fixture(dataRows) {
     const calls = [];
+    let catalogCalls = 0, definitionLoads = 0;
     const pool = { request: () => ({
         inputs: {},
         input(name, _type, value) { this.inputs[name] = value; return this; },
         async query(text) {
-            if (text.includes('FROM Ac ORDER BY AcNo')) return { recordsets: [accounts, []] };
+            if (text.includes('FROM Ac ORDER BY AcNo')) { catalogCalls++; return { recordsets: [accounts, []] }; }
             calls.push({ inputs: this.inputs, text });
             return { recordset: dataRows(this.inputs, text) };
         }
@@ -28,10 +29,33 @@ function fixture(dataRows) {
     const service = createBilancioService({
         getConnection: async () => pool,
         sql: { Int: 'Int', MAX: 'MAX', NVarChar: () => 'NVarChar' },
-        definitionStore: { load: async () => structuredClone(definition) }
+        definitionStore: {
+            load: async () => { definitionLoads++; return { ...structuredClone(definition), scope: 'scope' }; },
+            freeze: async config => ({ number: config.version, id: 'a'.repeat(64) }),
+            scope: () => 'scope'
+        }
     });
-    return { service, calls };
+    return { service, calls, catalogCalls: () => catalogCalls, definitionLoads: () => definitionLoads };
 }
+
+test('all four draft tables use one frozen configuration and one chart of accounts', async () => {
+    const f = fixture((inputs, text) => {
+        if (text.includes(' AS Month')) return accounts.map(ac => ({ ...ac, Month: -10, PriorMonth: -9, Ytd: -30, PriorYtd: -29 }));
+        return accounts.map(ac => ({ ...ac, AcYr: 2026, AcPr: 4, Amount: -10 }));
+    });
+    const result = await f.service.bundle(2026, 4);
+    assert.equal(f.catalogCalls(), 1);
+    assert.equal(f.definitionLoads(), 1);
+    assert.deepEqual([result.report.definitionVersion, result.monthly.definitionVersion, result.yearly.definitionVersion], [3, 3, 3]);
+    assert.equal(result.configurationRevision.number, 3);
+    assert.equal(result.report.assets.title, 'Aktiver');
+    const pinned = { definition: result.definition, configurationRevision: result.configurationRevision, scope: result.scope };
+    const reopened = await f.service.bundle(2026, 4, 'default', pinned);
+    assert.equal(f.catalogCalls(), 1);
+    assert.equal(f.definitionLoads(), 1);
+    assert.deepEqual(reopened.definition, result.definition);
+    assert.equal(reopened.configurationRevision.id, result.configurationRevision.id);
+});
 
 test('monthly: 12 rolling fiscal months across the year boundary, oldest first, with sign flip and percentages', async () => {
     const { service, calls } = fixture(() => [

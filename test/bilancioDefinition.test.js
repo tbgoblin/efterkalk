@@ -84,6 +84,7 @@ test('headings carry no amount, missing or duplicate account values fail', () =>
 test('GOH default loads without writes; saving uses optimistic version and author', async () => {
     let writes=0, saved;
     const gohData={getAppState:async(key,opts)=>{assert.equal(opts.strict,true);return null;},setAppState:async(key,payload,opts)=>{
+        if (opts.createOnly) return true;
         writes++;assert.equal(opts.expectedVersion,0);saved=payload;return true;
     }};
     const store=createDefinitionStore({gohData,getProfile:()=>({server:'s',database:'d'}),defaultDefinition:config()});
@@ -94,7 +95,7 @@ test('GOH default loads without writes; saving uses optimistic version and autho
 test('conflicting write and changed database are not reported as success', async () => {
     let database='d', writes=0;
     const store=createDefinitionStore({gohData:{getAppState:async()=>null,setAppState:async()=>{writes++;return false;}},getProfile:()=>({server:'s',database}),defaultDefinition:config()});
-    const c=await store.load();await assert.rejects(store.save(c,catalog,'admin'),e=>e.statusCode===409);
+    const c=await store.load();await assert.rejects(store.save(c,catalog,'admin'),e=>e.statusCode===503);
     database='other';await assert.rejects(store.save(c,catalog,'admin'),/Databaseprofilen/);assert.equal(writes,1);
 });
 test('unavailable GOH never silently substitutes the default configuration', async () => {

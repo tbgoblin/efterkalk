@@ -12,24 +12,108 @@
     let report = null;
     let extras = { monthly: null, yearly: null, error: '' };
     let extrasToken = 0;
-    async function loadExtras(year, period, reportId) {
-        const token = ++extrasToken;
-        extras = { monthly: null, yearly: null, error: '' };
-        try {
-            const [monthly, yearly] = await Promise.all(['monthly', 'yearly'].map(async name => {
-                const response = await fetch(`/bilancio-trial/${name}?year=${encodeURIComponent(year)}&period=${encodeURIComponent(period)}&reportId=${encodeURIComponent(reportId)}`, { cache: 'no-store' });
-                const data = await response.json();
-                if (!response.ok) throw Error(data.error || 'Oversigten kunne ikke hentes.');
-                return data;
-            }));
-            if (token !== extrasToken) return;
-            extras = { monthly, yearly, error: '' };
-        } catch (error) {
-            if (token !== extrasToken) return;
-            extras = { monthly: null, yearly: null, error: error.message };
-        }
+    let activeBundle = null;
+    async function api(url, options = {}) {
+        const response = await fetch(url, { cache: 'no-store', ...options });
+        const data = await response.json();
+        if (!response.ok) throw Error(data.error || 'Rapporten kunne ikke hentes.');
+        return data;
+    }
+    function archiveUrl(id, reportId) {
+        return `/bilancio-trial/archive/${encodeURIComponent(id)}?reportId=${encodeURIComponent(reportId)}`;
+    }
+    function applyBundle(bundle) {
+        activeBundle = bundle;
+        report = bundle.report;
+        extras = { monthly: bundle.monthly, yearly: bundle.yearly, error: '' };
+        el('year').value = report.year;
+        el('period').value = report.period;
+        if (bundle.id) el('unit').value = bundle.unit;
+        el('unit').disabled = !!bundle.id;
+        el('saveReportBtn').disabled = !!bundle.id;
+        el('downloadPdfBtn').disabled = !bundle.id;
+        el('downloadJsonBtn').disabled = !bundle.id;
+        el('archiveNote').disabled = !!bundle.id;
+        el('archiveNote').value = bundle.note || '';
+        const revision = bundle.configurationRevision;
+        el('revisionInfo').textContent = (bundle.id
+            ? `GEMT · Rapport Rev. ${bundle.revision} · ${bundle.savedBy} · ${new Date(bundle.savedAt).toLocaleString('da-DK')}`
+            : `KLADDE · Næste rapportrevision: ${bundle.baseRevision + 1}`)
+            + ` · Konfiguration Rev. ${revision.number} (${revision.id.slice(0, 12)}) · App ${bundle.appVersion}`
+            + (bundle.templateLockedAt ? ' · Månedens skabelon er låst' : '')
+            + (bundle.note ? ' · ' + bundle.note : '');
         render();
     }
+    async function refreshArchive(reportId) {
+        const data = await api('/bilancio-trial/archive?reportId=' + encodeURIComponent(reportId));
+        if (el('reportSelect').value !== reportId) return;
+        el('archiveSelect').innerHTML = '<option value="">Vælg en gemt rapport</option>' + data.reports.map(item =>
+            `<option value="${esc(item.id)}">${item.year}-${String(item.year + 1).slice(-2)} · P${item.period} · Rev. ${item.revision} · ${esc(new Date(item.savedAt).toLocaleString('da-DK'))}</option>`
+        ).join('');
+    }
+    el('saveReportBtn').addEventListener('click', async () => {
+        if (!activeBundle?.draftId || activeBundle.id) return;
+        if (!confirm('Gem rapporten permanent? Den kan ikke overskrives. Rettelser oprettes som en ny revision.')) return;
+        const token = extrasToken;
+        el('saveReportBtn').disabled = true;
+        el('error').textContent = '';
+        try {
+            const saved = await api('/bilancio-trial/archive', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ draftId: activeBundle.draftId, unit: Number(el('unit').value), note: el('archiveNote').value })
+            });
+            if (token !== extrasToken) return;
+            applyBundle(saved);
+            el('status').textContent = 'Rapport og PDF er gemt permanent på GOH.';
+            await refreshArchive(saved.report.reportId);
+            if (token === extrasToken) el('archiveSelect').value = saved.id;
+        } catch (error) {
+            if (token === extrasToken) {
+                el('error').textContent = error.message;
+                el('saveReportBtn').disabled = !!activeBundle?.id;
+            }
+        }
+    });
+    el('openArchiveBtn').addEventListener('click', async () => {
+        const id = el('archiveSelect').value, reportId = el('reportSelect').value;
+        if (!id) { el('error').textContent = 'Vælg en gemt rapportrevision.'; return; }
+        const token = ++extrasToken;
+        el('load').disabled = true;
+        el('saveReportBtn').disabled = true;
+        el('error').textContent = '';
+        el('status').textContent = 'Henter arkiveret rapport…';
+        try {
+            const saved = await api(archiveUrl(id, reportId));
+            if (token !== extrasToken) return;
+            applyBundle(saved);
+            el('status').textContent = 'Arkiveret rapport · ingen genberegning fra Visma.';
+        } catch (error) {
+            if (token === extrasToken) {
+                el('error').textContent = error.message; el('status').textContent = '';
+                el('saveReportBtn').disabled = !activeBundle || !!activeBundle.id;
+            }
+        } finally { if (token === extrasToken) el('load').disabled = false; }
+    });
+    async function download(format) {
+        if (!activeBundle?.id) return;
+        const { id, report: currentReport, revision } = activeBundle;
+        el('error').textContent = '';
+        try {
+            const url = archiveUrl(id, currentReport.reportId).replace('?reportId=', '/download?reportId=') + '&format=' + format;
+            const response = await fetch(url, { cache: 'no-store' });
+            if (!response.ok) { const data = await response.json(); throw Error(data.error || 'Download mislykkedes.'); }
+            const objectUrl = URL.createObjectURL(await response.blob());
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = `${currentReport.reportId}-${currentReport.year}-P${currentReport.period}-Rev${revision}.${format}`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+        } catch (error) { el('error').textContent = error.message; }
+    }
+    el('downloadPdfBtn').addEventListener('click', () => download('pdf'));
+    el('downloadJsonBtn').addEventListener('click', () => download('json'));
     function printReport(orientation) {
         const styleEl = el('printOrientation');
         if (styleEl) styleEl.textContent = `@page{size:A4 ${orientation};margin:10mm}`;
@@ -169,15 +253,25 @@
     }
     el('unit').addEventListener('change',render);
     el('filters').addEventListener('submit',async event=>{
-        event.preventDefault();el('load').disabled=true;el('error').textContent='';el('status').textContent='Henter bogførte beløb…';report=null;el('report').innerHTML='';extrasToken++;extras={monthly:null,yearly:null,error:''};
+        event.preventDefault();
+        const token = ++extrasToken;
+        const reportId = el('reportSelect').value;
+        el('load').disabled=true;el('error').textContent='';el('status').textContent='Henter bogførte beløb…';report=null;activeBundle=null;el('report').innerHTML='';extras={monthly:null,yearly:null,error:''};
+        el('revisionInfo').textContent = '';
+        el('saveReportBtn').disabled = true;
+        el('downloadPdfBtn').disabled = true;
+        el('downloadJsonBtn').disabled = true;
+        el('unit').disabled = false;
+        el('archiveNote').disabled = false;
         try {
-            const response=await fetch(`/bilancio-trial/data?year=${encodeURIComponent(el('year').value)}&period=${encodeURIComponent(el('period').value)}&reportId=${encodeURIComponent(el('reportSelect').value)}`,{cache:'no-store'});
-            const data=await response.json();
-            if(!response.ok)throw Error(response.status===401||response.status===403?'Log ind i Operations Hub med adgang til Økonomirapport for at åbne rapporten.':data.error||'Kunne ikke hente rapporten.');
-            report=data;render();el('status').textContent=`Opdateret ${new Date(data.generatedAt).toLocaleString('da-DK')} · ${data.rows.reduce((n,r)=>n+(r.accounts?r.accounts.length:0),0)} konti`;
-            loadExtras(el('year').value,el('period').value,el('reportSelect').value);
-        } catch(error){el('status').textContent='';el('error').textContent=error.message;}
-        finally{el('load').disabled=false;}
+            await refreshArchive(reportId);
+            if (token !== extrasToken) return;
+            const data=await api(`/bilancio-trial/draft?year=${encodeURIComponent(el('year').value)}&period=${encodeURIComponent(el('period').value)}&reportId=${encodeURIComponent(reportId)}`);
+            if (token !== extrasToken) return;
+            applyBundle(data);
+            el('status').textContent=`Opdateret ${new Date(report.generatedAt).toLocaleString('da-DK')} · ${report.rows.reduce((n,r)=>n+(r.accounts?r.accounts.length:0),0)} konti`;
+        } catch(error){if (token === extrasToken) { el('status').textContent='';el('error').textContent=error.message; }}
+        finally{if (token === extrasToken) el('load').disabled=false;}
     });
     el('reportSelect').onchange=()=>el('filters').requestSubmit();
     (async()=>{
