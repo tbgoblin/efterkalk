@@ -43,13 +43,14 @@ test('management report defaults are stored in GOH and protected by superadmin',
     assert.match(source, /const user = requireSuperadmin\(req, res\)/);
 });
 
-test('management report page is landscape printable and its client script parses', () => {
+test('management report page is portrait printable and its client script parses', () => {
     const html = fs.readFileSync(path.join(root, 'assets/ledelsesrapport.html'), 'utf8');
     const script = fs.readFileSync(path.join(root, 'assets/js/ledelsesrapport.js'), 'utf8');
-    assert.match(html, /@page \{ size:A4 landscape;/);
+    assert.match(html, /@page \{ size:A4 portrait;/);
     assert.match(html, /id="configDialog"/);
     assert.match(html, /id="accounts"/);
-    assert.match(html, /Print liggende/);
+    assert.match(html, /Print stående/);
+    assert.match(html, /incoming-orders-table \{ font-size:8\.5px;/);
     assert.doesNotThrow(() => new Function(script));
     assert.match(script, /Omsætning pr\. måned/);
     assert.match(script, /Største kunder/);
@@ -165,7 +166,10 @@ test('monthly incoming orders show customer counts, order values and empty month
     assert.match(html, /Indgående ordrer pr\. måned/);
     assert.match(html, /Kunde &amp; Co/);
     assert.match(html, /&lt;Nyt navn&gt;/);
-    assert.match(html, /Måned i alt<\/th><th class="numeric">3<\/th><th class="numeric">200\.000 kr\./);
+    assert.match(html, /07\/26 · I alt<\/th><th class="numeric">3<\/th><th class="numeric">200\.000 kr\.<\/th><th class="numeric">100,0%/);
+    assert.match(html, /62,5%/);
+    assert.match(html, /37,5%/);
+    assert.match(html, /Periode i alt<\/th><th class="numeric">3<\/th><th class="numeric">200\.000 kr\.<\/th><th class="numeric">100,0%/);
     assert.match(html, /Ingen ordrer i måneden/);
     assert.doesNotMatch(html, /NaN|Infinity/);
 });

@@ -94,12 +94,14 @@
         .report-section-options input { width:auto; }
         .report-section-actions { display:flex; gap:6px; margin-bottom:7px; }
         .report-section-actions button { padding:5px 8px; font-size:10px; }
-        .incoming-orders-table { width:100%; border-collapse:collapse; font-size:11px; }
-        .incoming-orders-table th,.incoming-orders-table td { padding:5px 7px; border-bottom:1px solid var(--line); text-align:left; }
-        .incoming-orders-table thead th { color:var(--muted); font-size:10px; text-transform:uppercase; }
+        .incoming-month-panel { break-inside:auto; }
+        .incoming-orders-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:10px; }
+        .incoming-orders-table th,.incoming-orders-table td { padding:3px 5px; border-bottom:1px solid var(--line); text-align:left; }
+        .incoming-orders-table thead th { color:var(--muted); font-size:9px; text-transform:uppercase; }
         .incoming-orders-table .numeric { text-align:right; font-variant-numeric:tabular-nums; }
         .incoming-orders-table .incoming-month-total { background:#f4f8fb; font-weight:800; }
         .incoming-orders-table .incoming-month-total th { color:var(--navy); }
+        .incoming-orders-table .incoming-period-total { background:#e8f0f7; border-top:2px solid var(--navy); font-weight:900; }
         .resource-option { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 6px; border:1px solid transparent; border-radius:5px; background:#fff; }
         .resource-option.dragging { opacity:.45; border-color:var(--blue); }
         .resource-drag-handle { color:var(--muted); font-weight:900; letter-spacing:-2px; cursor:grab; }
@@ -111,7 +113,7 @@
         .dialog-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; }
         #status { margin-right:auto; align-self:center; font-size:11px; color:var(--muted); }
         @media screen and (max-width:800px) { .grid,.fields,.resource-grid { grid-template-columns:1fr; } .panel.wide { grid-column:auto; } .kpis { grid-template-columns:repeat(2,1fr); } .report { width:100%; margin:0; padding:14px; } .toolbar { position:static; flex-wrap:wrap; } .report-head { grid-template-columns:1fr; } .meta { text-align:left; } .kpi .value { font-size:16px; } }
-        @page { size:A4 landscape; margin:9mm; }
+        @page { size:A4 portrait; margin:9mm; }
         @media print {
             body { background:#fff; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
             .toolbar,dialog { display:none !important; }
@@ -122,6 +124,9 @@
             .kpi .value { font-size:16px; }
             .grid { display:block; }
             .panel { padding:8px; margin-bottom:10px; }
+            .incoming-month-panel { padding:5px; }
+            .incoming-orders-table { font-size:8.5px; }
+            .incoming-orders-table th,.incoming-orders-table td { padding:2px 4px; }
             .incoming-orders-table thead { display:table-header-group; }
             .incoming-orders-table tr { break-inside:avoid; }
             svg { height:205px; }
@@ -140,7 +145,7 @@
         <button type="button" onclick="location.href='/'" title="Tilbage">←</button>
         <strong>Ledelsesrapport</strong>
         <button type="button" onclick="openConfig()">Indstillinger</button>
-        <button type="button" class="primary" onclick="window.print()">Print liggende</button>
+        <button type="button" class="primary" onclick="window.print()">Print stående</button>
     </header>
     <main id="report" class="report"><div class="empty">Vælg rapportens indstillinger.</div></main>
 
@@ -198,6 +203,6 @@
         </form>
     </dialog>
     <script src="/assets/js/report-charts.js?v=4"></script>
-    <script src="/assets/js/ledelsesrapport.js?v=18"></script>
+    <script src="/assets/js/ledelsesrapport.js?v=19"></script>
 </body>
 </html>

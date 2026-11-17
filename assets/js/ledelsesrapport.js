@@ -131,16 +131,25 @@
             months.push(monthKey(cursor));
             cursor.setMonth(cursor.getMonth() + 1);
         }
-        const body = months.map(month => {
+        const monthlyTotals = months.map(month => {
             const customers = byMonth.get(month) || [];
-            const orderCount = customers.reduce((sum, row) => sum + number(row.orderCount), 0);
-            const orderValue = customers.reduce((sum, row) => sum + number(row.orderValueDkk), 0);
+            return {
+                month,
+                customers,
+                orderCount: customers.reduce((sum, row) => sum + number(row.orderCount), 0),
+                orderValue: customers.reduce((sum, row) => sum + number(row.orderValueDkk), 0)
+            };
+        });
+        const periodCount = monthlyTotals.reduce((sum, row) => sum + row.orderCount, 0);
+        const periodValue = monthlyTotals.reduce((sum, row) => sum + row.orderValue, 0);
+        const percentage = (value, total) => total === 0 ? '—' : (value / total * 100).toLocaleString('da-DK', { minimumFractionDigits:1, maximumFractionDigits:1 }) + '%';
+        const body = monthlyTotals.map(({ month, customers, orderCount, orderValue }) => {
             const customerRows = customers.length
-                ? customers.map(row => '<tr><td></td><td>'+esc((row.customerName || 'Ukendt kunde')+(row.custNo == null ? '' : ' · '+row.custNo))+'</td><td class="numeric">'+esc(number(row.orderCount).toLocaleString('da-DK'))+'</td><td class="numeric">'+esc(dkk(row.orderValueDkk))+'</td></tr>').join('')
-                : '<tr><td></td><td class="note" colspan="3">Ingen ordrer i måneden.</td></tr>';
-            return '<tr class="incoming-month-total"><th>'+esc(monthLabel(month))+'</th><th>Måned i alt</th><th class="numeric">'+esc(orderCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(orderValue))+'</th></tr>'+customerRows;
-        }).join('');
-        return '<section class="panel wide incoming-month-panel"><div class="panel-head"><h2>Indgående ordrer pr. måned</h2><span class="unit">Ordredato · ordreværdi i DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><table class="incoming-orders-table"><thead><tr><th>Måned</th><th>Kunde</th><th class="numeric">Antal ordre</th><th class="numeric">Ordreværdi</th></tr></thead><tbody>'+body+'</tbody></table></section>';
+                ? customers.map(row => '<tr><td></td><td>'+esc((row.customerName || 'Ukendt kunde')+(row.custNo == null ? '' : ' · '+row.custNo))+'</td><td class="numeric">'+esc(number(row.orderCount).toLocaleString('da-DK'))+'</td><td class="numeric">'+esc(dkk(row.orderValueDkk))+'</td><td class="numeric">'+esc(percentage(number(row.orderValueDkk),orderValue))+'</td></tr>').join('')
+                : '<tr><td></td><td class="note" colspan="4">Ingen ordrer i måneden.</td></tr>';
+            return '<tr class="incoming-month-total"><th colspan="2">'+esc(monthLabel(month))+' · I alt</th><th class="numeric">'+esc(orderCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(orderValue))+'</th><th class="numeric">'+esc(percentage(orderValue,orderValue))+'</th></tr>'+customerRows;
+        }).join('')+'<tr class="incoming-period-total"><th colspan="2">Periode i alt</th><th class="numeric">'+esc(periodCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(periodValue))+'</th><th class="numeric">'+esc(percentage(periodValue,periodValue))+'</th></tr>';
+        return '<section class="panel wide incoming-month-panel"><div class="panel-head"><h2>Indgående ordrer pr. måned</h2><span class="unit">Ordredato · ordreværdi i DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><table class="incoming-orders-table"><colgroup><col style="width:13%"><col style="width:37%"><col style="width:14%"><col style="width:21%"><col style="width:15%"></colgroup><thead><tr><th>Måned</th><th>Kunde</th><th class="numeric">Antal ordre</th><th class="numeric">Ordreværdi</th><th class="numeric">Andel</th></tr></thead><tbody>'+body+'</tbody></table></section>';
     }
 
     function chunks(items, size) {
