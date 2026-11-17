@@ -65,15 +65,19 @@ test('loading a month fetches invoices and Vareforbrug for that exact month', as
     await new Promise(r => setTimeout(r, 20));
 });
 
-test('customer monthly analysis prints a landscape PDF with all rows and only the monthly total', async () => {
+test('customer monthly analysis prints a portrait PDF without cost breakdown', async () => {
     let output = '';
     const visibleRow = { style:{ display:'none' }, querySelectorAll:() => [] };
     let visibleTotalRemoved = false;
+    let removedBreakdownCells = 0;
     let printed = false;
     const clonedTable = {
         classList:{ remove(){}, add(){} },
         querySelectorAll(selector) {
             if (selector === 'tbody tr') return [visibleRow];
+            if (selector === 'tr > :nth-child(9)') return Array.from({ length:3 }, () => ({
+                remove(){ removedBreakdownCells++; }
+            }));
             return [];
         },
         tFoot:{ rows:[{ remove(){ visibleTotalRemoved = true; } }, {}] },
@@ -97,12 +101,13 @@ test('customer monthly analysis prints a landscape PDF with all rows and only th
     client.exportSummaryPdf();
     await printFrame.onload();
 
-    assert.match(output, /A4 landscape/);
+    assert.match(output, /A4 portrait/);
     assert.match(output, /Kunder — månedsanalyse/);
     assert.match(output, /Inkl\. manglende tid fra stykliste/);
     assert.match(output, /table>customer rows/);
     assert.equal(visibleRow.style.display, '');
     assert.equal(visibleTotalRemoved, true);
+    assert.equal(removedBreakdownCells, 3);
     assert.equal(printed, true);
 });
 

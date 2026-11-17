@@ -753,7 +753,7 @@ function exportKfCustomerSummaryPdf() {
     printFrame.id = 'kfCustomerSummaryPrintFrame';
     printFrame.title = 'Kunder — månedsanalyse PDF';
     printFrame.setAttribute('aria-hidden', 'true');
-    printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0;';
+    printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:712px;height:1000px;border:0;';
     printFrame.onload = async () => {
         try {
             const printWindow = printFrame.contentWindow;
@@ -777,7 +777,7 @@ function exportKfCustomerSummaryPdf() {
     });
     const footerRows = printableTable.tFoot ? printableTable.tFoot.rows : [];
     if (footerRows.length > 1) footerRows[0].remove();
-    printableTable.querySelectorAll('details').forEach(details => { details.open = true; });
+    printableTable.querySelectorAll('tr > :nth-child(9)').forEach(cell => cell.remove());
 
     const [year, month] = _kfLoadedMonth.split('-').map(Number);
     const monthLabel = new Intl.DateTimeFormat('da-DK', { month: 'long', year: 'numeric' })
@@ -792,7 +792,7 @@ function exportKfCustomerSummaryPdf() {
             <meta charset="utf-8">
             <title>MånedsDB kunder ${_kfLoadedMonth}</title>
             <style>
-                @page { size: A4 landscape; margin: 11mm; }
+                @page { size: A4 portrait; margin: 11mm; }
                 * { box-sizing: border-box; }
                 body { margin: 0; color: #18324c; font: 10px "Segoe UI", Arial, sans-serif; }
                 .report-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 16px; padding: 0 0 11px; border-bottom: 3px solid #2d78a8; }
@@ -804,24 +804,22 @@ function exportKfCustomerSummaryPdf() {
                 thead { display: table-header-group; }
                 tfoot { display: table-row-group; }
                 tr { break-inside: avoid; page-break-inside: avoid; }
-                th { padding: 7px 5px; background: #123f6f; color: #fff; font-size: 8px; text-align: left; }
-                td { padding: 6px 5px; border-bottom: 1px solid #dce5ed; vertical-align: middle; }
+                th { padding: 7px 3px; background: #123f6f; color: #fff; font-size: 8px; text-align: left; }
+                td { padding: 6px 3px; border-bottom: 1px solid #dce5ed; vertical-align: middle; font-size: 9px; }
                 tbody tr:nth-child(even) td { background: #f4f8fb; }
-                th:first-child, td:first-child { width: 19%; }
+                th:first-child, td:first-child { width: 23%; }
                 th:nth-child(2), td:nth-child(2) { width: 6%; }
-                th:nth-child(3), td:nth-child(3) { width: 10%; }
-                th:nth-child(4), td:nth-child(4) { width: 9%; }
-                th:nth-child(5), td:nth-child(5) { width: 10%; }
-                th:nth-child(6), td:nth-child(6) { width: 8%; }
-                th:nth-child(7), td:nth-child(7) { width: 10%; }
-                th:nth-child(8), td:nth-child(8) { width: 7%; }
-                th:last-child, td:last-child { width: 21%; }
+                th:nth-child(3), td:nth-child(3) { width: 13%; }
+                th:nth-child(4), td:nth-child(4) { width: 10%; }
+                th:nth-child(5), td:nth-child(5) { width: 13%; }
+                th:nth-child(6), td:nth-child(6) { width: 9%; }
+                th:nth-child(7), td:nth-child(7) { width: 13%; }
+                th:nth-child(8), td:nth-child(8) { width: 13%; }
                 .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-                td:first-child { font-weight: 600; }
+                th.r { white-space: normal; }
+                td:first-child { font-weight: 600; overflow-wrap: anywhere; }
                 td:first-child span[style] { color: #627c91 !important; }
                 tfoot td { border-top: 2px solid #7da8c8; background: #e8f1f8 !important; font-weight: 700; }
-                details summary { display: none; }
-                details .kf-breakdown-detail { display: block; color: #405c73; font-size: 8px; line-height: 1.4; }
                 .kf-customer-summary-print-table .kf-margin-cell.ok { color: #197044; }
                 .kf-customer-summary-print-table .kf-margin-cell.warn { color: #9a6500; }
                 .kf-customer-summary-print-table .kf-margin-cell.bad { color: #a33835; }
