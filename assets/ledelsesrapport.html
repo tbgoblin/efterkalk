@@ -102,6 +102,7 @@
         .incoming-orders-table .incoming-month-total { background:#f4f8fb; font-weight:800; }
         .incoming-orders-table .incoming-month-total th { color:var(--navy); }
         .incoming-orders-table .incoming-period-total { background:#e8f0f7; border-top:2px solid var(--navy); font-weight:900; }
+        .incoming-orders-table .incoming-omitted td { color:var(--muted); font-style:italic; }
         .resource-option { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 6px; border:1px solid transparent; border-radius:5px; background:#fff; }
         .resource-option.dragging { opacity:.45; border-color:var(--blue); }
         .resource-drag-handle { color:var(--muted); font-weight:900; letter-spacing:-2px; cursor:grab; }
@@ -166,6 +167,9 @@
                     <label>Ordreindgang, fra uge<input id="orderFromWeek" type="week" required /></label>
                     <label>Ordreindgang, til uge<input id="orderToWeek" type="week" required /></label>
                 </div>
+                <div class="fields order-period">
+                    <label>Indgående ordrer · kunder pr. måned<select id="monthlyOrderLimit"><option value="5">Top 5</option><option value="10" selected>Top 10</option><option value="20">Top 20</option><option value="50">Top 50</option><option value="all">Alle kunder</option></select></label>
+                </div>
                 <div class="accounts-head"><span>Vælg rapportsektioner</span></div>
                 <div class="report-section-actions"><button type="button" onclick="setReportSections(true)">Vælg alle</button><button type="button" onclick="setReportSections(false)">Fravælg alle</button></div>
                 <div id="reportSections" class="report-section-options">
@@ -203,6 +207,6 @@
         </form>
     </dialog>
     <script src="/assets/js/report-charts.js?v=4"></script>
-    <script src="/assets/js/ledelsesrapport.js?v=19"></script>
+    <script src="/assets/js/ledelsesrapport.js?v=20"></script>
 </body>
 </html>

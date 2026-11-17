@@ -117,7 +117,7 @@
         return '<section class="panel wide revenue-panel"><div class="panel-head"><h2>Omsætning pr. måned</h2><span class="unit">Mio DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><svg class="omsaetning-chart-svg" viewBox="'+chart.viewBox+'" role="img" aria-label="Omsætning stacked pr. konto">'+chart.html+'</svg><div class="omsaetning-legend">'+chart.legend+'</div></section>';
     }
 
-    function monthlyCustomerOrdersPanel(data) {
+    function monthlyCustomerOrdersPanel(data, customerLimit = null) {
         const byMonth = new Map();
         (data.monthlyOrders || []).forEach(row => {
             const rawMonth = String(row.month || '');
@@ -144,12 +144,20 @@
         const periodValue = monthlyTotals.reduce((sum, row) => sum + row.orderValue, 0);
         const percentage = (value, total) => total === 0 ? '—' : (value / total * 100).toLocaleString('da-DK', { minimumFractionDigits:1, maximumFractionDigits:1 }) + '%';
         const body = monthlyTotals.map(({ month, customers, orderCount, orderValue }) => {
-            const customerRows = customers.length
-                ? customers.map(row => '<tr><td></td><td>'+esc((row.customerName || 'Ukendt kunde')+(row.custNo == null ? '' : ' · '+row.custNo))+'</td><td class="numeric">'+esc(number(row.orderCount).toLocaleString('da-DK'))+'</td><td class="numeric">'+esc(dkk(row.orderValueDkk))+'</td><td class="numeric">'+esc(percentage(number(row.orderValueDkk),orderValue))+'</td></tr>').join('')
+            const rankedCustomers = customers.slice().sort((left, right) => number(right.orderValueDkk) - number(left.orderValueDkk));
+            const visibleCustomers = Number.isInteger(customerLimit) && customerLimit > 0
+                ? rankedCustomers.slice(0, customerLimit) : rankedCustomers;
+            const omittedCount = customers.length - visibleCustomers.length;
+            const customerRows = visibleCustomers.length
+                ? visibleCustomers.map(row => '<tr><td></td><td>'+esc((row.customerName || 'Ukendt kunde')+(row.custNo == null ? '' : ' · '+row.custNo))+'</td><td class="numeric">'+esc(number(row.orderCount).toLocaleString('da-DK'))+'</td><td class="numeric">'+esc(dkk(row.orderValueDkk))+'</td><td class="numeric">'+esc(percentage(number(row.orderValueDkk),orderValue))+'</td></tr>').join('')
                 : '<tr><td></td><td class="note" colspan="4">Ingen ordrer i måneden.</td></tr>';
-            return '<tr class="incoming-month-total"><th colspan="2">'+esc(monthLabel(month))+' · I alt</th><th class="numeric">'+esc(orderCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(orderValue))+'</th><th class="numeric">'+esc(percentage(orderValue,orderValue))+'</th></tr>'+customerRows;
+            const omittedRow = omittedCount > 0
+                ? '<tr class="incoming-omitted"><td colspan="5">Yderligere '+esc(omittedCount.toLocaleString('da-DK'))+' '+(omittedCount === 1 ? 'kunde' : 'kunder')+' ikke vist; summer og andele omfatter alle kunder.</td></tr>'
+                : '';
+            return '<tr class="incoming-month-total"><th colspan="2">'+esc(monthLabel(month))+' · I alt</th><th class="numeric">'+esc(orderCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(orderValue))+'</th><th class="numeric">'+esc(percentage(orderValue,orderValue))+'</th></tr>'+customerRows+omittedRow;
         }).join('')+'<tr class="incoming-period-total"><th colspan="2">Periode i alt</th><th class="numeric">'+esc(periodCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(periodValue))+'</th><th class="numeric">'+esc(percentage(periodValue,periodValue))+'</th></tr>';
-        return '<section class="panel wide incoming-month-panel"><div class="panel-head"><h2>Indgående ordrer pr. måned</h2><span class="unit">Ordredato · ordreværdi i DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><table class="incoming-orders-table"><colgroup><col style="width:13%"><col style="width:37%"><col style="width:14%"><col style="width:21%"><col style="width:15%"></colgroup><thead><tr><th>Måned</th><th>Kunde</th><th class="numeric">Antal ordre</th><th class="numeric">Ordreværdi</th><th class="numeric">Andel</th></tr></thead><tbody>'+body+'</tbody></table></section>';
+        const customerSelection = Number.isInteger(customerLimit) && customerLimit > 0 ? 'Top '+customerLimit+' pr. måned efter ordreværdi' : 'Alle kunder pr. måned';
+        return '<section class="panel wide incoming-month-panel"><div class="panel-head"><h2>Indgående ordrer pr. måned</h2><span class="unit">'+esc(customerSelection)+' · ordredato · DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><table class="incoming-orders-table"><colgroup><col style="width:13%"><col style="width:37%"><col style="width:14%"><col style="width:21%"><col style="width:15%"></colgroup><thead><tr><th>Måned</th><th>Kunde</th><th class="numeric">Antal ordre</th><th class="numeric">Ordreværdi</th><th class="numeric">Andel</th></tr></thead><tbody>'+body+'</tbody></table></section>';
     }
 
     function chunks(items, size) {
@@ -247,7 +255,7 @@
             (sectionVisible('customers') ? '<section class="panel"><div class="panel-head"><h2>Største kunder</h2><span class="unit">'+esc(data.filters.customerFrom || data.filters.from)+' til '+esc(data.filters.customerTo || data.filters.to)+' · omsætning, kost og DB</span></div>'+customerBars(data.revenue.topCustomers)+'</section>' : '')+
             (sectionVisible('orderFlow') ? orderFlowPanel(data.orderFlow) : '')+
             (sectionVisible('weeklyOrders') ? orderPanels : '')+
-            (sectionVisible('monthlyOrders') ? monthlyCustomerOrdersPanel(data) : '')+'</div>'+
+            (sectionVisible('monthlyOrders') ? monthlyCustomerOrdersPanel(data,display.monthlyOrderLimit) : '')+'</div>'+
             (sectionVisible('load') ? resourceLoadPanels(data,display.loadResources) : '');
     }
 
@@ -334,7 +342,8 @@
         if(!accounts.length){status.textContent='Vælg mindst én konto.';return;}
         const sections=[...document.querySelectorAll('#reportSections input:checked')].map(input=>input.value);
         if(!sections.length){status.textContent='Vælg mindst én rapportsektion.';status.className='error';return;}
-        const display={loadResources:[...document.querySelectorAll('#loadResources input:checked')].map(input=>input.value),orderLines:[...document.querySelectorAll('#orderLines input:checked')].map(input=>input.value),sections};
+        const limitValue=document.getElementById('monthlyOrderLimit').value;
+        const display={loadResources:[...document.querySelectorAll('#loadResources input:checked')].map(input=>input.value),orderLines:[...document.querySelectorAll('#orderLines input:checked')].map(input=>input.value),sections,monthlyOrderLimit:limitValue==='all'?null:Number(limitValue)};
         if(!display.loadResources.length){status.textContent='Vælg mindst én ressource til Belastning.';status.className='error';return;}
         status.className='';status.textContent='Danner rapport...';document.getElementById('generateBtn').disabled=true;
         try{

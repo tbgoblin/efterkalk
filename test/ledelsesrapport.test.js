@@ -59,6 +59,8 @@ test('management report page is portrait printable and its client script parses'
     assert.match(script, /data-week-value="ordre"/);
     assert.match(html, /id="orderFromWeek" type="week"/);
     assert.match(html, /id="orderToWeek" type="week"/);
+    assert.match(html, /id="monthlyOrderLimit"/);
+    assert.match(html, /option value="all">Alle kunder/);
     assert.match(html, /id="reportSections"/);
     assert.match(html, /value="monthlyOrders" checked/);
     assert.match(script, /GohReportCharts\.revenueStacked/);
@@ -172,6 +174,20 @@ test('monthly incoming orders show customer counts, order values and empty month
     assert.match(html, /Periode i alt<\/th><th class="numeric">3<\/th><th class="numeric">200\.000 kr\.<\/th><th class="numeric">100,0%/);
     assert.match(html, /Ingen ordrer i måneden/);
     assert.doesNotMatch(html, /NaN|Infinity/);
+});
+
+test('monthly incoming order top-N keeps totals and customer shares based on all orders', () => {
+    const client = reportClientFixture();
+    const html = client.monthlyCustomerOrdersPanel({ filters: { from: '2026-07', to: '2026-07' }, monthlyOrders: [
+        { month: '202607', custNo: 12, customerName: 'Topkunde', orderCount: 2, orderValueDkk: 200000 },
+        { month: '202607', custNo: 14, customerName: 'Anden kunde', orderCount: 1, orderValueDkk: 100000 }
+    ] }, 1);
+    assert.match(html, /Top 1 pr\. måned efter ordreværdi/);
+    assert.match(html, /Topkunde/);
+    assert.doesNotMatch(html, /Anden kunde/);
+    assert.match(html, /300\.000 kr\.<\/th><th class="numeric">100,0%/);
+    assert.match(html, /66,7%/);
+    assert.match(html, /Yderligere 1 kunde ikke vist; summer og andele omfatter alle kunder/);
 });
 
 test('report section selection omits unselected sections from the printable report', () => {
