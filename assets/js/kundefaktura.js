@@ -742,13 +742,36 @@ function filterKfCustomerSummary() {
 
 function exportKfCustomerSummaryPdf() {
     const table = document.querySelector('#kfCustomerSummary .kf-customer-summary-table');
-    if (!table || !_kfLoadedMonth) return;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        kfSetStatus('Tillad pop op-vinduer for at gemme månedsanalysen som PDF.');
+    if (!table || !_kfLoadedMonth) {
+        kfSetStatus('Indlæs en måned, før du gemmer månedsanalysen som PDF.');
         return;
     }
+
+    const previousFrame = document.getElementById('kfCustomerSummaryPrintFrame');
+    if (previousFrame) previousFrame.remove();
+    const printFrame = document.createElement('iframe');
+    printFrame.id = 'kfCustomerSummaryPrintFrame';
+    printFrame.title = 'Kunder — månedsanalyse PDF';
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0;';
+    const printWindow = printFrame.contentWindow;
+    if (!printWindow) {
+        kfSetStatus('Kunne ikke oprette print-visningen. Prøv igen.');
+        return;
+    }
+
+    printFrame.onload = async () => {
+        try {
+            if (printWindow.document.fonts) await printWindow.document.fonts.ready;
+            printWindow.addEventListener('afterprint', () => printFrame.remove(), { once:true });
+            printWindow.focus();
+            printWindow.print();
+        } catch (err) {
+            printFrame.remove();
+            kfSetStatus('Kunne ikke udskrive månedsanalysen: ' + String(err.message || err));
+        }
+    };
+    document.body.appendChild(printFrame);
 
     const printableTable = table.cloneNode(true);
     printableTable.classList.remove('kf-customer-summary-table');
@@ -768,8 +791,7 @@ function exportKfCustomerSummaryPdf() {
         ? 'Inkl. manglende tid fra stykliste'
         : 'Kun registreret kost';
 
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
+    printFrame.srcdoc = `<!doctype html>
         <html lang="da">
         <head>
             <meta charset="utf-8">
@@ -818,10 +840,7 @@ function exportKfCustomerSummaryPdf() {
             </header>
             ${printableTable.outerHTML}
         </body>
-        </html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 250);
+        </html>`;
 }
 
 function closeKfCustomerTrend() {

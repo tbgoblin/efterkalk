@@ -7,7 +7,7 @@ const path = require('path');
 // assets/js/via.js: read the source, wrap it with new Function(...), stub the page globals it
 // documents at the top of the file (escapeHtml, formatNumber, pushModalStack, removeModalStack,
 // searchOrderByNo), and expose just what each test needs.
-function clientFixture({ fetchImpl, summary, printTable, printWindow } = {}) {
+function clientFixture({ fetchImpl, summary, printTable, printFrame } = {}) {
     const source = fs.readFileSync(path.join(__dirname, '../assets/js/kundefaktura.js'), 'utf8');
     const els = {};
     const el = id => els[id] || (els[id] = {
@@ -17,10 +17,16 @@ function clientFixture({ fetchImpl, summary, printTable, printWindow } = {}) {
         appendChild() {}, removeChild() {}, remove() {}
     });
     const noop = () => {};
-    const document_ = { getElementById: el, querySelectorAll: () => [], querySelector: () => printTable || null, createElement: () => el('x') };
+    const document_ = {
+        getElementById: el,
+        querySelectorAll: () => [],
+        querySelector: () => printTable || null,
+        createElement: () => printFrame || el('x'),
+        body:{ appendChild(){} }
+    };
     const posts = [];
     const fetch_ = fetchImpl || (async () => ({ ok: false, json: async () => ({}) }));
-    const window_ = { requestAnimationFrame: f => f(), GohMonthlySummary:summary, open: () => printWindow || null };
+    const window_ = { requestAnimationFrame: f => f(), GohMonthlySummary:summary };
     const client = new Function('document', 'window', 'fetch', 'escapeHtml', 'formatNumber', 'pushModalStack', 'removeModalStack', 'searchOrderByNo', source + `
         return {
             load: loadKundefakturaInvoices,
@@ -59,10 +65,11 @@ test('loading a month fetches invoices and Vareforbrug for that exact month', as
     await new Promise(r => setTimeout(r, 20));
 });
 
-test('customer monthly analysis opens a landscape PDF printout with all rows and only the monthly total', async () => {
+test('customer monthly analysis prints a landscape PDF with all rows and only the monthly total', async () => {
     let output = '';
     const visibleRow = { style:{ display:'none' }, querySelectorAll:() => [] };
     let visibleTotalRemoved = false;
+    let printed = false;
     const clonedTable = {
         classList:{ remove(){}, add(){} },
         querySelectorAll(selector) {
@@ -73,16 +80,21 @@ test('customer monthly analysis opens a landscape PDF printout with all rows and
         outerHTML:'<table>customer rows</table>'
     };
     const printWindow = {
-        document:{ open(){}, write(html){ output = html; }, close(){} },
-        focus(){}, print(){}
+        document:{ fonts:{ ready:Promise.resolve() } },
+        addEventListener(){}, focus(){}, print(){ printed = true; }
+    };
+    const printFrame = {
+        style:{}, contentWindow:printWindow,
+        setAttribute(){}, remove(){},
+        set srcdoc(html) { output = html; }
     };
     const client = clientFixture({
         printTable:{ cloneNode:() => clonedTable },
-        printWindow
+        printFrame
     });
     client.setPrintState('2026-10', 'adjusted');
     client.exportSummaryPdf();
-    await new Promise(resolve => setTimeout(resolve, 270));
+    await printFrame.onload();
 
     assert.match(output, /A4 landscape/);
     assert.match(output, /Kunder — månedsanalyse/);
@@ -90,6 +102,7 @@ test('customer monthly analysis opens a landscape PDF printout with all rows and
     assert.match(output, /table>customer rows/);
     assert.equal(visibleRow.style.display, '');
     assert.equal(visibleTotalRemoved, true);
+    assert.equal(printed, true);
 });
 
 test('credit notes replace the positive-only snapshot and U/B stays outside invoice and cost totals', async () => {
