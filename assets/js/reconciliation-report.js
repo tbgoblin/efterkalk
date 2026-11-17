@@ -244,7 +244,9 @@
         const missing = rows.some(row => row.display !== 'hidden' && row.type !== 'heading' && row.value == null);
         const parts = [];
         parts.push('<header><h1>Afstemning af Vareforbrug · ' + esc(monthName(data.month)) + '</h1>'
-            + '<p>Udskrevet ' + esc(dateTime(new Date().toISOString())) + ' · pladelager vurderet til ' + esc(plateLabel) + '</p></header>');
+            + '<p>Udskrevet ' + esc(dateTime(new Date().toISOString())) + ' · pladelager vurderet til ' + esc(plateLabel) + '</p>'
+            + (data.lockedAt ? '<p>Låst ' + esc(dateTime(data.lockedAt)) + ' af ' + esc(data.lockedBy)
+                + ' · kost: ' + (data.costMode === 'registered' ? 'kun registreret' : 'inkl. stykliste') + '</p>' : '') + '</header>');
         if (missing) parts.push('<p class="warning">Nogle tal var ikke færdigberegnet, da rapporten blev lavet (vist som —). Vent til alle ordrer er beregnet, og udskriv igen.</p>');
         parts.push(buildSummary(data, info));
         parts.push(controlsHtml(data.controlList || []));

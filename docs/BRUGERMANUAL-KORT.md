@@ -78,6 +78,8 @@ Du kan:
 - Eksportere både kunder og ordrer til CSV.
 - Bruge `Gem som PDF` ved kundeanalysen. PDF'en indeholder en afstemning mod alle bogførte omsætningskonti, posteringer uden fakturanummer og fakturerede U/B-ordrer; øvrige afvigelser vises særskilt. I desktop-appen vælges filnavn og placering direkte, uden Microsoft Print to PDF.
 - Gemme den færdigberegnede månedsrevision i GOH, så den kan genåbnes og bruges til trend.
+- Bruge `Lås afstemning`, når alle tal og kontroller er færdigberegnet. Den gemte afstemning og PDF'en bevarer tallene, detaljerne og de registrerede ordreomkostninger fra låsningstidspunktet og kan ses fra andre arbejdspladser. De øvrige ordre- og kundetabeller viser fortsat aktuelle tal.
+- Vælge `Lås op` og bekræfte for at genindlæse aktuelle tal. Afstemningen kan derefter låses igen. Den seneste låste version bevares ved oplåsning indtil en ny låsning.
 
 Måneden gemmes først, når ordreberegningerne er gennemført. En ordre uden komplet kost markeres i stedet for at få opfundet en værdi.
 

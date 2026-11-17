@@ -6,18 +6,19 @@ const model=require('../assets/js/monthly-summary-model');
 const {createMonthlySummaryService}=require('../services/monthlySummaryService');
 
 function backend() {
-    let state=null,writes=0;
+    const states=new Map();let writes=0;
     const catalog={accounts:[{AcNo:12070,Nm:'Køb',AcGr:'12_Vareforbrug'},{AcNo:12085,Nm:'Internt',AcGr:'12_Vareforbrug'},{AcNo:12092,Nm:'Skrot',AcGr:'12_Vareforbrug'}],groups:[{AcGr:'12_Vareforbrug',AgAcGr:''}]};
     const amounts={12070:1500,12085:125,12092:-200};
     const service=createMonthlySummaryService({getProfile:()=>({server:'test',database:'test'}),getCatalog:async()=>catalog,
-        gohData:{getAppState:async()=>state,setAppState:async(key,payload,{expectedVersion})=>{if((state?.payload.version || 0)!==expectedVersion)return false;state={payload};writes++;return true;}},
+        gohData:{getAppState:async key=>states.get(key) || null,setAppState:async(key,payload,{expectedVersion})=>{if((states.get(key)?.payload.version || 0)!==expectedVersion)return false;states.set(key,{payload:structuredClone(payload)});writes++;return true;}},
         sql:{Int:0,MAX:0,NVarChar:()=>0},getConnection:async()=>({request(){let ids=[];return{input(name,type,value){if(name==='accounts')ids=value.split(',').map(Number);return this;},async query(){return{recordset:catalog.accounts.filter(row=>ids.includes(row.AcNo)).map(row=>({...row,Amount:amounts[row.AcNo]}))};}};}})
     });
     return {service,writes:()=>writes,fetch:async(url,options={})=>{
         try {
             const body=options.body ? JSON.parse(options.body) : {};
             let payload;
-            if(url.includes('/preview'))payload=await service.data(body.month,body.definition);
+            if(url.includes('/reconciliation-lock'))payload={scope:service.scope(),state:await service.lockState(new URL(url,'http://test').searchParams.get('month'))};
+            else if(url.includes('/preview'))payload=await service.data(body.month,body.definition);
             else if(url.includes('/summary-definition') && options.method==='PUT')payload={definition:await service.save(body,'admin')};
             else if(url.includes('/summary-definition'))payload=await service.editor();
             else payload={...await service.data(new URL(url,'http://test').searchParams.get('month')),canEdit:true};
@@ -87,14 +88,20 @@ test('user can choose a group, exclude one account, preview, save and reopen the
 
 test('late month responses cannot replace the current month, and failures restore the standard summary',async()=>{
     const pending={};
-    const f=fixture(url=>new Promise(resolve=>{pending[new URL(url,'http://test').searchParams.get('month')]=resolve;}));
-    const first=f.controller.load('2026-09'),second=f.controller.load('2026-10');
-    const response=month=>({ok:true,json:async()=>({ok:true,month,definition:{...model.defaults(),title:month},selections:{booked:[12070]},accounts:[{AcNo:12070,Nm:'Køb',Amount:0}]})});
+    const f=fixture(url=>url.includes('/reconciliation-lock')
+        ? Promise.resolve({ok:true,json:async()=>({ok:true,scope:'test',state:{version:0,locked:false}})})
+        : new Promise(resolve=>{pending[new URL(url,'http://test').searchParams.get('month')]=resolve;}));
+    const first=f.controller.load('2026-09');
+    await new Promise(resolve=>setImmediate(resolve));
+    const second=f.controller.load('2026-10');
+    await new Promise(resolve=>setImmediate(resolve));
+    const response=month=>({ok:true,json:async()=>({ok:true,month,definition:{...model.defaults(),scope:'test',title:month},selections:{booked:[12070]},accounts:[{AcNo:12070,Nm:'Køb',Amount:0}]})});
     pending['2026-10'](response('2026-10'));await second;
     pending['2026-09'](response('2026-09'));await first;
     assert.match(f.get('kfSummaryReport').innerHTML,/2026-10/);
     assert.doesNotMatch(f.get('kfSummaryReport').innerHTML,/2026-09/);
-    const third=f.controller.load('2026-11');pending['2026-11']({ok:false,json:async()=>({ok:false,error:'GOH unavailable'})});await third;
+    const third=f.controller.load('2026-11');await new Promise(resolve=>setImmediate(resolve));
+    pending['2026-11']({ok:false,json:async()=>({ok:false,error:'GOH unavailable'})});await third;
     assert.equal(f.get('kfSummaryLegacy').classList.contains('kfs-configured'),false);
     assert.equal(f.get('kfSummaryReport').hidden,true);
     assert.match(f.get('kfSummaryStatus').textContent,/GOH unavailable/);
@@ -111,4 +118,23 @@ test('invalid formulas fail before any write and a conflicting save leaves the e
     await f.click('kfs-save');
     assert.equal(b.writes(),1);assert.equal(f.get('kfSummaryDialog').open,true);
     assert.match(f.get('kfs-message').textContent,/anden bruger/);
+});
+
+test('a locked month renders saved rows and ignores later live metrics and configuration',async()=>{
+    const b=backend(),scope=b.service.scope();
+    const metrics=Object.fromEntries(['orders','invoiced','cost','material','material_only','stang','parts','subcontract',
+        'warehouse_delta','purchase_gap','ub_orders','ub_material','finished_material','purchase_timing'].map(key=>[key,0]));
+    const snapshot={summary:{month:'2026-10',scope,title:'Låst',metrics,rows:[
+        {id:'cost',name:'Registreret kost',type:'source',source:'cost',display:'row',unit:'dkk',value:42}],signs:{}},
+        plateMode:'standard',costMode:'registered',details:{month:'2026-10',varelager:{plateMode:'standard',categories:[{delta:0}]},
+            purchaseGap:{totalValue:0},wip:{delta:0},timing:{value:0}},ubOrders:[],controlList:[],
+        orderCosts:{invoices:[],margins:{},ubMargins:{}}};
+    await b.service.changeLock('2026-10',0,'lock',snapshot,'alice');
+    const f=fixture(b.fetch);await f.controller.load('2026-10');
+    f.controller.update({...metrics,cost:999});
+    assert.match(f.get('kfSummaryReport').innerHTML,/42,00 DKK/);
+    assert.doesNotMatch(f.get('kfSummaryReport').innerHTML,/999,00/);
+    assert.equal(f.controller.current().rows[0].value,42);
+    assert.equal(f.get('kfSummaryPlateMode').disabled,true);
+    assert.match(f.get('kfSummaryStatus').textContent,/Låst.*alice/);
 });

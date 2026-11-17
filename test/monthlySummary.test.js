@@ -51,10 +51,11 @@ test('credit signs, manual zero, hidden dependencies and formulas retain exact a
 });
 
 function serviceFixture() {
-    let profile={server:'Visma',database:'F0001'},state=null,writes=0,parameters={},catalogHook;
-    const gohData={getAppState:async()=>state,setAppState:async(key,payload,{expectedVersion})=>{
-        if((state?.payload.version || 0)!==expectedVersion)return false;
-        writes++;state={payload:structuredClone(payload)};return true;
+    let profile={server:'Visma',database:'F0001'},writes=0,parameters={},catalogHook,unavailable=false;
+    const states=new Map();
+    const gohData={getAppState:async key=>{if(unavailable)throw new Error('GOH unavailable');return states.get(key) || null;},setAppState:async(key,payload,{expectedVersion})=>{
+        if((states.get(key)?.payload.version || 0)!==expectedVersion)return false;
+        writes++;states.set(key,{payload:structuredClone(payload)});return true;
     }};
     const service=createMonthlySummaryService({gohData,getProfile:()=>profile,
         getCatalog:async()=>{if(catalogHook)await catalogHook();return catalog;},
@@ -62,8 +63,47 @@ function serviceFixture() {
         getConnection:async()=>({request:()=>({input(name,type,value){parameters[name]=value;return this;},
             async query(){return{recordset:[{AcNo:12070,Nm:'Varekøb',Amount:0}]};}})})
     });
-    return{service,writes:()=>writes,parameters:()=>parameters,setProfile:value=>{profile=value;},catalogHook:fn=>{catalogHook=fn;}};
+    return{service,writes:()=>writes,parameters:()=>parameters,setProfile:value=>{profile=value;},catalogHook:fn=>{catalogHook=fn;},unavailable:()=>{unavailable=true;}};
 }
+
+function lockSnapshot(service) {
+    const metrics=Object.fromEntries(['orders','invoiced','cost','material','material_only','stang','parts','subcontract',
+        'warehouse_delta','purchase_gap','ub_orders','ub_material','finished_material','purchase_timing'].map(key=>[key,0]));
+    return {summary:{month:'2026-10',scope:service.scope(),title:'Måned',metrics,rows:[{id:'cost',name:'Kost',type:'source',display:'row',value:42}],signs:{}},
+        plateMode:'fifo',costMode:'registered',details:{month:'2026-10',varelager:{plateMode:'fifo',categories:[{delta:0}]},
+            purchaseGap:{totalValue:0},wip:{delta:0},timing:{value:0}},ubOrders:[],controlList:[],
+        orderCosts:{invoices:[],margins:{},ubMargins:{}}};
+}
+
+test('locked reconciliation is shared, isolated by profile and month, and unlock retains the last snapshot',async()=>{
+    const f=serviceFixture(),snapshot=lockSnapshot(f.service);
+    const locked=await f.service.changeLock('2026-10',0,'lock',snapshot,'alice');
+    snapshot.summary.rows[0].value=999;
+    assert.equal((await f.service.lockState('2026-10')).snapshot.summary.rows[0].value,42);
+    assert.equal((await f.service.lockState('2026-09')).locked,false);
+    await assert.rejects(()=>f.service.changeLock('2026-10',0,'unlock',null,'bob'),{statusCode:409});
+    const unlocked=await f.service.changeLock('2026-10',locked.version,'unlock',null,'bob');
+    assert.equal(unlocked.snapshot.summary.rows[0].value,42);
+    const updated=lockSnapshot(f.service);updated.summary.rows[0].value=77;
+    await f.service.changeLock('2026-10',unlocked.version,'lock',updated,'bob');
+    assert.equal((await f.service.lockState('2026-10')).snapshot.summary.rows[0].value,77);
+    f.setProfile({server:'Visma',database:'Other'});
+    assert.equal((await f.service.lockState('2026-10')).locked,false);
+});
+
+test('locking rejects missing values, wrong profile and unavailable shared storage',async()=>{
+    const f=serviceFixture(),snapshot=lockSnapshot(f.service);
+    snapshot.summary.metrics.material=null;
+    await assert.rejects(()=>f.service.changeLock('2026-10',0,'lock',snapshot,'alice'),{statusCode:400});
+    snapshot.summary.metrics.material=1;snapshot.details.wip.delta=1;
+    await assert.rejects(()=>f.service.changeLock('2026-10',0,'lock',snapshot,'alice'),{statusCode:400});
+    snapshot.details.wip.delta=0;snapshot.summary.scope='wrong';
+    await assert.rejects(()=>f.service.changeLock('2026-10',0,'lock',snapshot,'alice'),{statusCode:400});
+    f.unavailable();
+    await assert.rejects(()=>f.service.lockState('2026-10'),/GOH unavailable/);
+    await assert.rejects(()=>f.service.changeLock('2026-10',0,'lock',snapshot,'alice'),/GOH unavailable/);
+    assert.equal(f.writes(),0);
+});
 
 test('configuration is versioned, shared per database and never saved by preview or monthly reads',async()=>{
     const f=serviceFixture(),config=await f.service.load();

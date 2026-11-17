@@ -69,6 +69,64 @@ function createMonthlySummaryService({ gohData, getProfile, getConnection, sql, 
         if (key !== scope()) throw error('Databaseprofilen er ændret. Genindlæs oversigten.',409);
         return {month:meta.raw,definition:{...compiled.definition,scope:key},selections:compiled.selections,accounts};
     }
-    return {load,editor,save,data,scope};
+    function lockKey(month) {
+        if (!parseCalendarMonth(month)) throw error('Vælg en gyldig måned.',400);
+        return scope() + '_lock_' + month;
+    }
+    async function lockState(month) {
+        const key=lockKey(month);
+        const state=await gohData.getAppState(key,{strict:true});
+        if (key !== lockKey(month)) throw error('Databaseprofilen er ændret. Genindlæs måneden.',409);
+        const value=state ? state.payload : {version:0,locked:false};
+        if (!Number.isSafeInteger(value.version) || typeof value.locked !== 'boolean'
+            || (value.locked && (!value.snapshot || value.snapshot.summary?.month !== month))) {
+            throw error('Den gemte afstemning er ugyldig. Kontakt administratoren.',503);
+        }
+        return value;
+    }
+    async function changeLock(month,version,action,snapshot,username) {
+        const key=lockKey(month);
+        if (!Number.isSafeInteger(version) || version < 0 || !['lock','unlock'].includes(action)) {
+            throw error('Ugyldig anmodning om låsning.',400);
+        }
+        const current=await lockState(month);
+        if (version !== current.version || current.locked === (action === 'lock')) {
+            throw error('Låsestatus er ændret. Genindlæs måneden og prøv igen.',409);
+        }
+        if (action === 'lock') {
+            const s=snapshot?.summary, d=snapshot?.details;
+            const close=(a,b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a-b)<0.01;
+            const required=['orders','invoiced','cost','material','material_only','stang','parts','subcontract',
+                'warehouse_delta','purchase_gap','ub_orders','ub_material','finished_material','purchase_timing'];
+            if (!s || s.month !== month || s.scope !== scope() || !Array.isArray(s.rows) || !s.rows.length
+                || !s.metrics || required.some(name => !Number.isFinite(s.metrics[name]))
+                || s.rows.some(row => row.display !== 'hidden' && row.type !== 'heading' && !Number.isFinite(row.value))
+                || !s.signs || !d || d.month !== month || !d.varelager || !d.purchaseGap || !d.wip || !d.timing
+                || !Array.isArray(snapshot.ubOrders) || !Array.isArray(snapshot.controlList)
+                || !['fifo','standard'].includes(snapshot.plateMode)
+                || !['registered','adjusted'].includes(snapshot.costMode)
+                || d.varelager.plateMode !== snapshot.plateMode || !Array.isArray(d.varelager.categories) || !d.varelager.categories.length
+                || d.varelager.categories.some(item => !Number.isFinite(item.delta))
+                || !close(d.varelager.categories.reduce((sum,item) => sum+item.delta,0),s.metrics.warehouse_delta)
+                || !close(d.wip.delta,s.metrics.finished_material) || !close(d.purchaseGap.totalValue,s.metrics.purchase_gap)
+                || !close(d.timing.value,s.metrics.purchase_timing)
+                || snapshot.ubOrders.some(row => !Number.isFinite(row.material))
+                || !snapshot.orderCosts || !Array.isArray(snapshot.orderCosts.invoices)
+                || !snapshot.orderCosts.margins || !snapshot.orderCosts.ubMargins) {
+                throw error('Afstemningen er ikke færdigberegnet. Genindlæs og kontrollér alle tal.',400);
+            }
+        }
+        if (key !== lockKey(month)) throw error('Databaseprofilen er ændret. Genindlæs måneden.',409);
+        const now=new Date().toISOString();
+        const next={version:version+1,locked:action === 'lock',snapshot:action === 'lock' ? snapshot : current.snapshot,
+            lockedAt:action === 'lock' ? now : current.lockedAt,lockedBy:action === 'lock' ? username : current.lockedBy,
+            updatedAt:now,updatedBy:username};
+        if (!await gohData.setAppState(key,next,{expectedVersion:version})) {
+            throw error('Låsestatus kunne ikke gemmes. Genindlæs måneden og prøv igen.',409);
+        }
+        if (key !== lockKey(month)) throw error('Databaseprofilen er ændret. Genindlæs måneden.',409);
+        return next;
+    }
+    return {load,editor,save,data,scope,lockState,changeLock};
 }
 module.exports={createMonthlySummaryService,compile};

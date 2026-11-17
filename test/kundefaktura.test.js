@@ -7,7 +7,7 @@ const path = require('path');
 // assets/js/via.js: read the source, wrap it with new Function(...), stub the page globals it
 // documents at the top of the file (escapeHtml, formatNumber, pushModalStack, removeModalStack,
 // searchOrderByNo), and expose just what each test needs.
-function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf, numberFormatter = String } = {}) {
+function clientFixture({ fetchImpl, summary, report, printTable, printFrame, desktopPdf, numberFormatter = String } = {}) {
     const source = fs.readFileSync(path.join(__dirname, '../assets/js/kundefaktura.js'), 'utf8');
     const els = {};
     const el = id => els[id] || (els[id] = {
@@ -26,7 +26,7 @@ function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf,
     };
     const posts = [];
     const fetch_ = fetchImpl || (async () => ({ ok: false, json: async () => ({}) }));
-    const window_ = { requestAnimationFrame: f => f(), GohMonthlySummary:summary, GohDesktopPdf:desktopPdf };
+    const window_ = { requestAnimationFrame: f => f(), confirm:()=>true, GohMonthlySummary:summary, GohReconciliationReport:report, GohDesktopPdf:desktopPdf };
     const client = new Function('document', 'window', 'fetch', 'escapeHtml', 'formatNumber', 'pushModalStack', 'removeModalStack', 'searchOrderByNo', source + `
         return {
             load: loadKundefakturaInvoices,
@@ -40,12 +40,68 @@ function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf,
             removeUb: removeKfUbOrder,
             refreshNote: refreshKfOrderClassification,
             exportSummaryPdf: exportKfCustomerSummaryPdf,
+            printReconciliation: printKfReconciliation,
+            toggleLock: toggleKfReconciliationLock,
+            setLockInputs: () => {
+                _kfAllCustomers=true; _kfLoadedMonth='2026-10'; _kfSummaryInvoicesReady=true; _kfUbLoaded=true;
+                _kfInvoiceRows=[{OrdNo:1,InvoAm:10}];
+                _kfMarginMap={'1':{costBreakdownAvailable:true,totalCost:5,materialCost:5,stangCost:0,purchasedPartCost:0,underleverandorCost:0}};
+                _kfControlsData={}; _kfPurchaseGap={totalValue:2}; _kfPurchaseTiming={value:3};
+                _kfWipMaterial={delta:4}; _kfVarelagerDelta={delta:6};
+            },
+            changeWip: () => { _kfWipMaterial={delta:7}; },
             exportOrders: exportKfOrdersCsv,
             state: () => ({ rows: _kfInvoiceRows.map(r => r.OrdNo), loadedMonth: _kfLoadedMonth, vareforbrug: _kfVareforbrugGL, loadSeq: _kfLoadSeq })
         };
     `)(document_, window_, fetch_, String, numberFormatter, noop, noop, noop);
     return { ...client, document: document_, posts };
 }
+
+test('locked PDF uses only the saved details and refuses a changed lock version',async()=>{
+    const saved={summary:{month:'2026-10',scope:'profile',rows:[],metrics:{},title:'Saved'},plateMode:'fifo',
+        details:{wip:{delta:6418}},ubOrders:[],controlList:[]};
+    const state={version:1,locked:true,snapshot:saved,lockedBy:'alice',lockedAt:'2026-11-12T10:16:00Z'};
+    let remoteVersion=1,printed=null;
+    const client=clientFixture({summary:{current:()=>saved.summary,lockState:()=>state},
+        report:{print:value=>{printed=value;}},
+        fetchImpl:async url=>{
+            assert.match(url,/reconciliation-lock/);
+            return {ok:true,json:async()=>({ok:true,scope:'profile',state:{version:remoteVersion}})};
+        }});
+    client.setPrintState('2026-10','adjusted');
+    await client.printReconciliation();
+    assert.equal(printed.details.wip.delta,6418);
+    assert.equal(printed.lockedBy,'alice');
+    printed=null;remoteVersion=2;
+    await client.printReconciliation();
+    assert.equal(printed,null);
+    assert.match(client.document.getElementById('kfStatus').textContent,/Genindlæs/);
+});
+
+test('locking captures cost and details, and refuses a changed calculation during the request',async()=>{
+    let state={version:0,locked:false},saved,client,change=false;
+    const summary={month:'2026-10',scope:'scope',title:'Måned',rows:[],signs:{},metrics:{warehouse_delta:6}};
+    const report={buildControls:()=>[],controlsHtml:()=>'',print:()=>{}};
+    client=clientFixture({summary:{current:()=>summary,lockState:()=>state,setLockState:value=>{state=value;}},report,
+        fetchImpl:async(url,options)=>{
+            if (url.includes('reconciliation-details')) {
+                if (change) client.changeWip();
+                return {ok:true,json:async()=>({ok:true,month:'2026-10',varelager:{categories:[{delta:6}]},
+                    purchaseGap:{totalValue:2},wip:{delta:4},timing:{value:3}})};
+            }
+            saved=JSON.parse(options.body);
+            return {ok:true,json:async()=>({ok:true,state:{version:1,locked:true,snapshot:saved.snapshot}})};
+        }});
+    client.setLockInputs();
+    await client.toggleLock();
+    assert.equal(saved.snapshot.details.wip.delta,4);
+    assert.equal(saved.snapshot.orderCosts.margins['1'].totalCost,5);
+    state={version:0,locked:false};saved=null;change=true;
+    client.setLockInputs();
+    await client.toggleLock();
+    assert.equal(saved,null);
+    assert.match(client.document.getElementById('kfStatus').textContent,/ændrede sig/);
+});
 
 test('loading a month fetches invoices and Vareforbrug for that exact month', async () => {
     const calls = [];

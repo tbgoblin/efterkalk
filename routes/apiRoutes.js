@@ -3031,6 +3031,21 @@ function createApiRouter({
         try { res.json({ok:true,...await monthlySummaryService.data(String(req.query.month || '')),canEdit:getSessionUser(req)?.role==='superadmin'}); }
         catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
     });
+    router.get('/efterkalk/reconciliation-lock', requireModulePermission('efterkalk'), async (req,res) => {
+        res.setHeader('Cache-Control','no-store');
+        try {
+            const state=await monthlySummaryService.lockState(String(req.query.month || ''));
+            res.json({ok:true,scope:monthlySummaryService.scope(),state});
+        }
+        catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
+    });
+    router.put('/efterkalk/reconciliation-lock', requireModulePermission('efterkalk'), express.json({limit:'5mb'}), async (req,res) => {
+        try {
+            const {month,version,action,snapshot}=req.body || {};
+            const user=getSessionUser(req);
+            res.json({ok:true,state:await monthlySummaryService.changeLock(month,version,action,snapshot,user.username || user.displayName)});
+        } catch(error) { res.status(error.statusCode || 503).json({ok:false,error:error.message}); }
+    });
     router.get('/efterkalk/summary-definition', requireModulePermission('efterkalk'),bilancioAdminGuard,async (req,res) => {
         res.setHeader('Cache-Control','no-store');
         try { res.json({ok:true,...await monthlySummaryService.editor()}); }

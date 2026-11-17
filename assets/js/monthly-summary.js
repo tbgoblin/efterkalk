@@ -4,7 +4,7 @@
     const el=id => document.getElementById(id);
     const esc=value => String(value ?? '').replace(/[&<>"']/g,c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const types={source:'Ordre- eller lagerværdi',accounts:'Konti / kontogrupper',formula:'Formel',manual:'Manuelt beløb pr. måned',heading:'Overskrift'};
-    let month='',payload=null,metrics={},requestId=0,draft=null,catalog=null,selected=0,dirty=false,busy=false,uid=0;
+    let month='',payload=null,metrics={},lockState=null,requestId=0,draft=null,catalog=null,selected=0,dirty=false,busy=false,uid=0;
     const status=(message,error=false) => { el('kfSummaryStatus').textContent=message; el('kfSummaryStatus').dataset.error=String(error); };
     async function api(url,options) {
         const response=await fetch(url,options);
@@ -18,9 +18,9 @@
         const options=row.unit==='count' ? {maximumFractionDigits:0} : {minimumFractionDigits:2,maximumFractionDigits:2};
         return new Intl.NumberFormat('da-DK',options).format(row.value) + (row.unit==='percent' ? ' %' : row.unit==='dkk' ? ' DKK' : '');
     }
-    function renderReport(data,target) {
-        const rows=model.evaluate(data.definition,{...data,month,metrics});
-        const signs=model.formulaSigns(rows);
+    function renderReport(data,target,snapshot) {
+        const rows=snapshot ? snapshot.rows : model.evaluate(data.definition,{...data,month,metrics});
+        const signs=snapshot ? new Map(Object.entries(snapshot.signs)) : model.formulaSigns(rows);
         const names=new Map(rows.map(row => [row.id,row.name]));
         const label=row => { const help=model.describe(row,names); return help ? '<span class="kfs-name" title="'+esc(help)+'">'+esc(row.name)+'</span>' : esc(row.name); };
         const sign=row => signs.has(row.id) ? '<span class="kfs-sign" title="'+(signs.get(row.id)==='−'?'Trækkes fra':'Lægges til')+'">'+signs.get(row.id)+'</span>' : '';
@@ -40,24 +40,52 @@
     }
     function render() {
         if (!payload || !month) return;
-        renderReport(payload,el('kfSummaryReport'));
+        const snapshot=lockState?.locked ? lockState.snapshot.summary : null;
+        renderReport(payload,el('kfSummaryReport'),snapshot);
         el('kfSummaryReport').hidden=false;
         el('kfSummaryLegacy').classList.add('kfs-configured');
     }
     async function load(value) {
         const token=++requestId;
-        month=value; payload=null;
+        month=value; payload=null; lockState=null;
+        const lockButton=el('kfReconLock');
+        if (lockButton) { lockButton.disabled=true; lockButton.textContent='Lås afstemning'; }
+        const plate=el('kfSummaryPlateMode'); if (plate) plate.disabled=true;
         el('kfSummaryLegacy').classList.remove('kfs-configured');
         el('kfSummaryReport').hidden=true;
         el('kfSummaryBuild').hidden=true;
         status('Henter opsætning og bogføring…');
         try {
+            const locked=await api('/efterkalk/reconciliation-lock?month='+encodeURIComponent(month));
+            if (token!==requestId) return;
+            lockState=locked.state;
+            if (lockState.locked) {
+                if (lockState.snapshot.summary.scope!==locked.scope) throw new Error('Databaseprofilen er ændret.');
+                payload={definition:{title:lockState.snapshot.summary.title}};
+                showLockState();
+                render();
+                return;
+            }
             const data=await api('/efterkalk/summary?month='+encodeURIComponent(month));
             if (token!==requestId) return;
+            if (data.definition.scope!==locked.scope) throw new Error('Databaseprofilen er ændret.');
             payload=data;
             el('kfSummaryBuild').hidden=!data.canEdit;
-            render(); status('Bogføring for '+month+' · øvrige tal følger de indlæste ordrer.');
-        } catch(error) { if (token===requestId) status(error.message+' Standardvisningen bruges indtil videre.',true); }
+            showLockState(); render();
+        } catch(error) { if (token===requestId) { lockState=null; status(error.message+' Genindlæs måneden.',true); } }
+    }
+    function showLockState() {
+        const locked=Boolean(lockState?.locked);
+        const button=el('kfReconLock');
+        if (button) { button.disabled=!lockState; button.textContent=locked?'Lås op':'Lås afstemning'; }
+        const plate=el('kfSummaryPlateMode');
+        if (plate) { plate.disabled=locked; if (locked) plate.value=lockState.snapshot.plateMode; }
+        if (locked) {
+            el('kfSummaryBuild').hidden=true;
+            status('Låst '+new Date(lockState.lockedAt).toLocaleString('da-DK')+' af '+lockState.lockedBy
+                +' · Kost: '+(lockState.snapshot.costMode==='registered'?'kun registreret':'inkl. stykliste')
+                +' · Afstemning og PDF er låst. Øvrige ordretabeller viser aktuelle tal.');
+        } else status('Bogføring for '+month+' · øvrige tal følger de indlæste ordrer.');
     }
     function capture() {
         if (!draft || !draft.rows[selected]) return;
@@ -195,9 +223,12 @@
         update(values){metrics=values;render();},
         current(){
             if (!payload || !month) return null;
+            if (lockState?.locked) return lockState.snapshot.summary;
             const rows=model.evaluate(payload.definition,{...payload,month,metrics});
-            return {month,title:payload.definition.title,metrics,rows,signs:Object.fromEntries(model.formulaSigns(rows))};
+            return {month,scope:payload.definition.scope,title:payload.definition.title,metrics,rows,signs:Object.fromEntries(model.formulaSigns(rows))};
         },
-        mode(monthly){el('kfSummaryTools').hidden=!monthly;if(!monthly){requestId++;month='';payload=null;el('kfSummaryReport').hidden=true;el('kfSummaryLegacy').classList.remove('kfs-configured');}}
+        lockState(){return lockState;},
+        setLockState(state){lockState=state;showLockState();render();},
+        mode(monthly){el('kfSummaryTools').hidden=!monthly;if(!monthly){requestId++;month='';payload=null;lockState=null;el('kfSummaryReport').hidden=true;el('kfSummaryLegacy').classList.remove('kfs-configured');}}
     };
 }());

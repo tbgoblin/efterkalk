@@ -2,6 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const report = require('../assets/js/reconciliation-report');
 
+test('locked PDFs identify who locked the stored report',()=>{
+    const html=report.buildHtml(data({lockedAt:'2026-11-12T10:16:00Z',lockedBy:'Alice & Bob'}));
+    assert.match(html,/Låst .*Alice &amp; Bob/);
+});
+
 function data(overrides = {}) {
     return {
         month: '2026-10', plateMode: 'fifo',

@@ -2246,6 +2246,7 @@
                 <div id="kfSummaryTools" class="kfs-tools" hidden>
                     <button id="kfSummaryBuild" type="button" class="kf-export-btn" hidden>Byg oversigt</button>
                     <button id="kfReconPdf" type="button" class="kf-export-btn" onclick="printKfReconciliation()">PDF med forklaring</button>
+                    <button id="kfReconLock" type="button" class="kf-export-btn" onclick="toggleKfReconciliationLock()" disabled>Lås afstemning</button>
                     <label>Plader <select id="kfSummaryPlateMode" onchange="setKfPlateMode(this.value)"><option value="fifo">FIFO</option><option value="standard">Standardpris</option></select></label>
                     <span id="kfSummaryStatus" role="status" aria-live="polite"></span>
                 </div>
@@ -2468,9 +2469,9 @@
     <script src="/assets/js/order-print-preview.js?v=__PKG_VERSION__-1"></script>
     <script src="/assets/js/bilancio-formula.js?v=__PKG_VERSION__-1"></script>
     <script src="/assets/js/monthly-summary-model.js?v=__PKG_VERSION__-4"></script>
-    <script src="/assets/js/monthly-summary.js?v=__PKG_VERSION__-4"></script>
-    <script src="/assets/js/reconciliation-report.js?v=__PKG_VERSION__-5"></script>
-    <script src="/assets/js/kundefaktura.js?v=__PKG_VERSION__-8"></script>
+    <script src="/assets/js/monthly-summary.js?v=__PKG_VERSION__-5"></script>
+    <script src="/assets/js/reconciliation-report.js?v=__PKG_VERSION__-6"></script>
+    <script src="/assets/js/kundefaktura.js?v=__PKG_VERSION__-9"></script>
     <script src="/assets/js/order-notes.js?v=__PKG_VERSION__-1"></script>
     <script src="/assets/js/omsaetning.js?v=__PKG_VERSION__-1"></script>
     <script src="/assets/js/ordreindgang.js?v=__PKG_VERSION__-1"></script>

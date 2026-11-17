@@ -66,7 +66,7 @@ const app = express();
 const jsonBodyParser = express.json({ limit: '256kb' });
 const snapshotJsonBodyParser = express.json({ limit: '15mb' });
 app.use((req, res, next) => {
-    if (req.path === '/bom/analyze-file') return next();
+    if (req.path === '/bom/analyze-file' || req.path === '/efterkalk/reconciliation-lock') return next();
     if (req.path === '/lagerliste/snapshots' && req.method === 'POST') {
         return snapshotJsonBodyParser(req, res, next);
     }

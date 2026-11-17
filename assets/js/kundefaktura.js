@@ -78,7 +78,10 @@ function _renderKfControls(complete) {
     if (!host || !window.GohReconciliationReport) return;
     host.hidden = !_kfAllCustomers || !_kfLoadedMonth;
     if (host.hidden) return;
-    host.innerHTML = complete && _kfControlsData
+    const lock=window.GohMonthlySummary?.lockState?.();
+    host.innerHTML = lock?.locked
+        ? window.GohReconciliationReport.controlsHtml(lock.snapshot.controlList)
+        : complete && _kfControlsData
         ? window.GohReconciliationReport.controlsHtml(window.GohReconciliationReport.buildControls(_kfControlInput()))
         : '<p class="kfs-muted">Kontroller beregnes, når alle ordrer er hentet…</p>';
 }
@@ -142,9 +145,25 @@ function _kfScaleMargin(margin, share) {
 async function printKfReconciliation() {
     const summary = window.GohMonthlySummary && window.GohMonthlySummary.current();
     if (!summary || !_kfLoadedMonth || summary.month !== _kfLoadedMonth) { kfSetStatus('Hent en måned først.'); return; }
+    const seq=_kfLoadSeq;
     const button = document.getElementById('kfReconPdf');
     if (button) button.disabled = true;
     try {
+        const lock = window.GohMonthlySummary.lockState();
+        if (!lock) throw new Error('Låsestatus er ukendt. Genindlæs måneden.');
+        const check=await fetch('/efterkalk/reconciliation-lock?month='+encodeURIComponent(summary.month));
+        const latest=await check.json();
+        if (!check.ok || !latest.ok) throw new Error(latest.error || 'Låsestatus kunne ikke hentes.');
+        if (latest.scope!==summary.scope || latest.state.version!==lock.version || summary.month!==_kfLoadedMonth || seq!==_kfLoadSeq) {
+            throw new Error('Låsestatus eller måned er ændret. Genindlæs måneden før udskrift.');
+        }
+        if (lock.locked) {
+            const snapshot=lock.snapshot;
+            window.GohReconciliationReport.print({ ...snapshot.summary, plateMode:snapshot.plateMode, details:snapshot.details,
+                costMode:snapshot.costMode, ubOrders:snapshot.ubOrders, controlList:snapshot.controlList,
+                lockedAt:lock.lockedAt, lockedBy:lock.lockedBy });
+            return;
+        }
         const response = await fetch('/efterkalk/reconciliation-details?month=' + encodeURIComponent(summary.month) + '&plateMode=' + encodeURIComponent(_kfPlateMode));
         const details = await response.json();
         if (!response.ok || !details.ok) throw new Error(details.error || 'Kunne ikke hente detaljerne.');
@@ -155,6 +174,69 @@ async function printKfReconciliation() {
         kfSetStatus('Fejl: ' + error.message);
     } finally {
         if (button) button.disabled = false;
+    }
+}
+
+async function toggleKfReconciliationLock() {
+    const service=window.GohMonthlySummary;
+    const state=service && service.lockState();
+    const summary=service && service.current();
+    if (!state || !summary || summary.month !== _kfLoadedMonth) { kfSetStatus('Genindlæs måneden før låsning.'); return; }
+    if (state.locked && !window.confirm('Lås afstemningen op? Tallene genindlæses og kan ændre sig.')) return;
+    const button=document.getElementById('kfReconLock');
+    const seq=_kfLoadSeq, month=_kfLoadedMonth, plateMode=_kfPlateMode, costMode=_kfCostMode;
+    if (button) button.disabled=true;
+    try {
+        let snapshot;
+        if (!state.locked) {
+            if (!_kfSummaryInvoicesReady || _kfMarginFetchRunning || !_kfUbLoaded || !_kfControlsData
+                || _kfBillableRows().some(row => !_kfMarginMap[String(row.OrdNo)]?.costBreakdownAvailable)
+                || _kfUbMaterial() === null) {
+                throw new Error('Vent til alle ordrer og kontroller er færdigberegnet, eller genindlæs måneden.');
+            }
+            const ubOrders=_kfUbRows.map(row => ({...row,material:_kfUbOrderMaterial(row.OrdNo)}));
+            const controlList=window.GohReconciliationReport.buildControls(_kfControlInput());
+            const orderCosts={invoices:_kfInvoiceRows,margins:_kfMarginMap,ubMargins:_kfUbMarginMap};
+            const baseline=JSON.stringify({summary,ubOrders,controlList,orderCosts});
+            const response=await fetch('/efterkalk/reconciliation-details?month='+encodeURIComponent(month)+'&plateMode='+encodeURIComponent(plateMode));
+            const details=await response.json();
+            if (!response.ok || !details.ok) throw new Error(details.error || 'Kunne ikke hente detaljerne.');
+            const current={summary:service.current(),ubOrders:_kfUbRows.map(row => ({...row,material:_kfUbOrderMaterial(row.OrdNo)})),
+                controlList:window.GohReconciliationReport.buildControls(_kfControlInput()),
+                orderCosts:{invoices:_kfInvoiceRows,margins:_kfMarginMap,ubMargins:_kfUbMarginMap}};
+            const close=(a,b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a-b)<0.01;
+            const categories=details.varelager?.categories;
+            if (seq!==_kfLoadSeq || month!==_kfLoadedMonth || plateMode!==_kfPlateMode || costMode!==_kfCostMode
+                || baseline!==JSON.stringify(current) || details.month!==month
+                || JSON.stringify(details.wip)!==JSON.stringify(_kfWipMaterial)
+                || JSON.stringify(details.purchaseGap)!==JSON.stringify(_kfPurchaseGap)
+                || JSON.stringify(details.timing)!==JSON.stringify(_kfPurchaseTiming)
+                || !Array.isArray(categories) || !categories.length
+                || !close(categories.reduce((sum,item) => sum+item.delta,0),summary.metrics.warehouse_delta)) {
+                throw new Error('Tallene ændrede sig eller er ufuldstændige. Genindlæs måneden før låsning.');
+            }
+            snapshot=JSON.parse(baseline);
+            snapshot.plateMode=plateMode;
+            snapshot.costMode=costMode;
+            snapshot.details=details;
+        }
+        const response=await fetch('/efterkalk/reconciliation-lock',{method:'PUT',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({month,version:state.version,action:state.locked?'unlock':'lock',snapshot})});
+        if (response.status===413) throw new Error('Afstemningen er for stor til at blive gemt. Kontakt administratoren.');
+        const result=await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Låsestatus kunne ikke gemmes.');
+        if (seq!==_kfLoadSeq || month!==_kfLoadedMonth) return;
+        if (state.locked) {
+            await loadKundefakturaInvoices();
+        } else {
+            service.setLockState(result.state);
+            _renderKfControls(true);
+            kfSetStatus('Afstemningen er låst og gemt for alle brugere.');
+        }
+    } catch (error) {
+        if (seq===_kfLoadSeq) kfSetStatus('Fejl: '+error.message);
+    } finally {
+        if (button && seq===_kfLoadSeq) button.disabled=false;
     }
 }
 
@@ -491,7 +573,10 @@ async function loadKundefakturaInvoices() {
     _kfUbMarginMap = {};
     _resetKfKpis();
     if (_kfAllCustomers) {
-        if (window.GohMonthlySummary) window.GohMonthlySummary.load(selectedMonth);
+        if (window.GohMonthlySummary) Promise.resolve(window.GohMonthlySummary.load(selectedMonth)).then(() => {
+            if (seq===_kfLoadSeq) _renderKfControls(_kfSummaryInvoicesReady
+                && _kfBillableRows().every(row => Boolean(_kfMarginMap[String(row.OrdNo)])));
+        });
         _refreshKfConfigurableSummary();
         _fetchKfVareforbrug(selectedMonth, seq);
         _loadKfUbOrders(selectedMonth, seq);
@@ -578,6 +663,7 @@ async function _fetchKfVareforbrug(month, seq = _kfLoadSeq) {
 }
 
 function setKfPlateMode(mode) {
+    if (window.GohMonthlySummary?.lockState?.()?.locked) return;
     _kfPlateMode = mode === 'standard' ? 'standard' : 'fifo';
     const selection=document.getElementById('kfSummaryPlateMode');
     if (selection) selection.value=_kfPlateMode;
