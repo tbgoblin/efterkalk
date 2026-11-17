@@ -89,6 +89,17 @@
         .report-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; max-height:160px; overflow:auto; border:1px solid var(--line); padding:9px; }
         .report-options label { display:flex; align-items:center; gap:7px; font-weight:600; }
         .report-options input { width:auto; }
+        .report-section-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; border:1px solid var(--line); padding:10px; }
+        .report-section-options label { display:flex; align-items:center; gap:7px; font-weight:600; }
+        .report-section-options input { width:auto; }
+        .report-section-actions { display:flex; gap:6px; margin-bottom:7px; }
+        .report-section-actions button { padding:5px 8px; font-size:10px; }
+        .incoming-orders-table { width:100%; border-collapse:collapse; font-size:11px; }
+        .incoming-orders-table th,.incoming-orders-table td { padding:5px 7px; border-bottom:1px solid var(--line); text-align:left; }
+        .incoming-orders-table thead th { color:var(--muted); font-size:10px; text-transform:uppercase; }
+        .incoming-orders-table .numeric { text-align:right; font-variant-numeric:tabular-nums; }
+        .incoming-orders-table .incoming-month-total { background:#f4f8fb; font-weight:800; }
+        .incoming-orders-table .incoming-month-total th { color:var(--navy); }
         .resource-option { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 6px; border:1px solid transparent; border-radius:5px; background:#fff; }
         .resource-option.dragging { opacity:.45; border-color:var(--blue); }
         .resource-drag-handle { color:var(--muted); font-weight:900; letter-spacing:-2px; cursor:grab; }
@@ -111,6 +122,8 @@
             .kpi .value { font-size:16px; }
             .grid { display:block; }
             .panel { padding:8px; margin-bottom:10px; }
+            .incoming-orders-table thead { display:table-header-group; }
+            .incoming-orders-table tr { break-inside:avoid; }
             svg { height:205px; }
             .weekly-chart { width:100%; height:auto; }
             .order-panel { break-inside:avoid; }
@@ -148,6 +161,17 @@
                     <label>Ordreindgang, fra uge<input id="orderFromWeek" type="week" required /></label>
                     <label>Ordreindgang, til uge<input id="orderToWeek" type="week" required /></label>
                 </div>
+                <div class="accounts-head"><span>Vælg rapportsektioner</span></div>
+                <div class="report-section-actions"><button type="button" onclick="setReportSections(true)">Vælg alle</button><button type="button" onclick="setReportSections(false)">Fravælg alle</button></div>
+                <div id="reportSections" class="report-section-options">
+                    <label><input type="checkbox" value="kpis" checked /> Nøgletal</label>
+                    <label><input type="checkbox" value="revenue" checked /> Omsætning pr. måned</label>
+                    <label><input type="checkbox" value="customers" checked /> Største kunder</label>
+                    <label><input type="checkbox" value="orderFlow" checked /> Ordrebeholdning</label>
+                    <label><input type="checkbox" value="weeklyOrders" checked /> Ordreindgang pr. uge</label>
+                    <label><input type="checkbox" value="monthlyOrders" checked /> Indgående ordrer pr. måned</label>
+                    <label><input type="checkbox" value="load" checked /> Belastning pr. ressource</label>
+                </div>
                 <div class="accounts-head"><span>Ordreindgang · synlige linjer</span></div>
                 <div id="orderLines" class="report-options">
                     <label><input type="checkbox" value="totalOrd" checked /> Ordre</label>
@@ -174,6 +198,6 @@
         </form>
     </dialog>
     <script src="/assets/js/report-charts.js?v=4"></script>
-    <script src="/assets/js/ledelsesrapport.js?v=17"></script>
+    <script src="/assets/js/ledelsesrapport.js?v=18"></script>
 </body>
 </html>

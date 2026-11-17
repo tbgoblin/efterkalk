@@ -117,6 +117,32 @@
         return '<section class="panel wide revenue-panel"><div class="panel-head"><h2>Omsætning pr. måned</h2><span class="unit">Mio DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><svg class="omsaetning-chart-svg" viewBox="'+chart.viewBox+'" role="img" aria-label="Omsætning stacked pr. konto">'+chart.html+'</svg><div class="omsaetning-legend">'+chart.legend+'</div></section>';
     }
 
+    function monthlyCustomerOrdersPanel(data) {
+        const byMonth = new Map();
+        (data.monthlyOrders || []).forEach(row => {
+            const rawMonth = String(row.month || '');
+            const key = /^\d{6}$/.test(rawMonth) ? rawMonth.slice(0, 4) + '-' + rawMonth.slice(4) : rawMonth.slice(0, 7);
+            if (!byMonth.has(key)) byMonth.set(key, []);
+            byMonth.get(key).push(row);
+        });
+        const months = [];
+        const cursor = new Date(data.filters.from + '-01T12:00:00');
+        while (monthKey(cursor) <= data.filters.to && months.length < 36) {
+            months.push(monthKey(cursor));
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+        const body = months.map(month => {
+            const customers = byMonth.get(month) || [];
+            const orderCount = customers.reduce((sum, row) => sum + number(row.orderCount), 0);
+            const orderValue = customers.reduce((sum, row) => sum + number(row.orderValueDkk), 0);
+            const customerRows = customers.length
+                ? customers.map(row => '<tr><td></td><td>'+esc((row.customerName || 'Ukendt kunde')+(row.custNo == null ? '' : ' · '+row.custNo))+'</td><td class="numeric">'+esc(number(row.orderCount).toLocaleString('da-DK'))+'</td><td class="numeric">'+esc(dkk(row.orderValueDkk))+'</td></tr>').join('')
+                : '<tr><td></td><td class="note" colspan="3">Ingen ordrer i måneden.</td></tr>';
+            return '<tr class="incoming-month-total"><th>'+esc(monthLabel(month))+'</th><th>Måned i alt</th><th class="numeric">'+esc(orderCount.toLocaleString('da-DK'))+'</th><th class="numeric">'+esc(dkk(orderValue))+'</th></tr>'+customerRows;
+        }).join('');
+        return '<section class="panel wide incoming-month-panel"><div class="panel-head"><h2>Indgående ordrer pr. måned</h2><span class="unit">Ordredato · ordreværdi i DKK · '+esc(monthLabel(data.filters.from)+' - '+monthLabel(data.filters.to))+'</span></div><table class="incoming-orders-table"><thead><tr><th>Måned</th><th>Kunde</th><th class="numeric">Antal ordre</th><th class="numeric">Ordreværdi</th></tr></thead><tbody>'+body+'</tbody></table></section>';
+    }
+
     function chunks(items, size) {
         const result = [];
         for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
@@ -202,14 +228,18 @@
     function render(data, settings = readOrderViewSettings(), display = {}) {
         const orderView = orderReportView(data.orders, settings);
         const selectedLines = Array.isArray(display.orderLines) ? display.orderLines : ['totalOrd', 'ma3', 'totalBudget', 'periodAverage'];
+        const sectionVisible = key => !Array.isArray(display.sections) || display.sections.includes(key);
         const lineLegend = {totalOrd:['#0b3f88','Ordre (linje)'],ma3:['#ff6f00','Gns. ordre (3 uger)'],totalBudget:['#1b8f3b','Budget'],periodAverage:['#7b1fa2','Gns. ordre i perioden']};
         const orderLegend = '<span><i class="swatch" style="background:#2f5ea5"></i>Ordre (søjle)</span>'+selectedLines.filter(key=>lineLegend[key]).map(key=>'<span><i class="swatch" style="background:'+lineLegend[key][0]+'"></i>'+lineLegend[key][1]+'</span>').join('');
         const orderPanels = orderView.rows.length ? '<section class="panel wide order-panel"><div class="panel-head"><h2>Ordreindgang</h2><span class="unit">'+esc(data.filters.orderFrom)+' til '+esc(data.filters.orderTo)+' · t.DKK</span></div>'+lineChart(orderView.rows,orderView.average,selectedLines)+'<div class="legend">'+orderLegend+'</div></section>' : '<section class="panel wide"><h2>Ordreindgang</h2><p class="note">Ingen data i valgt ugeperiode.</p></section>';
         report.innerHTML='<header class="report-head"><div><h1>Ledelsesrapport</h1><p class="subtitle">Økonomi, ordreindgang, belastning og arbejde i gang</p></div><div class="meta"><b>'+esc(data.filters.from)+' til '+esc(data.filters.to)+'</b><br>Dannet '+esc(new Date(data.generatedAt).toLocaleString('da-DK'))+'<br>VIA aktuel pr. '+esc(new Date(data.via.asOf).toLocaleString('da-DK'))+'</div></header>'+
-            '<section class="kpis"><div class="kpi"><div class="label">Omsætning</div><div class="value">'+esc(mio(data.revenue.totalRevenueMio))+'</div></div><div class="kpi"><div class="label">VIA kost</div><div class="value">'+esc(dkk(data.via.totalCost))+'</div></div><div class="kpi"><div class="label">Åbne ordrers salg</div><div class="value">'+esc(dkk(data.via.totalSales))+'</div></div><div class="kpi"><div class="label">Resterende salg</div><div class="value">'+esc(dkk(data.via.remainingSales))+'</div></div><div class="kpi"><div class="label">Åbne ordrer</div><div class="value">'+esc(data.via.orderCount)+'</div></div></section>'+
-            '<div class="grid">'+stackedRevenue(data)+
-            '<section class="panel"><div class="panel-head"><h2>Største kunder</h2><span class="unit">'+esc(data.filters.customerFrom || data.filters.from)+' til '+esc(data.filters.customerTo || data.filters.to)+' · omsætning, kost og DB</span></div>'+customerBars(data.revenue.topCustomers)+'</section>'+
-            orderFlowPanel(data.orderFlow)+orderPanels+'</div>'+resourceLoadPanels(data,display.loadResources);
+            (sectionVisible('kpis') ? '<section class="kpis"><div class="kpi"><div class="label">Omsætning</div><div class="value">'+esc(mio(data.revenue.totalRevenueMio))+'</div></div><div class="kpi"><div class="label">VIA kost</div><div class="value">'+esc(dkk(data.via.totalCost))+'</div></div><div class="kpi"><div class="label">Åbne ordrers salg</div><div class="value">'+esc(dkk(data.via.totalSales))+'</div></div><div class="kpi"><div class="label">Resterende salg</div><div class="value">'+esc(dkk(data.via.remainingSales))+'</div></div><div class="kpi"><div class="label">Åbne ordrer</div><div class="value">'+esc(data.via.orderCount)+'</div></div></section>' : '')+
+            '<div class="grid">'+(sectionVisible('revenue') ? stackedRevenue(data) : '')+
+            (sectionVisible('customers') ? '<section class="panel"><div class="panel-head"><h2>Største kunder</h2><span class="unit">'+esc(data.filters.customerFrom || data.filters.from)+' til '+esc(data.filters.customerTo || data.filters.to)+' · omsætning, kost og DB</span></div>'+customerBars(data.revenue.topCustomers)+'</section>' : '')+
+            (sectionVisible('orderFlow') ? orderFlowPanel(data.orderFlow) : '')+
+            (sectionVisible('weeklyOrders') ? orderPanels : '')+
+            (sectionVisible('monthlyOrders') ? monthlyCustomerOrdersPanel(data) : '')+'</div>'+
+            (sectionVisible('load') ? resourceLoadPanels(data,display.loadResources) : '');
     }
 
     async function loadConfig() {
@@ -283,13 +313,19 @@
         refreshResourcePagePreview();
     }
 
+    window.setReportSections = selected => {
+        document.querySelectorAll('#reportSections input').forEach(input => { input.checked=selected; });
+    };
+
     window.openConfig = () => dialog.showModal();
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const accounts=[...document.querySelectorAll('#accounts input:checked')].map(input=>input.value);
         if(!accounts.length){status.textContent='Vælg mindst én konto.';return;}
-        const display={loadResources:[...document.querySelectorAll('#loadResources input:checked')].map(input=>input.value),orderLines:[...document.querySelectorAll('#orderLines input:checked')].map(input=>input.value)};
+        const sections=[...document.querySelectorAll('#reportSections input:checked')].map(input=>input.value);
+        if(!sections.length){status.textContent='Vælg mindst én rapportsektion.';status.className='error';return;}
+        const display={loadResources:[...document.querySelectorAll('#loadResources input:checked')].map(input=>input.value),orderLines:[...document.querySelectorAll('#orderLines input:checked')].map(input=>input.value),sections};
         if(!display.loadResources.length){status.textContent='Vælg mindst én ressource til Belastning.';status.className='error';return;}
         status.className='';status.textContent='Danner rapport...';document.getElementById('generateBtn').disabled=true;
         try{

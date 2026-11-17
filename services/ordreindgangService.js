@@ -266,8 +266,45 @@ function createOrdreindgangService({ getConnection, sql }) {
         return { from, to, rows: result.recordset || [] };
     }
 
+    async function getMonthlyCustomerSummary({ fromDate, exclusiveToDate }) {
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('fromDate', sql.Int, Number(fromDate))
+            .input('exclusiveToDate', sql.Int, Number(exclusiveToDate))
+            .query(`
+                WITH Orders AS (
+                    SELECT
+                        O.OrdNo,
+                        O.OrdDt / 100 AS MonthKey,
+                        O.CustNo,
+                        COALESCE(NULLIF(LTRIM(RTRIM(O.Nm)), ''),
+                                 NULLIF(LTRIM(RTRIM(A.Nm)), ''),
+                                 CASE WHEN O.CustNo > 0 THEN CONVERT(varchar(20), O.CustNo) ELSE 'Ukendt kunde' END) AS CustomerName,
+                        (ISNULL(O.InvoSF, 0) + ISNULL(O.InvoIF, 0)) * (O.ExRt / 100.0) AS OrderValueDkk
+                    FROM F0001.dbo.Ord O
+                    LEFT JOIN F0001.dbo.Actor A ON O.CustNo > 0 AND O.CustNo = A.CustNo
+                    WHERE O.TrTp = 1
+                      AND O.OrdTp = 1
+                      AND O.OrdDt >= @fromDate
+                      AND O.OrdDt < @exclusiveToDate
+                )
+                SELECT MonthKey, CustNo, MAX(CustomerName) AS CustomerName,
+                       COUNT(DISTINCT OrdNo) AS OrderCount, SUM(OrderValueDkk) AS OrderValueDkk
+                FROM Orders
+                GROUP BY MonthKey, CustNo
+                ORDER BY MonthKey, SUM(OrderValueDkk) DESC, CustNo;
+            `);
+        return (result.recordset || []).map(row => ({
+            month: String(row.MonthKey || ''),
+            custNo: row.CustNo == null ? null : Number(row.CustNo),
+            customerName: String(row.CustomerName || '').trim(),
+            orderCount: Number(row.OrderCount || 0),
+            orderValueDkk: Number(row.OrderValueDkk || 0)
+        }));
+    }
+
     return {
-        getSummary, getRecentOrders
+        getSummary, getRecentOrders, getMonthlyCustomerSummary
     };
 }
 

@@ -575,20 +575,25 @@ function createApiRouter({
             const viaContextValue = viaContext(true);
 
             const revenueTask = omsaetningService.getSummary({ fra, til, accountCsv: selectedAccounts.join(','), customerCsv: '' });
+            const monthlyOrdersTask = ordreindgangService.getMonthlyCustomerSummary({
+                fromDate: Number(fromDate.toISOString().slice(0, 10).replace(/-/g, '')),
+                exclusiveToDate: Number(exclusiveToDate.toISOString().slice(0, 10).replace(/-/g, ''))
+            });
             const customerEnd = new Date(Date.UTC(customerTo.year, customerTo.month, 1));
             const customerTask = customerFrom.raw === fromMonth.raw && customerTo.raw === toMonth.raw ? revenueTask
                 : omsaetningService.getSummary({ fra: String(ledelsesrapportFiscalPeriod(customerFrom.year, customerFrom.month)),
                     til: String(ledelsesrapportFiscalPeriod(customerEnd.getUTCFullYear(), customerEnd.getUTCMonth() + 1)),
                     accountCsv: selectedAccounts.join(','), customerCsv: '' });
 
-            const [revenue, orders, oddLoad, evenLoad, via, customerRevenue, orderFlow] = await Promise.all([
+            const [revenue, orders, oddLoad, evenLoad, via, customerRevenue, orderFlow, monthlyOrders] = await Promise.all([
                 revenueTask,
                 ordreindgangService.getSummary({ fraWeek, tilWeek }),
                 fetchBelastningRows({ getConnection, sql, toDay: loadStart, dage: hasLoadPeriod ? loadSpan : loadDays, resGrCsv: '', parity: 1, orderNo: '', customerFilter: '' }),
                 fetchBelastningRows({ getConnection, sql, toDay: loadStart, dage: hasLoadPeriod ? loadSpan : loadDays, resGrCsv: '', parity: 0, orderNo: '', customerFilter: '' }),
                 getViaPayload(viaContextValue, true),
                 customerTask,
-                omsaetningService.getOrderFlow({ month: orderFlowMonth, customerCsv: '' })
+                omsaetningService.getOrderFlow({ month: orderFlowMonth, customerCsv: '' }),
+                monthlyOrdersTask
             ]);
 
             const customerMap = new Map();
@@ -634,6 +639,7 @@ function createApiRouter({
                 accounts: allAccounts.filter(account => selectedAccounts.includes(String(account.acNo))),
                 revenue: { totalRevenueMio: revenue.totalRevenueMio, rows: revenue.rows, topCustomers: topCustomerRows },
                 orders,
+                monthlyOrders,
                 orderFlow: { month: orderFlow.month, asOf: orderFlow.asOf, unknownCount: orderFlow.unknownCount,
                     total: orderFlow.total, prior: orderFlow.prior, received: orderFlow.received },
                 load: summarizeLedelsesrapportLoad(loadRows),

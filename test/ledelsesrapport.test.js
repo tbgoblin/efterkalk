@@ -58,7 +58,10 @@ test('management report page is landscape printable and its client script parses
     assert.match(script, /data-week-value="ordre"/);
     assert.match(html, /id="orderFromWeek" type="week"/);
     assert.match(html, /id="orderToWeek" type="week"/);
+    assert.match(html, /id="reportSections"/);
+    assert.match(html, /value="monthlyOrders" checked/);
     assert.match(script, /GohReportCharts\.revenueStacked/);
+    assert.match(script, /Indgående ordrer pr\. måned/);
     assert.match(script, /GohReportCharts\.belastningCluster/);
     assert.match(script, /Åbne ordrers salg/);
     assert.match(script, /VIA kost/);
@@ -123,7 +126,7 @@ function reportClientFixture() {
     const source = fs.readFileSync(path.join(root, 'assets/js/ledelsesrapport.js'), 'utf8');
     const body = source.slice(source.indexOf('{') + 1, source.indexOf('    async function loadConfig()'));
     const charts = require('../assets/js/report-charts');
-    return new Function('document', 'window', body + ';return { stackedRevenue, horizontalBars, customerBars, orderReportView, lineChart, resourceLoadPanels, orderFlowPanel, render, report };')(
+    return new Function('document', 'window', body + ';return { stackedRevenue, horizontalBars, customerBars, monthlyCustomerOrdersPanel, orderReportView, lineChart, resourceLoadPanels, orderFlowPanel, render, report };')(
         { getElementById: () => ({}) }, { GohReportCharts: charts });
 }
 
@@ -151,6 +154,32 @@ test('top customer rows show their contribution margin', () => {
     assert.match(html, /Kost<\/span>.*DB<\/span>.*Negativ DB<\/span>/);
     const missing = client.customerBars([{ name: 'Ukendt kost', revenueMio: 1, costMio: null }]);
     assert.match(missing, /DB kan ikke beregnes/);
+});
+
+test('monthly incoming orders show customer counts, order values and empty months', () => {
+    const client = reportClientFixture();
+    const html = client.monthlyCustomerOrdersPanel({ filters: { from: '2026-07', to: '2026-08' }, monthlyOrders: [
+        { month: '202607', custNo: 12, customerName: 'Kunde & Co', orderCount: 2, orderValueDkk: 125000 },
+        { month: '202607', custNo: 14, customerName: '<Nyt navn>', orderCount: 1, orderValueDkk: 75000 }
+    ] });
+    assert.match(html, /Indgående ordrer pr\. måned/);
+    assert.match(html, /Kunde &amp; Co/);
+    assert.match(html, /&lt;Nyt navn&gt;/);
+    assert.match(html, /Måned i alt<\/th><th class="numeric">3<\/th><th class="numeric">200\.000 kr\./);
+    assert.match(html, /Ingen ordrer i måneden/);
+    assert.doesNotMatch(html, /NaN|Infinity/);
+});
+
+test('report section selection omits unselected sections from the printable report', () => {
+    const client = reportClientFixture();
+    client.render({ generatedAt: '2026-09-16', filters: { from: '2026-07', to: '2026-07', orderFrom: '2026-W27', orderTo: '2026-W31' },
+        orders: { weeklyRows: [], kpis: {} }, monthlyOrders: [{ month: '202607', custNo: 12, customerName: 'Kunde', orderCount: 1, orderValueDkk: 125000 }],
+        revenue: { rows: [], topCustomers: [] }, load: { rows: [] }, via: { asOf: '2026-09-16', costs: {} }
+    }, { budget: {}, holidays: {} }, { sections: ['monthlyOrders'] });
+    assert.match(client.report.innerHTML, /Indgående ordrer pr\. måned/);
+    for (const section of ['class="kpis"', 'revenue-panel', 'Største kunder', 'Ordrebeholdning', 'order-panel', 'load-page']) {
+        assert.doesNotMatch(client.report.innerHTML, new RegExp(section));
+    }
 });
 
 test('revenue net totals sit above the whole column including when credits reduce the net', () => {
@@ -303,7 +332,8 @@ function reportFixture(options = {}) {
         { getAccounts: async () => { calls.push('accounts'); return options.accounts || [{ acNo: 11012 }]; },
             getSummary: async params => { calls.push({ revenue: params }); return options.revenue ? options.revenue(params) : { rows: [], totalRevenueMio: 0 }; },
             getOrderFlow: async params => { calls.push({ orderFlow: params }); return options.orderFlow || { month: params.month, asOf: 20260918, unknownCount: 0, total: {}, prior: {}, received: {} }; } },
-        { getSummary: async params => { calls.push({ orders: params }); return { weeklyRows: [] }; } },
+        { getSummary: async params => { calls.push({ orders: params }); return { weeklyRows: [] }; },
+            getMonthlyCustomerSummary: async params => { calls.push({ monthlyOrders: params }); return options.monthlyOrders || []; } },
         async params => { calls.push({ load: params }); return params.parity === 1 ? (options.loadRows || [dailyRow]) : []; },
         async () => ({ rows: options.viaRows || [] }), () => ({}), async () => ({ request: () => {
             const request = { input() { return request; }, async query() { return { recordset: options.invoiceRows || [] }; } };
@@ -349,6 +379,8 @@ test('report forwards independent weeks without changing revenue months or daily
     assert.equal(result.payload.filters.orderFrom, '2025-W52');
     assert.deepEqual(result.payload.load.rows, [fixture.dailyRow]);
     assert.deepEqual(fixture.calls.find(call => call.orderFlow).orderFlow, { month: '2026-09', customerCsv: '' });
+    assert.deepEqual(fixture.calls.find(call => call.monthlyOrders).monthlyOrders, { fromDate: 20260701, exclusiveToDate: 20261001 });
+    assert.deepEqual(result.payload.monthlyOrders, []);
 });
 
 test('invalid week ranges and unauthorized requests stop before database reads', async () => {
