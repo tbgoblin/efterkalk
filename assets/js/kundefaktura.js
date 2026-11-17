@@ -740,6 +740,90 @@ function filterKfCustomerSummary() {
     if (count) count.textContent = query ? visible.customers + ' af ' + total.customers + ' kunder' : total.customers + ' kunder';
 }
 
+function exportKfCustomerSummaryPdf() {
+    const table = document.querySelector('#kfCustomerSummary .kf-customer-summary-table');
+    if (!table || !_kfLoadedMonth) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        kfSetStatus('Tillad pop op-vinduer for at gemme månedsanalysen som PDF.');
+        return;
+    }
+
+    const printableTable = table.cloneNode(true);
+    printableTable.classList.remove('kf-customer-summary-table');
+    printableTable.classList.add('kf-customer-summary-print-table');
+    printableTable.querySelectorAll('tbody tr').forEach(row => {
+        row.style.display = '';
+        row.querySelectorAll('.kf-trend-btn').forEach(button => button.remove());
+    });
+    const footerRows = printableTable.tFoot ? printableTable.tFoot.rows : [];
+    if (footerRows.length > 1) footerRows[0].remove();
+    printableTable.querySelectorAll('details').forEach(details => { details.open = true; });
+
+    const [year, month] = _kfLoadedMonth.split('-').map(Number);
+    const monthLabel = new Intl.DateTimeFormat('da-DK', { month: 'long', year: 'numeric' })
+        .format(new Date(year, month - 1, 1));
+    const costMode = _kfCostMode === 'adjusted'
+        ? 'Inkl. manglende tid fra stykliste'
+        : 'Kun registreret kost';
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+        <html lang="da">
+        <head>
+            <meta charset="utf-8">
+            <title>MånedsDB kunder ${_kfLoadedMonth}</title>
+            <style>
+                @page { size: A4 landscape; margin: 11mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; color: #18324c; font: 10px "Segoe UI", Arial, sans-serif; }
+                .report-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 16px; padding: 0 0 11px; border-bottom: 3px solid #2d78a8; }
+                .eyebrow { margin-bottom: 4px; color: #4a7898; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+                h1 { margin: 0; color: #123f6f; font-size: 22px; }
+                .report-meta { color: #4b6379; text-align: right; line-height: 1.6; }
+                .report-meta strong { display: block; color: #123f6f; font-size: 13px; }
+                table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                thead { display: table-header-group; }
+                tfoot { display: table-row-group; }
+                tr { break-inside: avoid; page-break-inside: avoid; }
+                th { padding: 7px 5px; background: #123f6f; color: #fff; font-size: 8px; text-align: left; }
+                td { padding: 6px 5px; border-bottom: 1px solid #dce5ed; vertical-align: middle; }
+                tbody tr:nth-child(even) td { background: #f4f8fb; }
+                th:first-child, td:first-child { width: 19%; }
+                th:nth-child(2), td:nth-child(2) { width: 6%; }
+                th:nth-child(3), td:nth-child(3) { width: 10%; }
+                th:nth-child(4), td:nth-child(4) { width: 9%; }
+                th:nth-child(5), td:nth-child(5) { width: 10%; }
+                th:nth-child(6), td:nth-child(6) { width: 8%; }
+                th:nth-child(7), td:nth-child(7) { width: 10%; }
+                th:nth-child(8), td:nth-child(8) { width: 7%; }
+                th:last-child, td:last-child { width: 21%; }
+                .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+                td:first-child { font-weight: 600; }
+                td:first-child span[style] { color: #627c91 !important; }
+                tfoot td { border-top: 2px solid #7da8c8; background: #e8f1f8 !important; font-weight: 700; }
+                details summary { display: none; }
+                details .kf-breakdown-detail { display: block; color: #405c73; font-size: 8px; line-height: 1.4; }
+                .kf-customer-summary-print-table .kf-margin-cell.ok { color: #197044; }
+                .kf-customer-summary-print-table .kf-margin-cell.warn { color: #9a6500; }
+                .kf-customer-summary-print-table .kf-margin-cell.bad { color: #a33835; }
+                @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+            </style>
+        </head>
+        <body>
+            <header class="report-head">
+                <div><div class="eyebrow">Gantech · Efterkalkulation · Månedens DB</div><h1>Kunder — månedsanalyse</h1></div>
+                <div class="report-meta"><strong>${monthLabel}</strong>${costMode}</div>
+            </header>
+            ${printableTable.outerHTML}
+        </body>
+        </html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
+}
+
 function closeKfCustomerTrend() {
     _kfTrendRequestId++;
     const panel = document.getElementById('kfCustomerTrend');

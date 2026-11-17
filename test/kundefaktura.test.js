@@ -7,7 +7,7 @@ const path = require('path');
 // assets/js/via.js: read the source, wrap it with new Function(...), stub the page globals it
 // documents at the top of the file (escapeHtml, formatNumber, pushModalStack, removeModalStack,
 // searchOrderByNo), and expose just what each test needs.
-function clientFixture({ fetchImpl, summary } = {}) {
+function clientFixture({ fetchImpl, summary, printTable, printWindow } = {}) {
     const source = fs.readFileSync(path.join(__dirname, '../assets/js/kundefaktura.js'), 'utf8');
     const els = {};
     const el = id => els[id] || (els[id] = {
@@ -17,20 +17,23 @@ function clientFixture({ fetchImpl, summary } = {}) {
         appendChild() {}, removeChild() {}, remove() {}
     });
     const noop = () => {};
-    const document_ = { getElementById: el, querySelectorAll: () => [], querySelector: () => null, createElement: () => el('x') };
+    const document_ = { getElementById: el, querySelectorAll: () => [], querySelector: () => printTable || null, createElement: () => el('x') };
     const posts = [];
     const fetch_ = fetchImpl || (async () => ({ ok: false, json: async () => ({}) }));
+    const window_ = { requestAnimationFrame: f => f(), GohMonthlySummary:summary, open: () => printWindow || null };
     const client = new Function('document', 'window', 'fetch', 'escapeHtml', 'formatNumber', 'pushModalStack', 'removeModalStack', 'searchOrderByNo', source + `
         return {
             load: loadKundefakturaInvoices,
             setAll: v => { _kfAllCustomers = v; },
+            setPrintState: (month, mode) => { _kfLoadedMonth = month; _kfCostMode = mode; },
             addUb: addKfUbOrder,
             removeUb: removeKfUbOrder,
             refreshNote: refreshKfOrderClassification,
+            exportSummaryPdf: exportKfCustomerSummaryPdf,
             exportOrders: exportKfOrdersCsv,
             state: () => ({ rows: _kfInvoiceRows.map(r => r.OrdNo), loadedMonth: _kfLoadedMonth, vareforbrug: _kfVareforbrugGL, loadSeq: _kfLoadSeq })
         };
-    `)(document_, { requestAnimationFrame: f => f(), GohMonthlySummary:summary }, fetch_, String, String, noop, noop, noop);
+    `)(document_, window_, fetch_, String, String, noop, noop, noop);
     return { ...client, document: document_, posts };
 }
 
@@ -54,6 +57,39 @@ test('loading a month fetches invoices and Vareforbrug for that exact month', as
     // The margin-fetch loop runs in the background (fire-and-forget, same as in the real app);
     // let it settle before the test ends so it doesn't report activity after completion.
     await new Promise(r => setTimeout(r, 20));
+});
+
+test('customer monthly analysis opens a landscape PDF printout with all rows and only the monthly total', async () => {
+    let output = '';
+    const visibleRow = { style:{ display:'none' }, querySelectorAll:() => [] };
+    let visibleTotalRemoved = false;
+    const clonedTable = {
+        classList:{ remove(){}, add(){} },
+        querySelectorAll(selector) {
+            if (selector === 'tbody tr') return [visibleRow];
+            return [];
+        },
+        tFoot:{ rows:[{ remove(){ visibleTotalRemoved = true; } }, {}] },
+        outerHTML:'<table>customer rows</table>'
+    };
+    const printWindow = {
+        document:{ open(){}, write(html){ output = html; }, close(){} },
+        focus(){}, print(){}
+    };
+    const client = clientFixture({
+        printTable:{ cloneNode:() => clonedTable },
+        printWindow
+    });
+    client.setPrintState('2026-10', 'adjusted');
+    client.exportSummaryPdf();
+    await new Promise(resolve => setTimeout(resolve, 270));
+
+    assert.match(output, /A4 landscape/);
+    assert.match(output, /Kunder — månedsanalyse/);
+    assert.match(output, /Inkl\. manglende tid fra stykliste/);
+    assert.match(output, /table>customer rows/);
+    assert.equal(visibleRow.style.display, '');
+    assert.equal(visibleTotalRemoved, true);
 });
 
 test('credit notes replace the positive-only snapshot and U/B stays outside invoice and cost totals', async () => {
