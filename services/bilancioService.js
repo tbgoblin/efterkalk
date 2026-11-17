@@ -306,6 +306,16 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
                     INNER JOIN Ac A WITH(NOLOCK) ON A.AcNo = T.AcNo AND A.AcGr = '10_Omsætning'
                     WHERE T.VoDt BETWEEN @from AND @to`)).recordset || [];
         const revenueBooked = revenueRows.filter(row => row.HasInvoice).reduce((sum, row) => sum + Number(row.Revenue || 0), 0);
+        const accounts = new Map();
+        for (const row of revenueRows) {
+            const account = Number(row.AcNo);
+            if (!accounts.has(account)) accounts.set(account, {
+                account, name: String(row.Nm || '').trim(), invoiced: 0, other: 0
+            });
+            const entry = accounts.get(account);
+            entry[row.HasInvoice ? 'invoiced' : 'other'] += Number(row.Revenue || 0);
+        }
+        const revenueAccounts = [...accounts.values()].sort((a, b) => a.account - b.account);
         const otherRevenue = revenueRows.filter(row => !row.HasInvoice && Math.abs(Number(row.Revenue || 0)) >= 0.005)
             .map(row => ({ account: Number(row.AcNo), name: String(row.Nm || '').trim(), voucher: row.VoNo, text: String(row.Txt || '').trim(), amount: Number(row.Revenue) }));
         const previousMonth = previousMonthKey(monthKey);
@@ -320,7 +330,7 @@ function createBilancioService({ getConnection, sql, lagerlisteService, fs, dive
             .filter(row => Number(row.Value || 0) >= 5000 && before.has(keyOf(row)) && Math.abs(before.get(keyOf(row)) - Number(row.Value || 0)) < 0.5)
             .map(row => ({ category: String(row.category || ''), descr: String(row.Descr || ''), value: Number(row.Value || 0) }))
             .sort((a, b) => b.value - a.value) : [];
-        return { month: monthKey, revenueBooked, otherRevenue,
+        return { month: monthKey, revenueBooked, revenueAccounts, otherRevenue,
             snapshots: { current: meta(current, monthKey), previous: meta(previous, previousMonth) }, diverseUnchanged: unchanged };
     }
     function previousMonthKey(monthKey) {

@@ -752,6 +752,30 @@ async function exportKfCustomerSummaryPdf() {
         setPdfStatus('Indlæs en måned, før du gemmer månedsanalysen som PDF.');
         return;
     }
+    if (!_kfSummaryInvoicesReady || !_kfControlsData || _kfControlsData.month !== _kfLoadedMonth
+        || !Array.isArray(_kfControlsData.revenueAccounts)
+        || !_kfControlsData.revenueAccounts.every(account =>
+            Number.isFinite(account.invoiced) && Number.isFinite(account.other))) {
+        setPdfStatus('Regnskabsdata til afstemningen er ikke klar. Hent måneden igen, og prøv derefter at gemme PDF.');
+        return;
+    }
+
+    const accounts = _kfControlsData.revenueAccounts;
+    const bookedInvoices = accounts.reduce((sum, account) => sum + account.invoiced, 0);
+    const bookedOther = accounts.reduce((sum, account) => sum + account.other, 0);
+    const bookedTotal = bookedInvoices + bookedOther;
+    const ubRows = _kfInvoiceRows.filter(row => row.IsUB && Math.abs(Number(row.InvoAm || 0)) >= 0.005);
+    const ubRevenue = ubRows.reduce((sum, row) => sum + Number(row.InvoAm || 0), 0);
+    const customerTotal = _kfBillableRows().reduce((sum, row) => sum + Number(row.InvoAm || 0), 0);
+    const otherDifference = customerTotal - (bookedInvoices - ubRevenue);
+    const money = value => escapeHtml(formatNumber(Math.abs(value) < 0.005 ? 0 : value)) + ' kr.';
+    const accountRows = accounts.map(account =>
+        '<tr><td>' + escapeHtml(String(account.account)) + ' · ' + escapeHtml(account.name) +
+        '</td><td class="r">' + money(account.invoiced + account.other) + '</td></tr>').join('');
+    const ubDetails = ubRows.length ? ubRows.map(row =>
+        '<tr><td>' + escapeHtml(String(row.CustomerName || row.CustomerShrt || row.CustNo || 'Ukendt kunde')) +
+        ' · ordre ' + escapeHtml(String(row.OrdNo)) + '</td><td class="r">' + money(Number(row.InvoAm || 0)) + '</td></tr>'
+    ).join('') : '<tr><td colspan="2">Ingen fakturerede U/B-ordrer i måneden.</td></tr>';
 
     const printableTable = table.cloneNode(true);
     printableTable.classList.remove('kf-customer-summary-table');
@@ -808,6 +832,13 @@ async function exportKfCustomerSummaryPdf() {
                 .kf-customer-summary-print-table .kf-margin-cell.ok { color: #197044; }
                 .kf-customer-summary-print-table .kf-margin-cell.warn { color: #9a6500; }
                 .kf-customer-summary-print-table .kf-margin-cell.bad { color: #a33835; }
+                .reconciliation { break-before: page; page-break-before: always; }
+                .reconciliation h2 { color: #123f6f; font-size: 18px; margin: 0 0 10px; }
+                .reconciliation h3 { color: #123f6f; font-size: 12px; margin: 18px 0 6px; }
+                .reconciliation p { color: #4b6379; line-height: 1.5; }
+                .reconciliation table th:first-child, .reconciliation table td:first-child { width: 76%; }
+                .reconciliation table th:nth-child(2), .reconciliation table td:nth-child(2) { width: 24%; }
+                .reconciliation .total td { border-top: 2px solid #7da8c8; font-weight: 700; }
                 @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
             </style>
         </head>
@@ -817,6 +848,26 @@ async function exportKfCustomerSummaryPdf() {
                 <div class="report-meta"><strong>${monthLabel}</strong>${costMode}</div>
             </header>
             ${printableTable.outerHTML}
+            <section class="reconciliation">
+                <h2>Afstemning mod Visma</h2>
+                <p>Alle konti i omsætningsgruppen er med, også internt salg. Bogførte posteringer uden fakturanummer vises separat, da de ikke indgår i kundeanalysen.</p>
+                <h3>Bogført omsætning pr. konto</h3>
+                <table><thead><tr><th>Konto</th><th class="r">Bogført</th></tr></thead><tbody>
+                    ${accountRows}
+                    <tr class="total"><td>Visma i alt</td><td class="r">${money(bookedTotal)}</td></tr>
+                </tbody></table>
+                <h3>Fra bogføring til kundeanalyse</h3>
+                <table><thead><tr><th>Post</th><th class="r">Beløb</th></tr></thead><tbody>
+                    <tr><td>Visma i alt</td><td class="r">${money(bookedTotal)}</td></tr>
+                    <tr><td>Fratræk posteringer uden fakturanummer</td><td class="r">${money(-bookedOther)}</td></tr>
+                    <tr><td>Fratræk fakturerede U/B-ordrer</td><td class="r">${money(-ubRevenue)}</td></tr>
+                    <tr><td>Øvrig forskel, som skal undersøges</td><td class="r">${money(otherDifference)}</td></tr>
+                    <tr class="total"><td>Kundeanalyse i alt</td><td class="r">${money(customerTotal)}</td></tr>
+                </tbody></table>
+                <p>Øvrig forskel er den resterende afvigelse mellem bogførte fakturaer og ordrebeløbene. Den er ikke automatisk forklaret.</p>
+                <h3>Fakturerede U/B-ordrer, som er udeladt</h3>
+                <table><thead><tr><th>Kunde og ordre</th><th class="r">Faktureret</th></tr></thead><tbody>${ubDetails}</tbody></table>
+            </section>
         </body>
         </html>`;
 

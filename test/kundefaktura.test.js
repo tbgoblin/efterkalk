@@ -7,7 +7,7 @@ const path = require('path');
 // assets/js/via.js: read the source, wrap it with new Function(...), stub the page globals it
 // documents at the top of the file (escapeHtml, formatNumber, pushModalStack, removeModalStack,
 // searchOrderByNo), and expose just what each test needs.
-function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf } = {}) {
+function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf, numberFormatter = String } = {}) {
     const source = fs.readFileSync(path.join(__dirname, '../assets/js/kundefaktura.js'), 'utf8');
     const els = {};
     const el = id => els[id] || (els[id] = {
@@ -31,7 +31,11 @@ function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf 
         return {
             load: loadKundefakturaInvoices,
             setAll: v => { _kfAllCustomers = v; },
-            setPrintState: (month, mode) => { _kfLoadedMonth = month; _kfCostMode = mode; },
+            setPrintState: (month, mode) => {
+                _kfLoadedMonth = month; _kfCostMode = mode; _kfSummaryInvoicesReady = true;
+                _kfControlsData = { month, revenueAccounts: [] };
+            },
+            setPdfData: (controls, rows) => { _kfControlsData = controls; _kfInvoiceRows = rows; },
             addUb: addKfUbOrder,
             removeUb: removeKfUbOrder,
             refreshNote: refreshKfOrderClassification,
@@ -39,7 +43,7 @@ function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf 
             exportOrders: exportKfOrdersCsv,
             state: () => ({ rows: _kfInvoiceRows.map(r => r.OrdNo), loadedMonth: _kfLoadedMonth, vareforbrug: _kfVareforbrugGL, loadSeq: _kfLoadSeq })
         };
-    `)(document_, window_, fetch_, String, String, noop, noop, noop);
+    `)(document_, window_, fetch_, String, numberFormatter, noop, noop, noop);
     return { ...client, document: document_, posts };
 }
 
@@ -126,6 +130,80 @@ test('desktop customer PDF uses direct export and reports failures', async () =>
     assert.equal(request.month, '2026-10');
     assert.match(request.html, /A4 portrait/);
     assert.match(client.document.getElementById('kfCustomerPdfStatus').textContent, /Disken er fuld/);
+});
+
+test('customer PDF reconciles all revenue accounts and billed U/B orders without hiding other differences', async () => {
+    let request;
+    const printTable = { cloneNode:() => ({
+        classList:{ remove(){}, add(){} }, querySelectorAll:() => [], tFoot:{ rows:[] },
+        outerHTML:'<table>customer rows</table>'
+    }) };
+    const client = clientFixture({ printTable, desktopPdf:{ async saveCustomerSummary(data) {
+        request = data;
+        return { canceled:false };
+    } } });
+    client.setPrintState('2026-10', 'adjusted');
+    client.setPdfData({ month:'2026-10', revenueAccounts:[
+        { account:11012, name:'Omsætning', invoiced:1000, other:50 },
+        { account:11040, name:'Intern salg', invoiced:200, other:0 }
+    ] }, [
+        { OrdNo:1, CustomerName:'Kunde', InvoAm:1050 },
+        { OrdNo:2, CustomerName:'U/B kunde', InvoAm:100, IsUB:true }
+    ]);
+    await client.exportSummaryPdf();
+    assert.match(request.html, /11040 · Intern salg<\/td><td class="r">200 kr\./);
+    assert.match(request.html, /Visma i alt<\/td><td class="r">1250 kr\./);
+    assert.match(request.html, /Fratræk posteringer uden fakturanummer<\/td><td class="r">-50 kr\./);
+    assert.match(request.html, /Fratræk fakturerede U\/B-ordrer<\/td><td class="r">-100 kr\./);
+    assert.match(request.html, /Øvrig forskel, som skal undersøges<\/td><td class="r">-50 kr\./);
+    assert.match(request.html, /Kundeanalyse i alt<\/td><td class="r">1050 kr\./);
+    assert.match(request.html, /U\/B kunde · ordre 2<\/td><td class="r">100 kr\./);
+});
+
+test('customer PDF does not export a misleading reconciliation when accounting data is unavailable or stale', async () => {
+    let saves = 0;
+    const client = clientFixture({
+        printTable:{ cloneNode() { throw new Error('must not clone'); } },
+        desktopPdf:{ async saveCustomerSummary() { saves++; } }
+    });
+    client.setPrintState('2026-10', 'adjusted');
+    for (const controls of [null, { month:'2026-09', revenueAccounts:[] }, { month:'2026-10' }]) {
+        client.setPdfData(controls, []);
+        await client.exportSummaryPdf();
+        assert.match(client.document.getElementById('kfCustomerPdfStatus').textContent, /Regnskabsdata/);
+    }
+    assert.equal(saves, 0);
+});
+
+test('October reconciliation includes internal sales and non-invoice revenue without a false residual', async () => {
+    let html;
+    const printTable = { cloneNode:() => ({
+        classList:{ remove(){}, add(){} }, querySelectorAll:() => [], tFoot:{ rows:[] },
+        outerHTML:'<table>customer rows</table>'
+    }) };
+    const client = clientFixture({ printTable,
+        numberFormatter: value => new Intl.NumberFormat('da-DK', { minimumFractionDigits:2, maximumFractionDigits:2 }).format(value),
+        desktopPdf:{ async saveCustomerSummary(data) { html = data.html; return { canceled:false }; } }
+    });
+    client.setPrintState('2026-10', 'adjusted');
+    client.setPdfData({ month:'2026-10', revenueAccounts:[
+        { account:11012, name:'Omsætning', invoiced:5264926.87, other:0 },
+        { account:11015, name:'EU-salg uden moms', invoiced:49192.78, other:0 },
+        { account:11040, name:'Intern salg', invoiced:11656, other:0 },
+        { account:11050, name:'Regulering igangværende arbejde', invoiced:0, other:406530.01 }
+    ] }, [
+        { OrdNo:1, CustomerName:'Faktureret', InvoAm:5312272.41 },
+        { OrdNo:412993, CustomerName:'Caverion', InvoAm:12959.84, IsUB:true },
+        { OrdNo:414749, CustomerName:'Logitrans', InvoAm:225.40, IsUB:true },
+        { OrdNo:416608, CustomerName:'Alimak', InvoAm:186, IsUB:true },
+        { OrdNo:416864, CustomerName:'Ambolten', InvoAm:132, IsUB:true }
+    ]);
+    await client.exportSummaryPdf();
+    assert.match(html, /Visma i alt<\/td><td class="r">5\.732\.305,66 kr\./);
+    assert.match(html, /Fratræk posteringer uden fakturanummer<\/td><td class="r">-406\.530,01 kr\./);
+    assert.match(html, /Fratræk fakturerede U\/B-ordrer<\/td><td class="r">-13\.503,24 kr\./);
+    assert.match(html, /Øvrig forskel, som skal undersøges<\/td><td class="r">0,00 kr\./);
+    assert.match(html, /Kundeanalyse i alt<\/td><td class="r">5\.312\.272,41 kr\./);
 });
 
 test('credit notes replace the positive-only snapshot and U/B stays outside invoice and cost totals', async () => {

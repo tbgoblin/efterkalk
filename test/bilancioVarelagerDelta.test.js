@@ -50,6 +50,30 @@ function payload({ platesFifo = 0, platesStandard = null, opfolgningvare = 0, st
     };
 }
 
+test('monthly controls separate invoiced and other postings for every revenue account', async () => {
+    const rows = [
+        { AcNo:11012, Nm:'Omsætning', Revenue:100, HasInvoice:1 },
+        { AcNo:11012, Nm:'Omsætning', Revenue:-20, HasInvoice:1 },
+        { AcNo:11040, Nm:'Intern salg', Revenue:25, HasInvoice:1 },
+        { AcNo:11050, Nm:'Regulering', Revenue:60, HasInvoice:0, VoNo:123 }
+    ];
+    const service = createBilancioService({
+        getConnection:async () => ({ request:() => ({
+            input() { return this; },
+            async query() { return { recordset:rows }; }
+        }) }),
+        sql:{ Int:'Int' }
+    });
+    const controls = await service.controlsDataForMonth('2026-10');
+    assert.equal(controls.revenueBooked, 105);
+    assert.deepEqual(controls.revenueAccounts, [
+        { account:11012, name:'Omsætning', invoiced:80, other:0 },
+        { account:11040, name:'Intern salg', invoiced:25, other:0 },
+        { account:11050, name:'Regulering', invoiced:0, other:60 }
+    ]);
+    assert.equal(controls.otherRevenue[0].amount, 60);
+});
+
 test('Varelager total sums plates(FIFO) + opfolgningvare + stang + gr5Items FifoValue + diverse + restPlates', async () => {
     const { service } = fixture({
         snapshots: {
