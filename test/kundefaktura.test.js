@@ -7,7 +7,7 @@ const path = require('path');
 // assets/js/via.js: read the source, wrap it with new Function(...), stub the page globals it
 // documents at the top of the file (escapeHtml, formatNumber, pushModalStack, removeModalStack,
 // searchOrderByNo), and expose just what each test needs.
-function clientFixture({ fetchImpl, summary, printTable, printFrame } = {}) {
+function clientFixture({ fetchImpl, summary, printTable, printFrame, desktopPdf } = {}) {
     const source = fs.readFileSync(path.join(__dirname, '../assets/js/kundefaktura.js'), 'utf8');
     const els = {};
     const el = id => els[id] || (els[id] = {
@@ -26,7 +26,7 @@ function clientFixture({ fetchImpl, summary, printTable, printFrame } = {}) {
     };
     const posts = [];
     const fetch_ = fetchImpl || (async () => ({ ok: false, json: async () => ({}) }));
-    const window_ = { requestAnimationFrame: f => f(), GohMonthlySummary:summary };
+    const window_ = { requestAnimationFrame: f => f(), GohMonthlySummary:summary, GohDesktopPdf:desktopPdf };
     const client = new Function('document', 'window', 'fetch', 'escapeHtml', 'formatNumber', 'pushModalStack', 'removeModalStack', 'searchOrderByNo', source + `
         return {
             load: loadKundefakturaInvoices,
@@ -109,6 +109,23 @@ test('customer monthly analysis prints a portrait PDF without cost breakdown', a
     assert.equal(visibleTotalRemoved, true);
     assert.equal(removedBreakdownCells, 3);
     assert.equal(printed, true);
+});
+
+test('desktop customer PDF uses direct export and reports failures', async () => {
+    let request;
+    const printTable = { cloneNode:() => ({
+        classList:{ remove(){}, add(){} }, querySelectorAll:() => [], tFoot:{ rows:[] },
+        outerHTML:'<table>customer rows</table>'
+    }) };
+    const client = clientFixture({ printTable, desktopPdf:{ async saveCustomerSummary(data) {
+        request = data;
+        throw new Error('Disken er fuld');
+    } } });
+    client.setPrintState('2026-10', 'registered');
+    await client.exportSummaryPdf();
+    assert.equal(request.month, '2026-10');
+    assert.match(request.html, /A4 portrait/);
+    assert.match(client.document.getElementById('kfCustomerPdfStatus').textContent, /Disken er fuld/);
 });
 
 test('credit notes replace the positive-only snapshot and U/B stays outside invoice and cost totals', async () => {

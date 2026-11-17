@@ -740,33 +740,18 @@ function filterKfCustomerSummary() {
     if (count) count.textContent = query ? visible.customers + ' af ' + total.customers + ' kunder' : total.customers + ' kunder';
 }
 
-function exportKfCustomerSummaryPdf() {
+async function exportKfCustomerSummaryPdf() {
     const table = document.querySelector('#kfCustomerSummary .kf-customer-summary-table');
+    const pdfStatus = document.getElementById('kfCustomerPdfStatus');
+    const setPdfStatus = message => {
+        if (pdfStatus) pdfStatus.textContent = message;
+        else kfSetStatus(message);
+    };
+    setPdfStatus('');
     if (!table || !_kfLoadedMonth) {
-        kfSetStatus('Indlæs en måned, før du gemmer månedsanalysen som PDF.');
+        setPdfStatus('Indlæs en måned, før du gemmer månedsanalysen som PDF.');
         return;
     }
-
-    const previousFrame = document.getElementById('kfCustomerSummaryPrintFrame');
-    if (previousFrame) previousFrame.remove();
-    const printFrame = document.createElement('iframe');
-    printFrame.id = 'kfCustomerSummaryPrintFrame';
-    printFrame.title = 'Kunder — månedsanalyse PDF';
-    printFrame.setAttribute('aria-hidden', 'true');
-    printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:712px;height:1000px;border:0;';
-    printFrame.onload = async () => {
-        try {
-            const printWindow = printFrame.contentWindow;
-            if (!printWindow) throw new Error('Kunne ikke oprette print-visningen.');
-            if (printWindow.document.fonts) await printWindow.document.fonts.ready;
-            printWindow.addEventListener('afterprint', () => printFrame.remove(), { once:true });
-            printWindow.focus();
-            printWindow.print();
-        } catch (err) {
-            printFrame.remove();
-            kfSetStatus('Kunne ikke udskrive månedsanalysen: ' + String(err.message || err));
-        }
-    };
 
     const printableTable = table.cloneNode(true);
     printableTable.classList.remove('kf-customer-summary-table');
@@ -786,7 +771,7 @@ function exportKfCustomerSummaryPdf() {
         ? 'Inkl. manglende tid fra stykliste'
         : 'Kun registreret kost';
 
-    printFrame.srcdoc = `<!doctype html>
+    const html = `<!doctype html>
         <html lang="da">
         <head>
             <meta charset="utf-8">
@@ -834,6 +819,38 @@ function exportKfCustomerSummaryPdf() {
             ${printableTable.outerHTML}
         </body>
         </html>`;
+
+    if (window.GohDesktopPdf) {
+        try {
+            const result = await window.GohDesktopPdf.saveCustomerSummary({ month:_kfLoadedMonth, html });
+            if (!result.canceled) setPdfStatus('Kundeanalysen er gemt som PDF.');
+        } catch (err) {
+            setPdfStatus('Kunne ikke gemme kundeanalysen som PDF: ' + String(err.message || err));
+        }
+        return;
+    }
+
+    const previousFrame = document.getElementById('kfCustomerSummaryPrintFrame');
+    if (previousFrame) previousFrame.remove();
+    const printFrame = document.createElement('iframe');
+    printFrame.id = 'kfCustomerSummaryPrintFrame';
+    printFrame.title = 'Kunder — månedsanalyse PDF';
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:712px;height:1000px;border:0;';
+    printFrame.onload = async () => {
+        try {
+            const printWindow = printFrame.contentWindow;
+            if (!printWindow) throw new Error('Kunne ikke oprette print-visningen.');
+            if (printWindow.document.fonts) await printWindow.document.fonts.ready;
+            printWindow.addEventListener('afterprint', () => printFrame.remove(), { once:true });
+            printWindow.focus();
+            printWindow.print();
+        } catch (err) {
+            printFrame.remove();
+            setPdfStatus('Kunne ikke udskrive månedsanalysen: ' + String(err.message || err));
+        }
+    };
+    printFrame.srcdoc = html;
     document.body.appendChild(printFrame);
 }
 

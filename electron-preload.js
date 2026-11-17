@@ -6,3 +6,7 @@ contextBridge.exposeInMainWorld('GohDesktopLogin', {
     remember: credentials => ipcRenderer.invoke('goh-login:remember', credentials),
     forget: () => ipcRenderer.invoke('goh-login:forget')
 });
+
+contextBridge.exposeInMainWorld('GohDesktopPdf', {
+    saveCustomerSummary: data => ipcRenderer.invoke('goh-customer-summary:pdf', data)
+});

@@ -303,6 +303,7 @@
         .kf-customer-summary-tools { display:flex; align-items:center; gap:10px; margin:0 0 8px; }
         .kf-customer-summary-tools input { flex:1; min-width:180px; border:1px solid #c9dbf2; border-radius:7px; padding:7px 9px; font-size:12px; }
         .kf-customer-summary-tools span { color:#5f7892; font-size:11px; font-weight:700; white-space:nowrap; }
+        .kf-customer-summary-tools #kfCustomerPdfStatus { white-space:normal; }
         .kf-customer-summary-table tfoot tr + tr td { border-top:1px solid #c0d8f5; }
         .kf-trend-panel { margin:0 0 14px; padding:12px; border:1px solid #bfd8f5; border-radius:10px; background:#f8fbff; }
         .kf-trend-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
@@ -2320,6 +2321,7 @@
                         <input id="kfCustomerSummaryFilter" type="search" placeholder="Søg kunde eller kundenummer…" oninput="filterKfCustomerSummary()" />
                         <span id="kfCustomerSummaryCount"></span>
                         <button class="kf-export-btn" type="button" onclick="exportKfCustomerSummaryPdf()">Gem som PDF</button>
+                        <span id="kfCustomerPdfStatus" role="status" aria-live="polite"></span>
                     </div>
                     <div class="kf-table-wrap kf-customer-summary-scroll">
                         <table class="kf-table kf-customer-summary-table">

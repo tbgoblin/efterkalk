@@ -76,6 +76,7 @@ Du kan:
 - Skifte mellem `Kun registreret` og `Inkl. manglende tid fra stykliste`.
 - Se det særskilte stykliste-tillæg, når registreret produktionstid mangler.
 - Eksportere både kunder og ordrer til CSV.
+- Bruge `Gem som PDF` ved kundeanalysen. I desktop-appen vælges filnavn og placering direkte, uden Microsoft Print to PDF.
 - Gemme den færdigberegnede månedsrevision i GOH, så den kan genåbnes og bruges til trend.
 
 Måneden gemmes først, når ordreberegningerne er gennemført. En ordre uden komplet kost markeres i stedet for at få opfundet en værdi.

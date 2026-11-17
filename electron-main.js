@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { createDesktopCredentialStore } = require('./services/desktopCredentialService');
+const { createCustomerSummaryPdfService } = require('./services/customerSummaryPdfService');
 
 let mainWindow = null;
 let autoUpdaterConfigured = false;
@@ -188,6 +189,17 @@ function setupDesktopLogin() {
         if (response.status === 401) credentialStore.forget();
         if (!response.ok) throw new Error('Gemt login kunne ikke åbnes. Log ind igen.');
         return response.json();
+    });
+}
+
+function setupCustomerSummaryPdf() {
+    const save = createCustomerSummaryPdfService({ BrowserWindow, dialog, fs, sandbox: !IS_RDS });
+    ipcMain.handle('goh-customer-summary:pdf', async (event, data) => {
+        if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame
+            || new URL(event.senderFrame.url).origin !== APP_URL || new URL(event.senderFrame.url).pathname !== '/') {
+            throw new Error('PDF-adgang afvist');
+        }
+        return save(mainWindow, data);
     });
 }
 
@@ -577,6 +589,7 @@ function createMainWindow() {
 function bootDesktopApp() {
     configureAutoStart();
     setupDesktopLogin();
+    setupCustomerSummaryPdf();
 
     // Show loading screen immediately — don't wait for server
     createMainWindow();
