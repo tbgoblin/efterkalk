@@ -754,14 +754,10 @@ function exportKfCustomerSummaryPdf() {
     printFrame.title = 'Kunder — månedsanalyse PDF';
     printFrame.setAttribute('aria-hidden', 'true');
     printFrame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0;';
-    const printWindow = printFrame.contentWindow;
-    if (!printWindow) {
-        kfSetStatus('Kunne ikke oprette print-visningen. Prøv igen.');
-        return;
-    }
-
     printFrame.onload = async () => {
         try {
+            const printWindow = printFrame.contentWindow;
+            if (!printWindow) throw new Error('Kunne ikke oprette print-visningen.');
             if (printWindow.document.fonts) await printWindow.document.fonts.ready;
             printWindow.addEventListener('afterprint', () => printFrame.remove(), { once:true });
             printWindow.focus();
@@ -771,7 +767,6 @@ function exportKfCustomerSummaryPdf() {
             kfSetStatus('Kunne ikke udskrive månedsanalysen: ' + String(err.message || err));
         }
     };
-    document.body.appendChild(printFrame);
 
     const printableTable = table.cloneNode(true);
     printableTable.classList.remove('kf-customer-summary-table');
@@ -841,6 +836,7 @@ function exportKfCustomerSummaryPdf() {
             ${printableTable.outerHTML}
         </body>
         </html>`;
+    document.body.appendChild(printFrame);
 }
 
 function closeKfCustomerTrend() {

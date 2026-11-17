@@ -22,7 +22,7 @@ function clientFixture({ fetchImpl, summary, printTable, printFrame } = {}) {
         querySelectorAll: () => [],
         querySelector: () => printTable || null,
         createElement: () => printFrame || el('x'),
-        body:{ appendChild(){} }
+        body:{ appendChild(node){ node.connected = true; } }
     };
     const posts = [];
     const fetch_ = fetchImpl || (async () => ({ ok: false, json: async () => ({}) }));
@@ -84,7 +84,8 @@ test('customer monthly analysis prints a landscape PDF with all rows and only th
         addEventListener(){}, focus(){}, print(){ printed = true; }
     };
     const printFrame = {
-        style:{}, contentWindow:printWindow,
+        style:{}, connected:false,
+        get contentWindow() { return this.connected ? printWindow : null; },
         setAttribute(){}, remove(){},
         set srcdoc(html) { output = html; }
     };
