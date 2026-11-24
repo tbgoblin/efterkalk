@@ -12,6 +12,8 @@ const ADMIN_MODULES = [
     ['ordreindgang', 'Ordreindgang'],
     ['ordreoversigt', 'Ordreoversigt'],
     ['belastning', 'Belastning'],
+    ['mileage', 'Kørselgodtgørelse'],
+    ['mileageManage', 'Kørselgodtgørelse · Godkendelse og opsætning'],
     ['ledelsesrapport', 'Ledelsesrapport'],
     ['personalehandbog', 'Personalehåndbog']
     ,['lagerliste', 'Lagerliste'],

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const orderNotesService = require('../services/orderNotesService');
 const { createUbOrdersService } = require('../services/ubOrdersService');
 const { createMonthlySummaryService } = require('../services/monthlySummaryService');
+const { createMileageRouter } = require('./mileageRoutes');
 const aftercalcCostExclusionsService = require('../services/aftercalcCostExclusionsService');
 const lagerlisteReconciliationService = require('../services/lagerlisteReconciliationService');
 const phCrawler = require('../services/phCrawlerService');
@@ -94,6 +95,8 @@ function createApiRouter({
         buildExpiredSessionCookie,
         sessionTtlMs
     } = createAuthService({ fs, usersFile: path.join(__dirname, '..', 'users.json') });
+
+    router.use('/mileage', createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, logEvent }));
 
     // Stato condiviso da GOH: DB vince sul file locale, fail-soft se non raggiungibile
     Promise.allSettled([

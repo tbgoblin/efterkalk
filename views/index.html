@@ -1431,6 +1431,7 @@
                         <button type="button" onclick="navigateFromSideMenu('dashboard')">🏠 Dashboard</button>
                         <button type="button" onclick="closeSideMenu();openSettingsModal()">⚙️ Database settings</button>
                         <button type="button" data-module-key="efterkalk" onclick="navigateFromSideMenu('efterkalk')">Efterkalkulation</button>
+                        <button type="button" data-module-key="mileage" onclick="window.location.href='/assets/mileage.html'">Kørselgodtgørelse</button>
                         <button type="button" data-module-key="lagerliste" onclick="navigateFromSideMenu('lagerliste')">Lagerliste</button>
                         <button type="button" data-module-key="lagerliste" onclick="window.location.href='/assets/lagerliste2.html'">🧪 Lagerliste 2 (Beta)</button>
                         <button type="button" data-module-key="ledelsesrapport" onclick="window.open('/assets/ledelsesrapport.html','_blank','noopener')">Ledelsesrapport</button>
@@ -1513,6 +1514,7 @@
                         <article class="dash-card" data-module-key="ordreoversigt"><span class="dash-chip">Produktion</span><h4>Ordreoversigt</h4><p>Produktionsstatus, levering, indkøb og dokumentation pr. ordre.</p><button onclick="openModule('ordreoversigt')">Åbn Ordreoversigt</button></article>
                         <article class="dash-card" data-module-key="belastning"><span class="dash-chip">Produktion</span><h4>Belastning</h4><p>Kapacitet, ressourcer, ordreflyt og planlægningsudsving.</p><button onclick="openModule('belastning')">Åbn Belastning</button></article>
                         <article class="dash-card" data-module-key="ledelsesrapport"><span class="dash-chip">Ledelse</span><h4>Ledelsesrapport</h4><p>Samlet økonomi, ordreindgang, kapacitet og VIA klar til udskrivning.</p><button onclick="window.open('/assets/ledelsesrapport.html','_blank','noopener')">Åbn rapport</button></article>
+                        <article class="dash-card" data-module-key="mileage"><span class="dash-chip">Personale</span><h4>Kørselgodtgørelse</h4><p>Kørsler med mellemstop, årlige satser, godkendelse og interne bilag.</p><button onclick="window.location.href='/assets/mileage.html'">Åbn kørsel</button></article>
                         <article class="dash-card" data-module-key="bilancio"><span class="dash-chip">Prøve</span><h4>Resultatopgørelse</h4><p>Omsætning og vareforbrug pr. måned og regnskabsår til dato.</p><button onclick="window.open('/assets/bilancio-trial.html','_blank','noopener')">Åbn Økonomirapport</button></article>
                         <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Bogholderi</span><h4>Lagerliste</h4><p>Lagerværdi, VIA og færdige ikke-fakturerede varer.</p><button onclick="openModule('lagerliste')">Åbn Lagerliste</button></article>
                         <article class="dash-card" data-module-key="lagerliste"><span class="dash-chip">Beta</span><h4>Lagerliste 2</h4><p>Route- og transaktionsafstemning for lagerbevægelser.</p><button onclick="window.location.href='/assets/lagerliste2.html'">Åbn Lagerliste 2</button></article>
@@ -3351,6 +3353,7 @@
             ordreoversigt: 'ordreoversigt',
             belastning: 'belastning',
             ledelsesrapport: 'ledelsesrapport',
+            mileage: 'mileage',
             personalehåndbog: 'personalehandbog',
             lagerliste: 'lagerliste',
             bilancio: 'bilancio'

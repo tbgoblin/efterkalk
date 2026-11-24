@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="da">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kørselgodtgørelse · Gantech</title>
+    <link rel="stylesheet" href="/assets/css/mileage.css?v=1">
+</head>
+<body>
+    <header class="toolbar"><a href="/">← Operations Hub</a><strong>Gantech · Kørselgodtgørelse</strong><span id="identity"></span><button id="refresh" type="button">Opdater</button></header>
+    <main>
+        <div class="page-head"><div><p class="eyebrow">PERSONALE / KØRSEL</p><h1>Kørselgodtgørelse</h1><p class="muted">Fra første stop til godkendt bilag. Gemmes i GOH.</p></div><button id="newTrip" type="button" class="primary" disabled>+ Ny kørsel</button></div>
+        <p id="status" role="status" aria-live="polite"></p>
+        <p id="setupNotice" class="notice" hidden></p>
+        <section class="panel">
+            <div class="section-head"><h2>Kørsler og bilag</h2><button id="yearPdf" type="button" disabled>Årsbilag PDF</button></div>
+            <div class="fields filters">
+                <label>År<select id="filterYear"><option value="">Alle år / uden dato</option></select></label>
+                <label>Medarbejder<select id="filterEmployee"><option value="">Alle tilgængelige</option></select></label>
+                <label>Status<select id="filterStatus"><option value="">Alle</option><option value="draft">Kladde</option><option value="submitted">Afventer</option><option value="approved">Godkendt</option><option value="paid">Udbetalt</option><option value="rejected">Afvist</option><option value="legacy">Historik</option></select></label>
+            </div>
+            <div id="totals" class="totals"></div>
+            <div class="table-wrap"><table><thead><tr><th>Dato</th><th>Medarbejder / formål</th><th>Status</th><th class="numeric">Km</th><th class="numeric">Godkendt DKK</th><th>Bilag</th></tr></thead><tbody id="tripRows"></tbody></table></div>
+        </section>
+        <section id="management" class="panel" hidden>
+            <div class="section-head"><div><p class="eyebrow">GODKENDELSE & OPSÆTNING</p><h2>Administration af kørsel</h2></div></div>
+            <p class="muted">Godkendelse sker fra den enkelte kørsel. Egne kørsler skal godkendes af en anden ansvarlig. Adgang og godkendelsesret gives i Operations Hubs brugeradministration.</p>
+            <details><summary>Årlige satser</summary>
+                <p class="notice">Satser indtastes og kontrolleres af Gantech. Der er ingen automatisk skatteopdatering. 20.000 km gælder pr. medarbejder pr. kalenderår. Allerede godkendte beløb ændres ikke af nye satser.</p>
+                <p id="rateList"></p>
+                <form id="rateForm" class="fields">
+                    <label>År<input id="rateYear" type="number" min="2000" max="2200" required></label>
+                    <label>DKK/km til og med 20.000<input id="rateHigh" type="number" min="0.001" max="100" step="0.001" required></label>
+                    <label>DKK/km over 20.000<input id="rateLow" type="number" min="0.001" max="100" step="0.001" required></label>
+                    <button class="primary" type="submit">Gem årssatser</button>
+                </form>
+            </details>
+            <details><summary>Medarbejdere og GOH-brugere</summary>
+                <p class="muted">Importerede medarbejdere skal knyttes til en GOH-bruger. Gamle Power Apps-administratorer får ikke automatisk rettigheder her.</p>
+                <form id="employeeForm" class="fields">
+                    <label>Vælg medarbejder<select id="employeeEdit"><option value="">Ny medarbejder</option></select></label>
+                    <label>Navn<input id="employeeName" maxlength="200" required></label>
+                    <label>GOH-bruger<select id="employeeUser"><option value="">Ikke tilknyttet</option></select></label>
+                    <label>Standardnummerplade<input id="employeePlate" maxlength="30"></label>
+                    <label class="check"><input id="employeeActive" type="checkbox" checked> Aktiv medarbejder</label>
+                    <button class="primary" type="submit">Gem medarbejder</button>
+                </form>
+            </details>
+            <details><summary>Import fra Power Apps (én gang)</summary>
+                <p class="notice">Vælg de fire SharePoint-CSV-filer. Import kræver tomme medarbejder- og kørselslister. Historiske km og Formål bevares, men beløb genberegnes ikke. Kontrollér at eksporten omfatter alle relevante kørsler; disse km tæller med i årets 20.000 km-grænse.</p>
+                <form id="importForm" class="fields">
+                    <label>Kørselgodtgørelse<input id="importTrips" type="file" accept=".csv" required></label>
+                    <label>Kørsel_medarbejderne<input id="importEmployees" type="file" accept=".csv" required></label>
+                    <label>Kørsel_addresse<input id="importAddresses" type="file" accept=".csv" required></label>
+                    <label>Kørsel_formål<input id="importPurposes" type="file" accept=".csv" required></label>
+                    <button type="submit">Kontrollér import</button>
+                </form>
+                <p id="importPreview" role="status"></p><button id="confirmImport" type="button" class="primary" hidden>Bekræft import til GOH</button>
+            </details>
+            <details><summary>Automatiske afstande</summary><p id="routingStatus"></p><p class="muted">En serveradministrator kan sætte miljøvariablen GOH_ORS_API_KEY. Nøglen må ikke indtastes i appen eller gemmes i kildekoden. Konto, vilkår og forespørgselsgrænser aftales separat med openrouteservice. Adresseopslag og rutevalg sender kun de valgte adresser/koordinater til tjenesten, ikke medarbejdernavn, nummerplade eller formål. Manuelle km virker uden tjenesten.</p></details>
+        </section>
+    </main>
+    <dialog id="tripDialog" aria-labelledby="tripTitle">
+        <form id="tripForm">
+            <div class="section-head"><h2 id="tripTitle">Ny kørsel</h2><button type="button" id="closeTrip">Luk</button></div>
+            <input id="tripId" type="hidden">
+            <div class="fields">
+                <label>Kørselsdato<input id="tripDate" type="date" required></label>
+                <label>Nummerplade<input id="tripPlate" maxlength="30" required></label>
+                <label class="span2">Erhvervsmæssigt formål<input id="tripPurpose" list="purposeOptions" maxlength="2000" required></label>
+            </div>
+            <div class="section-head"><h3>Rute i kørselsrækkefølge</h3><button type="button" id="addStop">+ Mellemstop / pause</button></div>
+            <p id="tripRoutingNotice" class="notice" hidden>Automatisk afstand er ikke konfigureret endnu. Skriv adresserne og angiv de samlede km manuelt med et afstandsgrundlag.</p>
+            <p class="muted">Vælg adresse efter opslag for automatisk beregning. Eller skriv adresser og angiv de samlede km manuelt. Pauser giver ikke ekstra km i sig selv.</p>
+            <div id="stops"></div><datalist id="addressOptions"></datalist><datalist id="purposeOptions"></datalist>
+            <label class="check"><input id="tripReturn" type="checkbox"> Retur ad samme stop i omvendt rækkefølge</label>
+            <div class="fields">
+                <button id="calculateRoute" type="button">Beregn hele ruten</button>
+                <label>Samlet km, inklusive eventuel retur<input id="tripKm" type="number" min="0.01" max="10000" step="0.01" required></label>
+                <label class="span2">Grundlag / begrundelse for km<input id="tripBasis" maxlength="1000" placeholder="Fx kilometertæller eller begrundelse for rettelse" required></label>
+                <label class="span2">Kommentar<textarea id="tripComment" maxlength="2000" rows="2"></textarea></label>
+            </div>
+            <p class="muted">openrouteservice.org by HeiGIT · Map data © OpenStreetMap contributors. Endeligt beløb beregnes ved godkendelse ud fra kørselsåret og tidligere godkendte km.</p>
+            <p id="tripError" role="alert"></p>
+            <div class="actions"><button type="submit" class="primary">Gem kladde</button></div>
+        </form>
+    </dialog>
+    <dialog id="detailDialog" aria-labelledby="detailTitle"><div class="section-head"><h2 id="detailTitle">Kørselsbilag</h2><button id="closeDetail" type="button">Luk</button></div><div id="detailBody"></div><p id="detailError" role="alert"></p></dialog>
+    <script src="/assets/js/mileage.js?v=1"></script>
+</body>
+</html>

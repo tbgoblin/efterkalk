@@ -21,6 +21,19 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 - cache locale + warmup automatico per velocizzare l’avvio
 - pacchetto desktop Windows con aggiornamento automatico via GitHub Releases
 
+### Kørselgodtgørelse
+
+- Modulo nativo GOH, indipendente da Power Apps/SharePoint, disponibile dal menu e dal dashboard.
+- In **Administration → Brugere** assegnare `Kørselgodtgørelse` (`mileage`) ai lavoratori; ai responsabili assegnare anche `Kørselgodtgørelse · Godkendelse og opsætning` (`mileageManage`). I superadmin hanno entrambi gli accessi.
+- Prima delle nuove registrazioni: importare una sola volta i quattro CSV di SharePoint dalla sezione amministrativa del modulo, verificando l'anteprima, quindi collegare ogni dipendente al proprio utente GOH. I file originali e i dati personali non fanno parte del repository o dell'installer.
+- Lo storico mantiene i km già comprensivi del ritorno e il testo originale di `Formaal`; le causali usano `Formaal` oppure `Titel` quando la prima colonna è vuota. Non si inventano indirizzi separati né importi storici assenti. Una data storica mancante va completata da un responsabile prima di approvare nuove trasferte per quel dipendente.
+- Ogni anno impostare esplicitamente le tariffe DKK/km fino a 20.000 km e oltre. L'anno è quello della trasferta; la franchigia residua considera i km storici importati e quelli già approvati/pagati per dipendente nello stesso anno. L'assegnazione alle fasce avviene **nell'ordine di approvazione**, anche per trasferte retrodatate; le bozze mostrano solo una stima. Le tariffe non sono aggiornate automaticamente da SKAT.
+- Il dipendente salva una bozza con data, targa, causale, partenza, tappe/pausa, arrivo e km totali e la invia. Un altro responsabile approva (fissando importo, tariffe, fasce e audit) oppure respinge con motivazione. Il pagamento è una marcatura interna e non esegue bonifici. I valori già approvati non vengono ricalcolati dopo un cambio tariffa.
+- PDF interno per singola trasferta e PDF annuale per dipendente. I totali DKK escludono lo storico senza importo, le bozze e le richieste non approvate. Il PDF annuale include tutti gli stati dell'anno selezionato, indipendentemente dal filtro di stato della lista.
+- Dati condivisi in `GOH.dbo.AppState`, chiave `mileage_v1`, con letture rigorose e scritture versionate atomiche; nessun fallback locale e nessun dato personale in localStorage. Il modulo non cambia per profilo Visma: riguarda il personale Gantech.
+- **Percorsi opzionali:** configurare `GOH_ORS_API_KEY` nell'ambiente del processo server/Electron e riavviare. Non salvare la chiave nel codice, nel database delle trasferte o nel browser. Il servizio usa gli endpoint HTTPS fissi di openrouteservice per ricerca indirizzi e percorsi in auto, con timeout e limite locale di 30 richieste/minuto per utente. Solo un'azione esplicita dell'utente invia indirizzi/coordinate al servizio; nessuna richiesta esterna avviene senza chiave. Il ritorno viene calcolato attraverso le tappe in ordine inverso, non moltiplicando semplicemente l'andata. Errori o quote esaurite richiedono un nuovo tentativo oppure l'inserimento manuale esplicito, mai una distanza fittizia.
+- Account, quota e condizioni del servizio devono essere verificati/accettati dall'azienda; nessun abbonamento viene attivato dall'app. Documentazione: [Directions](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/), [Geocoder](https://giscience.github.io/openrouteservice/api-reference/endpoints/geocoder/), [piani del fornitore](https://account.heigit.org/info/plans). I km manuali sono sempre disponibili senza API.
+
 ### Aggiornamenti verificati (`2026-04-07`)
 
 - protezione **single-instance** in `electron-main.js` per evitare avvii duplicati della desktop app
