@@ -77,7 +77,7 @@ test('shared addresses preserve imported entries, confirmed coordinates and conc
     assert.equal((await service.data(worker)).addresses.length, 3);
 });
 
-test('trip workflow enforces ownership, independent approval, fixed rates, and payment once', async () => {
+test('trip workflow enforces permission, fixed rates, and payment once', async () => {
     const f = await fixture();
     const trip = await f.save();
     assert.equal((await f.service.data(worker)).trips[0].estimate.amount, 400);
@@ -86,13 +86,11 @@ test('trip workflow enforces ownership, independent approval, fixed rates, and p
     await f.act(trip, 'submit', worker);
     await assert.rejects(f.act(trip, 'approve', worker), { statusCode: 403 });
     const selfManager = { ...worker, permissions: approver.permissions };
-    await assert.rejects(f.act(trip, 'approve', selfManager), /egen kørsel/);
-    const employee = (await f.service.data(approver)).employees.find(row => row.username === worker.username);
-    await f.service.saveEmployee({ ...employee, version: (await f.service.data(approver)).version, username: '' }, approver);
-    await assert.rejects(f.act(trip, 'approve', selfManager), /egen kørsel/);
-    await f.service.saveEmployee({ ...employee, version: (await f.service.data(approver)).version }, approver);
-    await f.act(trip, 'approve');
+    await assert.rejects(f.act(trip, 'reject', selfManager, 'Test'), { statusCode: 409 });
+    await f.act(trip, 'approve', selfManager);
     let approved = (await f.service.data(worker)).trips[0];
+    assert.equal(approved.approvedBy, worker.username);
+    assert.equal(approved.history.at(-1).by, worker.username);
     assert.equal(approved.allowance.amount, 400);
     assert.equal(approved.km, 100); // Total km already includes return; never double it again.
     await f.service.saveRate({ version: (await f.service.data(approver)).version, year: 2026, high: 5, low: 3 }, approver);
@@ -116,7 +114,7 @@ test('reject requires a reason and allows the owner to correct and resubmit', as
     assert.equal((await f.service.data(worker)).trips[0].allowance.amount, 320);
 });
 
-test('a worker can create, edit and submit for another employee but cannot approve their own entry', async () => {
+test('a manager can approve a trip they created for another employee or one created for them', async () => {
     const f = await fixture();
     const otherId = (await f.service.data(other)).employeeId;
     const trip = await f.save({ employeeId: otherId }, worker);
@@ -128,10 +126,14 @@ test('a worker can create, edit and submit for another employee but cannot appro
     await f.act(trip, 'submit', worker);
     const creatorManager = { ...worker, permissions: approver.permissions };
     const ownerManager = { ...other, permissions: approver.permissions };
-    await assert.rejects(f.act(trip, 'approve', creatorManager), /oprettet/);
-    await assert.rejects(f.act(trip, 'approve', ownerManager), /egen kørsel/);
-    await f.act(trip, 'approve');
-    assert.equal((await f.service.document(trip.id, other)).allowance.amount, 320);
+    await f.act(trip, 'approve', creatorManager);
+    const approved = await f.service.document(trip.id, other);
+    assert.equal(approved.allowance.amount, 320);
+    assert.equal(approved.approvedBy, worker.username);
+    const second = await f.save({ employeeId: otherId }, worker);
+    await f.act(second, 'submit', worker);
+    await f.act(second, 'approve', ownerManager);
+    assert.equal((await f.service.document(second.id, other)).approvedBy, other.username);
 });
 
 test('Visma synchronization preserves GOH links, tracks active employees and rejects ambiguous or different sources', async () => {

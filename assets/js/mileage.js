@@ -205,7 +205,8 @@
             '<label>Begrundelse / kommentar<input id="actionNote" maxlength="1000"></label><div class="actions">'+
             (t.status !== 'deleted' ? '<button type="button" data-pdf="'+esc(t.id)+'">Hent PDF</button>' : '')+
             ((own || creator) && ['draft','rejected'].includes(t.status) ? '<button type="button" data-edit="'+esc(t.id)+'">Rediger</button><button type="button" data-action="submit" class="primary">Send til godkendelse</button>' : '')+
-            (data.canManage && !own && !creator && t.status === 'submitted' ? '<button type="button" data-action="reject">Afvis med begrundelse</button><button type="button" data-action="approve" class="primary">Godkend og fastlås beløb</button>' : '')+
+            (data.canManage && !own && !creator && t.status === 'submitted' ? '<button type="button" data-action="reject">Afvis med begrundelse</button>' : '')+
+            (data.canManage && t.status === 'submitted' ? '<button type="button" data-action="approve" class="primary">Godkend og fastlås beløb</button>' : '')+
             (data.canManage && t.status === 'approved' ? '<button type="button" data-action="pay" class="primary">Markér udbetalt</button>' : '')+
             (data.canManage && t.status !== 'deleted' ? '<button type="button" data-action="delete">Slet kørsel</button>' : '')+'</div>';
         if (!$('detailDialog').open) $('detailDialog').showModal();

@@ -272,7 +272,6 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
             requireManager(user);
             if (trip.legacy || trip.status === 'deleted') throw fail('Importeret eller slettet historik kan ikke godkendes eller udbetales igen.', 409);
             if (action === 'approve') {
-                if (own || creator) throw fail('Du kan ikke godkende din egen kørsel eller en kørsel, du har oprettet.', 403);
                 if (trip.status !== 'submitted') throw fail('Kun indsendte kørsler kan godkendes.', 409);
                 const year = Number(trip.date.slice(0, 4));
                 const rate = state.rates.find(row => row.year === year);
