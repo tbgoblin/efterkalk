@@ -32,7 +32,9 @@ function generateMileagePdf(trips) {
             line('Bilags-ID', trip.id);
             if (trip.legacy) line('Power Apps-reference', trip.sourceId);
             line('Medarbejder / nummerplade', trip.employeeName + ' / ' + trip.plate);
+            if (trip.createdBy) line('Oprettet af', trip.createdBy);
             line('Kørselsdato / status', (trip.date || 'Dato mangler') + ' / ' + statusNames[trip.status]);
+            if (trip.reconciliationRequired) line('Kontrol kræves', 'Tidligere km er ændret efter godkendelsen. Kontrollér beregningen; beløbet er ikke genberegnet.');
             line('Formål', trip.purpose);
             line('Rute og stop', trip.stops.length ? trip.stops.map((stop, index) =>
                 (index + 1) + '. ' + stop.address + (stop.note ? ' (' + stop.note + ')' : '')).join('\n') : 'Historisk rutebeskrivelse: se Formål ovenfor.');

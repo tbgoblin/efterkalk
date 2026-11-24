@@ -4,7 +4,7 @@
     const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
     const fmt = value => Number(value).toLocaleString('da-DK', { minimumFractionDigits:2, maximumFractionDigits:2 });
     const rateFmt = value => Number(value).toLocaleString('da-DK', { minimumFractionDigits:2, maximumFractionDigits:3 });
-    const statuses = { draft:'Kladde', submitted:'Afventer', approved:'Godkendt', paid:'Udbetalt', rejected:'Afvist', legacy:'Historik' };
+    const statuses = { draft:'Kladde', submitted:'Afventer', approved:'Godkendt', paid:'Udbetalt', rejected:'Afvist', legacy:'Historik', deleted:'Slettet' };
     let data, currentTrip, previewFiles, busy = false;
     let points = [];
     async function api(path, body) {
@@ -34,7 +34,7 @@
         }
     }
     function applyAvailability() {
-        $('newTrip').disabled = !data?.employeeId;
+        $('newTrip').disabled = !data?.participants?.length;
         $('calculateRoute').disabled = !data?.routingConfigured;
         $('tripRoutingNotice').hidden = Boolean(data?.routingConfigured);
         document.querySelectorAll('[data-search]').forEach(button => { button.disabled = !data?.routingConfigured; });
@@ -46,22 +46,30 @@
         if ([...$(id).options].some(option => option.value === previous)) $(id).value = previous;
     }
     async function load() {
+        let syncError = '';
+        try { const result = await api('/employees/sync', {}); syncError = (result.warnings || []).join(' '); }
+        catch (error) { syncError = error.message; }
         data = await api('/data');
+        $('syncNotice').hidden = !syncError;
+        $('syncNotice').textContent = syncError ? 'Visma: '+syncError+' Medarbejderlisten kan være ufuldstændig eller forældet.' : '';
         $('identity').textContent = data.user.displayName;
         $('management').hidden = !data.canManage;
         $('setupNotice').hidden = Boolean(data.employeeId);
-        $('setupNotice').textContent = 'Din GOH-bruger er ikke tilknyttet en aktiv medarbejder. Bed en kørselsadministrator om at tilknytte dig, før du opretter kørsler.';
+        $('setupNotice').textContent = 'Din GOH-bruger er ikke tilknyttet en aktiv medarbejder. Du kan oprette kørsel for en medarbejder, men skal tilknyttes for at se dine egne kørsler.';
         const years = [...new Set(data.trips.map(row => row.date?.slice(0,4)).filter(Boolean).concat(String(new Date().getFullYear())))].sort().reverse();
         options('filterYear', years, x => x, x => x, '<option value="">Alle år / uden dato</option>');
-        options('filterEmployee', data.employees, x => x.id, x => x.name, '<option value="">Alle tilgængelige</option>');
-        if (!data.canManage && data.employeeId) $('filterEmployee').value = data.employeeId;
+        const visibleEmployees = new Map(data.employees.map(row => [row.id, row.name]));
+        data.trips.forEach(row => visibleEmployees.set(row.employeeId, row.employeeName));
+        options('filterEmployee', [...visibleEmployees].map(([id,name]) => ({id,name})), x => x.id, x => x.name, '<option value="">Alle tilgængelige</option>');
+        if (data.canManage && !$('filterStatus').querySelector('option[value="deleted"]')) $('filterStatus').add(new Option('Slettet', 'deleted'));
         $('addressOptions').innerHTML = data.addresses.map(row => '<option value="'+esc(row.address)+'">'+esc(row.name)+'</option>').join('');
         $('purposeOptions').innerHTML = data.purposes.map(row => '<option value="'+esc(row)+'"></option>').join('');
         if (data.canManage) {
-            options('employeeEdit', data.employees, x => x.id, x => x.name, '<option value="">Ny medarbejder</option>');
+            options('employeeEdit', data.employees, x => x.id, x => x.name+(x.vismaEmpNo ? ' (Visma '+x.vismaEmpNo+')' : '')+(!x.active ? ' · inaktiv' : ''), '<option value="">Ny medarbejder</option>');
             options('employeeUser', data.users, x => x.username.toLowerCase(), x => x.name+' ('+x.username+')', '<option value="">Ikke tilknyttet</option>');
             $('rateList').textContent = data.rates.slice().sort((a,b) => b.year-a.year).map(row => row.year+': '+rateFmt(row.high)+' / '+rateFmt(row.low)+' DKK pr. km').join(' · ') || 'Ingen satser oprettet.';
             $('routingStatus').textContent = data.routingConfigured ? 'openrouteservice er konfigureret på serveren.' : 'Automatisk afstand er ikke konfigureret. Brug manuelle km indtil videre.';
+            $('employeeEdit').dispatchEvent(new Event('change'));
         }
         render();
         applyAvailability();
@@ -69,11 +77,15 @@
     function render() {
         if (!data) return;
         const year = $('filterYear').value, employee = $('filterEmployee').value, status = $('filterStatus').value;
-        const rows = data.trips.filter(row => (!year || row.date?.startsWith(year)) && (!employee || row.employeeId === employee) && (!status || row.status === status))
+        const rows = data.trips.filter(row => (status === 'deleted' ? row.status === 'deleted' : row.status !== 'deleted')
+            && (!year || row.date?.startsWith(year)) && (!employee || row.employeeId === employee) && (!status || row.status === status))
             .slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-        const amount = rows.reduce((sum,row) => sum+(row.allowance?.amount || 0),0);
-        $('totals').textContent = rows.length+' kørsler · '+fmt(rows.reduce((sum,row) => sum+row.km,0))+' km · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.';
-        $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span></td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
+        const activeRows = rows.filter(row => row.status !== 'deleted');
+        const amount = activeRows.reduce((sum,row) => sum+(row.allowance?.amount || 0),0);
+        const reviews = data.trips.filter(row => row.reconciliationRequired && row.status !== 'deleted').length;
+        $('totals').textContent = activeRows.length+' kørsler · '+fmt(activeRows.reduce((sum,row) => sum+row.km,0))+' km · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.'
+            +(reviews ? ' '+reviews+' godkendte kørsler skal gennemgås: tidligere km er ændret; beløb er ikke genberegnet.' : '');
+        $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
         applyAvailability();
     }
     function invalidateDistance() {
@@ -95,9 +107,15 @@
         $('tripError').textContent = '';
         $('tripId').value = trip?.id || '';
         $('tripTitle').textContent = trip ? 'Rediger kørsel' : 'Ny kørsel';
+        options('tripEmployee', data.participants, x => x.id, x => x.name+(x.vismaEmpNo ? ' ('+x.vismaEmpNo+')' : ''), '<option value="">Vælg medarbejder</option>');
+        if (trip && ![...$('tripEmployee').options].some(option => option.value === trip.employeeId)) {
+            $('tripEmployee').add(new Option(trip.employeeName, trip.employeeId));
+        }
+        $('tripEmployee').value = trip?.employeeId || data.employeeId || '';
+        $('tripEmployee').disabled = Boolean(trip);
         $('tripDate').value = trip?.date || new Date().toLocaleDateString('sv-SE');
         $('tripDate').max = new Date().toLocaleDateString('sv-SE');
-        $('tripPlate').value = trip?.plate || data.employees.find(row => row.id === data.employeeId)?.plate || '';
+        $('tripPlate').value = trip?.plate || data.employees.find(row => row.id === $('tripEmployee').value)?.plate || '';
         $('tripPurpose').value = trip?.purpose || '';
         $('tripReturn').checked = trip?.roundTrip || false;
         $('tripKm').value = trip?.km || '';
@@ -114,20 +132,25 @@
         if (!t) return;
         $('detailError').textContent = '';
         const own = t.employeeId === data.employeeId;
+        const creator = t.createdBy === data.user.username;
         const pair = (label,value) => '<dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd>';
-        $('detailBody').innerHTML = '<dl>'+pair('Medarbejder',t.employeeName)+pair('Dato',t.date || 'Mangler')+
+        $('detailBody').innerHTML = '<dl>'+pair('Medarbejder',t.employeeName)+(t.createdBy ? pair('Oprettet af',t.createdBy) : '')+pair('Dato',t.date || 'Mangler')+
             pair('Nummerplade',t.plate)+pair('Status',statuses[t.status])+
             pair('Formål',t.purpose)+pair('Rute / stop',t.stops.map(stop => stop.address+(stop.note?' ('+stop.note+')':'')).join('\n') || 'Se historisk Formål')+
             pair('Retur',t.roundTrip?'Ja':'Nej')+pair('Samlet km',fmt(t.km))+pair('Afstandsgrundlag',t.manualReason)+
             pair('Godtgørelse',t.allowance ? fmt(t.allowance.amount)+' DKK; '+fmt(t.allowance.highKm)+' km × '+rateFmt(t.allowance.highRate)+' + '+fmt(t.allowance.lowKm)+' km × '+rateFmt(t.allowance.lowRate) : t.legacy ? 'Historisk beløb ikke eksporteret; ikke genberegnet.' : t.estimate ? fmt(t.estimate.amount)+' DKK foreløbigt. Endeligt beløb fastlåses ved godkendelse.' : 'Satser eller fuldstændig historik mangler; kan ikke beregnes endnu.')+
             pair('Kommentar',t.comment || '—')+
+            (t.reconciliationRequired && t.status !== 'deleted' ? pair('Kontrol kræves','Tidligere km er ændret efter godkendelsen. Kontrollér beregningen; beløbet er ikke genberegnet.') : '')+
+            (t.status === 'deleted' ? pair('Før sletning',statuses[t.deletedPreviousStatus] || t.deletedPreviousStatus) : '')+
             (t.legacy ? pair('Historisk betaling',t.legacyPaid?'Markeret udbetalt':'Ikke markeret udbetalt') : '')+
             pair('Hændelser',t.history.map(row => row.at+' · '+row.by+' · '+row.action+(row.note?' · '+row.note:'')).join('\n') || 'Importeret historik')+'</dl>'+
-            (data.canManage && t.legacy && !t.date ? '<label>Manglende historisk kørselsdato<input id="legacyDate" type="date"></label><button type="button" data-action="legacy-date">Gem historisk dato</button>' : '')+
-            '<label>Begrundelse / kommentar<input id="actionNote" maxlength="1000"></label><div class="actions"><button type="button" data-pdf="'+esc(t.id)+'">Hent PDF</button>'+
-            (own && ['draft','rejected'].includes(t.status) ? '<button type="button" data-edit="'+esc(t.id)+'">Rediger</button><button type="button" data-action="submit" class="primary">Send til godkendelse</button>' : '')+
-            (data.canManage && !own && t.status === 'submitted' ? '<button type="button" data-action="reject">Afvis med begrundelse</button><button type="button" data-action="approve" class="primary">Godkend og fastlås beløb</button>' : '')+
-            (data.canManage && t.status === 'approved' ? '<button type="button" data-action="pay" class="primary">Markér udbetalt</button>' : '')+'</div>';
+            (data.canManage && t.status === 'legacy' && !t.date ? '<label>Manglende historisk kørselsdato<input id="legacyDate" type="date"></label><button type="button" data-action="legacy-date">Gem historisk dato</button>' : '')+
+            '<label>Begrundelse / kommentar<input id="actionNote" maxlength="1000"></label><div class="actions">'+
+            (t.status !== 'deleted' ? '<button type="button" data-pdf="'+esc(t.id)+'">Hent PDF</button>' : '')+
+            ((own || creator) && ['draft','rejected'].includes(t.status) ? '<button type="button" data-edit="'+esc(t.id)+'">Rediger</button><button type="button" data-action="submit" class="primary">Send til godkendelse</button>' : '')+
+            (data.canManage && !own && !creator && t.status === 'submitted' ? '<button type="button" data-action="reject">Afvis med begrundelse</button><button type="button" data-action="approve" class="primary">Godkend og fastlås beløb</button>' : '')+
+            (data.canManage && t.status === 'approved' ? '<button type="button" data-action="pay" class="primary">Markér udbetalt</button>' : '')+
+            (data.canManage && t.status !== 'deleted' ? '<button type="button" data-action="delete">Slet kørsel</button>' : '')+'</div>';
         if (!$('detailDialog').open) $('detailDialog').showModal();
     }
     async function download(path, filename) {
@@ -149,6 +172,9 @@
         points = stopValues(); points.splice(points.length-1,0,{address:'',note:''}); renderStops(); invalidateDistance();
     });
     $('tripReturn').addEventListener('change',invalidateDistance);
+    $('tripEmployee').addEventListener('change', () => {
+        $('tripPlate').value = data.employees.find(row => row.id === $('tripEmployee').value)?.plate || '';
+    });
     $('tripKm').addEventListener('input', () => { $('tripBasis').value=''; });
     $('stops').addEventListener('input', event => {
         if (!event.target.matches('[data-address]')) return;
@@ -189,7 +215,7 @@
     $('tripForm').addEventListener('submit',event=>{
         event.preventDefault();
         perform(async()=>{
-            await api('/trips',{version:data.version,id:$('tripId').value || undefined,date:$('tripDate').value,plate:$('tripPlate').value,
+            await api('/trips',{version:data.version,id:$('tripId').value || undefined,employeeId:$('tripEmployee').value,date:$('tripDate').value,plate:$('tripPlate').value,
                 purpose:$('tripPurpose').value,stops:stopValues(),roundTrip:$('tripReturn').checked,km:Number($('tripKm').value),
                 manualReason:$('tripBasis').value,comment:$('tripComment').value});
             $('tripDialog').close(); await load(); $('status').textContent='Kladde gemt i GOH. Åbn kørslen for at sende den til godkendelse.';
@@ -202,17 +228,21 @@
         if(pdf){perform(()=>download('/trips/'+encodeURIComponent(pdf.dataset.pdf)+'/document.pdf','Gantech-korsel.pdf'),'detailError');return;}
         const button=event.target.closest('[data-action]');
         if(!button)return;
+        if (button.dataset.action === 'delete' && !confirm('Slet kørslen? Den udelades fra fremtidige km-beregninger. Godkendte beløb genberegnes ikke, og berørte kørsler markeres til kontrol. Angiv en begrundelse.')) return;
         perform(async()=>{
             const id=currentTrip.id, action=button.dataset.action;
-            await api('/trips/'+encodeURIComponent(id)+(action==='legacy-date'?'/legacy-date':'/action'),
+            await api('/trips/'+encodeURIComponent(id)+(action==='legacy-date'?'/legacy-date':action==='delete'?'/delete':'/action'),
                 {version:data.version,action,note:$('actionNote').value,date:$('legacyDate')?.value});
-            await load(); detail(id);
+            await load();
+            if (action === 'delete') { $('detailDialog').close(); $('status').textContent='Kørslen er slettet. Tidligere godkendte beløb er uændrede; berørte kørsler er markeret til kontrol.'; }
+            else detail(id);
         },'detailError');
     });
     $('employeeEdit').addEventListener('change',()=>{
         const row=data.employees.find(item=>item.id===$('employeeEdit').value);
         $('employeeName').value=row?.name || ''; $('employeeUser').value=row?.username || '';
         $('employeePlate').value=row?.plate || ''; $('employeeActive').checked=row?.active ?? true;
+        $('employeeName').disabled=Boolean(row?.vismaEmpNo); $('employeeActive').disabled=Boolean(row?.vismaEmpNo);
     });
     $('employeeForm').addEventListener('submit',event=>{
         event.preventDefault();perform(async()=>{

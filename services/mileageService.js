@@ -4,6 +4,7 @@ const STATE_KEY = 'mileage_v1';
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const manager = user => user?.role === 'superadmin' || user?.permissions?.mileageManage === true;
 const username = user => String(user?.username || '').trim().toLowerCase();
+const nameKey = value => String(value || '').normalize('NFC').trim().toLowerCase();
 const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
     && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
@@ -62,18 +63,32 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         trip.history.push({ action, by: username(user), at: now(), note });
     }
 
+    function markForReview(state, employeeId, year, user, reason, excludedId, marked = new Set()) {
+        for (const trip of state.trips) {
+            if (trip.id !== excludedId && trip.employeeId === employeeId && ['approved', 'paid'].includes(trip.status)
+                && (!year || trip.date?.slice(0, 4) === year) && !marked.has(trip.id)) {
+                trip.reconciliationRequired = true;
+                history(trip, 'review-required', user, reason);
+                marked.add(trip.id);
+            }
+        }
+        return marked;
+    }
+
     async function data(user) {
         const state = await load();
         const canManage = manager(user);
         const employee = ownEmployee(state, user);
         return { version: state.version, user: { username: username(user), displayName: user.displayName || user.username },
             canManage, employeeId: employee?.id || null, employees: canManage ? state.employees : employee ? [employee] : [],
+            participants: state.employees.filter(row => row.active).map(row => ({ id: row.id, name: row.name, vismaEmpNo: row.vismaEmpNo || null })),
             addresses: state.addresses, purposes: state.purposes, rates: state.rates,
-            trips: state.trips.filter(row => canManage || row.employeeId === employee?.id).map(trip => {
+            trips: state.trips.filter(row => canManage || (row.status !== 'deleted'
+                && (row.employeeId === employee?.id || row.createdBy === username(user)))).map(trip => {
                 if (trip.legacy || trip.allowance) return trip;
                 const year = Number(trip.date?.slice(0, 4));
                 const rate = state.rates.find(row => row.year === year);
-                const historyIncomplete = state.trips.some(row => row.employeeId === trip.employeeId && row.legacy && !row.date);
+                const historyIncomplete = state.trips.some(row => row.employeeId === trip.employeeId && row.status === 'legacy' && !row.date);
                 const previousKm = state.trips.filter(row => row.employeeId === trip.employeeId
                     && ['approved', 'paid', 'legacy'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
                     .reduce((sum, row) => sum + row.km, 0);
@@ -92,9 +107,87 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         if (linkedUser && state.employees.some(row => row.id !== input.id && row.username === linkedUser)) throw fail('GOH-brugeren er allerede knyttet til en medarbejder.');
         const employee = input.id ? state.employees.find(row => row.id === input.id) : { id: id() };
         if (!employee) throw fail('Medarbejderen findes ikke.', 404);
+        if (employee.vismaEmpNo && (name !== employee.name || input.active !== employee.active)) {
+            throw fail('Navn og aktiv status styres af Visma.');
+        }
         Object.assign(employee, { name, username: linkedUser, plate: text(input.plate || '', 'Nummerplade', 30, false), active: input.active === true });
         if (!input.id) state.employees.push(employee);
         return persist(state, input.version, user);
+    }
+
+    async function syncEmployees(rows, source, user) {
+        if (!Array.isArray(rows) || !rows.length || typeof source !== 'string' || !source) {
+            throw fail('Visma returnerede ingen gyldig medarbejderliste. Ingen ændringer blev gemt.', 503);
+        }
+        const incoming = [], ids = new Set(), names = new Map();
+        for (const row of rows) {
+            const empNo = String(row.EmpNo ?? '').trim();
+            const name = typeof row.Nm === 'string' ? row.Nm.trim() : '';
+            const group = Number(row.Gr2);
+            if (!/^[1-9]\d*$/.test(empNo) || !name || name.length > 200 || row.Gr2 == null || ![0, 99].includes(group)
+                || ids.has(empNo)) {
+                throw fail('Visma-listen indeholder ugyldige eller dublerede medarbejdernumre. Ingen ændringer blev gemt.', 409);
+            }
+            ids.add(empNo);
+            names.set(nameKey(name), (names.get(nameKey(name)) || 0) + 1);
+            incoming.push({ empNo, name, active: group === 0 });
+        }
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const state = await load();
+            if (state.vismaSource && state.vismaSource !== source) throw fail('Visma-profilen afviger fra den registrerede medarbejderkilde. Kontakt administratoren.', 409);
+            const knownIds = new Map(), existingNames = new Map();
+            for (const employee of state.employees) {
+                if (employee.vismaEmpNo) {
+                    if (knownIds.has(employee.vismaEmpNo)) throw fail('Dublerede Visma-medarbejdernumre i GOH.', 409);
+                    knownIds.set(employee.vismaEmpNo, employee);
+                }
+                const key = nameKey(employee.name);
+                if (!existingNames.has(key)) existingNames.set(key, []);
+                existingNames.get(key).push(employee);
+            }
+            let changed = state.vismaSource !== source;
+            const ambiguous = new Set();
+            for (const row of incoming) {
+                let employee = knownIds.get(row.empNo);
+                const matches = existingNames.get(nameKey(row.name)) || [];
+                if (!employee) {
+                    const unlinked = matches.filter(match => !match.vismaEmpNo);
+                    if (unlinked.length > 1 || (unlinked.length && names.get(nameKey(row.name)) > 1)) {
+                        if (row.active || unlinked.some(match => match.active)) ambiguous.add(row.name);
+                        continue;
+                    }
+                    employee = unlinked[0];
+                    if (!employee) {
+                        if (!row.active) continue;
+                        employee = { id: id(), name: row.name, username: '', plate: '', active: row.active };
+                        state.employees.push(employee);
+                        if (!existingNames.has(nameKey(row.name))) existingNames.set(nameKey(row.name), []);
+                        existingNames.get(nameKey(row.name)).push(employee);
+                    }
+                    employee.vismaEmpNo = row.empNo;
+                    knownIds.set(row.empNo, employee);
+                    changed = true;
+                }
+                if (employee.name !== row.name || employee.active !== row.active) {
+                    employee.name = row.name;
+                    employee.active = row.active;
+                    changed = true;
+                }
+            }
+            const warnings = ambiguous.size ? [
+                ambiguous.size + ' medarbejdernavne kan ikke knyttes sikkert til Visma pga. navnesammenfald.'
+                + (manager(user) ? ' Kontrollér medarbejderne i opsætningen: ' + [...ambiguous].join(', ') + '.' : ' Kontakt administratoren.')
+            ] : [];
+            if (!changed) return { changed: false, warnings };
+            state.vismaSource = source;
+            const version = state.version;
+            try {
+                await persist(state, version, user);
+                return { changed: true, warnings };
+            } catch (error) {
+                if (attempt || error.statusCode !== 409) throw error;
+            }
+        }
     }
 
     async function saveRate(input, user) {
@@ -111,11 +204,14 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
     async function saveTrip(input, user) {
         const state = await load();
         checkVersion(state, input.version);
-        const employee = ownEmployee(state, user);
-        if (!employee) throw fail('En administrator skal knytte din GOH-bruger til en aktiv medarbejder.', 403);
         let trip = input.id ? state.trips.find(row => row.id === input.id) : null;
-        if (input.id && (!trip || trip.employeeId !== employee.id)) throw fail('Kørslen findes ikke.', 404);
+        const own = ownEmployee(state, user);
+        if (input.id && (!trip || (trip.employeeId !== own?.id && trip.createdBy !== username(user)))) throw fail('Kørslen findes ikke.', 404);
         if (trip && !['draft', 'rejected'].includes(trip.status)) throw fail('Kun kladder og afviste kørsler kan ændres.', 409);
+        if (trip && input.employeeId && input.employeeId !== trip.employeeId) throw fail('Medarbejderen kan ikke ændres på en eksisterende kørsel.');
+        const employee = trip ? state.employees.find(row => row.id === trip.employeeId)
+            : state.employees.find(row => row.id === (input.employeeId || own?.id) && row.active);
+        if (!employee) throw fail('Vælg en aktiv medarbejder.');
         if (!validDate(input.date) || input.date > now().slice(0, 10)) throw fail('Vælg en gyldig kørselsdato, ikke i fremtiden.');
         if (!Array.isArray(input.stops) || input.stops.length < 2 || input.stops.length > 12) throw fail('Angiv fra, til og højst 10 mellemstop.');
         const stops = input.stops.map(stop => {
@@ -146,21 +242,22 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         if (!trip) throw fail('Kørslen findes ikke.', 404);
         const employee = ownEmployee(state, user);
         const own = employee?.id === trip.employeeId;
+        const creator = trip.createdBy === username(user);
         const action = input.action;
         if (action === 'submit') {
-            if (!own || !['draft', 'rejected'].includes(trip.status)) throw fail('Kørslen kan ikke indsendes.', 403);
+            if ((!own && !creator) || !['draft', 'rejected'].includes(trip.status)) throw fail('Kørslen kan ikke indsendes.', 403);
             if (!state.rates.some(row => row.year === Number(trip.date.slice(0, 4)))) throw fail('Årets satser skal oprettes før indsendelse.');
             trip.status = 'submitted';
         } else {
             requireManager(user);
-            if (trip.legacy) throw fail('Importeret historik kan ikke godkendes eller udbetales igen.', 409);
+            if (trip.legacy || trip.status === 'deleted') throw fail('Importeret eller slettet historik kan ikke godkendes eller udbetales igen.', 409);
             if (action === 'approve') {
-                if (own || trip.createdBy === username(user)) throw fail('Du kan ikke godkende din egen kørsel.', 403);
+                if (own || creator) throw fail('Du kan ikke godkende din egen kørsel eller en kørsel, du har oprettet.', 403);
                 if (trip.status !== 'submitted') throw fail('Kun indsendte kørsler kan godkendes.', 409);
                 const year = Number(trip.date.slice(0, 4));
                 const rate = state.rates.find(row => row.year === year);
                 if (!rate) throw fail('Satser mangler for kørselsåret.');
-                const undated = state.trips.some(row => row.employeeId === trip.employeeId && row.legacy && !row.date);
+                const undated = state.trips.some(row => row.employeeId === trip.employeeId && row.status === 'legacy' && !row.date);
                 if (undated) throw fail('Medarbejderens historik har en kørsel uden dato. Ret importgrundlaget før godkendelse.');
                 const previousKm = state.trips.filter(row => row.employeeId === trip.employeeId
                     && ['approved', 'paid', 'legacy'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
@@ -170,7 +267,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
                 trip.approvedAt = now();
                 trip.status = 'approved';
             } else if (action === 'reject') {
-                if (own || trip.createdBy === username(user) || trip.status !== 'submitted') throw fail('Kørslen kan ikke afvises.', 409);
+                if (own || creator || trip.status !== 'submitted') throw fail('Kørslen kan ikke afvises.', 409);
                 text(input.note, 'Begrundelse', 1000);
                 trip.status = 'rejected';
             } else if (action === 'pay') {
@@ -186,31 +283,104 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
     async function document(tripId, user) {
         const state = await load();
         const employee = ownEmployee(state, user);
-        const trip = state.trips.find(row => row.id === tripId && (manager(user) || row.employeeId === employee?.id));
+        const trip = state.trips.find(row => row.id === tripId && row.status !== 'deleted'
+            && (manager(user) || row.employeeId === employee?.id || row.createdBy === username(user)));
         if (!trip) throw fail('Kørslen findes ikke.', 404);
         return trip;
+    }
+
+    function mergeImport(state, files, user) {
+        const { parseMileageImport } = require('./mileageImportService');
+        const imported = parseMileageImport(files);
+        if (state.imports.length) throw fail('Historik er allerede importeret. Gentagen import er blokeret for at undgå dubletter.', 409);
+        const names = new Map();
+        for (const employee of state.employees) {
+            const name = nameKey(employee.name);
+            if (!names.has(name)) names.set(name, []);
+            names.get(name).push(employee);
+        }
+        const ids = new Set(state.employees.map(row => row.id));
+        const idMap = new Map();
+        let matched = 0;
+        for (const employee of imported.employees) {
+            const matches = names.get(nameKey(employee.name)) || [];
+            if (matches.length > 1) throw fail('En importeret medarbejder matcher flere eksisterende medarbejdere. Afklar navnene før import.', 409);
+            let existing = matches[0];
+            if (existing) matched++;
+            if (!existing) {
+                if (ids.has(employee.id)) throw fail('Medarbejder-ID er allerede i brug. Afklar før import.', 409);
+                existing = employee;
+                state.employees.push(existing);
+                names.set(nameKey(existing.name), [existing]);
+                ids.add(existing.id);
+            }
+            idMap.set(employee.id, existing.id);
+        }
+        const tripIds = new Set(state.trips.map(row => row.id));
+        const marked = new Set();
+        for (const trip of imported.trips) {
+            if (tripIds.has(trip.id)) throw fail('Et historisk kørsels-ID findes allerede. Importen er stoppet for at undgå dubletter.', 409);
+            trip.employeeId = idMap.get(trip.employeeId);
+            trip.employeeName = state.employees.find(row => row.id === trip.employeeId).name;
+            markForReview(state, trip.employeeId, trip.date?.slice(0, 4), user, 'Historiske km er tilføjet efter godkendelsen.', null, marked);
+            history(trip, 'import', user, 'Power Apps-id: ' + trip.sourceId);
+            state.trips.push(trip);
+        }
+        const addresses = new Set(state.addresses.map(row => nameKey(row.address)));
+        for (const row of imported.addresses) if (!addresses.has(nameKey(row.address))) {
+            state.addresses.push(row); addresses.add(nameKey(row.address));
+        }
+        const purposes = new Set(state.purposes.map(nameKey));
+        for (const purpose of imported.purposes) if (!purposes.has(nameKey(purpose))) {
+            state.purposes.push(purpose); purposes.add(nameKey(purpose));
+        }
+        const affected = marked.size;
+        imported.warnings.push(matched + ' medarbejdere er matchet på navn; ' + (imported.employees.length - matched) + ' nye medarbejdere oprettes. Kontrollér navne og GOH-tilknytninger.');
+        if (affected) imported.warnings.push(affected + ' godkendte/udbetalte kørsler skal gennemgås: historiske km er tilføjet efter godkendelsen. Beløbene er ikke ændret.');
+        state.imports.push({ at: now(), by: username(user), count: imported.trips.length, warnings: imported.warnings });
+        return imported;
+    }
+
+    async function previewImport(files, user) {
+        requireManager(user);
+        const imported = mergeImport(await load(), files, user);
+        return { counts: { employees: imported.employees.length, trips: imported.trips.length,
+            addresses: imported.addresses.length, purposes: imported.purposes.length }, warnings: imported.warnings };
     }
 
     async function importData(input, user) {
         requireManager(user);
         const state = await load();
         checkVersion(state, input.version);
-        const { parseMileageImport } = require('./mileageImportService');
-        const imported = parseMileageImport(input.files);
-        if (state.imports.length) throw fail('Historik er allerede importeret. Gentagen import er blokeret for at undgå dubletter.', 409);
-        if (state.trips.length || state.employees.length) throw fail('Import kræver tomme kørselsdata. Importér historikken før nye medarbejdere og kørsler.', 409);
-        Object.assign(state, { employees: imported.employees, trips: imported.trips, addresses: imported.addresses, purposes: imported.purposes });
-        for (const trip of state.trips) history(trip, 'import', user, 'Power Apps-id: ' + trip.sourceId);
-        state.imports.push({ at: now(), by: username(user), count: imported.trips.length, warnings: imported.warnings });
+        const imported = mergeImport(state, input.files, user);
         await persist(state, input.version, user);
         return { warnings: imported.warnings };
+    }
+
+    async function deleteTrip(tripId, input, user) {
+        requireManager(user);
+        const state = await load();
+        checkVersion(state, input.version);
+        const trip = state.trips.find(row => row.id === tripId && row.status !== 'deleted');
+        if (!trip) throw fail('Kørslen findes ikke eller er allerede slettet.', 404);
+        const reason = text(input.note, 'Begrundelse for sletning', 1000);
+        const previousStatus = trip.status;
+        if (['approved', 'paid', 'legacy'].includes(previousStatus)) {
+            markForReview(state, trip.employeeId, trip.date?.slice(0, 4), user, 'Km er fjernet efter godkendelsen. Kontrollér beregningen.', trip.id);
+        }
+        trip.status = 'deleted';
+        trip.deletedPreviousStatus = previousStatus;
+        trip.deletedAt = now();
+        trip.deletedBy = username(user);
+        history(trip, 'delete', user, reason);
+        return persist(state, input.version, user);
     }
 
     async function correctLegacyDate(tripId, input, user) {
         requireManager(user);
         const state = await load();
         checkVersion(state, input.version);
-        const trip = state.trips.find(row => row.id === tripId && row.legacy);
+        const trip = state.trips.find(row => row.id === tripId && row.status === 'legacy');
         if (!trip || trip.date) throw fail('Kun en manglende historisk dato kan suppleres.', 409);
         if (!validDate(input.date) || input.date > now().slice(0, 10)) throw fail('Ugyldig historisk dato.');
         trip.date = input.date;
@@ -218,7 +388,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         return persist(state, input.version, user);
     }
 
-    return { data, saveEmployee, saveRate, saveTrip, transition, document, importData, correctLegacyDate };
+    return { data, syncEmployees, saveEmployee, saveRate, saveTrip, transition, document, previewImport, importData, deleteTrip, correctLegacyDate };
 }
 
 module.exports = { createMileageService, calculateAllowance, manager, fail, validDate };

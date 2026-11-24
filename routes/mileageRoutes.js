@@ -1,10 +1,9 @@
 const express = require('express');
 const { createMileageService, fail } = require('../services/mileageService');
 const { createMileageRoutingService, createMileageRoutingSettings } = require('../services/mileageRoutingService');
-const { parseMileageImport } = require('../services/mileageImportService');
 const { generateMileagePdf } = require('../services/mileagePdf');
 
-function createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }) {
+function createMileageRouter({ gohData, readUsers, readVismaEmployees, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }) {
     const router = express.Router();
     const service = createMileageService({ gohData, readUsers });
     const settings = createMileageRoutingSettings({ gohData });
@@ -37,16 +36,21 @@ function createMileageRouter({ gohData, readUsers, getSessionUser, requireModule
         next();
     };
     router.get('/data', run(async (_req, res, user) => res.json({ ok: true, ...await service.data(user), routingConfigured: await routing.configured() })));
+    router.post('/employees/sync', run(async (_req, res, user) => {
+        let result;
+        try { result = await readVismaEmployees(); }
+        catch { throw fail('Kunne ikke hente medarbejdere fra Visma. Listen kan være forældet; prøv igen eller kontakt administratoren.', 503); }
+        res.json({ ok: true, ...await service.syncEmployees(result.rows, result.source, user) });
+    }));
     router.post('/employees', management, run(async (req, res, user) => { await service.saveEmployee(req.body, user); res.json({ ok: true }); }));
     router.post('/rates', management, run(async (req, res, user) => { await service.saveRate(req.body, user); res.json({ ok: true }); }));
     router.post('/trips', run(async (req, res, user) => { await service.saveTrip(req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/action', run(async (req, res, user) => { await service.transition(req.params.id, req.body, user); res.json({ ok: true }); }));
+    router.post('/trips/:id/delete', management, run(async (req, res, user) => { await service.deleteTrip(req.params.id, req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/legacy-date', management, run(async (req, res, user) => { await service.correctLegacyDate(req.params.id, req.body, user); res.json({ ok: true }); }));
     router.post('/import', management, express.json({ limit: '5mb' }), run(async (req, res, user) => {
         if (req.body.preview === true) {
-            const parsed = parseMileageImport(req.body.files);
-            return res.json({ ok: true, counts: { employees: parsed.employees.length, trips: parsed.trips.length,
-                addresses: parsed.addresses.length, purposes: parsed.purposes.length }, warnings: parsed.warnings });
+            return res.json({ ok: true, ...await service.previewImport(req.body.files, user) });
         }
         res.json({ ok: true, ...await service.importData(req.body, user) });
     }));
@@ -62,7 +66,7 @@ function createMileageRouter({ gohData, readUsers, getSessionUser, requireModule
     router.get('/report.pdf', run(async (req, res, user) => {
         if (!/^\d{4}$/.test(String(req.query.year || '')) || typeof req.query.employeeId !== 'string') throw fail('Vælg år og medarbejder.');
         const data = await service.data(user);
-        const trips = data.trips.filter(row => row.employeeId === req.query.employeeId && row.date?.slice(0, 4) === req.query.year);
+        const trips = data.trips.filter(row => row.status !== 'deleted' && row.employeeId === req.query.employeeId && row.date?.slice(0, 4) === req.query.year);
         if (!trips.length) throw fail('Ingen kørsler i det valgte år.', 404);
         const pdf = await generateMileagePdf(trips.sort((a, b) => a.date.localeCompare(b.date)));
         res.setHeader('Content-Type', 'application/pdf');

@@ -90,6 +90,86 @@ test('reject requires a reason and allows the owner to correct and resubmit', as
     assert.equal((await f.service.data(worker)).trips[0].allowance.amount, 320);
 });
 
+test('a worker can create, edit and submit for another employee but cannot approve their own entry', async () => {
+    const f = await fixture();
+    const otherId = (await f.service.data(other)).employeeId;
+    const trip = await f.save({ employeeId: otherId }, worker);
+    assert.equal(trip.employeeId, otherId);
+    assert.equal((await f.service.data(other)).trips[0].id, trip.id);
+    assert.equal((await f.service.document(trip.id, worker)).id, trip.id);
+    await assert.rejects(f.save({ id: trip.id, employeeId: (await f.service.data(worker)).employeeId }, worker), /ikke ændres/);
+    await f.save({ id: trip.id, employeeId: otherId, km: 80 }, other);
+    await f.act(trip, 'submit', worker);
+    const creatorManager = { ...worker, permissions: approver.permissions };
+    const ownerManager = { ...other, permissions: approver.permissions };
+    await assert.rejects(f.act(trip, 'approve', creatorManager), /oprettet/);
+    await assert.rejects(f.act(trip, 'approve', ownerManager), /egen kørsel/);
+    await f.act(trip, 'approve');
+    assert.equal((await f.service.document(trip.id, other)).allowance.amount, 320);
+});
+
+test('Visma synchronization preserves GOH links, tracks active employees and rejects ambiguous or different sources', async () => {
+    const f = await fixture();
+    const before = await f.service.data(approver);
+    const rows = [{ EmpNo: 10, Nm: 'Test Worker', Gr2: 0 }, { EmpNo: 20, Nm: 'New Worker', Gr2: 0 }];
+    assert.equal((await f.service.syncEmployees(rows, 'company-source', worker)).changed, true);
+    let data = await f.service.data(approver);
+    assert.equal(data.employees.find(row => row.vismaEmpNo === '10').id, before.employees[0].id);
+    assert.equal(data.employees.find(row => row.vismaEmpNo === '10').username, worker.username);
+    assert.equal(data.participants.some(row => row.name === 'New Worker'), true);
+    assert.equal((await f.service.syncEmployees(rows, 'company-source', worker)).changed, false);
+    assert.equal((await f.service.data(approver)).version, data.version);
+    await f.service.syncEmployees([{ EmpNo: 10, Nm: 'Renamed Worker', Gr2: 99 }, rows[1]], 'company-source', worker);
+    data = await f.service.data(approver);
+    assert.equal(data.employees.find(row => row.vismaEmpNo === '10').username, worker.username);
+    assert.equal(data.participants.some(row => row.name === 'Renamed Worker'), false);
+    await assert.rejects(f.service.syncEmployees(rows, 'other-source', worker), /profilen afviger/);
+    await assert.rejects(f.service.syncEmployees([{ EmpNo: 10, Nm: 'Duplicate', Gr2: 0 }, { EmpNo: 10, Nm: 'Different', Gr2: 0 }], 'company-source', worker), /dublerede/);
+    await assert.rejects(f.service.syncEmployees([], 'company-source', worker), /ingen gyldig/);
+    assert.equal((await f.service.data(approver)).version, data.version);
+    const synced = data.employees.find(row => row.vismaEmpNo === '10');
+    await assert.rejects(f.service.saveEmployee({ ...synced, name: 'Altered', version: data.version }, approver), /styres af Visma/);
+});
+
+test('duplicate Visma names do not attach ambiguous employees, and unlinked inactive entries are ignored', async () => {
+    const f = await fixture();
+    const result = await f.service.syncEmployees([
+        { EmpNo:10, Nm:'Test Worker', Gr2:0 }, { EmpNo:11, Nm:'Test Worker', Gr2:99 },
+        { EmpNo:20, Nm:'Past Worker', Gr2:99 }, { EmpNo:21, Nm:'Past Worker', Gr2:99 },
+        { EmpNo:30, Nm:'Active New', Gr2:0 }
+    ], 'company-source', worker);
+    assert.match(result.warnings.join(' '), /navnesammenfald/);
+    const data = await f.service.data(approver);
+    assert.equal(data.employees.find(row => row.username === worker.username).vismaEmpNo, undefined);
+    assert.equal(data.employees.some(row => row.name === 'Past Worker'), false);
+    assert.equal(data.employees.find(row => row.vismaEmpNo === '30').name, 'Active New');
+});
+
+test('manager deletion is audited, excludes km and marks affected approved trips for review', async () => {
+    const f = await fixture();
+    const first = await f.save({ km: 10000 });
+    await f.act(first, 'submit', worker); await f.act(first, 'approve'); await f.act(first, 'pay');
+    const second = await f.save({ km: 100 });
+    await f.act(second, 'submit', worker); await f.act(second, 'approve');
+    const deleteInput = { version: (await f.service.data(approver)).version, note: 'Duplicate entry' };
+    await assert.rejects(f.service.deleteTrip(first.id, deleteInput, worker), { statusCode: 403 });
+    await assert.rejects(f.service.deleteTrip(first.id, { ...deleteInput, note: '' }, approver), /Begrundelse/);
+    await f.service.deleteTrip(first.id, deleteInput, approver);
+    assert.equal((await f.service.data(worker)).trips.some(row => row.id === first.id), false);
+    const deleted = (await f.service.data(approver)).trips.find(row => row.id === first.id);
+    assert.equal(deleted.status, 'deleted');
+    assert.equal(deleted.deletedPreviousStatus, 'paid');
+    assert.equal(deleted.history.at(-1).note, 'Duplicate entry');
+    const affected = await f.service.document(second.id, worker);
+    assert.equal(affected.reconciliationRequired, true);
+    assert.equal(affected.allowance.previousKm, 10000);
+    await assert.rejects(f.service.document(first.id, worker), { statusCode: 404 });
+    await assert.rejects(f.act(first, 'pay'), { statusCode: 409 });
+    const third = await f.save({ km: 20 });
+    await f.act(third, 'submit', worker); await f.act(third, 'approve');
+    assert.equal((await f.service.document(third.id, worker)).allowance.previousKm, 100);
+});
+
 test('backdated trips use their own calendar-year rate and exclude other years from the threshold', async () => {
     const f = await fixture();
     await f.service.saveRate({ version: (await f.service.data(approver)).version, year: 2025, high: 3, low: 1 }, approver);
@@ -173,6 +253,26 @@ test('one-time import is atomic and undated legacy trips block approval until co
     await assert.rejects(service.transition(legacy.id, { version: (await service.data(worker)).version, action: 'pay' }, approver), /Historik|historik/);
 });
 
+test('import merges existing employees and trips while flagging affected approved amounts', async () => {
+    const f = await fixture();
+    const existing = await f.save();
+    await f.act(existing, 'submit', worker); await f.act(existing, 'approve');
+    const before = await f.service.data(approver);
+    const preview = await f.service.previewImport(importFiles(), approver);
+    assert.equal(preview.counts.trips, 2);
+    assert.match(preview.warnings.join(' '), /skal gennemgås/);
+    assert.equal((await f.service.data(approver)).version, before.version);
+    await f.service.importData({ version: before.version, files: importFiles() }, approver);
+    const after = await f.service.data(approver);
+    assert.equal(after.employees.length, 2);
+    assert.equal(after.employees.find(row => row.username === worker.username).id, before.employees[0].id);
+    assert.equal(after.trips.length, 3);
+    assert.ok(after.trips.filter(row => row.legacy).every(row => row.employeeId === before.employees[0].id));
+    assert.equal(after.trips.find(row => row.id === existing.id).reconciliationRequired, true);
+    assert.equal(after.trips.find(row => row.id === existing.id).allowance.amount, 400);
+    await assert.rejects(f.service.previewImport(importFiles(), approver), /allerede importeret/);
+});
+
 test('routing is opt-in, validates provider results and routes return through reversed stops', async () => {
     const disabled = createMileageRoutingService({ apiKey: () => '' });
     await assert.rejects(disabled.search('Example'), /ikke konfigureret/);
@@ -250,7 +350,8 @@ test('API protects configuration and import separately from employee access', as
         res.status(403).json({ error: 'Denied' });
         return null;
     };
-    app.use('/mileage', createMileageRouter({ gohData, readUsers: () => users, getSessionUser, requireModulePermission, requireSuperadmin, logEvent() {} }));
+    const readVismaEmployees = async () => ({ source:'test-company', rows:[{ EmpNo:10, Nm:'Test Worker', Gr2:0 }] });
+    app.use('/mileage', createMileageRouter({ gohData, readUsers: () => users, readVismaEmployees, getSessionUser, requireModulePermission, requireSuperadmin, logEvent() {} }));
     const server = http.createServer(app);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
@@ -265,6 +366,20 @@ test('API protects configuration and import separately from employee access', as
     assert.equal(preview.status, 200);
     assert.equal((await preview.json()).counts.trips, 2);
     assert.equal((await gohData.getAppState('',{strict:true})), null);
+    const sync = await fetch(base+'/mileage/employees/sync', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:'{}' });
+    assert.equal(sync.status, 200);
+    const syncedData = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'worker' } })).json();
+    assert.equal(syncedData.participants.length, 1);
+    const create = await fetch(base+'/mileage/trips', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' },
+        body:JSON.stringify({ version:syncedData.version, employeeId:syncedData.participants[0].id, date:'2025-01-01', plate:'TEST',
+            purpose:'Visit', stops:[{address:'Start'},{address:'End'}], km:5, manualReason:'Odometer' }) });
+    assert.equal(create.status, 200);
+    let tripData = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'worker' } })).json();
+    const tripId = tripData.trips[0].id;
+    const deleteBody = JSON.stringify({ version:tripData.version, note:'Duplicate' });
+    assert.equal((await fetch(base+'/mileage/trips/'+tripId+'/delete', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:deleteBody })).status, 403);
+    assert.equal((await fetch(base+'/mileage/trips/'+tripId+'/delete', { method:'POST', headers:{ 'x-test-user':'approver','Content-Type':'application/json' }, body:deleteBody })).status, 200);
+    assert.equal((await fetch(base+'/mileage/report.pdf?year=2025&employeeId='+encodeURIComponent(tripData.participants[0].id), { headers:{ 'x-test-user':'approver' } })).status, 404);
     const headers = { 'x-test-user':'admin-test', 'Content-Type':'application/json' };
     const denied = await fetch(base+'/mileage/routing-settings', { method:'POST', headers:{ ...headers, 'x-test-user':'approver' },
         body:JSON.stringify({ version:0, action:'save', apiKey:'database-test-key' }) });

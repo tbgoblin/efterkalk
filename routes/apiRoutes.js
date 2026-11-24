@@ -96,7 +96,22 @@ function createApiRouter({
         sessionTtlMs
     } = createAuthService({ fs, usersFile: path.join(__dirname, '..', 'users.json') });
 
-    router.use('/mileage', createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }));
+    const mileageVismaSource = () => {
+        const profile = settingsService.getActiveProfile();
+        return crypto.createHash('sha256').update(JSON.stringify([
+            String(profile.server).trim().toLowerCase(), String(profile.database).trim().toLowerCase()
+        ])).digest('hex');
+    };
+    const readVismaEmployees = async () => {
+        const source = mileageVismaSource();
+        const pool = await getConnection();
+        const request = pool.request();
+        request.timeout = 15000;
+        const result = await request.query('SELECT EmpNo, Nm, Gr2 FROM Actor WHERE EmpNo <> 0 AND Gr2 IN (0, 99)');
+        if (source !== mileageVismaSource()) throw new Error('Visma profile changed during synchronization');
+        return { source, rows: result.recordset };
+    };
+    router.use('/mileage', createMileageRouter({ gohData, readUsers, readVismaEmployees, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }));
 
     // Stato condiviso da GOH: DB vince sul file locale, fail-soft se non raggiungibile
     Promise.allSettled([

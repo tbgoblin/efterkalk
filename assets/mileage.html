@@ -11,6 +11,7 @@
     <main>
         <div class="page-head"><div><p class="eyebrow">PERSONALE / KØRSEL</p><h1>Kørselgodtgørelse</h1><p class="muted">Fra første stop til godkendt bilag. Gemmes i GOH.</p></div><button id="newTrip" type="button" class="primary" disabled>+ Ny kørsel</button></div>
         <p id="status" role="status" aria-live="polite"></p>
+        <p id="syncNotice" class="notice" role="status" hidden></p>
         <p id="setupNotice" class="notice" hidden></p>
         <section class="panel">
             <div class="section-head"><h2>Kørsler og bilag</h2><button id="yearPdf" type="button" disabled>Årsbilag PDF</button></div>
@@ -36,7 +37,7 @@
                 </form>
             </details>
             <details><summary>Medarbejdere og GOH-brugere</summary>
-                <p class="muted">Importerede medarbejdere skal knyttes til en GOH-bruger. Gamle Power Apps-administratorer får ikke automatisk rettigheder her.</p>
+                <p class="muted">Medarbejdere synkroniseres fra Visma ved åbning og opdatering. Visma styrer navn og aktiv status; tilknytning til GOH-bruger og nummerplade vedligeholdes her. Gamle Power Apps-administratorer får ikke automatisk rettigheder her.</p>
                 <form id="employeeForm" class="fields">
                     <label>Vælg medarbejder<select id="employeeEdit"><option value="">Ny medarbejder</option></select></label>
                     <label>Navn<input id="employeeName" maxlength="200" required></label>
@@ -47,7 +48,7 @@
                 </form>
             </details>
             <details><summary>Import fra Power Apps (én gang)</summary>
-                <p class="notice">Vælg de fire SharePoint-CSV-filer. Import kræver tomme medarbejder- og kørselslister. Historiske km og Formål bevares, men beløb genberegnes ikke. Kontrollér at eksporten omfatter alle relevante kørsler; disse km tæller med i årets 20.000 km-grænse.</p>
+                <p class="notice">Vælg de fire SharePoint-CSV-filer. Eksisterende medarbejdere med samme navn genbruges; øvrige data bevares. Historiske km og Formål bevares, men beløb genberegnes ikke. Allerede godkendte kørsler, som påvirkes, markeres til kontrol. Kontrollér at eksporten omfatter alle relevante kørsler; disse km tæller med i årets 20.000 km-grænse.</p>
                 <form id="importForm" class="fields">
                     <label>Kørselgodtgørelse<input id="importTrips" type="file" accept=".csv" required></label>
                     <label>Kørsel_medarbejderne<input id="importEmployees" type="file" accept=".csv" required></label>
@@ -66,6 +67,7 @@
             <input id="tripId" type="hidden">
             <div class="fields">
                 <label>Kørselsdato<input id="tripDate" type="date" required></label>
+                <label>Medarbejder<select id="tripEmployee" required></select></label>
                 <label>Nummerplade<input id="tripPlate" maxlength="30" required></label>
                 <label class="span2">Erhvervsmæssigt formål<input id="tripPurpose" list="purposeOptions" maxlength="2000" required></label>
             </div>
