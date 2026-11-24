@@ -60,11 +60,23 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
     async function search(query) {
         if (typeof query !== 'string' || query.trim().length < 3 || query.length > 500) throw fail('Skriv mindst tre tegn i adressen.');
         const key = await getKey();
-        const params = new URLSearchParams({ api_key: key, text: query.trim(), size: '5' });
+        const params = new URLSearchParams({ api_key: key, text: query.trim(), size: '10' });
         const result = await request('https://api.openrouteservice.org/geocode/search?' + params, key);
         if (!Array.isArray(result?.features)) throw fail('Ruteservicen returnerede ingen adresseliste.', 502);
         return result.features.filter(row => validCoordinates(row?.geometry?.coordinates) && typeof row.properties?.label === 'string')
-            .map(row => ({ address: row.properties.label, coordinates: row.geometry.coordinates }));
+            .map(row => {
+                const properties = row.properties;
+                const label = properties.label.trim();
+                const street = typeof properties.street === 'string' ? properties.street.trim() : '';
+                const number = typeof properties.housenumber === 'string' ? properties.housenumber.trim() : '';
+                const streetAddress = [street, number].filter(Boolean).join(' ');
+                const labelKey = label.toLocaleLowerCase();
+                const alreadyShown = streetAddress && (labelKey.includes(streetAddress.toLocaleLowerCase())
+                    || (street && number && labelKey.includes((number + ' ' + street).toLocaleLowerCase())));
+                const name = typeof properties.name === 'string' ? properties.name.trim() : '';
+                return { name, address: streetAddress && !alreadyShown ? label + ' · ' + streetAddress : label,
+                    streetAddressKnown: Boolean(street && number), coordinates: row.geometry.coordinates };
+            }).filter(row => row.address);
     }
     async function route(points, roundTrip) {
         if (!Array.isArray(points) || points.length < 2 || points.length > 12 || !points.every(validCoordinates)) throw fail('Vælg en gyldig adresse for hvert stop.');

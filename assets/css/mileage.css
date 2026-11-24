@@ -45,7 +45,7 @@ details { border-top:1px solid var(--line); margin-top:15px; padding-top:12px; }
 summary { font-weight:700; cursor:pointer; padding:4px 0; }
 dialog { width:min(820px,calc(100% - 24px)); max-height:92vh; overflow:auto; padding:22px; border:1px solid var(--line); border-radius:10px; color:var(--ink); }
 dialog::backdrop { background:rgba(15,35,52,.5); }
-.stop { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:5px; padding:10px; margin:10px 0; }
+.stop { position:relative; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:5px; padding:10px; margin:10px 0; }
 .stop .fields { margin:5px 0; grid-template-columns:1fr auto; }
 .stop .stop-tools { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center; }
 .stop .stop-tools select { width:auto; flex:1; min-width:140px; }
@@ -53,6 +53,14 @@ dialog::backdrop { background:rgba(15,35,52,.5); }
 .saved-addresses button { text-align:left; overflow-wrap:anywhere; }
 .saved-addresses button small { display:block; font-weight:400; }
 .stop-title { display:flex; align-items:center; justify-content:space-between; }
+.stop-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
+.stop-actions select { width:auto; }
+.drag-stop { display:inline-flex; align-items:center; gap:6px; cursor:grab; touch-action:none; }
+.drag-stop:active { cursor:grabbing; }
+.stop.dragging { opacity:.5; }
+.stop.drop-target { outline:3px solid var(--accent); outline-offset:2px; background:#f2f7f8; }
+.stop.drop-target::after { content:"Slip her"; position:absolute; top:-14px; left:10px; padding:2px 8px; border-radius:4px; background:var(--accent); color:white; font-size:12px; font-weight:700; }
+.drag-preview { position:fixed; top:0; left:0; z-index:1; max-width:208px; padding:8px 10px; border:1px solid var(--accent); border-radius:6px; background:white; box-shadow:0 6px 18px rgba(15,35,52,.25); font-weight:700; overflow-wrap:anywhere; pointer-events:none; }
 #status:empty,#tripError:empty,#detailError:empty,#addressError:empty { display:none; }
 #status { padding:10px; background:#f7fbff; }
 .error,#tripError,#detailError,#addressError { color:#a33025; }

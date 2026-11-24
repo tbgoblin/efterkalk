@@ -5,7 +5,7 @@
     const fmt = value => Number(value).toLocaleString('da-DK', { minimumFractionDigits:2, maximumFractionDigits:2 });
     const rateFmt = value => Number(value).toLocaleString('da-DK', { minimumFractionDigits:2, maximumFractionDigits:3 });
     const statuses = { draft:'Kladde', submitted:'Afventer', approved:'Godkendt', paid:'Udbetalt', rejected:'Afvist', legacy:'Historik', deleted:'Slettet' };
-    let data, currentTrip, previewFiles, addressToSave, busy = false;
+    let data, currentTrip, previewFiles, addressToSave, busy = false, dragging = null;
     let points = [];
     async function api(path, body) {
         const response = await fetch('/mileage' + path, body === undefined ? {} : {
@@ -94,12 +94,62 @@
     function stopValues() {
         return [...$('stops').querySelectorAll('.stop')].map((row, i) => ({
             address: row.querySelector('[data-address]').value.trim(), note: row.querySelector('[data-note]').value.trim(),
-            coordinates: points[i]?.coordinates || null, savedAddress: points[i]?.savedAddress || null
+            coordinates: points[i]?.coordinates || null, savedAddress: points[i]?.savedAddress || null, name: points[i]?.name || ''
         }));
     }
     function renderStops() {
         $('stops').innerHTML = points.map((point,index) => '<section class="stop" data-index="'+index+'"><div class="stop-title"><strong>'+esc(index === 0 ? 'Fra' : index === points.length-1 ? 'Til' : 'Mellemstop '+index)+'</strong>'+
-            (index > 0 && index < points.length-1 ? '<button type="button" data-remove-stop="'+index+'">Fjern</button>' : '')+'</div><div class="fields"><label>Adresse eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><div class="saved-addresses" data-saved-results aria-live="polite"></div><div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div><label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools" data-results></div></section>').join('');
+            (index > 0 && index < points.length-1 ? '<div class="stop-actions">'+
+                (points.length > 3 ? '<button type="button" class="drag-stop" data-drag-stop aria-label="Flyt mellemstop '+index+'" aria-describedby="reorderHelp" aria-keyshortcuts="ArrowUp ArrowDown"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.3"/><circle cx="11" cy="3" r="1.3"/><circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/><circle cx="5" cy="13" r="1.3"/><circle cx="11" cy="13" r="1.3"/></svg>Træk for at flytte</button>' : '')+
+                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><div class="fields"><label>Adresse, hotel eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><div class="saved-addresses" data-saved-results aria-live="polite"></div><div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div><label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
+    }
+    function moveStop(index, target) {
+        if (target < 1 || target >= points.length - 1 || target === index) return;
+        const oldRows=[...$('stops').querySelectorAll('.stop')];
+        const oldTops=oldRows.map(row=>row.getBoundingClientRect().top);
+        const order=oldRows.map((_,i)=>i);
+        order.splice(target,0,order.splice(index,1)[0]);
+        points=stopValues();
+        const [moved]=points.splice(index,1);
+        points.splice(target,0,moved);
+        renderStops(); invalidateDistance();
+        $('tripNotice').textContent='Mellemstop flyttet til plads '+target+'. Beregn eller angiv afstanden igen.';
+        $('stops').querySelector('.stop[data-index="'+target+'"] [data-drag-stop]').focus();
+        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            $('stops').querySelectorAll('.stop').forEach((row,i)=>{
+                const delta=oldTops[order[i]]-row.getBoundingClientRect().top;
+                if (delta && Math.abs(delta)<1500) row.animate([{transform:'translateY('+delta+'px)'},{transform:'translateY(0)'}],{duration:220,easing:'ease-out'});
+            });
+        }
+    }
+    function clearDrag() {
+        if (dragging?.frame) cancelAnimationFrame(dragging.frame);
+        dragging?.ghost?.remove();
+        $('stops').querySelectorAll('.dragging, .drop-target').forEach(row => row.classList.remove('dragging','drop-target'));
+        dragging=null;
+    }
+    function updateDragTarget(y) {
+        const rows=[...$('stops').querySelectorAll('.stop')].slice(1,-1);
+        const nearest=rows.reduce((best,row,index) => {
+            const rect=row.getBoundingClientRect(), distance=Math.abs(y-(rect.top+rect.height/2));
+            return distance < best.distance ? {index:index+1,distance} : best;
+        },{index:dragging.index,distance:Infinity});
+        if (dragging.target !== nearest.index) {
+            dragging.target=nearest.index;
+            $('tripNotice').textContent=dragging.target === dragging.index ? 'Træk til en anden plads.' : 'Slip for at flytte mellemstoppet til plads '+dragging.target+'.';
+        }
+        rows.forEach((row,index) => {
+            row.classList.toggle('dragging',index+1 === dragging.index);
+            row.classList.toggle('drop-target',index+1 === dragging.target && dragging.target !== dragging.index);
+        });
+    }
+    function scrollDuringDrag() {
+        if (!dragging?.active) return;
+        const dialog=$('tripDialog'), rect=dialog.getBoundingClientRect();
+        const top=Math.max(0,rect.top), bottom=Math.min(window.innerHeight,rect.bottom);
+        const step=dragging.y < top+45 ? -12 : dragging.y > bottom-45 ? 12 : 0;
+        if (step) { dialog.scrollTop+=step; updateDragTarget(dragging.y); }
+        dragging.frame=requestAnimationFrame(scrollDuringDrag);
     }
     function suggestAddresses(row) {
         const query = row.querySelector('[data-address]').value.trim().normalize('NFC').toLocaleLowerCase('da-DK');
@@ -171,6 +221,7 @@
     $('refresh').addEventListener('click', () => perform(load));
     $('newTrip').addEventListener('click', () => openTrip());
     $('closeTrip').addEventListener('click', () => $('tripDialog').close());
+    $('tripDialog').addEventListener('close', clearDrag);
     $('closeAddress').addEventListener('click', () => $('addressDialog').close());
     $('closeDetail').addEventListener('click', () => $('detailDialog').close());
     ['filterYear','filterEmployee','filterStatus'].forEach(id => $(id).addEventListener('change',render));
@@ -189,18 +240,85 @@
         const row = event.target.closest('.stop');
         points[Number(row.dataset.index)].coordinates = null;
         points[Number(row.dataset.index)].savedAddress = null;
+        points[Number(row.dataset.index)].name = '';
         row.querySelector('[data-results]').innerHTML = '';
         suggestAddresses(row);
         invalidateDistance();
     });
+    $('stops').addEventListener('keydown', event => {
+        const handle=event.target.closest('[data-drag-stop]');
+        if (!handle || !['ArrowUp','ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const index=Number(handle.closest('.stop').dataset.index);
+        moveStop(index,index+(event.key === 'ArrowUp' ? -1 : 1));
+    });
+    $('stops').addEventListener('pointerdown', event => {
+        const handle=event.target.closest('[data-drag-stop]');
+        if (!handle || !event.isPrimary || event.button !== 0 || dragging) return;
+        dragging={pointerId:event.pointerId,index:Number(handle.closest('.stop').dataset.index),x:event.clientX,y:event.clientY,active:false};
+        handle.setPointerCapture(event.pointerId);
+    });
+    $('stops').addEventListener('pointermove', event => {
+        if (!dragging || event.pointerId !== dragging.pointerId) return;
+        if (!dragging.active && Math.hypot(event.clientX-dragging.x,event.clientY-dragging.y) < 8) return;
+        if (!dragging.active) {
+            const row=$('stops').querySelector('.stop[data-index="'+dragging.index+'"]');
+            dragging.ghost=document.createElement('div');
+            dragging.ghost.className='drag-preview';
+            dragging.ghost.setAttribute('aria-hidden','true');
+            dragging.ghost.textContent='Flytter: '+(row.querySelector('[data-address]').value.trim() || 'Mellemstop '+dragging.index);
+            $('tripDialog').appendChild(dragging.ghost);
+        }
+        dragging.active=true;
+        dragging.y=event.clientY;
+        const x=Math.max(0,Math.min(event.clientX+12,window.innerWidth-220));
+        dragging.ghost.style.transform='translate('+x+'px,'+Math.max(0,event.clientY-30)+'px)';
+        updateDragTarget(dragging.y);
+        if (!dragging.frame) dragging.frame=requestAnimationFrame(scrollDuringDrag);
+    });
+    $('stops').addEventListener('pointerup', event => {
+        if (!dragging || event.pointerId !== dragging.pointerId) return;
+        const {index,target,active}=dragging;
+        const handle=event.target.closest('[data-drag-stop]');
+        if (active && handle) {
+            handle.dataset.dragged='true';
+            setTimeout(() => { delete handle.dataset.dragged; },0);
+        }
+        clearDrag();
+        if (active && target !== undefined && target !== index) moveStop(index,target);
+        else if (active) $('tripNotice').textContent='Mellemstoppet blev ikke flyttet.';
+    });
+    $('stops').addEventListener('pointercancel', event => {
+        if (dragging && event.pointerId === dragging.pointerId) {
+            clearDrag();
+            $('tripNotice').textContent='Flytning annulleret.';
+        }
+    });
     $('stops').addEventListener('click', event => {
         const remove=event.target.closest('[data-remove-stop]');
         if (remove) { points=stopValues(); points.splice(Number(remove.dataset.removeStop),1); renderStops(); invalidateDistance(); return; }
+        const handle=event.target.closest('[data-drag-stop]');
+        if (handle) {
+            if (handle.dataset.dragged) return;
+            const row=handle.closest('.stop'), index=Number(row.dataset.index), actions=handle.parentElement;
+            let select=actions.querySelector('[data-move-to]');
+            if (!select) {
+                select=document.createElement('select');
+                select.dataset.moveTo='';
+                select.setAttribute('aria-label','Flyt mellemstop '+index+' til plads');
+                select.innerHTML=points.slice(1,-1).map((_,i) => '<option value="'+(i+1)+'">Plads '+(i+1)+'</option>').join('');
+                select.value=String(index);
+                select.addEventListener('change',()=>moveStop(index,Number(select.value)));
+                actions.appendChild(select);
+            }
+            select.focus();
+            return;
+        }
         const saved=event.target.closest('[data-saved-address]');
         if (saved) {
             const row=saved.closest('.stop'), item=data.addresses[Number(saved.dataset.savedAddress)], index=Number(row.dataset.index);
             row.querySelector('[data-address]').value=item.address;
-            points[index]={...points[index],address:item.address,coordinates:item.coordinates || null,savedAddress:{name:item.name,address:item.address}};
+            points[index]={...points[index],name:item.name,address:item.address,coordinates:item.coordinates || null,savedAddress:{name:item.name,address:item.address}};
             row.querySelector('[data-saved-results]').innerHTML='';
             row.querySelector('[data-results]').textContent=item.coordinates ? 'Gemte koordinater er klar til ruteberegning.' : 'Find og bekræft adressen online for at gemme koordinater.';
             invalidateDistance();
@@ -211,7 +329,7 @@
             const row=saveAddress.closest('.stop'), index=Number(row.dataset.index), address=row.querySelector('[data-address]').value.trim();
             if (!address) { $('tripError').textContent='Skriv en adresse før den gemmes.'; return; }
             addressToSave={address,coordinates:points[index].coordinates || null};
-            $('addressName').value=points[index].savedAddress?.name || '';
+            $('addressName').value=points[index].savedAddress?.name || points[index].name || '';
             $('addressValue').value=address;
             $('addressCoordinates').textContent=addressToSave.coordinates ? 'Bekræftede koordinater gemmes med adressen.' : 'Adressen gemmes uden koordinater; km kan angives manuelt.';
             $('addressError').textContent='';
@@ -224,21 +342,21 @@
             const row = search.closest('.stop'), input = row.querySelector('[data-address]'), query=input.value;
             const result = await api('/addresses/search',{query});
             if (input.value !== query) throw new Error('Adressen blev ændret. Søg igen.');
-            const select=document.createElement('select'); select.setAttribute('aria-label','Vælg fundet adresse');
-            select.innerHTML='<option value="">Vælg adresse…</option>'+result.addresses.map((item,index)=>'<option value="'+index+'">'+esc(item.address)+'</option>').join('');
-            row.querySelector('[data-results]').replaceChildren(select);
             if (!result.addresses.length) throw new Error('Ingen adresser fundet. Præcisér søgningen eller angiv km manuelt.');
-            select.addEventListener('change', () => {
-                if(select.value==='')return;
-                const match=result.addresses[Number(select.value)];
+            const results=row.querySelector('[data-results]');
+            results.innerHTML='<strong>Vælg det rigtige resultat:</strong>'+result.addresses.map((item,index)=>
+                '<button type="button" data-online-result="'+index+'">'+esc(item.address)+
+                (!item.streetAddressKnown ? '<small>Gade og husnummer er ikke særskilt oplyst af søgetjenesten.</small>' : '')+'</button>').join('');
+            results.querySelectorAll('[data-online-result]').forEach(button => button.addEventListener('click', () => {
+                const match=result.addresses[Number(button.dataset.onlineResult)];
                 const index=Number(row.dataset.index), original=points[index].savedAddress;
-                input.value=match.address; points[index]={...points[index],...match}; row.querySelector('[data-saved-results]').innerHTML=''; invalidateDistance();
+                input.value=match.address; points[index]={...points[index],...match}; row.querySelector('[data-saved-results]').innerHTML=''; results.textContent='Adresse valgt.'; invalidateDistance();
                 if (original?.name) perform(async () => {
                     await api('/addresses',{version:data.version,...original,coordinates:match.coordinates});
                     await load();
                     row.querySelector('[data-results]').textContent='Adressen er bekræftet og koordinaterne gemt til næste gang.';
                 },'tripError');
-            });
+            }));
         },'tripError');
     });
     $('addressForm').addEventListener('submit',event=>{

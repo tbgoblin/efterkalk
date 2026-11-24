@@ -307,6 +307,9 @@ test('routing is opt-in, validates provider results and routes return through re
         calls.push({ url, options });
         if (url.includes('/geocode/')) return { ok:true, json:async() => ({ features:[
             { properties:{label:'Example address'}, geometry:{coordinates:[10,55]} },
+            { properties:{name:'Hotel Example', label:'Hotel Example, Test City', street:'Testvej', housenumber:'25'}, geometry:{coordinates:[11,56]} },
+            { properties:{label:'Testvej 25, Test City', street:'Testvej', housenumber:'25'}, geometry:{coordinates:[12,57]} },
+            { properties:{label:'Other Hotel, Test City', street:'Hotelvej'}, geometry:{coordinates:[13,58]} },
             { properties:{label:'Invalid'}, geometry:{coordinates:[200,55]} }, null
         ] }) };
         return { ok: true, json: async () => ({ routes: [{ segments: [{ distance: 1000 }, { distance: 2000 }, { distance: 2500 }, { distance: 1100 }] }] }) };
@@ -316,8 +319,14 @@ test('routing is opt-in, validates provider results and routes return through re
     assert.deepEqual(JSON.parse(calls[0].options.body).coordinates, [[10,55],[11,56],[12,57],[11,56],[10,55]]);
     assert.equal(JSON.parse(calls[0].options.body).instructions, true);
     assert.equal(result.km, 6.6);
-    assert.deepEqual(await routing.search('Example address'), [{ address:'Example address',coordinates:[10,55] }]);
+    assert.deepEqual(await routing.search('Example address'), [
+        { name:'',address:'Example address',streetAddressKnown:false,coordinates:[10,55] },
+        { name:'Hotel Example',address:'Hotel Example, Test City · Testvej 25',streetAddressKnown:true,coordinates:[11,56] },
+        { name:'',address:'Testvej 25, Test City',streetAddressKnown:true,coordinates:[12,57] },
+        { name:'',address:'Other Hotel, Test City · Hotelvej',streetAddressKnown:false,coordinates:[13,58] }
+    ]);
     assert.equal(new URL(calls[1].url).searchParams.get('api_key'), 'test-only-key');
+    assert.equal(new URL(calls[1].url).searchParams.get('size'), '10');
     await assert.rejects(routing.route([[200,55],[12,57]],false), /gyldig adresse/);
     const broken = createMileageRoutingService({ apiKey: () => 'test-only-key', fetchImpl: async () => ({ ok: true, json: async () => null }) });
     await assert.rejects(broken.route(points,false), /alle delstrækninger/);
