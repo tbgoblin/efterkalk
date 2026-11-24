@@ -47,7 +47,8 @@ function showAdminSection(sectionKey) {
         users: ['adminTabUsers', 'adminSectionUsers'],
         diverse: ['adminTabDiverse', 'adminSectionDiverse'],
         'working-days': ['adminTabWorkingDays', 'adminSectionWorkingDays'],
-        ledelsesrapport: ['adminTabLedelsesrapport', 'adminSectionLedelsesrapport']
+        ledelsesrapport: ['adminTabLedelsesrapport', 'adminSectionLedelsesrapport'],
+        'mileage-routing': ['adminTabMileageRouting', 'adminSectionMileageRouting']
     };
     const selectedKey = Object.prototype.hasOwnProperty.call(sections, sectionKey) ? sectionKey : 'users';
     try { sessionStorage.setItem('adminSection', selectedKey); } catch (_) {}
@@ -65,6 +66,69 @@ function showAdminSection(sectionKey) {
             panel.hidden = !selected;
         }
     });
+    if (selectedKey === 'mileage-routing') loadAdminMileageRouting();
+}
+
+let adminMileageRoutingVersion = null;
+function setAdminMileageRoutingStatus(message, isError) {
+    const status = document.getElementById('adminRoutingStatus');
+    status.textContent = message;
+    status.style.color = isError ? '#b71c1c' : '#1b5e20';
+}
+
+function showAdminMileageRoutingStatus(data) {
+    adminMileageRoutingVersion = data.version;
+    document.getElementById('adminRoutingSave').disabled = false;
+    document.getElementById('adminRoutingRemove').disabled = data.source !== 'database';
+    const message = data.source === 'database' ? 'En nøgle er gemt i GOH-databasen.'
+        : data.source === 'environment' ? 'En nøgle er konfigureret via servermiljøet; ingen nøgle er gemt i GOH.'
+        : 'Ingen API-nøgle er konfigureret.';
+    setAdminMileageRoutingStatus(message, false);
+}
+
+async function loadAdminMileageRouting() {
+    adminMileageRoutingVersion = null;
+    document.getElementById('adminRoutingSave').disabled = true;
+    document.getElementById('adminRoutingRemove').disabled = true;
+    setAdminMileageRoutingStatus('Henter indstillinger...', false);
+    try {
+        const response = await fetch('/mileage/routing-settings', { headers: adminHeaders(), cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Indstillingerne kunne ikke hentes.');
+        showAdminMileageRoutingStatus(data);
+    } catch (error) {
+        setAdminMileageRoutingStatus(String(error.message || error), true);
+    }
+}
+
+async function updateAdminMileageRouting(action) {
+    if (adminMileageRoutingVersion === null) return;
+    const save = document.getElementById('adminRoutingSave');
+    const remove = document.getElementById('adminRoutingRemove');
+    save.disabled = true;
+    remove.disabled = true;
+    setAdminMileageRoutingStatus('Gemmer...', false);
+    try {
+        const body = { action, version: adminMileageRoutingVersion };
+        if (action === 'save') body.apiKey = document.getElementById('adminRoutingKey').value;
+        const response = await fetch('/mileage/routing-settings', { method: 'POST', headers: adminHeaders(), body: JSON.stringify(body) });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Nøglen kunne ikke gemmes.');
+        document.getElementById('adminRoutingKey').value = '';
+        showAdminMileageRoutingStatus(data);
+    } catch (error) {
+        adminMileageRoutingVersion = null;
+        setAdminMileageRoutingStatus(String(error.message || error) + ' Åbn fanen igen for at prøve på ny.', true);
+    }
+}
+
+function saveAdminMileageRouting(event) {
+    event.preventDefault();
+    return updateAdminMileageRouting('save');
+}
+
+function removeAdminMileageRouting() {
+    if (confirm('Fjern den gemte API-nøgle fra GOH?')) return updateAdminMileageRouting('remove');
 }
 
 function handleAdminTabKeydown(event) {

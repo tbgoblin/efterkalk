@@ -57,7 +57,7 @@
                 </form>
                 <p id="importPreview" role="status"></p><button id="confirmImport" type="button" class="primary" hidden>Bekræft import til GOH</button>
             </details>
-            <details><summary>Automatiske afstande</summary><p id="routingStatus"></p><p class="muted">En serveradministrator kan sætte miljøvariablen GOH_ORS_API_KEY. Nøglen må ikke indtastes i appen eller gemmes i kildekoden. Konto, vilkår og forespørgselsgrænser aftales separat med openrouteservice. Adresseopslag og rutevalg sender kun de valgte adresser/koordinater til tjenesten, ikke medarbejdernavn, nummerplade eller formål. Manuelle km virker uden tjenesten.</p></details>
+            <details><summary>Automatiske afstande</summary><p id="routingStatus"></p><p class="muted">En superadmin kan opsætte nøglen under Administration · Kørsel · Ruteservice. Nøglen gemmes i klartekst i GOH-databasen; direkte databaseadgang og backups skal beskyttes. Konto, vilkår og forespørgselsgrænser aftales separat med openrouteservice. Adresseopslag og rutevalg sender kun de valgte adresser/koordinater til tjenesten, ikke medarbejdernavn, nummerplade eller formål. Manuelle km virker uden tjenesten.</p></details>
         </section>
     </main>
     <dialog id="tripDialog" aria-labelledby="tripTitle">

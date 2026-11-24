@@ -1985,6 +1985,7 @@
                 <button id="adminTabDiverse" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionDiverse" onclick="showAdminSection('diverse')"><span class="admin-section-card-title">Lagerliste · Diverse</span><span class="admin-section-card-text">Vedligehold manuelle værdier og skrotberegninger.</span></button>
                 <button id="adminTabWorkingDays" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionWorkingDays" onclick="showAdminSection('working-days')"><span class="admin-section-card-title">Omsætning · Arbejdsdage</span><span class="admin-section-card-text">Fastlæg arbejdsdage, dagsmål og budgetgrundlag.</span></button>
                 <button id="adminTabLedelsesrapport" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionLedelsesrapport" onclick="showAdminSection('ledelsesrapport')"><span class="admin-section-card-title">Ledelsesrapport · Standard</span><span class="admin-section-card-text">Vælg standardperioder og information ved åbning.</span></button>
+                <button id="adminTabMileageRouting" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="adminSectionMileageRouting" onclick="showAdminSection('mileage-routing')"><span class="admin-section-card-title">Kørsel · Ruteservice</span><span class="admin-section-card-text">Administrer openrouteservice API-nøglen.</span></button>
             </nav>
             <section id="adminSectionUsers" class="admin-section active" role="tabpanel" aria-labelledby="adminTabUsers">
                 <p class="admin-section-intro">Opret brugere, aktivér eller deaktivér adgang, og vælg hvilke moduler den enkelte bruger må åbne.</p>
@@ -2050,6 +2051,21 @@
                         <fieldset class="admin-report-options-wide"><legend>Belastning · ressourcer</legend><p class="admin-section-intro">Træk i håndtaget for at ændre rækkefølgen. Op til 32 dage vises 4 pr. side; længere perioder 2 pr. side.</p><div id="adminReportLoadResources" class="admin-report-option-list"><span class="via-status">Henter ressourcer...</span></div></fieldset>
                     </div>
                     <div class="admin-working-days-actions"><span id="adminReportDefaultsStatus" class="via-status" style="margin-right:auto;"></span><button type="button" onclick="saveAdminLedelsesrapportDefaults()">Gem standard</button></div>
+                </section>
+            </section>
+            <section id="adminSectionMileageRouting" class="admin-section" role="tabpanel" aria-labelledby="adminTabMileageRouting" hidden>
+                <p class="admin-section-intro">Opsæt automatisk adresseopslag og ruteafstand for alle brugere af Kørselgodtgørelse.</p>
+                <section class="admin-panel">
+                    <h4>openrouteservice API-nøgle</h4>
+                    <p>Nøglen gemmes i klartekst i GOH-databasen og kan læses af personer med direkte database- eller backupadgang. Den vises ikke i Operations Hub efter gemning. Beskyt databaseadgang og sikkerhedskopier.</p>
+                    <p>Adresseopslag og ruteberegning sender adresser og koordinater til openrouteservice. Kontrollér tjenestens vilkår og kvoter. Manuelle km kan altid bruges.</p>
+                    <form id="adminRoutingForm" onsubmit="saveAdminMileageRouting(event)">
+                        <label for="adminRoutingKey">Ny API-nøgle</label>
+                        <input id="adminRoutingKey" type="password" maxlength="512" autocomplete="off" required>
+                        <button id="adminRoutingSave" type="submit" disabled>Gem nøgle</button>
+                        <button id="adminRoutingRemove" type="button" onclick="removeAdminMileageRouting()" disabled>Fjern gemt nøgle</button>
+                    </form>
+                    <p id="adminRoutingStatus" role="status" aria-live="polite"></p>
                 </section>
             </section>
         </section>

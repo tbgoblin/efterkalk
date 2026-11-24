@@ -1,15 +1,15 @@
 const express = require('express');
 const { createMileageService, fail } = require('../services/mileageService');
-const { createMileageRoutingService } = require('../services/mileageRoutingService');
+const { createMileageRoutingService, createMileageRoutingSettings } = require('../services/mileageRoutingService');
 const { parseMileageImport } = require('../services/mileageImportService');
 const { generateMileagePdf } = require('../services/mileagePdf');
 
-function createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, logEvent }) {
+function createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }) {
     const router = express.Router();
     const service = createMileageService({ gohData, readUsers });
-    const routing = createMileageRoutingService();
+    const settings = createMileageRoutingSettings({ gohData });
+    const routing = createMileageRoutingService({ apiKey: settings.key });
     const limits = new Map();
-    router.use(requireModulePermission('mileage'));
     router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
     const run = action => async (req, res) => {
         try {
@@ -22,6 +22,10 @@ function createMileageRouter({ gohData, readUsers, getSessionUser, requireModule
             res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Kørselsmodulet kunne ikke behandle forespørgslen.' });
         }
     };
+    const superadmin = (req, res, next) => { if (requireSuperadmin(req, res)) next(); };
+    router.get('/routing-settings', superadmin, run(async (_req, res) => res.json({ ok: true, ...await settings.status() })));
+    router.post('/routing-settings', superadmin, run(async (req, res, user) => res.json({ ok: true, ...await settings.save(req.body, user) })));
+    router.use(requireModulePermission('mileage'));
     const management = requireModulePermission('mileageManage');
     const throttle = (req, _res, next) => {
         const key = String(getSessionUser(req).username).toLowerCase();
@@ -32,7 +36,7 @@ function createMileageRouter({ gohData, readUsers, getSessionUser, requireModule
         if (++entry.count > 30) return next(fail('For mange adresse- eller rutekald. Vent et minut.', 429));
         next();
     };
-    router.get('/data', run(async (_req, res, user) => res.json({ ok: true, ...await service.data(user), routingConfigured: routing.configured() })));
+    router.get('/data', run(async (_req, res, user) => res.json({ ok: true, ...await service.data(user), routingConfigured: await routing.configured() })));
     router.post('/employees', management, run(async (req, res, user) => { await service.saveEmployee(req.body, user); res.json({ ok: true }); }));
     router.post('/rates', management, run(async (req, res, user) => { await service.saveRate(req.body, user); res.json({ ok: true }); }));
     router.post('/trips', run(async (req, res, user) => { await service.saveTrip(req.body, user); res.json({ ok: true }); }));

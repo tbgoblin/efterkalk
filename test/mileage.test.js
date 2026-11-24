@@ -4,7 +4,7 @@ const http = require('node:http');
 const express = require('express');
 const { createMileageService, calculateAllowance } = require('../services/mileageService');
 const { parseMileageImport, parseCsv } = require('../services/mileageImportService');
-const { createMileageRoutingService } = require('../services/mileageRoutingService');
+const { createMileageRoutingService, createMileageRoutingSettings } = require('../services/mileageRoutingService');
 const { generateMileagePdf } = require('../services/mileagePdf');
 const { createMileageRouter } = require('../routes/mileageRoutes');
 
@@ -13,13 +13,13 @@ const other = { username: 'other', displayName: 'Other Worker', role: 'user', pe
 const approver = { username: 'approver', role: 'user', permissions: { mileage: true, mileageManage: true } };
 const users = [worker, other, approver];
 function store() {
-    let payload;
+    const values = new Map();
     return {
         failWrites: false,
-        async getAppState(_key, options) { assert.equal(options.strict, true); return payload ? { payload: structuredClone(payload) } : null; },
-        async setAppState(_key, next, options) {
-            if (this.failWrites || (payload?.version || 0) !== options.expectedVersion) return false;
-            payload = structuredClone(next);
+        async getAppState(key, options) { assert.equal(options.strict, true); return values.has(key) ? { payload: structuredClone(values.get(key)) } : null; },
+        async setAppState(key, next, options) {
+            if (this.failWrites || (values.get(key)?.version || 0) !== options.expectedVersion) return false;
+            values.set(key, structuredClone(next));
             return true;
         }
     };
@@ -198,6 +198,36 @@ test('routing is opt-in, validates provider results and routes return through re
     await assert.rejects(broken.search('Example'), /ingen adresseliste/);
 });
 
+test('routing settings share a write-only database key across instances and handle conflicts and removal', async () => {
+    const gohData = store();
+    const settings = createMileageRoutingSettings({ gohData, envKey: () => 'environment-test-key' });
+    const second = createMileageRoutingSettings({ gohData, envKey: () => 'environment-test-key' });
+    assert.deepEqual(await settings.status(), { version: 0, configured: true, source: 'environment' });
+    assert.deepEqual(await settings.save({ version: 0, action: 'save', apiKey: 'database-test-key' }, approver),
+        { version: 1, configured: true, source: 'database' });
+    assert.equal(await second.key(), 'database-test-key');
+    let usedKey;
+    const routing = createMileageRoutingService({ apiKey: second.key, fetchImpl: async (url, options) => {
+        usedKey = options.headers.Authorization;
+        assert.equal(new URL(url).searchParams.get('api_key'), usedKey);
+        return { ok: true, json: async () => ({ features: [] }) };
+    } });
+    await routing.search('Test address');
+    assert.equal(usedKey, 'database-test-key');
+    await assert.rejects(second.save({ version: 0, action: 'remove' }, approver), { statusCode: 409 });
+    await assert.rejects(second.save({ version: 1, action: 'save', apiKey: 'bad\nkey' }, approver), { statusCode: 400 });
+    gohData.failWrites = true;
+    await assert.rejects(second.save({ version: 1, action: 'remove' }, approver), { statusCode: 409 });
+    gohData.failWrites = false;
+    assert.deepEqual(await second.save({ version: 1, action: 'remove' }, approver),
+        { version: 2, configured: true, source: 'environment' });
+    assert.equal(await settings.key(), 'environment-test-key');
+    await routing.search('Test address');
+    assert.equal(usedKey, 'environment-test-key');
+    const noFallback = createMileageRoutingSettings({ gohData, envKey: () => '' });
+    assert.equal((await noFallback.status()).configured, false);
+});
+
 test('internal PDF is generated from authorized trip data including fixed allowance', async () => {
     const f = await fixture();
     const trip = await f.save();
@@ -210,10 +240,17 @@ test('internal PDF is generated from authorized trip data including fixed allowa
 test('API protects configuration and import separately from employee access', async t => {
     const app = express(), gohData = store();
     app.use((req,res,next) => req.path === '/mileage/import' ? next() : express.json()(req,res,next));
-    const getSessionUser = req => users.find(row => row.username === req.headers['x-test-user']);
+    const superadmin = { username: 'admin-test', role: 'superadmin', permissions: {} };
+    const getSessionUser = req => [...users, superadmin].find(row => row.username === req.headers['x-test-user']);
     const requireModulePermission = permission => (req,res,next) => getSessionUser(req)?.permissions[permission]
         ? next() : res.status(403).json({ error: 'Denied' });
-    app.use('/mileage', createMileageRouter({ gohData, readUsers: () => users, getSessionUser, requireModulePermission, logEvent() {} }));
+    const requireSuperadmin = (req,res) => {
+        const user = getSessionUser(req);
+        if (user?.role === 'superadmin') return user;
+        res.status(403).json({ error: 'Denied' });
+        return null;
+    };
+    app.use('/mileage', createMileageRouter({ gohData, readUsers: () => users, getSessionUser, requireModulePermission, requireSuperadmin, logEvent() {} }));
     const server = http.createServer(app);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
@@ -228,4 +265,20 @@ test('API protects configuration and import separately from employee access', as
     assert.equal(preview.status, 200);
     assert.equal((await preview.json()).counts.trips, 2);
     assert.equal((await gohData.getAppState('',{strict:true})), null);
+    const headers = { 'x-test-user':'admin-test', 'Content-Type':'application/json' };
+    const denied = await fetch(base+'/mileage/routing-settings', { method:'POST', headers:{ ...headers, 'x-test-user':'approver' },
+        body:JSON.stringify({ version:0, action:'save', apiKey:'database-test-key' }) });
+    assert.equal(denied.status, 403);
+    assert.equal((await fetch(base+'/mileage/routing-settings', { headers: { 'x-test-user':'worker' } })).status, 403);
+    assert.equal((await fetch(base+'/mileage/routing-settings')).status, 403);
+    const saved = await fetch(base+'/mileage/routing-settings', { method:'POST', headers,
+        body:JSON.stringify({ version:0, action:'save', apiKey:'database-test-key' }) });
+    assert.equal(saved.status, 200);
+    assert.doesNotMatch(await saved.text(), /database-test-key/);
+    const status = await fetch(base+'/mileage/routing-settings', { headers });
+    assert.equal(status.headers.get('cache-control'), 'no-store');
+    assert.doesNotMatch(await status.text(), /database-test-key/);
+    const workerData = await (await fetch(base+'/mileage/data', { headers: { 'x-test-user':'worker' } })).text();
+    assert.doesNotMatch(workerData, /database-test-key/);
+    assert.equal(JSON.parse(workerData).routingConfigured, true);
 });

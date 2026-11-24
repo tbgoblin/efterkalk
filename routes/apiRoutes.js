@@ -96,7 +96,7 @@ function createApiRouter({
         sessionTtlMs
     } = createAuthService({ fs, usersFile: path.join(__dirname, '..', 'users.json') });
 
-    router.use('/mileage', createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, logEvent }));
+    router.use('/mileage', createMileageRouter({ gohData, readUsers, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }));
 
     // Stato condiviso da GOH: DB vince sul file locale, fail-soft se non raggiungibile
     Promise.allSettled([
