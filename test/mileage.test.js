@@ -51,6 +51,32 @@ test('allowance correctly splits the 20,000-km crossing and rounds only money', 
     assert.equal(calculateAllowance(1.23, 0, { year: 2026, high: 3.795, low: 2 }).amount, 4.67);
 });
 
+test('shared addresses preserve imported entries, confirmed coordinates and concurrent updates', async () => {
+    const gohData = store();
+    await gohData.setAppState('mileage_v1', { schema:1, version:0, employees:[], addresses:[
+        { name:'Example Company', address:'Test Street 1' }
+    ], purposes:[], rates:[], trips:[], imports:[] }, { expectedVersion:0 });
+    const service = createMileageService({ gohData, readUsers: () => users });
+    await service.saveAddress({ version:0, name:'example company', address:'Test Street 1', coordinates:[10, 55] }, worker);
+    let data = await service.data(other);
+    assert.equal(data.addresses.length, 1);
+    assert.deepEqual(data.addresses[0].coordinates, [10, 55]);
+    await service.saveAddress({ version:1, name:'Example Company', address:'Test Street 2' }, other);
+    data = await service.data(worker);
+    assert.equal(data.addresses.length, 2);
+    assert.equal(data.addresses[1].coordinates, undefined);
+    await assert.rejects(service.saveAddress({ version:2, name:'', address:'Test' }, worker), { statusCode:400 });
+    await assert.rejects(service.saveAddress({ version:2, name:'Bad', address:'Test', coordinates:[181, 55] }, worker), { statusCode:400 });
+    await assert.rejects(service.saveAddress({ version:1, name:'Stale', address:'Test' }, worker), { statusCode:409 });
+    const results = await Promise.allSettled([
+        service.saveAddress({ version:2, name:'One', address:'Test 1' }, worker),
+        service.saveAddress({ version:2, name:'Two', address:'Test 2' }, other)
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter(result => result.status === 'rejected' && result.reason.statusCode === 409).length, 1);
+    assert.equal((await service.data(worker)).addresses.length, 3);
+});
+
 test('trip workflow enforces ownership, independent approval, fixed rates, and payment once', async () => {
     const f = await fixture();
     const trip = await f.save();
@@ -380,6 +406,12 @@ test('API protects configuration and import separately from employee access', as
     assert.equal((await fetch(base+'/mileage/trips/'+tripId+'/delete', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:deleteBody })).status, 403);
     assert.equal((await fetch(base+'/mileage/trips/'+tripId+'/delete', { method:'POST', headers:{ 'x-test-user':'approver','Content-Type':'application/json' }, body:deleteBody })).status, 200);
     assert.equal((await fetch(base+'/mileage/report.pdf?year=2025&employeeId='+encodeURIComponent(tripData.participants[0].id), { headers:{ 'x-test-user':'approver' } })).status, 404);
+    const current = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'worker' } })).json();
+    const addressBody = JSON.stringify({ version:current.version, name:'Example', address:'Test Street 1' });
+    assert.equal((await fetch(base+'/mileage/addresses', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:addressBody })).status, 403);
+    assert.equal((await fetch(base+'/mileage/addresses', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:addressBody })).status, 200);
+    const otherData = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'other' } })).json();
+    assert.equal(otherData.addresses[0].name, 'Example');
     const headers = { 'x-test-user':'admin-test', 'Content-Type':'application/json' };
     const denied = await fetch(base+'/mileage/routing-settings', { method:'POST', headers:{ ...headers, 'x-test-user':'approver' },
         body:JSON.stringify({ version:0, action:'save', apiKey:'database-test-key' }) });

@@ -45,6 +45,7 @@ function createMileageRouter({ gohData, readUsers, readVismaEmployees, getSessio
     router.post('/employees', management, run(async (req, res, user) => { await service.saveEmployee(req.body, user); res.json({ ok: true }); }));
     router.post('/rates', management, run(async (req, res, user) => { await service.saveRate(req.body, user); res.json({ ok: true }); }));
     router.post('/trips', run(async (req, res, user) => { await service.saveTrip(req.body, user); res.json({ ok: true }); }));
+    router.post('/addresses', run(async (req, res, user) => { await service.saveAddress(req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/action', run(async (req, res, user) => { await service.transition(req.params.id, req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/delete', management, run(async (req, res, user) => { await service.deleteTrip(req.params.id, req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/legacy-date', management, run(async (req, res, user) => { await service.correctLegacyDate(req.params.id, req.body, user); res.json({ ok: true }); }));

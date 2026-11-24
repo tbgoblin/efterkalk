@@ -73,8 +73,9 @@
             </div>
             <div class="section-head"><h3>Rute i kørselsrækkefølge</h3><button type="button" id="addStop">+ Mellemstop / pause</button></div>
             <p id="tripRoutingNotice" class="notice" hidden>Automatisk afstand er ikke konfigureret endnu. Skriv adresserne og angiv de samlede km manuelt med et afstandsgrundlag.</p>
-            <p class="muted">Vælg adresse efter opslag for automatisk beregning. Eller skriv adresser og angiv de samlede km manuelt. Pauser giver ikke ekstra km i sig selv.</p>
-            <div id="stops"></div><datalist id="addressOptions"></datalist><datalist id="purposeOptions"></datalist>
+            <p id="tripNotice" role="status" aria-live="polite"></p>
+            <p class="muted">Søg i fælles adresser ved at skrive navn eller adresse. Gemte adresser uden koordinater skal findes og bekræftes én gang. Online opslag sker kun med Find adresse. Du kan også angive km manuelt.</p>
+            <div id="stops"></div><datalist id="purposeOptions"></datalist>
             <label class="check"><input id="tripReturn" type="checkbox"> Retur ad samme stop i omvendt rækkefølge</label>
             <div class="fields">
                 <button id="calculateRoute" type="button">Beregn hele ruten</button>
@@ -85,6 +86,17 @@
             <p class="muted">openrouteservice.org by HeiGIT · Map data © OpenStreetMap contributors. Endeligt beløb beregnes ved godkendelse ud fra kørselsåret og tidligere godkendte km.</p>
             <p id="tripError" role="alert"></p>
             <div class="actions"><button type="submit" class="primary">Gem kladde</button></div>
+        </form>
+    </dialog>
+    <dialog id="addressDialog" aria-labelledby="addressTitle">
+        <form id="addressForm">
+            <div class="section-head"><h2 id="addressTitle">Gem fælles adresse</h2><button type="button" id="closeAddress">Luk</button></div>
+            <p class="muted">Adressen bliver synlig for alle med adgang til kørsel. Bekræft et online opslag først, hvis koordinaterne skal gemmes til automatisk ruteberegning.</p>
+            <label>Navn / virksomhed<input id="addressName" maxlength="200" required></label>
+            <label>Adresse<input id="addressValue" readonly></label>
+            <p id="addressCoordinates" class="muted"></p>
+            <p id="addressError" role="alert"></p>
+            <div class="actions"><button type="submit" class="primary">Gem fælles adresse</button></div>
         </form>
     </dialog>
     <dialog id="detailDialog" aria-labelledby="detailTitle"><div class="section-head"><h2 id="detailTitle">Kørselsbilag</h2><button id="closeDetail" type="button">Luk</button></div><div id="detailBody"></div><p id="detailError" role="alert"></p></dialog>

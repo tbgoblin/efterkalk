@@ -1,9 +1,4 @@
-const { fail } = require('./mileageService');
-
-function coordinates(value) {
-    return Array.isArray(value) && value.length === 2 && value.every(n => typeof n === 'number' && Number.isFinite(n))
-        && Math.abs(value[0]) <= 180 && Math.abs(value[1]) <= 90;
-}
+const { fail, validCoordinates } = require('./mileageService');
 
 function createMileageRoutingSettings({ gohData, envKey = () => process.env.GOH_ORS_API_KEY || '' }) {
     const stateKey = 'mileage_routing_settings_v1';
@@ -68,11 +63,11 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
         const params = new URLSearchParams({ api_key: key, text: query.trim(), size: '5' });
         const result = await request('https://api.openrouteservice.org/geocode/search?' + params, key);
         if (!Array.isArray(result?.features)) throw fail('Ruteservicen returnerede ingen adresseliste.', 502);
-        return result.features.filter(row => coordinates(row?.geometry?.coordinates) && typeof row.properties?.label === 'string')
+        return result.features.filter(row => validCoordinates(row?.geometry?.coordinates) && typeof row.properties?.label === 'string')
             .map(row => ({ address: row.properties.label, coordinates: row.geometry.coordinates }));
     }
     async function route(points, roundTrip) {
-        if (!Array.isArray(points) || points.length < 2 || points.length > 12 || !points.every(coordinates)) throw fail('Vælg en gyldig adresse for hvert stop.');
+        if (!Array.isArray(points) || points.length < 2 || points.length > 12 || !points.every(validCoordinates)) throw fail('Vælg en gyldig adresse for hvert stop.');
         // Calculate the actual reverse itinerary too; road restrictions can make it differ from 2x outward distance.
         const itinerary = roundTrip === true ? points.concat(points.slice(0, -1).reverse()) : points;
         const result = await request('https://api.openrouteservice.org/v2/directions/driving-car', await getKey(), {

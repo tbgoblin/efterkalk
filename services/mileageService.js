@@ -8,6 +8,8 @@ const nameKey = value => String(value || '').normalize('NFC').trim().toLowerCase
 const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
     && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+const validCoordinates = value => Array.isArray(value) && value.length === 2
+    && value.every(n => typeof n === 'number' && Number.isFinite(n)) && Math.abs(value[0]) <= 180 && Math.abs(value[1]) <= 90;
 
 function text(value, label, max = 500, required = true) {
     if (typeof value !== 'string' || value.trim().length > max || (required && !value.trim())) throw fail(label + ' mangler eller er ugyldig.');
@@ -201,6 +203,24 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         return persist(state, input.version, user);
     }
 
+    async function saveAddress(input, user) {
+        const state = await load();
+        checkVersion(state, input.version);
+        const name = text(input.name, 'Navn', 200);
+        const address = text(input.address, 'Adresse', 500);
+        if (input.coordinates != null && !validCoordinates(input.coordinates)) throw fail('Ugyldige adressekoordinater.');
+        let saved = state.addresses.find(row => nameKey(row.name) === nameKey(name) && nameKey(row.address) === nameKey(address));
+        if (!saved) {
+            if (state.addresses.length >= 5000) throw fail('Adressebogen er fuld.');
+            saved = { name, address };
+            state.addresses.push(saved);
+        }
+        if (input.coordinates != null) saved.coordinates = input.coordinates.slice();
+        saved.updatedAt = now();
+        saved.updatedBy = username(user);
+        return persist(state, input.version, user);
+    }
+
     async function saveTrip(input, user) {
         const state = await load();
         checkVersion(state, input.version);
@@ -388,7 +408,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         return persist(state, input.version, user);
     }
 
-    return { data, syncEmployees, saveEmployee, saveRate, saveTrip, transition, document, previewImport, importData, deleteTrip, correctLegacyDate };
+    return { data, syncEmployees, saveEmployee, saveRate, saveAddress, saveTrip, transition, document, previewImport, importData, deleteTrip, correctLegacyDate };
 }
 
-module.exports = { createMileageService, calculateAllowance, manager, fail, validDate };
+module.exports = { createMileageService, calculateAllowance, manager, fail, validDate, validCoordinates };
