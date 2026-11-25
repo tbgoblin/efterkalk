@@ -328,7 +328,7 @@ test('routing is opt-in, validates provider results and routes return through re
     const calls = [];
     const routing = createMileageRoutingService({ apiKey: () => 'test-only-key', fetchImpl: async (url, options) => {
         calls.push({ url, options });
-        if (url.includes('/geocode/')) return { ok:true, json:async() => ({ features:[
+        if (url.includes('/pelias/v1/search')) return { ok:true, json:async() => ({ features:[
             { properties:{label:'Example address'}, geometry:{coordinates:[10,55]} },
             { properties:{name:'Hotel Example', label:'Hotel Example, Test City', street:'Testvej', housenumber:'25'}, geometry:{coordinates:[11,56]} },
             { properties:{label:'Testvej 25, Test City', street:'Testvej', housenumber:'25'}, geometry:{coordinates:[12,57]} },
@@ -339,6 +339,8 @@ test('routing is opt-in, validates provider results and routes return through re
     } });
     const points = [[10,55],[11,56],[12,57]];
     const result = await routing.route(points, true);
+    assert.equal(new URL(calls[0].url).origin, 'https://api.heigit.org');
+    assert.equal(new URL(calls[0].url).pathname, '/openrouteservice/v2/directions/driving-car');
     assert.deepEqual(JSON.parse(calls[0].options.body).coordinates, [[10,55],[11,56],[12,57],[11,56],[10,55]]);
     assert.equal(JSON.parse(calls[0].options.body).instructions, true);
     assert.equal(result.km, 6.6);
@@ -349,6 +351,8 @@ test('routing is opt-in, validates provider results and routes return through re
         { name:'',address:'Other Hotel, Test City · Hotelvej',streetAddressKnown:false,coordinates:[13,58] }
     ]);
     assert.equal(new URL(calls[1].url).searchParams.get('api_key'), 'test-only-key');
+    assert.equal(new URL(calls[1].url).origin, 'https://api.heigit.org');
+    assert.equal(new URL(calls[1].url).pathname, '/pelias/v1/search');
     assert.equal(new URL(calls[1].url).searchParams.get('size'), '10');
     await assert.rejects(routing.route([[200,55],[12,57]],false), /gyldig adresse/);
     const broken = createMileageRoutingService({ apiKey: () => 'test-only-key', fetchImpl: async () => ({ ok: true, json: async () => null }) });

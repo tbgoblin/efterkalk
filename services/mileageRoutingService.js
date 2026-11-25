@@ -38,6 +38,7 @@ function createMileageRoutingSettings({ gohData, envKey = () => process.env.GOH_
 }
 
 function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => process.env.GOH_ORS_API_KEY || '' } = {}) {
+    const apiBase = 'https://api.heigit.org';
     async function getKey() {
         const key = (await apiKey()).trim();
         if (!key) throw fail('Automatisk afstand er ikke konfigureret. Kontakt en administrator, eller angiv km manuelt.', 503);
@@ -69,7 +70,7 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
         if (typeof query !== 'string' || query.trim().length < 3 || query.length > 500) throw fail('Skriv mindst tre tegn i adressen.');
         const key = await getKey();
         const params = new URLSearchParams({ api_key: key, text: query.trim(), size: '10' });
-        const result = await request('https://api.openrouteservice.org/geocode/search?' + params, key);
+        const result = await request(apiBase + '/pelias/v1/search?' + params, key);
         if (!Array.isArray(result?.features)) throw fail('Ruteservicen returnerede ingen adresseliste.', 502);
         return result.features.filter(row => validCoordinates(row?.geometry?.coordinates) && typeof row.properties?.label === 'string')
             .map(row => {
@@ -90,7 +91,7 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
         if (!Array.isArray(points) || points.length < 2 || points.length > 12 || !points.every(validCoordinates)) throw fail('Vælg en gyldig adresse for hvert stop.');
         // Calculate the actual reverse itinerary too; road restrictions can make it differ from 2x outward distance.
         const itinerary = roundTrip === true ? points.concat(points.slice(0, -1).reverse()) : points;
-        const result = await request('https://api.openrouteservice.org/v2/directions/driving-car', await getKey(), {
+        const result = await request(apiBase + '/openrouteservice/v2/directions/driving-car', await getKey(), {
             // ORS omits segment distances when instructions are disabled.
             method: 'POST', body: JSON.stringify({ coordinates: itinerary, instructions: true, geometry: false })
         });
