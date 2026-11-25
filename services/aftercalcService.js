@@ -14,7 +14,7 @@ function createAftercalcService({
     orderListDaysBack,
     cacheTtlProductionSummaryMs
 }) {
-    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 27;
+    const PRODUCTION_SUMMARY_CACHE_SCHEMA_VERSION = 28;
     const laserRoutePricingCache = new Map();
 
     function buildLineWarnings(line, extraWarnings = []) {
@@ -218,6 +218,14 @@ function createAftercalcService({
         const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
         if (key !== '2' || Number(line.PurcNo || 0) > 0 || isLaserLProduct(line.ProdNo) || isInvoiceTrackedLine(line)) return null;
         // Without a linked purchase order, match the stock cost shown by Visma.
+        return Number(quantity || 0) * Number(line.CstPr ?? line.CCstPr ?? 0);
+    }
+
+    function getUnlinkedSalesOrderStockCost(line, quantity) {
+        const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+        if ((key !== '0' && key !== '2') || Number(line.PurcNo || 0) > 0
+            || isLaserLProduct(line.ProdNo) || isInvoiceTrackedLine(line)) return null;
+        // Direct stock rows on sales orders use the same CstPr shown by Visma as Kostpris.
         return Number(quantity || 0) * Number(line.CstPr ?? line.CCstPr ?? 0);
     }
 
@@ -468,21 +476,26 @@ function createAftercalcService({
         if (!prodKey) return null;
 
         const allocatedQty = Number((pricingData.qtyByProd && pricingData.qtyByProd.get(prodKey)) || 0);
-        const qtyMismatch = qty > 0 && allocatedQty > 0 && Math.abs(allocatedQty - qty) > 0.0001;
+        const routeProdKey = routeKey ? routeKey + '|' + prodKey : '';
+        const routeAllocatedQty = Number((pricingData.qtyByProdRoute && pricingData.qtyByProdRoute.get(routeProdKey)) || 0);
+        const routeAllocatedTotalCost = Number((pricingData.totalCostByProdRoute && pricingData.totalCostByProdRoute.get(routeProdKey)) || 0);
+        const allocatedQtyForLine = routeAllocatedQty > 0 ? routeAllocatedQty : allocatedQty;
+        const qtyMismatch = qty > 0 && allocatedQtyForLine > 0 && Math.abs(allocatedQtyForLine - qty) > 0.0001;
         const allocationInfoText = qtyMismatch
-            ? (allocatedQty > qty
-                ? ('Der er registreret flere stk i nestingdata (' + allocatedQty + ') end på denne ordrelinje (' + qty + '), så laserkosten bliver fordelt og pris pr. stk kan afvige.')
-                : ('Der er registreret færre stk i nestingdata (' + allocatedQty + ') end på denne ordrelinje (' + qty + '), så laserkosten bliver fordelt og pris pr. stk kan afvige.'))
+            ? ('Nestingdata indeholder ' + allocatedQtyForLine + ' stk. mod ' + qty + ' stk. på ordrelinjen. Samlet kost bruger alle tilknyttede nestinglinjer, så pris pr. stk kan afvige.')
             : '';
 
         if (routeKey) {
-            const routeProdKey = routeKey + '|' + prodKey;
             const routeAllocatedUnitCost = Number((pricingData.unitCostByProdRoute && pricingData.unitCostByProdRoute.get(routeProdKey)) || 0);
             if (routeAllocatedUnitCost > 0) {
+                const displayQuantity = routeAllocatedQty || qty;
                 return {
                     unitCost: parseFloat(Number(routeAllocatedUnitCost).toFixed(6)),
-                    totalCost: qty > 0 ? parseFloat(Number(routeAllocatedUnitCost * qty).toFixed(2)) : null,
-                    allocatedQty,
+                    totalCost: routeAllocatedTotalCost > 0
+                        ? parseFloat(Number(routeAllocatedTotalCost).toFixed(2))
+                        : (displayQuantity > 0 ? parseFloat(Number(routeAllocatedUnitCost * displayQuantity).toFixed(2)) : null),
+                    allocatedQty: routeAllocatedQty || allocatedQty,
+                    displayQuantity,
                     usesAllocationSpread: qtyMismatch,
                     infoText: allocationInfoText
                 };
@@ -491,10 +504,12 @@ function createAftercalcService({
             const kgPerPiece = Number(pricingData.kgPerPieceByProdRoute.get(routeProdKey) || 0);
             if (avgSheetCstPr > 0 && kgPerPiece > 0) {
                 const unitCost = parseFloat(Number(avgSheetCstPr * kgPerPiece).toFixed(6));
+                const displayQuantity = routeAllocatedQty || qty;
                 return {
                     unitCost,
-                    totalCost: qty > 0 ? parseFloat(Number(unitCost * qty).toFixed(2)) : null,
-                    allocatedQty,
+                    totalCost: displayQuantity > 0 ? parseFloat(Number(unitCost * displayQuantity).toFixed(2)) : null,
+                    allocatedQty: routeAllocatedQty || allocatedQty,
+                    displayQuantity,
                     usesAllocationSpread: qtyMismatch,
                     infoText: allocationInfoText
                 };
@@ -507,13 +522,11 @@ function createAftercalcService({
             const fallbackUnitCost = allocationBaseQty > 0
                 ? (aggregatedTotalCost / allocationBaseQty)
                 : Number(pricingData.unitCostByProd.get(prodKey) || 0);
-            const allocatedTotalCost = (allocationBaseQty > 0 && qty > 0)
-                ? (aggregatedTotalCost * (qty / allocationBaseQty))
-                : aggregatedTotalCost;
             return {
                 unitCost: parseFloat(Number(fallbackUnitCost).toFixed(6)),
-                totalCost: parseFloat(Number(allocatedTotalCost).toFixed(2)),
+                totalCost: parseFloat(Number(aggregatedTotalCost).toFixed(2)),
                 allocatedQty,
+                displayQuantity: allocationBaseQty,
                 usesAllocationSpread: qtyMismatch,
                 infoText: allocationInfoText
             };
@@ -521,10 +534,12 @@ function createAftercalcService({
 
         const aggregatedUnitCost = Number(pricingData.unitCostByProd.get(prodKey) || 0);
         if (aggregatedUnitCost > 0) {
+            const displayQuantity = allocatedQty > 0 ? allocatedQty : qty;
             return {
                 unitCost: parseFloat(Number(aggregatedUnitCost).toFixed(6)),
-                totalCost: qty > 0 ? parseFloat(Number(aggregatedUnitCost * qty).toFixed(2)) : null,
+                totalCost: displayQuantity > 0 ? parseFloat(Number(aggregatedUnitCost * displayQuantity).toFixed(2)) : null,
                 allocatedQty,
+                displayQuantity,
                 usesAllocationSpread: qtyMismatch,
                 infoText: allocationInfoText
             };
@@ -581,6 +596,7 @@ function createAftercalcService({
                             NoFin,
                             NoInvo,
                             NoInvoAb,
+                            CstPr,
                             ProdTp4,
                             CCstPr,
                             CAST(NoFin * CCstPr AS DECIMAL(10,2)) AS LineCost
@@ -601,6 +617,7 @@ function createAftercalcService({
             }
 
             const orderHeader = orderResult.recordset[0];
+            const isSalesOrder = Number(orderHeader.TrTp) === 1;
             const useRouteSpecificLaserCost = true;
 
             const prodNosForDrawings = [
@@ -621,13 +638,23 @@ function createAftercalcService({
                     const displayQuantity = Number(line.NoFin || 0) === 0 && Number(line.NoOrg || 0) > 0
                         ? Number(line.NoOrg || 0)
                         : Number(line.NoFin || 0);
+                    const unlinkedSalesStockCost = isSalesOrder
+                        ? getUnlinkedSalesOrderStockCost(line, displayQuantity)
+                        : null;
                     return {
                         ...line,
                         IsDiscountLine: false,
                         DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
+                        DisplayUnitCost: unlinkedSalesStockCost !== null
+                            ? (displayQuantity > 0
+                                ? parseFloat(Number(unlinkedSalesStockCost / displayQuantity).toFixed(2))
+                                : Number(line.CstPr ?? line.CCstPr ?? 0))
+                            : null,
                         HasWarning: warningMessages.length > 0,
                         WarningText: joinWarningMessages(warningMessages),
-                        EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2)),
+                        EffectiveLineCost: parseFloat(Number(
+                            unlinkedSalesStockCost !== null ? unlinkedSalesStockCost : effectiveLineCost
+                        ).toFixed(2)),
                         DrawingWebPg: drawingByProdNo.get(prodNoKey) || null
                     };
                 });
@@ -645,13 +672,23 @@ function createAftercalcService({
                     const displayQuantity = Number(line.NoFin || 0) === 0 && Number(line.NoOrg || 0) > 0
                         ? Number(line.NoOrg || 0)
                         : Number(line.NoFin || 0);
+                    const unlinkedSalesStockCost = isSalesOrder
+                        ? getUnlinkedSalesOrderStockCost(line, displayQuantity)
+                        : null;
                     return {
                         ...line,
                         IsDiscountLine: false,
                         DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
+                        DisplayUnitCost: unlinkedSalesStockCost !== null
+                            ? (displayQuantity > 0
+                                ? parseFloat(Number(unlinkedSalesStockCost / displayQuantity).toFixed(2))
+                                : Number(line.CstPr ?? line.CCstPr ?? 0))
+                            : null,
                         HasWarning: warningMessages.length > 0,
                         WarningText: joinWarningMessages(warningMessages),
-                        EffectiveLineCost: parseFloat(Number(effectiveLineCost).toFixed(2)),
+                        EffectiveLineCost: parseFloat(Number(
+                            unlinkedSalesStockCost !== null ? unlinkedSalesStockCost : effectiveLineCost
+                        ).toFixed(2)),
                         DrawingWebPg: drawingByProdNo.get(prodNoKey) || null
                     };
                 });
@@ -893,7 +930,10 @@ function createAftercalcService({
                         line.ChildProductionTotalCost = childProductionTotalCost === null
                             ? null
                             : parseFloat(Number(childProductionTotalCost).toFixed(2));
-                        line.DisplayQuantity = parseFloat(Number(displayQuantity).toFixed(2));
+                        const effectiveDisplayQuantity = Number(specialLaserCostInfo && specialLaserCostInfo.displayQuantity) > 0
+                            ? Number(specialLaserCostInfo.displayQuantity)
+                            : displayQuantity;
+                        line.DisplayQuantity = parseFloat(Number(effectiveDisplayQuantity).toFixed(2));
                         line.EffectiveOperationMinutes = key === '1'
                             ? parseFloat(Number(operationTimeInfo.effectiveMinutes).toFixed(2))
                             : null;
@@ -1337,13 +1377,16 @@ function createAftercalcService({
                 }
 
                 const roundedEffectiveLineCost = parseFloat(Number(effectiveLineCost).toFixed(2));
-                const displayUnitCost = Number(displayQuantity || 0) > 0
-                    ? parseFloat(Number(roundedEffectiveLineCost / displayQuantity).toFixed(2))
+                const effectiveDisplayQuantity = Number(specialLaserCostInfo && specialLaserCostInfo.displayQuantity) > 0
+                    ? Number(specialLaserCostInfo.displayQuantity)
+                    : displayQuantity;
+                const displayUnitCost = Number(effectiveDisplayQuantity || 0) > 0
+                    ? parseFloat(Number(roundedEffectiveLineCost / effectiveDisplayQuantity).toFixed(2))
                     : parseFloat(Number(line.CCstPr || 0).toFixed(2));
 
                 return {
                     ...line,
-                    DisplayQuantity: parseFloat(Number(displayQuantity).toFixed(2)),
+                    DisplayQuantity: parseFloat(Number(effectiveDisplayQuantity).toFixed(2)),
                     DisplayUnitCost: displayUnitCost,
                     EffectiveOperationMinutes: key === '1'
                         ? parseFloat(Number(operationTimeInfo.effectiveMinutes).toFixed(2))

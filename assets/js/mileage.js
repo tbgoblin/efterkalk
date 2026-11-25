@@ -98,13 +98,16 @@
     function render() {
         if (!data) return;
         const year = $('filterYear').value, employee = $('filterEmployee').value, status = $('filterStatus').value;
+        const showHistory = $('filterHistory').checked;
         const rows = data.trips.filter(row => (status === 'deleted' ? row.status === 'deleted' : row.status !== 'deleted')
-            && (!year || row.date?.startsWith(year)) && (!employee || row.employeeId === employee) && (!status || row.status === status))
+            && (!year || row.date?.startsWith(year)) && (!employee || row.employeeId === employee)
+            && (!status || row.status === status) && (showHistory || row.status !== 'legacy'))
             .slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
         const activeRows = rows.filter(row => row.status !== 'deleted');
         const amount = activeRows.reduce((sum,row) => sum+(row.allowance?.amount || 0),0);
         const reviews = data.trips.filter(row => row.reconciliationRequired && row.status !== 'deleted').length;
         $('totals').textContent = activeRows.length+' kørsler · '+fmt(activeRows.reduce((sum,row) => sum+row.km,0))+' km · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.'
+            +(!showHistory ? ' Historiske km er skjult her, men tæller stadig med i årets km-grænse.' : '')
             +(reviews ? ' '+reviews+' godkendte kørsler skal gennemgås: tidligere km er ændret; beløb er ikke genberegnet.' : '');
         $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
         applyAvailability();
@@ -261,7 +264,7 @@
     $('closeAddress').addEventListener('click', () => $('addressDialog').close());
     $('closeDetail').addEventListener('click', () => $('detailDialog').close());
     $('cancelDelete').addEventListener('click', () => $('deleteDialog').close());
-    ['filterYear','filterEmployee','filterStatus'].forEach(id => $(id).addEventListener('change',render));
+    ['filterYear','filterEmployee','filterStatus','filterHistory'].forEach(id => $(id).addEventListener('change',render));
     $('tripRows').addEventListener('click', event => { const button=event.target.closest('[data-detail]'); if(button)detail(button.dataset.detail); });
     $('addStop').addEventListener('click', () => {
         if (points.length >= 12) { $('tripError').textContent='Højst 10 mellemstop.'; return; }

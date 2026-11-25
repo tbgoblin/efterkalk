@@ -24,7 +24,7 @@ h3 { font-size:15px; }
 .notice { border-left:3px solid #b97e1d; background:#fff8e9; padding:10px 13px; font-size:12px; }
 .panel { background:white; border:1px solid var(--line); border-radius:9px; padding:20px; margin:16px 0; }
 .fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:15px 0; align-items:end; }
-.filters { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.filters { grid-template-columns:repeat(4,minmax(0,1fr)); }
 label { display:grid; gap:5px; font-size:12px; font-weight:600; }
 input,select,textarea { width:100%; min-height:38px; padding:7px 9px; border:1px solid #b8cad9; border-radius:5px; color:var(--ink); background:white; }
 .check { display:flex; align-items:center; gap:7px; }

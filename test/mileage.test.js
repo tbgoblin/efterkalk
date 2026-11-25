@@ -402,9 +402,14 @@ test('internal PDF is generated from authorized trip data including fixed allowa
     const f = await fixture();
     const trip = await f.save();
     await f.act(trip, 'submit', worker); await f.act(trip, 'approve');
-    const pdf = await generateMileagePdf([await f.service.document(trip.id, worker)]);
+    const authorizedTrip = await f.service.document(trip.id, worker);
+    const pdf = await generateMileagePdf([authorizedTrip]);
+    const singlePagePdf = await generateMileagePdf([authorizedTrip], { includeSummary: false });
     assert.equal(pdf.subarray(0,5).toString(), '%PDF-');
     assert.ok(pdf.length > 2000);
+    const pageCount = buffer => (buffer.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+    assert.equal(pageCount(pdf), 2);
+    assert.equal(pageCount(singlePagePdf), 1);
 });
 
 test('API protects configuration and import separately from employee access', async t => {

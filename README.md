@@ -54,7 +54,7 @@ Il prodotto è cresciuto fino a diventare un **hub operativo interno**: oltre al
 
 ### Afterkalk: costo materiali senza ordine collegato (`2026-11-25`)
 
-- Per le righe materiale senza ordine d’acquisto collegato, il costo usa `CstPr`, come la colonna Visma `Kostpris`; i prezzi d’acquisto collegati e i calcoli laser mantengono le proprie regole.
+- Sugli ordini di vendita, le righe stock senza collegamento (`ProdTp4=0/2`) usano `CstPr`, come la colonna Visma `Kostpris`; nei sottoordini di produzione vale per i materiali `ProdTp4=2` senza acquisto collegato. Acquisti collegati e calcoli laser mantengono le proprie regole.
 
 ### Aggiornamenti recenti (`2026-04-22`)
 

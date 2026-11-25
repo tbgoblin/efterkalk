@@ -280,7 +280,8 @@ Sono presenti viste e metriche dedicate al laser:
 Per evitare ambiguità durante i controlli:
 
 - `NestKost pr. stk` nel popup laser è il costo unitario della **riga/route mostrata**
-- `Samlet kost` nel popup è il costo totale della singola riga aggregata (`qta × costo unitario` oppure `QuotaCosto`)
+- `Samlet kost` usa il costo completo delle righe di nesting collegate alla stessa produzione (`TrInf2`); non riduce il totale per farlo coincidere con il `NoFin` della riga materiale
+- se la quantità finita nel nesting differisce da quella sulla riga produzione, il riepilogo mostra la quantità nesting e segnala lo scarto; il costo unitario è calcolato sul totale dei pezzi effettivamente collegati
 - la riga principale `Materiale Laser` può mostrare un prezzo unitario diverso dal popup anche quando il **totale** è lo stesso, perché la divisione può avvenire su una quantità diversa (solo la riga madre vs somma di più `nestingordre`)
 - `Ryd cache` forza il refresh dei dati memorizzati, ma non cambia le differenze dovute alla formula o alla quantità usata nel riparto
 
@@ -342,7 +343,7 @@ Per ogni riga ordine vendita la UI mostra:
 | Colonna UI | Formula / sorgente | Note |
 |---|---|---|
 | `Færdigmeldt` | `DisplayQuantity` | normalmente `NoFin`; se `NoFin = 0` e `NoOrg > 0`, mostra `NoOrg` |
-| `Kostpris` | se c’è `PurcNo`: `ProductionOrderTotalCost / NoFin`; altrimenti `CCstPr` | nelle righe collegate a produzione mostra il costo unitario del figlio |
+| `Kostpris` | acquisto collegato: prezzo acquisto; produzione collegata: `ProductionOrderTotalCost / NoFin`; stock `ProdTp4=0/2` senza collegamento: `CstPr`; altrimenti `CCstPr` | nelle righe collegate mostra il costo effettivo del figlio/fornitore |
 | `Samlet kost` | `EffectiveLineCost` | è il costo effettivo finale |
 | `Salgspris/enhed` | `DPrice` | prezzo vendita unitario |
 | `Salgspris` | `DPrice × NoFin` | totale vendita della riga |
@@ -446,7 +447,7 @@ Per ogni `route`:
 Costo unitario laser = kg forbrugt per pezzo × media CstPr delle righe TrTp = 5 della stessa route
 ```
 
-Poi:
+Poi, quando le righe finite di nesting sono collegate alla produzione tramite `TrInf2`, il costo totale segue tutte le righe prodotto collegate e la quantità mostrata corrisponde al totale finito nel nesting. Se i conteggi coincidono, equivale a:
 
 ```text
 EffectiveLineCost = costo unitario laser × quantità finita

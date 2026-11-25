@@ -72,7 +72,7 @@ function createMileageRouter({
     router.post('/route', throttle, run(async (req, res) => res.json({ ok: true, ...await routing.route(req.body.points, req.body.roundTrip) })));
     router.get('/trips/:id/document.pdf', run(async (req, res, user) => {
         const trip = await service.document(req.params.id, user);
-        const pdf = await generateMileagePdf([trip]);
+        const pdf = await generateMileagePdf([trip], { includeSummary: false });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="Gantech-korsel.pdf"');
         res.send(pdf);

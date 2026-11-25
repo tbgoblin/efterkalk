@@ -4,7 +4,7 @@ const money = value => value.toLocaleString('da-DK', { minimumFractionDigits: 2,
 const rate = value => value.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 const statusNames = { draft: 'Kladde', submitted: 'Afventer godkendelse', approved: 'Godkendt', paid: 'Udbetalt', rejected: 'Afvist', legacy: 'Importeret historik' };
 
-function generateMileagePdf(trips) {
+function generateMileagePdf(trips, { includeSummary = true } = {}) {
     return new Promise((resolve, reject) => {
         const doc = new PDFDocument({ size: 'A4', margin: 40, autoFirstPage: false,
             info: { Title: 'Gantech - Kørselsgodtgørelse', Author: 'Gantech Operations Hub' } });
@@ -16,15 +16,17 @@ function generateMileagePdf(trips) {
             doc.font('Helvetica-Bold').fontSize(10).fillColor('#17324d').text(label);
             doc.font('Helvetica').fontSize(10).text(String(value ?? '-'), { paragraphGap: 7 });
         };
-        doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(22).text('Gantech');
-        doc.fontSize(16).text('Kørselsgodtgørelse - internt bilag');
-        doc.moveDown();
-        line('Dannet', new Date().toLocaleString('da-DK'));
-        line('Antal kørsler', trips.length);
-        line('Km i alt', money(trips.reduce((sum, trip) => sum + trip.km, 0)));
-        line('Dokumenteret beløb i alt (DKK)', money(trips.reduce((sum, trip) => sum + (trip.allowance?.amount || 0), 0)));
-        doc.fontSize(10).text('Beløbet omfatter kun godkendte/udbetalte kørsler med fastlåst beregning. Historiske beløb, kladder og afventende kørsler er ikke medregnet. Dette bilag udfører ingen bankbetaling.');
+        if (includeSummary) {
+            doc.addPage();
+            doc.font('Helvetica-Bold').fontSize(22).text('Gantech');
+            doc.fontSize(16).text('Kørselsgodtgørelse - internt bilag');
+            doc.moveDown();
+            line('Dannet', new Date().toLocaleString('da-DK'));
+            line('Antal kørsler', trips.length);
+            line('Km i alt', money(trips.reduce((sum, trip) => sum + trip.km, 0)));
+            line('Dokumenteret beløb i alt (DKK)', money(trips.reduce((sum, trip) => sum + (trip.allowance?.amount || 0), 0)));
+            doc.fontSize(10).text('Beløbet omfatter kun godkendte/udbetalte kørsler med fastlåst beregning. Historiske beløb, kladder og afventende kørsler er ikke medregnet. Dette bilag udfører ingen bankbetaling.');
+        }
         for (const trip of trips) {
             doc.addPage();
             doc.font('Helvetica-Bold').fontSize(16).text('Gantech - Kørselsbilag');

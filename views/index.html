@@ -2683,7 +2683,7 @@
 
         function getLaserAllocationFlagHtml(item, fallbackText) {
             if (!item || (!item.UsesLaserAllocationSpread && !item.usesLaserAllocationSpread)) return '';
-            const title = escapeHtml(item.LaserAllocationText || item.laserAllocationText || fallbackText || 'Laserkosten er fordelt på et andet antal stk end denne ordrelinje, så pris pr. stk kan afvige.');
+            const title = escapeHtml(item.LaserAllocationText || item.laserAllocationText || fallbackText || 'Samlet laserkost følger alle tilknyttede nestinglinjer; antal og pris pr. stk kan derfor afvige fra ordrelinjen.');
             return ' <span class="allocation-flag" title="' + title + '">*</span>';
         }
 
@@ -4807,7 +4807,7 @@
                             ? purchaseUnitCost
                             : ((line.PurcNo && line.PurcNo !== 0)
                             ? (lineQty > 0 ? (productionTotalCost / lineQty) : productionTotalCost)
-                            : (line.CCstPr || 0));
+                            : (line.DisplayUnitCost ?? line.CCstPr ?? 0));
                         html += '<td><span class="sales-line-cost-value">' + formatNumber(displayKostpris) + '</span></td>';
                         // Kost 0 med kendt enhedspris: vis estimat i stedet for et vildledende 0,00
                         let samletKostCell = '<strong>' + formatNumber(lineCost) + '</strong>';
