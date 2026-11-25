@@ -47,7 +47,7 @@ summary { font-weight:700; cursor:pointer; padding:4px 0; }
 dialog { width:min(820px,calc(100% - 24px)); max-height:92vh; overflow:auto; padding:22px; border:1px solid var(--line); border-radius:10px; color:var(--ink); }
 dialog::backdrop { background:rgba(15,35,52,.5); }
 .stop { position:relative; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:5px; padding:10px; margin:10px 0; }
-.stop .fields { margin:5px 0; grid-template-columns:1fr auto; }
+.stop .fields { margin:5px 0; grid-template-columns:minmax(0,1fr) auto; }
 .stop .stop-tools { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center; }
 .stop .stop-tools select { width:auto; flex:1; min-width:140px; }
 .saved-addresses { display:flex; flex-direction:column; gap:5px; margin:6px 0; }
@@ -73,6 +73,6 @@ dt { color:var(--muted); }
 dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
 @media (max-width:700px) {
     main { padding:18px 12px; } .toolbar { padding:10px 12px; gap:9px; } h1 { font-size:24px; }
-    .fields,.filters { grid-template-columns:1fr; } .panel { padding:12px; } .span2 { grid-column:auto; }
+    .fields,.filters,.stop .fields { grid-template-columns:1fr; } .panel { padding:12px; } .span2 { grid-column:auto; }
     .page-head { align-items:flex-start; } dialog { padding:14px; } dl { grid-template-columns:1fr; }
 }

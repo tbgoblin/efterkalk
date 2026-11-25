@@ -1,4 +1,5 @@
 const { fail, validCoordinates } = require('./mileageService');
+const proj4 = require('proj4');
 
 function createMileageRoutingSettings({ gohData, envKey = () => process.env.GOH_ORS_API_KEY || '' }) {
     const stateKey = 'mileage_routing_settings_v1';
@@ -87,6 +88,66 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
                     streetAddressKnown: Boolean(street && number), coordinates: row.geometry.coordinates };
             }).filter(row => row.address);
     }
+    async function searchDanish(query) {
+        if (typeof query !== 'string' || query.trim().length < 3) throw fail('Skriv mindst tre tegn i adressen.');
+        if (query.trim().length > 73) throw fail('Den danske adressesøgning kan højst modtage 73 tegn. Forkort adressen og prøv igen.');
+        await getKey();
+        const base = 'https://adressevaelger.dk';
+        const token = 'adressevaelger123';
+        async function danishRequest(url) {
+            let response;
+            try {
+                response = await fetchImpl(url, { signal: AbortSignal.timeout(15000), redirect: 'error' });
+            } catch {
+                throw fail('Den danske adressetjeneste kunne ikke kontaktes. Prøv igen eller angiv km manuelt.', 502);
+            }
+            if (!response.ok) throw fail(`Den danske adressetjeneste returnerede HTTP ${response.status}. Prøv igen eller angiv km manuelt.`, 502);
+            let result;
+            try { result = await response.json(); }
+            catch { throw fail('Den danske adressetjeneste returnerede et ugyldigt svar.', 502); }
+            if (result?.status !== 'ok') throw fail('Den danske adressetjeneste kunne ikke fuldføre søgningen. Prøv igen eller angiv km manuelt.', 502);
+            return result;
+        }
+        const params = new URLSearchParams({ tekst: query.trim(), token, maksimum: '10' });
+        const result = await danishRequest(base + '/husnumre/soeg?' + params);
+        if (!Array.isArray(result.fund)) throw fail('Den danske adressetjeneste returnerede ingen adresseliste.', 502);
+        const matches = result.fund.filter(row => row?.type === 'husnummer').slice(0, 10);
+        return Promise.all(matches.map(async row => {
+            if (typeof row.id !== 'string' || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(row.id)) {
+                throw fail('Den danske adressetjeneste returnerede et ugyldigt adresse-id.', 502);
+            }
+            const details = await danishRequest(base + '/husnumre/' + row.id + '?' + new URLSearchParams({ token }));
+            const house = details.husnummer;
+            const geometry = house?.adgangspunkt?.geometri;
+            const coordinates = geometry?.coordinates;
+            if (geometry?.crs?.properties?.name !== 'EPSG:25832' || !Array.isArray(coordinates) || coordinates.length !== 2
+                || !coordinates.every(Number.isFinite) || typeof house?.adgangsadressebetegnelse !== 'string'
+                || !house.adgangsadressebetegnelse.trim() || typeof house.vejnavn !== 'string' || !house.vejnavn.trim()
+                || typeof house.husnummertekst !== 'string' || !house.husnummertekst.trim()) {
+                throw fail('Den danske adressetjeneste returnerede en adresse uden gyldige koordinater eller adresseoplysninger.', 502);
+            }
+            const converted = proj4('+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs', 'WGS84', coordinates);
+            if (!validCoordinates(converted)) throw fail('Den danske adressetjeneste returnerede ugyldige koordinater.', 502);
+            return { name: '', address: house.adgangsadressebetegnelse.trim(), streetAddressKnown: true, coordinates: converted };
+        }));
+    }
+    async function searchCombined(query) {
+        if (typeof query !== 'string' || query.trim().length < 3 || query.length > 500) throw fail('Skriv mindst tre tegn i adressen.');
+        await getKey();
+        const [danish, general] = await Promise.allSettled([searchDanish(query), search(query)]);
+        const failures = [danish, general].filter(result => result.status === 'rejected');
+        const warnings = failures.map(result => result.reason?.statusCode
+            ? result.reason.message : 'En adressetjeneste kunne ikke fuldføre søgningen. Prøv igen.');
+        if (failures.length === 2) throw fail(warnings.join(' '), 502);
+        const official = danish.status === 'fulfilled' ? danish.value : [];
+        const places = general.status === 'fulfilled' ? general.value : [];
+        const addresses = [];
+        for (let i = 0; i < Math.max(official.length, places.length); i++) {
+            if (official[i]) addresses.push({ ...official[i], source: 'danish' });
+            if (places[i]) addresses.push({ ...places[i], source: 'general' });
+        }
+        return { addresses, warnings };
+    }
     async function route(points, roundTrip) {
         if (!Array.isArray(points) || points.length < 2 || points.length > 12 || !points.every(validCoordinates)) throw fail('Vælg en gyldig adresse for hvert stop.');
         // Calculate the actual reverse itinerary too; road restrictions can make it differ from 2x outward distance.
@@ -103,6 +164,6 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
         return { km, legs: segments.map(row => Math.round(row.distance / 10) / 100), provider: 'openrouteservice',
             attribution: '© openrouteservice.org by HeiGIT | Map data © OpenStreetMap contributors' };
     }
-    return { configured, search, route };
+    return { configured, search, searchDanish, searchCombined, route };
 }
 module.exports = { createMileageRoutingService, createMileageRoutingSettings };

@@ -128,7 +128,7 @@
         $('stops').innerHTML = points.map((point,index) => '<section class="stop" data-index="'+index+'"><div class="stop-title"><strong>'+esc(index === 0 ? 'Fra' : index === points.length-1 ? 'Til' : 'Mellemstop '+index)+'</strong>'+
             (index > 0 && index < points.length-1 ? '<div class="stop-actions">'+
                 (points.length > 3 ? '<button type="button" class="drag-stop" data-drag-stop aria-label="Flyt mellemstop '+index+'" aria-describedby="reorderHelp" aria-keyshortcuts="ArrowUp ArrowDown"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.3"/><circle cx="11" cy="3" r="1.3"/><circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/><circle cx="5" cy="13" r="1.3"/><circle cx="11" cy="13" r="1.3"/></svg>Træk for at flytte</button>' : '')+
-                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><div class="fields"><label>Adresse, hotel eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><div class="saved-addresses" data-saved-results aria-live="polite"></div>'+(data.canManage?'<div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div>':'')+'<label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
+                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><div class="fields"><label>Adresse, hotel eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><small>Søgningen sendes til Klimadatastyrelsen og openrouteservice.</small><div class="saved-addresses" data-saved-results aria-live="polite"></div>'+(data.canManage?'<div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div>':'')+'<label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
     }
     function moveStop(index, target) {
         if (target < 1 || target >= points.length - 1 || target === index) return;
@@ -400,13 +400,17 @@
         if (!search) return;
         perform(async () => {
             const row = search.closest('.stop'), input = row.querySelector('[data-address]'), query=input.value;
-            const result = await api('/addresses/search',{query});
-            if (input.value !== query) throw new Error('Adressen blev ændret. Søg igen.');
-            if (!result.addresses.length) throw new Error('Ingen adresser fundet. Præcisér søgningen eller angiv km manuelt.');
             const results=row.querySelector('[data-results]');
-            results.innerHTML='<strong>Vælg det rigtige resultat:</strong>'+result.addresses.map((item,index)=>
+            results.textContent='Søger efter adresser og steder...';
+            let result;
+            try { result = await api('/addresses/search',{query}); }
+            catch (error) { results.textContent=''; throw error; }
+            if (input.value !== query) throw new Error('Adressen blev ændret. Søg igen.');
+            results.innerHTML=(result.warnings || []).map(warning=>'<span class="error">'+esc(warning)+'</span>').join('')
+                +(result.addresses.length ? '<strong>Kontrollér adresse og postnummer, og vælg det rigtige resultat:</strong>' : '<span>Ingen adresser fundet. Præcisér søgningen eller angiv km manuelt.</span>')+result.addresses.map((item,index)=>
                 '<button type="button" data-online-result="'+index+'">'+esc(item.address)+
-                (!item.streetAddressKnown ? '<small>Gade og husnummer er ikke særskilt oplyst af søgetjenesten.</small>' : '')+'</button>').join('');
+                '<small>'+esc(item.source === 'danish' ? 'Klimadatastyrelsen' : 'openrouteservice')+
+                (!item.streetAddressKnown ? ' · Gade og husnummer er ikke særskilt oplyst af søgetjenesten.' : '')+'</small></button>').join('');
             results.querySelectorAll('[data-online-result]').forEach(button => button.addEventListener('click', () => {
                 const match=result.addresses[Number(button.dataset.onlineResult)];
                 const index=Number(row.dataset.index), original=points[index].savedAddress;

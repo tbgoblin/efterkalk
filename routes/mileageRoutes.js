@@ -68,7 +68,9 @@ function createMileageRouter({
         }
         res.json({ ok: true, ...await service.importData(req.body, user) });
     }));
-    router.post('/addresses/search', throttle, run(async (req, res) => res.json({ ok: true, addresses: await routing.search(req.body.query) })));
+    router.post('/addresses/search', throttle, run(async (req, res) => {
+        res.json({ ok: true, ...await routing.searchCombined(req.body.query) });
+    }));
     router.post('/route', throttle, run(async (req, res) => res.json({ ok: true, ...await routing.route(req.body.points, req.body.roundTrip) })));
     router.get('/trips/:id/document.pdf', run(async (req, res, user) => {
         const trip = await service.document(req.params.id, user);

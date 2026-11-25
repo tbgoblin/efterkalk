@@ -445,6 +445,88 @@ test('routing is opt-in, validates provider results and routes return through re
     }
 });
 
+test('Danish address search resolves house numbers and converts official coordinates', async () => {
+    const calls = [];
+    const id = '0a3f507a-eedb-32b8-e044-0003ba298018';
+    const routing = createMileageRoutingService({ apiKey: () => 'ors-test-key', fetchImpl: async (url, options) => {
+        calls.push({ url: new URL(url), options });
+        if (url.includes('/soeg?')) return { ok: true, json: async () => ({ status: 'ok', fund: [
+            { type: 'navngivenvejpostnummer', id: 'street-only' },
+            { type: 'husnummer', id }
+        ] }) };
+        return { ok: true, json: async () => ({ status: 'ok', husnummer: {
+            adgangsadressebetegnelse: 'Sankt Kjelds Plads 11, 2100 København Ø', vejnavn: 'Sankt Kjelds Plads', husnummertekst: '11',
+            adgangspunkt: { geometri: { crs: { properties: { name: 'EPSG:25832' } }, coordinates: [723910.44, 6179652.89] } }
+        } }) };
+    } });
+    const result = await routing.searchDanish('Sankt Kjelds Plads 11 2100');
+    assert.equal(result.length, 1);
+    assert.equal(result[0].address, 'Sankt Kjelds Plads 11, 2100 København Ø');
+    assert.equal(result[0].streetAddressKnown, true);
+    assert.ok(Math.abs(result[0].coordinates[0] - 12.5644364) < 0.00001);
+    assert.ok(Math.abs(result[0].coordinates[1] - 55.7108204) < 0.00001);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url.origin, 'https://adressevaelger.dk');
+    assert.equal(calls[0].url.searchParams.get('tekst'), 'Sankt Kjelds Plads 11 2100');
+    assert.equal(calls[1].url.pathname, '/husnumre/' + id);
+    assert.equal(calls[0].options.headers, undefined);
+    assert.equal(calls[1].options.headers, undefined);
+    await assert.rejects(routing.searchDanish('a'.repeat(74)), /73 tegn/);
+});
+
+test('Danish address search rejects incomplete data and surfaces provider failures', async () => {
+    const id = '0a3f507a-eedb-32b8-e044-0003ba298018';
+    const empty = createMileageRoutingService({ apiKey: () => 'test-key', fetchImpl: async () => ({
+        ok: true, json: async () => ({ status: 'ok', fund: [{ type: 'vejnavn' }] })
+    }) });
+    assert.deepEqual(await empty.searchDanish('Testvej'), []);
+    const badCoordinates = createMileageRoutingService({ apiKey: () => 'test-key', fetchImpl: async url => ({
+        ok: true, json: async () => url.includes('/soeg?')
+            ? { status: 'ok', fund: [{ type: 'husnummer', id }] }
+            : { status: 'ok', husnummer: { adgangsadressebetegnelse: 'Testvej 1', vejnavn: 'Testvej', husnummertekst: '1',
+                adgangspunkt: { geometri: { crs: { properties: { name: 'EPSG:4326' } }, coordinates: [10, 55] } } } }
+    }) });
+    await assert.rejects(badCoordinates.searchDanish('Testvej 1'), /uden gyldige koordinater/);
+    const unavailable = createMileageRoutingService({ apiKey: () => 'test-key', fetchImpl: async () => ({ ok: false, status: 503 }) });
+    await assert.rejects(unavailable.searchDanish('Testvej 1'), /HTTP 503/);
+    const disabled = createMileageRoutingService({ apiKey: () => '', fetchImpl: async () => { throw new Error('unexpected request'); } });
+    await assert.rejects(disabled.searchDanish('Testvej 1'), /ikke konfigureret/);
+});
+
+test('combined search includes both providers and reports partial or complete failures', async () => {
+    const id = '0a3f507a-eedb-32b8-e044-0003ba298018';
+    let danishFailure = false, generalFailure = false;
+    const routing = createMileageRoutingService({ apiKey: () => 'test-key', fetchImpl: async url => {
+        if (url.includes('api.heigit.org')) return generalFailure ? { ok:false, status:503 } : {
+            ok:true, json:async () => ({ features:[{ properties:{label:'Hotel Test'}, geometry:{coordinates:[12,55]} }] })
+        };
+        if (danishFailure) return { ok:false, status:503 };
+        return { ok:true, json:async () => url.includes('/soeg?')
+            ? { status:'ok', fund:[{ type:'husnummer', id }] }
+            : { status:'ok', husnummer:{ adgangsadressebetegnelse:'Testvej 1', vejnavn:'Testvej', husnummertekst:'1',
+                adgangspunkt:{ geometri:{ crs:{ properties:{ name:'EPSG:25832' } }, coordinates:[723910.44,6179652.89] } } } }
+        };
+    } });
+    const both = await routing.searchCombined('Testvej 1');
+    assert.deepEqual(both.addresses.map(row => row.source), ['danish', 'general']);
+    assert.deepEqual(both.warnings, []);
+    danishFailure = true;
+    const generalOnly = await routing.searchCombined('Testvej 1');
+    assert.deepEqual(generalOnly.addresses.map(row => row.address), ['Hotel Test']);
+    assert.match(generalOnly.warnings[0], /danske adressetjeneste.*HTTP 503/);
+    danishFailure = false; generalFailure = true;
+    const danishOnly = await routing.searchCombined('Testvej 1');
+    assert.deepEqual(danishOnly.addresses.map(row => row.address), ['Testvej 1']);
+    assert.match(danishOnly.warnings[0], /Ruteservicen.*HTTP 503/);
+    danishFailure = true;
+    await assert.rejects(routing.searchCombined('Testvej 1'), /danske adressetjeneste.*HTTP 503.*Ruteservicen.*HTTP 503/);
+    generalFailure = false;
+    const longQuery = await routing.searchCombined('a'.repeat(74));
+    assert.equal(longQuery.addresses[0].address, 'Hotel Test');
+    assert.match(longQuery.warnings[0], /73 tegn/);
+    await assert.rejects(routing.searchCombined('ab'), /mindst tre tegn/);
+});
+
 test('routing settings share a write-only database key across instances and handle conflicts and removal', async () => {
     const gohData = store();
     const settings = createMileageRoutingSettings({ gohData, envKey: () => 'environment-test-key' });
