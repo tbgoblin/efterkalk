@@ -100,6 +100,16 @@
             <div class="actions"><button type="submit" class="primary">Gem fælles adresse</button></div>
         </form>
     </dialog>
+    <dialog id="deleteDialog" aria-labelledby="deleteTitle">
+        <form id="deleteForm">
+            <div class="section-head"><h2 id="deleteTitle">Slet kørsel</h2><button type="button" id="cancelDelete">Annuller</button></div>
+            <p class="notice">Sletningen gemmes i kørselsens historik. Godkendte beløb ændres ikke, og berørte kørsler markeres til kontrol.</p>
+            <label for="deleteReason">Begrundelse for sletning</label>
+            <textarea id="deleteReason" maxlength="1000" rows="4" required placeholder="Skriv hvorfor kørslen skal slettes"></textarea>
+            <p id="deleteError" role="alert"></p>
+            <div class="actions"><button type="submit" class="danger">Slet kørsel</button></div>
+        </form>
+    </dialog>
     <dialog id="detailDialog" aria-labelledby="detailTitle"><div class="section-head"><h2 id="detailTitle">Kørselsbilag</h2><button id="closeDetail" type="button">Luk</button></div><div id="detailBody"></div><p id="detailError" role="alert"></p></dialog>
     <script src="/assets/js/mileage.js?v=1"></script>
 </body>

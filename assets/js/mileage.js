@@ -225,6 +225,7 @@
     $('tripDialog').addEventListener('close', clearDrag);
     $('closeAddress').addEventListener('click', () => $('addressDialog').close());
     $('closeDetail').addEventListener('click', () => $('detailDialog').close());
+    $('cancelDelete').addEventListener('click', () => $('deleteDialog').close());
     ['filterYear','filterEmployee','filterStatus'].forEach(id => $(id).addEventListener('change',render));
     $('tripRows').addEventListener('click', event => { const button=event.target.closest('[data-detail]'); if(button)detail(button.dataset.detail); });
     $('addStop').addEventListener('click', () => {
@@ -369,6 +370,24 @@
             $('tripNotice').textContent='Adressen er gemt i den fælles adressebog.';
         },'addressError');
     });
+    $('deleteReason').addEventListener('input',()=> $('deleteReason').setCustomValidity(''));
+    $('deleteForm').addEventListener('submit',event=>{
+        event.preventDefault();
+        const note=$('deleteReason').value.trim();
+        if(!note){
+            $('deleteReason').setCustomValidity('Angiv en begrundelse før sletning.');
+            $('deleteReason').reportValidity();
+            $('deleteReason').focus();
+            return;
+        }
+        perform(async()=>{
+            await api('/trips/'+encodeURIComponent(currentTrip.id)+'/delete',{version:data.version,note});
+            $('deleteDialog').close();
+            $('detailDialog').close();
+            await load();
+            $('status').textContent='Kørslen er slettet. Tidligere godkendte beløb er uændrede; berørte kørsler er markeret til kontrol.';
+        },'deleteError');
+    });
     $('calculateRoute').addEventListener('click', () => perform(async () => {
         const stops=stopValues(), roundTrip=$('tripReturn').checked;
         if (stops.some(stop=>!stop.coordinates)) throw new Error('Find og vælg en adresse for alle stop først.');
@@ -394,14 +413,19 @@
         if(pdf){perform(()=>download('/trips/'+encodeURIComponent(pdf.dataset.pdf)+'/document.pdf','Gantech-korsel.pdf'),'detailError');return;}
         const button=event.target.closest('[data-action]');
         if(!button)return;
-        if (button.dataset.action === 'delete' && !confirm('Slet kørslen? Den udelades fra fremtidige km-beregninger. Godkendte beløb genberegnes ikke, og berørte kørsler markeres til kontrol. Angiv en begrundelse.')) return;
+        if (button.dataset.action === 'delete') {
+            $('deleteError').textContent='';
+            $('deleteReason').value='';
+            $('deleteDialog').showModal();
+            $('deleteReason').focus();
+            return;
+        }
         perform(async()=>{
             const id=currentTrip.id, action=button.dataset.action;
             await api('/trips/'+encodeURIComponent(id)+(action==='legacy-date'?'/legacy-date':action==='delete'?'/delete':'/action'),
                 {version:data.version,action,note:$('actionNote').value,date:$('legacyDate')?.value});
             await load();
-            if (action === 'delete') { $('detailDialog').close(); $('status').textContent='Kørslen er slettet. Tidligere godkendte beløb er uændrede; berørte kørsler er markeret til kontrol.'; }
-            else detail(id);
+            detail(id);
         },'detailError');
     });
     $('employeeEdit').addEventListener('change',()=>{
