@@ -5,7 +5,7 @@
     const fmt = value => Number(value).toLocaleString('da-DK', { minimumFractionDigits:2, maximumFractionDigits:2 });
     const rateFmt = value => Number(value).toLocaleString('da-DK', { minimumFractionDigits:2, maximumFractionDigits:3 });
     const statuses = { draft:'Kladde', submitted:'Afventer', approved:'Godkendt', paid:'Udbetalt', rejected:'Afvist', legacy:'Historik', deleted:'Slettet' };
-    let data, currentTrip, previewFiles, addressToSave, busy = false, dragging = null;
+    let data, currentTrip, previewFiles, addressToSave, vismaActors = [], busy = false, dragging = null;
     let points = [];
     async function api(path, body) {
         const response = await fetch('/mileage' + path, body === undefined ? {} : {
@@ -19,6 +19,7 @@
         if (busy) return;
         busy = true;
         $(errorId).textContent = '';
+        $(errorId).classList.remove('error');
         document.querySelectorAll('button').forEach(button => { button.disabled = true; });
         try { await action(); }
         catch (error) {
@@ -38,6 +39,8 @@
         $('calculateRoute').disabled = !data?.routingConfigured;
         $('tripRoutingNotice').hidden = Boolean(data?.routingConfigured);
         document.querySelectorAll('[data-search]').forEach(button => { button.disabled = !data?.routingConfigured; });
+        if ($('deletePurpose')) $('deletePurpose').disabled = !$('purposeEdit').value;
+        if ($('deleteAddress')) $('deleteAddress').disabled = !$('addressEdit').value;
         $('yearPdf').disabled = !$('filterYear').value || !$('filterEmployee').value;
     }
     function options(id, rows, value, label, initial) {
@@ -46,12 +49,23 @@
         if ([...$(id).options].some(option => option.value === previous)) $(id).value = previous;
     }
     async function load() {
-        let syncError = '';
-        try { const result = await api('/employees/sync', {}); syncError = (result.warnings || []).join(' '); }
-        catch (error) { syncError = error.message; }
+        let syncError = '', actorError = '';
+        const [employeeSync, actorLookup] = await Promise.allSettled([
+            api('/employees/sync', {}), api('/visma-actors')
+        ]);
+        if (employeeSync.status === 'fulfilled') syncError = (employeeSync.value.warnings || []).join(' ');
+        else syncError = employeeSync.reason.message;
+        if (actorLookup.status === 'fulfilled' && Array.isArray(actorLookup.value.actors)) {
+            vismaActors = actorLookup.value.actors;
+        } else {
+            vismaActors = [];
+            actorError = actorLookup.status === 'rejected' ? actorLookup.reason.message : 'Visma returnerede en ugyldig adressebog.';
+        }
         data = await api('/data');
         $('syncNotice').hidden = !syncError;
         $('syncNotice').textContent = syncError ? 'Visma: '+syncError+' Medarbejderlisten kan være ufuldstændig eller forældet.' : '';
+        $('vismaAddressNotice').hidden = !actorError;
+        $('vismaAddressNotice').textContent = actorError ? 'Visma-adresser: '+actorError : '';
         $('identity').textContent = data.user.displayName;
         $('management').hidden = !data.canManage;
         $('setupNotice').hidden = Boolean(data.employeeId);
@@ -63,12 +77,18 @@
         options('filterEmployee', [...visibleEmployees].map(([id,name]) => ({id,name})), x => x.id, x => x.name, '<option value="">Alle tilgængelige</option>');
         if (data.canManage && !$('filterStatus').querySelector('option[value="deleted"]')) $('filterStatus').add(new Option('Slettet', 'deleted'));
         $('purposeOptions').innerHTML = data.purposes.map(row => '<option value="'+esc(row)+'"></option>').join('');
+        $('usersAdminLink').hidden = !data.isSuperadmin;
         if (data.canManage) {
             options('employeeEdit', data.employees, x => x.id, x => x.name+(x.vismaEmpNo ? ' (Visma '+x.vismaEmpNo+')' : '')+(!x.active ? ' · inaktiv' : ''), '<option value="">Ny medarbejder</option>');
             options('employeeUser', data.users, x => x.username.toLowerCase(), x => x.name+' ('+x.username+')', '<option value="">Ikke tilknyttet</option>');
+            $('purposeEdit').innerHTML = '<option value="">Nyt formål</option>'+data.purposes.map((row,index) => '<option value="'+index+'">'+esc(row)+'</option>').join('');
+            $('addressEdit').innerHTML = '<option value="">Ny adresse</option>'+data.addresses.map((row,index) =>
+                '<option value="'+index+'">'+esc(row.name || 'Uden navn')+' — '+esc(row.address)+'</option>').join('');
             $('rateList').textContent = data.rates.slice().sort((a,b) => b.year-a.year).map(row => row.year+': '+rateFmt(row.high)+' / '+rateFmt(row.low)+' DKK pr. km').join(' · ') || 'Ingen satser oprettet.';
             $('routingStatus').textContent = data.routingConfigured ? 'openrouteservice er konfigureret på serveren.' : 'Automatisk afstand er ikke konfigureret. Brug manuelle km indtil videre.';
             $('employeeEdit').dispatchEvent(new Event('change'));
+            $('purposeEdit').dispatchEvent(new Event('change'));
+            $('addressEdit').dispatchEvent(new Event('change'));
         }
         render();
         applyAvailability();
@@ -101,7 +121,7 @@
         $('stops').innerHTML = points.map((point,index) => '<section class="stop" data-index="'+index+'"><div class="stop-title"><strong>'+esc(index === 0 ? 'Fra' : index === points.length-1 ? 'Til' : 'Mellemstop '+index)+'</strong>'+
             (index > 0 && index < points.length-1 ? '<div class="stop-actions">'+
                 (points.length > 3 ? '<button type="button" class="drag-stop" data-drag-stop aria-label="Flyt mellemstop '+index+'" aria-describedby="reorderHelp" aria-keyshortcuts="ArrowUp ArrowDown"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.3"/><circle cx="11" cy="3" r="1.3"/><circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/><circle cx="5" cy="13" r="1.3"/><circle cx="11" cy="13" r="1.3"/></svg>Træk for at flytte</button>' : '')+
-                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><div class="fields"><label>Adresse, hotel eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><div class="saved-addresses" data-saved-results aria-live="polite"></div><div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div><label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
+                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><div class="fields"><label>Adresse, hotel eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><div class="saved-addresses" data-saved-results aria-live="polite"></div>'+(data.canManage?'<div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div>':'')+'<label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
     }
     function moveStop(index, target) {
         if (target < 1 || target >= points.length - 1 || target === index) return;
@@ -151,12 +171,25 @@
         if (step) { dialog.scrollTop+=step; updateDragTarget(dragging.y); }
         dragging.frame=requestAnimationFrame(scrollDuringDrag);
     }
+    function vismaActorAddress(actor) {
+        const postalCity=[actor.PNo,actor.PArea].filter(Boolean).join(' ');
+        return [actor.Ad1,actor.Ad2,postalCity].filter(Boolean).join(', ');
+    }
     function suggestAddresses(row) {
         const query = row.querySelector('[data-address]').value.trim().normalize('NFC').toLocaleLowerCase('da-DK');
         const matches = query.length < 2 ? [] : data.addresses.map((item, index) => ({ item, index }))
             .filter(({ item }) => [item.name, item.address].some(value => String(value || '').normalize('NFC').toLocaleLowerCase('da-DK').includes(query))).slice(0, 10);
+        const actors = query.length < 2 ? [] : vismaActors.map((item, index) => ({ item, index }))
+            .filter(({ item }) => [item.CustNo,item.SupNo,item.Nm,item.Ad1,item.Ad2,item.PNo,item.PArea]
+                .some(value => String(value || '').normalize('NFC').toLocaleLowerCase('da-DK').includes(query))).slice(0, 10);
         row.querySelector('[data-saved-results]').innerHTML = matches.map(({ item, index }) =>
-            '<button type="button" data-saved-address="'+index+'">'+esc(item.name || item.address)+'<small>'+esc(item.name ? item.address : '')+'</small></button>').join('');
+            '<button type="button" data-saved-address="'+index+'">'+esc(item.name || item.address)+'<small>'+esc(item.name ? item.address : '')+'</small></button>').join('')
+            +actors.map(({ item, index }) => {
+                const address=vismaActorAddress(item), kind=item.ActorType === 'supplier' ? 'Leverandør' : 'Kunde';
+                const number=item.ActorType === 'supplier' ? item.SupNo : item.CustNo;
+                return '<button type="button" data-visma-actor="'+index+'">'+esc(item.Nm || kind+' '+number)
+                    +'<small>Visma · '+kind+' '+esc(number)+(address ? ' · '+esc(address) : '')+'</small></button>';
+            }).join('');
     }
     function openTrip(trip) {
         $('tripForm').reset();
@@ -316,6 +349,19 @@
             select.focus();
             return;
         }
+        const vismaActor=event.target.closest('[data-visma-actor]');
+        if (vismaActor) {
+            const row=vismaActor.closest('.stop'), item=vismaActors[Number(vismaActor.dataset.vismaActor)];
+            const kind=item.ActorType === 'supplier' ? 'Leverandør' : 'Kunde';
+            const number=item.ActorType === 'supplier' ? item.SupNo : item.CustNo;
+            const index=Number(row.dataset.index), address=vismaActorAddress(item) || item.Nm || kind+' '+number;
+            row.querySelector('[data-address]').value=address;
+            points[index]={...points[index],name:item.Nm || kind+' '+number,address,coordinates:null,savedAddress:null};
+            row.querySelector('[data-saved-results]').innerHTML='';
+            row.querySelector('[data-results]').textContent='Visma '+kind.toLowerCase()+' valgt. Vælg et bekræftet resultat fra Find adresse online til ruteberegning, eller angiv km manuelt.';
+            invalidateDistance();
+            return;
+        }
         const saved=event.target.closest('[data-saved-address]');
         if (saved) {
             const row=saved.closest('.stop'), item=data.addresses[Number(saved.dataset.savedAddress)], index=Number(row.dataset.index);
@@ -440,6 +486,55 @@
                 username:$('employeeUser').value,plate:$('employeePlate').value,active:$('employeeActive').checked});
             await load();$('status').textContent='Medarbejder gemt.';
         });
+    });
+    $('purposeEdit').addEventListener('change',()=>{
+        const selected=$('purposeEdit').value;
+        const row=selected === '' ? null : data.purposes[Number(selected)];
+        $('purposeOriginal').value=row || '';
+        $('purposeValue').value=row || '';
+        $('deletePurpose').disabled=!row;
+    });
+    $('purposeForm').addEventListener('submit',event=>{
+        event.preventDefault();perform(async()=>{
+            await api('/purposes',{version:data.version,purpose:$('purposeValue').value,original:$('purposeOriginal').value || undefined});
+            await load();$('purposeStatus').textContent='Formålet er gemt.';
+        },'purposeStatus');
+    });
+    $('deletePurpose').addEventListener('click',()=>{
+        const purpose=$('purposeOriginal').value;
+        if(!purpose || !confirm('Fjern formålet "'+purpose+'" fra listen? Historiske kørsler ændres ikke.'))return;
+        perform(async()=>{
+            await api('/purposes/delete',{version:data.version,purpose});
+            await load();$('purposeStatus').textContent='Formålet er fjernet. Historiske kørsler er uændrede.';
+        },'purposeStatus');
+    });
+    $('addressEdit').addEventListener('change',()=>{
+        const selected=$('addressEdit').value;
+        const row=selected === '' ? null : data.addresses[Number(selected)];
+        $('addressOriginalName').value=row?.name || '';
+        $('addressOriginalValue').value=row?.address || '';
+        $('sharedAddressName').value=row?.name || '';
+        $('sharedAddressValue').value=row?.address || '';
+        $('sharedAddressCoordinates').textContent=row?.coordinates
+            ? 'Bekræftede koordinater er gemt.' : row ? 'Ingen koordinater gemt; online opslag kræves til automatisk rute.' : '';
+        $('deleteAddress').disabled=!row;
+    });
+    $('sharedAddressForm').addEventListener('submit',event=>{
+        event.preventDefault();perform(async()=>{
+            const originalName=$('addressOriginalName').value, originalAddress=$('addressOriginalValue').value;
+            const editing=$('addressEdit').value !== '';
+            await api('/addresses',{version:data.version,name:$('sharedAddressName').value,address:$('sharedAddressValue').value,
+                originalName:editing?originalName:undefined,originalAddress:editing?originalAddress:undefined});
+            await load();$('sharedAddressStatus').textContent='Den fælles adresse er gemt.';
+        },'sharedAddressStatus');
+    });
+    $('deleteAddress').addEventListener('click',()=>{
+        const name=$('addressOriginalName').value,address=$('addressOriginalValue').value;
+        if($('addressEdit').value === '' || !address || !confirm('Fjern "'+(name || 'Adresse uden navn')+' — '+address+'" fra den fælles adressebog?'))return;
+        perform(async()=>{
+            await api('/addresses/delete',{version:data.version,name,address});
+            await load();$('sharedAddressStatus').textContent='Adressen er fjernet fra den fælles adressebog.';
+        },'sharedAddressStatus');
     });
     $('rateForm').addEventListener('submit',event=>{
         event.preventDefault();perform(async()=>{

@@ -3,7 +3,10 @@ const { createMileageService, fail } = require('../services/mileageService');
 const { createMileageRoutingService, createMileageRoutingSettings } = require('../services/mileageRoutingService');
 const { generateMileagePdf } = require('../services/mileagePdf');
 
-function createMileageRouter({ gohData, readUsers, readVismaEmployees, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }) {
+function createMileageRouter({
+    gohData, readUsers, readVismaEmployees, readVismaMileageActors, getSessionUser,
+    requireModulePermission, requireSuperadmin, logEvent
+}) {
     const router = express.Router();
     const service = createMileageService({ gohData, readUsers });
     const settings = createMileageRoutingSettings({ gohData });
@@ -42,10 +45,20 @@ function createMileageRouter({ gohData, readUsers, readVismaEmployees, getSessio
         catch { throw fail('Kunne ikke hente medarbejdere fra Visma. Listen kan være forældet; prøv igen eller kontakt administratoren.', 503); }
         res.json({ ok: true, ...await service.syncEmployees(result.rows, result.source, user) });
     }));
+    router.get('/visma-actors', run(async (_req, res) => {
+        let actors;
+        try { actors = await readVismaMileageActors(); }
+        catch { throw fail('Kunde- og leverandøradresser fra Visma kunne ikke hentes. Klik Opdater, eller kontakt administratoren.', 503); }
+        if (!Array.isArray(actors)) throw fail('Kunde- og leverandøradresser fra Visma kunne ikke hentes. Klik Opdater, eller kontakt administratoren.', 503);
+        res.json({ ok: true, actors });
+    }));
     router.post('/employees', management, run(async (req, res, user) => { await service.saveEmployee(req.body, user); res.json({ ok: true }); }));
     router.post('/rates', management, run(async (req, res, user) => { await service.saveRate(req.body, user); res.json({ ok: true }); }));
     router.post('/trips', run(async (req, res, user) => { await service.saveTrip(req.body, user); res.json({ ok: true }); }));
-    router.post('/addresses', run(async (req, res, user) => { await service.saveAddress(req.body, user); res.json({ ok: true }); }));
+    router.post('/addresses', management, run(async (req, res, user) => { await service.saveAddress(req.body, user); res.json({ ok: true }); }));
+    router.post('/addresses/delete', management, run(async (req, res, user) => { await service.deleteAddress(req.body, user); res.json({ ok: true }); }));
+    router.post('/purposes', management, run(async (req, res, user) => { await service.savePurpose(req.body, user); res.json({ ok: true }); }));
+    router.post('/purposes/delete', management, run(async (req, res, user) => { await service.deletePurpose(req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/action', run(async (req, res, user) => { await service.transition(req.params.id, req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/delete', management, run(async (req, res, user) => { await service.deleteTrip(req.params.id, req.body, user); res.json({ ok: true }); }));
     router.post('/trips/:id/legacy-date', management, run(async (req, res, user) => { await service.correctLegacyDate(req.params.id, req.body, user); res.json({ ok: true }); }));

@@ -51,30 +51,51 @@ test('allowance correctly splits the 20,000-km crossing and rounds only money', 
     assert.equal(calculateAllowance(1.23, 0, { year: 2026, high: 3.795, low: 2 }).amount, 4.67);
 });
 
-test('shared addresses preserve imported entries, confirmed coordinates and concurrent updates', async () => {
+test('shared addresses are manager-only and preserve imports while invalidating changed coordinates', async () => {
     const gohData = store();
     await gohData.setAppState('mileage_v1', { schema:1, version:0, employees:[], addresses:[
         { name:'Example Company', address:'Test Street 1' }
     ], purposes:[], rates:[], trips:[], imports:[] }, { expectedVersion:0 });
     const service = createMileageService({ gohData, readUsers: () => users });
-    await service.saveAddress({ version:0, name:'example company', address:'Test Street 1', coordinates:[10, 55] }, worker);
+    await assert.rejects(service.saveAddress({ version:0, name:'example company', address:'Test Street 1', coordinates:[10, 55] }, worker), { statusCode:403 });
+    await service.saveAddress({ version:0, name:'example company', address:'Test Street 1', coordinates:[10, 55] }, approver);
     let data = await service.data(other);
     assert.equal(data.addresses.length, 1);
     assert.deepEqual(data.addresses[0].coordinates, [10, 55]);
-    await service.saveAddress({ version:1, name:'Example Company', address:'Test Street 2' }, other);
+    await service.saveAddress({ version:1, name:'Example Company', address:'Test Street 2',
+        originalName:'Example Company', originalAddress:'Test Street 1' }, approver);
     data = await service.data(worker);
-    assert.equal(data.addresses.length, 2);
-    assert.equal(data.addresses[1].coordinates, undefined);
-    await assert.rejects(service.saveAddress({ version:2, name:'', address:'Test' }, worker), { statusCode:400 });
-    await assert.rejects(service.saveAddress({ version:2, name:'Bad', address:'Test', coordinates:[181, 55] }, worker), { statusCode:400 });
-    await assert.rejects(service.saveAddress({ version:1, name:'Stale', address:'Test' }, worker), { statusCode:409 });
+    assert.equal(data.addresses.length, 1);
+    assert.equal(data.addresses[0].address, 'Test Street 2');
+    assert.equal(data.addresses[0].coordinates, undefined);
+    await assert.rejects(service.saveAddress({ version:2, name:'', address:'Test' }, approver), { statusCode:400 });
+    await assert.rejects(service.saveAddress({ version:2, name:'Bad', address:'Test', coordinates:[181, 55] }, approver), { statusCode:400 });
+    await assert.rejects(service.saveAddress({ version:1, name:'Stale', address:'Test' }, approver), { statusCode:409 });
     const results = await Promise.allSettled([
-        service.saveAddress({ version:2, name:'One', address:'Test 1' }, worker),
-        service.saveAddress({ version:2, name:'Two', address:'Test 2' }, other)
+        service.saveAddress({ version:2, name:'One', address:'Test 1' }, approver),
+        service.saveAddress({ version:2, name:'Two', address:'Test 2' }, approver)
     ]);
     assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
     assert.equal(results.filter(result => result.status === 'rejected' && result.reason.statusCode === 409).length, 1);
-    assert.equal((await service.data(worker)).addresses.length, 3);
+    assert.equal((await service.data(worker)).addresses.length, 2);
+});
+
+test('managers can edit and remove shared purposes and addresses without changing old trips', async () => {
+    const f = await fixture();
+    await assert.rejects(f.service.savePurpose({ version:3, purpose:'Customer visit' }, worker), { statusCode:403 });
+    await f.service.savePurpose({ version:3, purpose:'Customer visit' }, approver);
+    await f.service.savePurpose({ version:4, original:'Customer visit', purpose:'Customer meeting' }, approver);
+    await assert.rejects(f.service.savePurpose({ version:5, purpose:'customer MEETING' }, approver), { statusCode:409 });
+    assert.deepEqual((await f.service.data(worker)).purposes, ['Customer meeting']);
+    await f.service.deletePurpose({ version:5, purpose:'Customer meeting' }, approver);
+    await assert.rejects(f.service.deletePurpose({ version:6, purpose:'Customer meeting' }, approver), { statusCode:404 });
+    assert.deepEqual((await f.service.data(worker)).purposes, []);
+
+    await f.service.saveAddress({ version:6, name:'Office', address:'Main Road 1' }, approver);
+    await f.save({ purpose:'Customer meeting' });
+    await f.service.deleteAddress({ version:8, name:'Office', address:'Main Road 1' }, approver);
+    assert.equal((await f.service.data(worker)).trips[0].purpose, 'Customer meeting');
+    assert.deepEqual((await f.service.data(worker)).addresses, []);
 });
 
 test('trip workflow enforces permission, fixed rates, and payment once', async () => {
@@ -388,7 +409,18 @@ test('API protects configuration and import separately from employee access', as
         return null;
     };
     const readVismaEmployees = async () => ({ source:'test-company', rows:[{ EmpNo:10, Nm:'Test Worker', Gr2:0 }] });
-    app.use('/mileage', createMileageRouter({ gohData, readUsers: () => users, readVismaEmployees, getSessionUser, requireModulePermission, requireSuperadmin, logEvent() {} }));
+    let customerReadFails = false;
+    const readVismaMileageActors = async () => {
+        if (customerReadFails) throw new Error('test failure');
+        return [
+            { ActorType:'customer', CustNo:'61209086', SupNo:'', Nm:'FarmDroid ApS', Ad1:'Industrivej 1', Ad2:'', PNo:'6600', PArea:'Vejen' },
+            { ActorType:'supplier', CustNo:'', SupNo:'370488', Nm:'Ravema', Ad1:'Margretelundsväg', Ad2:'', PNo:'331 34', PArea:'Värnamo' }
+        ];
+    };
+    app.use('/mileage', createMileageRouter({
+        gohData, readUsers: () => users, readVismaEmployees, readVismaMileageActors,
+        getSessionUser, requireModulePermission, requireSuperadmin, logEvent() {}
+    }));
     const server = http.createServer(app);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
@@ -397,6 +429,19 @@ test('API protects configuration and import separately from employee access', as
     const response = await fetch(base+'/mileage/data', { headers: { 'x-test-user':'worker' } });
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).trips, []);
+    assert.equal((await (await fetch(base+'/mileage/data', { headers:{'x-test-user':'worker'} })).json()).isSuperadmin, false);
+    assert.equal((await fetch(base+'/mileage/visma-actors')).status, 403);
+    const customersResponse = await fetch(base+'/mileage/visma-actors', { headers:{'x-test-user':'worker'} });
+    assert.equal(customersResponse.status, 200);
+    assert.deepEqual((await customersResponse.json()).actors, [
+        { ActorType:'customer', CustNo:'61209086', SupNo:'', Nm:'FarmDroid ApS', Ad1:'Industrivej 1', Ad2:'', PNo:'6600', PArea:'Vejen' },
+        { ActorType:'supplier', CustNo:'', SupNo:'370488', Nm:'Ravema', Ad1:'Margretelundsväg', Ad2:'', PNo:'331 34', PArea:'Värnamo' }
+    ]);
+    customerReadFails = true;
+    const failedCustomersResponse = await fetch(base+'/mileage/visma-actors', { headers:{'x-test-user':'worker'} });
+    assert.equal(failedCustomersResponse.status, 503);
+    assert.match((await failedCustomersResponse.json()).error, /Kunde- og leverandøradresser fra Visma kunne ikke hentes/);
+    customerReadFails = false;
     assert.equal((await fetch(base+'/mileage/rates', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:JSON.stringify({year:2026}) })).status, 403);
     const preview = await fetch(base+'/mileage/import', { method:'POST', headers:{ 'x-test-user':'approver','Content-Type':'application/json' },
         body: JSON.stringify({preview:true,files:importFiles()}) });
@@ -420,9 +465,17 @@ test('API protects configuration and import separately from employee access', as
     const current = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'worker' } })).json();
     const addressBody = JSON.stringify({ version:current.version, name:'Example', address:'Test Street 1' });
     assert.equal((await fetch(base+'/mileage/addresses', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:addressBody })).status, 403);
-    assert.equal((await fetch(base+'/mileage/addresses', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:addressBody })).status, 200);
+    assert.equal((await fetch(base+'/mileage/addresses', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:addressBody })).status, 403);
+    assert.equal((await fetch(base+'/mileage/addresses', { method:'POST', headers:{ 'x-test-user':'approver','Content-Type':'application/json' }, body:addressBody })).status, 200);
     const otherData = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'other' } })).json();
     assert.equal(otherData.addresses[0].name, 'Example');
+    const purposeBody = JSON.stringify({ version:otherData.version, purpose:'Customer visit' });
+    assert.equal((await fetch(base+'/mileage/purposes', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' }, body:purposeBody })).status, 403);
+    assert.equal((await fetch(base+'/mileage/purposes', { method:'POST', headers:{ 'x-test-user':'approver','Content-Type':'application/json' }, body:purposeBody })).status, 200);
+    const purposeData = await (await fetch(base+'/mileage/data', { headers:{ 'x-test-user':'worker' } })).json();
+    assert.deepEqual(purposeData.purposes, ['Customer visit']);
+    assert.equal((await fetch(base+'/mileage/addresses/delete', { method:'POST', headers:{ 'x-test-user':'worker','Content-Type':'application/json' },
+        body:JSON.stringify({ version:purposeData.version, name:'Example', address:'Test Street 1' }) })).status, 403);
     const headers = { 'x-test-user':'admin-test', 'Content-Type':'application/json' };
     const denied = await fetch(base+'/mileage/routing-settings', { method:'POST', headers:{ ...headers, 'x-test-user':'approver' },
         body:JSON.stringify({ version:0, action:'save', apiKey:'database-test-key' }) });

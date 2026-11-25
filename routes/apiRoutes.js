@@ -111,8 +111,6 @@ function createApiRouter({
         if (source !== mileageVismaSource()) throw new Error('Visma profile changed during synchronization');
         return { source, rows: result.recordset };
     };
-    router.use('/mileage', createMileageRouter({ gohData, readUsers, readVismaEmployees, getSessionUser, requireModulePermission, requireSuperadmin, logEvent }));
-
     // Stato condiviso da GOH: DB vince sul file locale, fail-soft se non raggiungibile
     Promise.allSettled([
         hydrateUsersFromDb(),
@@ -347,6 +345,40 @@ function createApiRouter({
         logEvent,
         getActiveProfile: settingsService.getActiveProfile
     });
+    const readVismaMileageActors = async () => {
+        const source = mileageVismaSource();
+        const pool = await getConnection();
+        const request = pool.request();
+        request.timeout = 15000;
+        // Keep this Visma path read-only and select only the customer/supplier address fields used by mileage.
+        const result = await request.query(`
+            SELECT 'customer' AS ActorType, CAST(CustNo AS varchar(50)) AS CustNo, CAST(NULL AS varchar(50)) AS SupNo,
+                   Nm, Ad1, Ad2, PNo, PArea
+            FROM Actor WITH (NOLOCK)
+            WHERE CustNo <> 0
+            UNION ALL
+            SELECT 'supplier' AS ActorType, CAST(NULL AS varchar(50)) AS CustNo, CAST(SupNo AS varchar(50)) AS SupNo,
+                   Nm, Ad1, Ad2, PNo, PArea
+            FROM Actor WITH (NOLOCK)
+            WHERE SupNo <> 0
+        `);
+        if (source !== mileageVismaSource()) throw new Error('Visma profile changed during address lookup');
+        if (!Array.isArray(result.recordset)) throw new Error('Visma address query returned no result set');
+        return result.recordset.map(row => ({
+            ActorType: row.ActorType,
+            CustNo: String(row.CustNo ?? '').trim(),
+            SupNo: String(row.SupNo ?? '').trim(),
+            Nm: String(row.Nm || '').trim(),
+            Ad1: String(row.Ad1 || '').trim(),
+            Ad2: String(row.Ad2 || '').trim(),
+            PNo: String(row.PNo || '').trim(),
+            PArea: String(row.PArea || '').trim()
+        })).filter(row => (row.CustNo && row.CustNo !== '0') || (row.SupNo && row.SupNo !== '0'));
+    };
+    router.use('/mileage', createMileageRouter({
+        gohData, readUsers, readVismaEmployees, readVismaMileageActors, getSessionUser,
+        requireModulePermission, requireSuperadmin, logEvent
+    }));
     const diverseService = require('../services/lagerlisteDiverseService').createLagerlisteDiverseService({ gohData, getConnection });
     const lagerlisteService = createLagerlisteService({
         getDiverse: diverseService.current,

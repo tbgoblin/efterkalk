@@ -12,6 +12,7 @@
         <div class="page-head"><div><p class="eyebrow">PERSONALE / KØRSEL</p><h1>Kørselgodtgørelse</h1><p class="muted">Fra første stop til godkendt bilag. Gemmes i GOH.</p></div><button id="newTrip" type="button" class="primary" disabled>+ Ny kørsel</button></div>
         <p id="status" role="status" aria-live="polite"></p>
         <p id="syncNotice" class="notice" role="status" hidden></p>
+        <p id="vismaAddressNotice" class="notice" role="status" hidden></p>
         <p id="setupNotice" class="notice" hidden></p>
         <section class="panel">
             <div class="section-head"><h2>Kørsler og bilag</h2><button id="yearPdf" type="button" disabled>Årsbilag PDF</button></div>
@@ -37,7 +38,8 @@
                 </form>
             </details>
             <details><summary>Medarbejdere og GOH-brugere</summary>
-                <p class="muted">Medarbejdere synkroniseres fra Visma ved åbning og opdatering. Visma styrer navn og aktiv status; tilknytning til GOH-bruger og nummerplade vedligeholdes her. Gamle Power Apps-administratorer får ikke automatisk rettigheder her.</p>
+                <p class="muted">Medarbejdere synkroniseres fra Visma ved åbning og opdatering. Visma styrer navn og aktiv status; tilknytning til GOH-bruger og nummerplade vedligeholdes her. Oprettelse, adgangskoder og rettigheder for GOH-konti administreres separat af superadmin i Operations Hub.</p>
+                <p><a id="usersAdminLink" href="/" hidden>Åbn Operations Hub · Brugere og adgang</a></p>
                 <form id="employeeForm" class="fields">
                     <label>Vælg medarbejder<select id="employeeEdit"><option value="">Ny medarbejder</option></select></label>
                     <label>Navn<input id="employeeName" maxlength="200" required></label>
@@ -46,6 +48,27 @@
                     <label class="check"><input id="employeeActive" type="checkbox" checked> Aktiv medarbejder</label>
                     <button class="primary" type="submit">Gem medarbejder</button>
                 </form>
+            </details>
+            <details><summary>Formål og fælles adresser</summary>
+                <p class="muted">Ansvarlige med adgang til kørselsopsætning kan tilføje, rette og fjerne fælles formål og adresser. Rettelser til en adresses tekst fjerner dens gemte koordinater, så de ikke bruges til en forkert placering.</p>
+                <form id="purposeForm" class="fields">
+                    <label>Vælg formål<select id="purposeEdit"><option value="">Nyt formål</option></select></label>
+                    <label>Formål<input id="purposeValue" maxlength="2000" required></label>
+                    <input id="purposeOriginal" type="hidden">
+                    <button class="primary" type="submit">Gem formål</button>
+                    <button id="deletePurpose" type="button" class="danger" disabled>Fjern formål</button>
+                </form>
+                <p id="purposeStatus" role="status" aria-live="polite"></p>
+                <form id="sharedAddressForm" class="fields">
+                    <label>Vælg fælles adresse<select id="addressEdit"><option value="">Ny adresse</option></select></label>
+                    <label>Navn / virksomhed<input id="sharedAddressName" maxlength="200" required></label>
+                    <label class="span2">Adresse<input id="sharedAddressValue" maxlength="500" required></label>
+                    <input id="addressOriginalName" type="hidden">
+                    <input id="addressOriginalValue" type="hidden">
+                    <p id="sharedAddressCoordinates" class="muted span2"></p>
+                    <div class="actions span2"><button class="primary" type="submit">Gem fælles adresse</button><button id="deleteAddress" type="button" class="danger" disabled>Fjern adresse</button></div>
+                </form>
+                <p id="sharedAddressStatus" role="status" aria-live="polite"></p>
             </details>
             <details><summary>Import fra Power Apps (én gang)</summary>
                 <p class="notice">Vælg de fire SharePoint-CSV-filer. Eksisterende medarbejdere med samme navn genbruges; øvrige data bevares. Historiske km og Formål bevares, men beløb genberegnes ikke. Allerede godkendte kørsler, som påvirkes, markeres til kontrol. Kontrollér at eksporten omfatter alle relevante kørsler; disse km tæller med i årets 20.000 km-grænse.</p>
@@ -75,7 +98,7 @@
             <p id="reorderHelp" class="muted">Træk mellemstop til en ny plads, klik på håndtaget for at vælge en plads, eller brug piletasterne på håndtaget. Fra og til bliver stående.</p>
             <p id="tripRoutingNotice" class="notice" hidden>Automatisk afstand er ikke konfigureret endnu. Skriv adresserne og angiv de samlede km manuelt med et afstandsgrundlag.</p>
             <p id="tripNotice" role="status" aria-live="polite"></p>
-            <p class="muted">Søg i fælles adresser ved at skrive navn eller adresse. Brug Find adresse online til at søge efter en adresse, virksomhed eller et hotel; tilføj gerne by for at præcisere søgningen. Kontrollér resultatet, især hvis gade eller husnummer mangler. Gemte adresser uden koordinater skal bekræftes én gang. Du kan også angive km manuelt.</p>
+            <p class="muted">Søg i fælles adresser samt Visma-kunder og -leverandører med navn, nummer eller adresse. Oplysningerne læses fra Visma og ændres aldrig her. Brug Find adresse online til at bekræfte koordinater, eller angiv km manuelt.</p>
             <div id="stops"></div><datalist id="purposeOptions"></datalist>
             <label class="check"><input id="tripReturn" type="checkbox"> Retur ad samme stop i omvendt rækkefølge</label>
             <div class="fields">

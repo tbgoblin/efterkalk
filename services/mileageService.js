@@ -82,6 +82,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         const canManage = manager(user);
         const employee = ownEmployee(state, user);
         return { version: state.version, user: { username: username(user), displayName: user.displayName || user.username },
+            isSuperadmin: user?.role === 'superadmin',
             canManage, employeeId: employee?.id || null, employees: canManage ? state.employees : employee ? [employee] : [],
             participants: state.employees.filter(row => row.active).map(row => ({ id: row.id, name: row.name, vismaEmpNo: row.vismaEmpNo || null })),
             addresses: state.addresses, purposes: state.purposes, rates: state.rates,
@@ -204,20 +205,73 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
     }
 
     async function saveAddress(input, user) {
+        requireManager(user);
         const state = await load();
         checkVersion(state, input.version);
         const name = text(input.name, 'Navn', 200);
         const address = text(input.address, 'Adresse', 500);
         if (input.coordinates != null && !validCoordinates(input.coordinates)) throw fail('Ugyldige adressekoordinater.');
-        let saved = state.addresses.find(row => nameKey(row.name) === nameKey(name) && nameKey(row.address) === nameKey(address));
+        const editing = input.originalName != null || input.originalAddress != null;
+        if (editing && (input.originalName == null || input.originalAddress == null)) throw fail('Den oprindelige adresse mangler.');
+        const originalName = editing ? text(input.originalName, 'Oprindeligt navn', 200, false) : null;
+        const originalAddress = editing ? text(input.originalAddress, 'Oprindelig adresse', 500) : null;
+        let saved = editing
+            ? state.addresses.find(row => nameKey(row.name) === nameKey(originalName) && nameKey(row.address) === nameKey(originalAddress))
+            : state.addresses.find(row => nameKey(row.name) === nameKey(name) && nameKey(row.address) === nameKey(address));
+        if (editing && !saved) throw fail('Adressen findes ikke længere. Genindlæs listen.', 404);
+        if (editing && state.addresses.some(row => row !== saved && nameKey(row.name) === nameKey(name) && nameKey(row.address) === nameKey(address))) {
+            throw fail('En adresse med dette navn og denne adresse findes allerede.', 409);
+        }
         if (!saved) {
             if (state.addresses.length >= 5000) throw fail('Adressebogen er fuld.');
-            saved = { name, address };
+            saved = {};
             state.addresses.push(saved);
         }
+        if (saved.coordinates && nameKey(saved.address) !== nameKey(address) && input.coordinates == null) delete saved.coordinates;
+        Object.assign(saved, { name, address });
         if (input.coordinates != null) saved.coordinates = input.coordinates.slice();
         saved.updatedAt = now();
         saved.updatedBy = username(user);
+        return persist(state, input.version, user);
+    }
+
+    async function deleteAddress(input, user) {
+        requireManager(user);
+        const state = await load();
+        checkVersion(state, input.version);
+        const name = text(input.name, 'Navn', 200, false);
+        const address = text(input.address, 'Adresse', 500);
+        const index = state.addresses.findIndex(row => nameKey(row.name) === nameKey(name) && nameKey(row.address) === nameKey(address));
+        if (index < 0) throw fail('Adressen findes ikke længere. Genindlæs listen.', 404);
+        state.addresses.splice(index, 1);
+        return persist(state, input.version, user);
+    }
+
+    async function savePurpose(input, user) {
+        requireManager(user);
+        const state = await load();
+        checkVersion(state, input.version);
+        const purpose = text(input.purpose, 'Formål', 2000);
+        const editing = input.original != null;
+        const index = editing ? state.purposes.findIndex(row => nameKey(row) === nameKey(input.original)) : -1;
+        if (editing && index < 0) throw fail('Formålet findes ikke længere. Genindlæs listen.', 404);
+        if (state.purposes.some((row, rowIndex) => rowIndex !== index && nameKey(row) === nameKey(purpose))) {
+            throw fail('Formålet findes allerede.', 409);
+        }
+        if (!editing && state.purposes.length >= 5000) throw fail('Listen over formål er fuld.');
+        if (editing) state.purposes[index] = purpose;
+        else state.purposes.push(purpose);
+        return persist(state, input.version, user);
+    }
+
+    async function deletePurpose(input, user) {
+        requireManager(user);
+        const state = await load();
+        checkVersion(state, input.version);
+        const purpose = text(input.purpose, 'Formål', 2000);
+        const index = state.purposes.findIndex(row => nameKey(row) === nameKey(purpose));
+        if (index < 0) throw fail('Formålet findes ikke længere. Genindlæs listen.', 404);
+        state.purposes.splice(index, 1);
         return persist(state, input.version, user);
     }
 
@@ -407,7 +461,8 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         return persist(state, input.version, user);
     }
 
-    return { data, syncEmployees, saveEmployee, saveRate, saveAddress, saveTrip, transition, document, previewImport, importData, deleteTrip, correctLegacyDate };
+    return { data, syncEmployees, saveEmployee, saveRate, saveAddress, deleteAddress, savePurpose, deletePurpose,
+        saveTrip, transition, document, previewImport, importData, deleteTrip, correctLegacyDate };
 }
 
 module.exports = { createMileageService, calculateAllowance, manager, fail, validDate, validCoordinates };

@@ -62,9 +62,9 @@ dialog::backdrop { background:rgba(15,35,52,.5); }
 .stop.drop-target { outline:3px solid var(--accent); outline-offset:2px; background:#f2f7f8; }
 .stop.drop-target::after { content:"Slip her"; position:absolute; top:-14px; left:10px; padding:2px 8px; border-radius:4px; background:var(--accent); color:white; font-size:12px; font-weight:700; }
 .drag-preview { position:fixed; top:0; left:0; z-index:1; max-width:208px; padding:8px 10px; border:1px solid var(--accent); border-radius:6px; background:white; box-shadow:0 6px 18px rgba(15,35,52,.25); font-weight:700; overflow-wrap:anywhere; pointer-events:none; }
-#status:empty,#tripError:empty,#detailError:empty,#addressError:empty,#deleteError:empty { display:none; }
+#status:empty,#tripError:empty,#detailError:empty,#addressError:empty,#deleteError:empty,#purposeStatus:empty,#sharedAddressStatus:empty { display:none; }
 #status { padding:10px; background:#f7fbff; }
-.error,#tripError,#detailError,#addressError,#deleteError { color:#a33025; }
+.error,#tripError,#detailError,#addressError,#deleteError,#purposeStatus.error,#sharedAddressStatus.error { color:#a33025; }
 dl { display:grid; grid-template-columns:160px 1fr; gap:6px 12px; font-size:12px; }
 dt { color:var(--muted); }
 dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
