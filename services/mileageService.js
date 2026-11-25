@@ -91,11 +91,10 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
                 if (trip.legacy || trip.allowance) return trip;
                 const year = Number(trip.date?.slice(0, 4));
                 const rate = state.rates.find(row => row.year === year);
-                const historyIncomplete = state.trips.some(row => row.employeeId === trip.employeeId && row.status === 'legacy' && !row.date);
                 const previousKm = state.trips.filter(row => row.employeeId === trip.employeeId
-                    && ['approved', 'paid', 'legacy'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
+                    && ['approved', 'paid'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
                     .reduce((sum, row) => sum + row.km, 0);
-                return { ...trip, estimate: rate && !historyIncomplete ? calculateAllowance(trip.km, previousKm, rate) : null };
+                return { ...trip, estimate: rate ? calculateAllowance(trip.km, previousKm, rate) : null };
             }),
             users: canManage ? readUsers().filter(row => row.active !== false).map(row => ({ username: row.username, name: row.displayName || row.username })) : [] };
     }
@@ -330,10 +329,8 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
                 const year = Number(trip.date.slice(0, 4));
                 const rate = state.rates.find(row => row.year === year);
                 if (!rate) throw fail('Satser mangler for kørselsåret.');
-                const undated = state.trips.some(row => row.employeeId === trip.employeeId && row.status === 'legacy' && !row.date);
-                if (undated) throw fail('Medarbejderens historik har en kørsel uden dato. Ret importgrundlaget før godkendelse.');
                 const previousKm = state.trips.filter(row => row.employeeId === trip.employeeId
-                    && ['approved', 'paid', 'legacy'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
+                    && ['approved', 'paid'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
                     .reduce((sum, row) => sum + row.km, 0);
                 trip.allowance = calculateAllowance(trip.km, previousKm, rate);
                 trip.approvedBy = username(user);
@@ -390,12 +387,10 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
             idMap.set(employee.id, existing.id);
         }
         const tripIds = new Set(state.trips.map(row => row.id));
-        const marked = new Set();
         for (const trip of imported.trips) {
             if (tripIds.has(trip.id)) throw fail('Et historisk kørsels-ID findes allerede. Importen er stoppet for at undgå dubletter.', 409);
             trip.employeeId = idMap.get(trip.employeeId);
             trip.employeeName = state.employees.find(row => row.id === trip.employeeId).name;
-            markForReview(state, trip.employeeId, trip.date?.slice(0, 4), user, 'Historiske km er tilføjet efter godkendelsen.', null, marked);
             history(trip, 'import', user, 'Power Apps-id: ' + trip.sourceId);
             state.trips.push(trip);
         }
@@ -407,9 +402,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         for (const purpose of imported.purposes) if (!purposes.has(nameKey(purpose))) {
             state.purposes.push(purpose); purposes.add(nameKey(purpose));
         }
-        const affected = marked.size;
         imported.warnings.push(matched + ' medarbejdere er matchet på navn; ' + (imported.employees.length - matched) + ' nye medarbejdere oprettes. Kontrollér navne og GOH-tilknytninger.');
-        if (affected) imported.warnings.push(affected + ' godkendte/udbetalte kørsler skal gennemgås: historiske km er tilføjet efter godkendelsen. Beløbene er ikke ændret.');
         state.imports.push({ at: now(), by: username(user), count: imported.trips.length, warnings: imported.warnings });
         return imported;
     }
@@ -438,7 +431,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         if (!trip) throw fail('Kørslen findes ikke eller er allerede slettet.', 404);
         const reason = text(input.note, 'Begrundelse for sletning', 1000);
         const previousStatus = trip.status;
-        if (['approved', 'paid', 'legacy'].includes(previousStatus)) {
+        if (['approved', 'paid'].includes(previousStatus)) {
             markForReview(state, trip.employeeId, trip.date?.slice(0, 4), user, 'Km er fjernet efter godkendelsen. Kontrollér beregningen.', trip.id);
         }
         trip.status = 'deleted';

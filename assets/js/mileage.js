@@ -103,11 +103,12 @@
             && (!year || row.date?.startsWith(year)) && (!employee || row.employeeId === employee)
             && (!status || row.status === status) && (showHistory || row.status !== 'legacy'))
             .slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-        const activeRows = rows.filter(row => row.status !== 'deleted');
+        const activeRows = rows.filter(row => !['deleted', 'legacy'].includes(row.status));
+        const archiveCount = rows.filter(row => row.status === 'legacy').length;
         const amount = activeRows.reduce((sum,row) => sum+(row.allowance?.amount || 0),0);
-        const reviews = data.trips.filter(row => row.reconciliationRequired && row.status !== 'deleted').length;
+        const reviews = data.trips.filter(row => row.reconciliationRequired && !['deleted', 'legacy'].includes(row.status)).length;
         $('totals').textContent = activeRows.length+' kørsler · '+fmt(activeRows.reduce((sum,row) => sum+row.km,0))+' km · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.'
-            +(!showHistory ? ' Historiske km er skjult her, men tæller stadig med i årets km-grænse.' : '')
+            +(archiveCount ? ' '+archiveCount+' historiske poster vises kun som arkiv og påvirker ikke satser eller godtgørelse.' : '')
             +(reviews ? ' '+reviews+' godkendte kørsler skal gennemgås: tidligere km er ændret; beløb er ikke genberegnet.' : '');
         $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
         applyAvailability();
@@ -233,7 +234,7 @@
             pair('Nummerplade',t.plate)+pair('Status',statuses[t.status])+
             pair('Formål',t.purpose)+pair('Rute / stop',t.stops.map(stop => stop.address+(stop.note?' ('+stop.note+')':'')).join('\n') || 'Se historisk Formål')+
             pair('Retur',t.roundTrip?'Ja':'Nej')+pair('Samlet km',fmt(t.km))+pair('Afstandsgrundlag',t.manualReason)+
-            pair('Godtgørelse',t.allowance ? fmt(t.allowance.amount)+' DKK; '+fmt(t.allowance.highKm)+' km × '+rateFmt(t.allowance.highRate)+' + '+fmt(t.allowance.lowKm)+' km × '+rateFmt(t.allowance.lowRate) : t.legacy ? 'Historisk beløb ikke eksporteret; ikke genberegnet.' : t.estimate ? fmt(t.estimate.amount)+' DKK foreløbigt. Endeligt beløb fastlåses ved godkendelse.' : 'Satser eller fuldstændig historik mangler; kan ikke beregnes endnu.')+
+            pair('Godtgørelse',t.allowance ? fmt(t.allowance.amount)+' DKK; '+fmt(t.allowance.highKm)+' km × '+rateFmt(t.allowance.highRate)+' + '+fmt(t.allowance.lowKm)+' km × '+rateFmt(t.allowance.lowRate) : t.legacy ? 'Arkivpost: historisk beløb er ikke eksporteret eller genberegnet.' : t.estimate ? fmt(t.estimate.amount)+' DKK foreløbigt. Endeligt beløb fastlåses ved godkendelse.' : 'Satser mangler for kørselsåret; beløbet kan ikke beregnes endnu.')+
             pair('Kommentar',t.comment || '—')+
             (t.reconciliationRequired && t.status !== 'deleted' ? pair('Kontrol kræves','Tidligere km er ændret efter godkendelsen. Kontrollér beregningen; beløbet er ikke genberegnet.') : '')+
             (t.status === 'deleted' ? pair('Før sletning',statuses[t.deletedPreviousStatus] || t.deletedPreviousStatus) : '')+

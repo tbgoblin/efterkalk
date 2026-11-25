@@ -29,7 +29,7 @@
             <div class="section-head"><div><p class="eyebrow">GODKENDELSE & OPSÆTNING</p><h2>Administration af kørsel</h2></div></div>
             <p class="muted">Godkendelse sker fra den enkelte kørsel. En ansvarlig kan også godkende egne kørsler og kørsler, som vedkommende selv har oprettet. Adgang og godkendelsesret gives i Operations Hubs brugeradministration.</p>
             <details><summary>Årlige satser</summary>
-                <p class="notice">Satser indtastes og kontrolleres af Gantech. Der er ingen automatisk skatteopdatering. 20.000 km gælder pr. medarbejder pr. kalenderår. Allerede godkendte beløb ændres ikke af nye satser.</p>
+                <p class="notice">Satser indtastes og kontrolleres af Gantech. Der er ingen automatisk skatteopdatering. 20.000 km gælder pr. medarbejder pr. kalenderår for kørsler godkendt i GOH; Power Apps-historik er arkiv og tæller ikke med. Allerede godkendte beløb ændres ikke af nye satser.</p>
                 <p id="rateList"></p>
                 <form id="rateForm" class="fields">
                     <label>År<input id="rateYear" type="number" min="2000" max="2200" required></label>
@@ -72,7 +72,7 @@
                 <p id="sharedAddressStatus" role="status" aria-live="polite"></p>
             </details>
             <details><summary>Import fra Power Apps (én gang)</summary>
-                <p class="notice">Vælg de fire SharePoint-CSV-filer. Eksisterende medarbejdere med samme navn genbruges; øvrige data bevares. Historiske km og Formål bevares, men beløb genberegnes ikke. Allerede godkendte kørsler, som påvirkes, markeres til kontrol. Kontrollér at eksporten omfatter alle relevante kørsler; disse km tæller med i årets 20.000 km-grænse.</p>
+                <p class="notice">Vælg de fire SharePoint-CSV-filer. Eksisterende medarbejdere med samme navn genbruges; historiske kørsler og Formål bevares som arkiv, uden genberegning af beløb. Arkivets km og manglende datoer påvirker ikke satser, nye godtgørelser eller godkendelser.</p>
                 <form id="importForm" class="fields">
                     <label>Kørselgodtgørelse<input id="importTrips" type="file" accept=".csv" required></label>
                     <label>Kørsel_medarbejderne<input id="importEmployees" type="file" accept=".csv" required></label>

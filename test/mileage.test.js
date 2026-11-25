@@ -194,7 +194,7 @@ test('duplicate Visma names do not attach ambiguous employees, and unlinked inac
     assert.equal(data.employees.find(row => row.vismaEmpNo === '30').name, 'Active New');
 });
 
-test('manager deletion is audited, excludes km and marks affected approved trips for review', async () => {
+test('manager deletion is audited, excludes operational km and marks affected approvals for review', async () => {
     const f = await fixture();
     const first = await f.save({ km: 10000 });
     await f.act(first, 'submit', worker); await f.act(first, 'approve'); await f.act(first, 'pay');
@@ -278,7 +278,7 @@ test('legacy CSV preserves purpose and total km, does not invent amounts or gran
     assert.throws(() => parseMileageImport(files), /Dublerede/);
 });
 
-test('one-time import is atomic and undated legacy trips block approval until corrected', async () => {
+test('one-time imported history is archival and never affects approval or allowance calculations', async () => {
     const gohData = store();
     const service = createMileageService({ gohData, readUsers: () => users });
     await assert.rejects(service.importData({ version: 0, files: importFiles() }, worker), { statusCode: 403 });
@@ -289,27 +289,28 @@ test('one-time import is atomic and undated legacy trips block approval until co
     data = await service.data(approver);
     await service.saveRate({ year: 2026, high: 4, low: 2, version: data.version }, approver);
     data = await service.data(worker);
+    assert.equal(data.trips.find(row => row.legacy && !row.date).date, null);
     await service.saveTrip({ version: data.version, date: '2026-11-20', plate: 'TEST', purpose: 'Visit',
         km: 100, stops: [{ address: 'Start' }, { address: 'End' }], manualReason: 'Odometer' }, worker);
     let trip = (await service.data(worker)).trips.at(-1);
+    assert.equal(trip.estimate.previousKm, 0);
     await service.transition(trip.id, { version: (await service.data(worker)).version, action: 'submit' }, worker);
-    await assert.rejects(service.transition(trip.id, { version: (await service.data(worker)).version, action: 'approve' }, approver), /uden dato/);
-    const legacy = data.trips.find(row => !row.date);
-    await service.correctLegacyDate(legacy.id, { version: (await service.data(approver)).version, date: '2026-01-01' }, approver);
     await service.transition(trip.id, { version: (await service.data(worker)).version, action: 'approve' }, approver);
     trip = await service.document(trip.id, worker);
-    assert.equal(trip.allowance.previousKm, 150);
+    assert.equal(trip.allowance.previousKm, 0);
+    assert.equal(trip.allowance.amount, 400);
+    const legacy = (await service.data(approver)).trips.find(row => row.legacy && !row.date);
     await assert.rejects(service.transition(legacy.id, { version: (await service.data(worker)).version, action: 'pay' }, approver), /Historik|historik/);
 });
 
-test('import merges existing employees and trips while flagging affected approved amounts', async () => {
+test('imported history does not flag or alter existing approved trips', async () => {
     const f = await fixture();
     const existing = await f.save();
     await f.act(existing, 'submit', worker); await f.act(existing, 'approve');
     const before = await f.service.data(approver);
     const preview = await f.service.previewImport(importFiles(), approver);
     assert.equal(preview.counts.trips, 2);
-    assert.match(preview.warnings.join(' '), /skal gennemgås/);
+    assert.doesNotMatch(preview.warnings.join(' '), /skal gennemgås/);
     assert.equal((await f.service.data(approver)).version, before.version);
     await f.service.importData({ version: before.version, files: importFiles() }, approver);
     const after = await f.service.data(approver);
@@ -317,8 +318,11 @@ test('import merges existing employees and trips while flagging affected approve
     assert.equal(after.employees.find(row => row.username === worker.username).id, before.employees[0].id);
     assert.equal(after.trips.length, 3);
     assert.ok(after.trips.filter(row => row.legacy).every(row => row.employeeId === before.employees[0].id));
-    assert.equal(after.trips.find(row => row.id === existing.id).reconciliationRequired, true);
+    assert.equal(after.trips.find(row => row.id === existing.id).reconciliationRequired, undefined);
     assert.equal(after.trips.find(row => row.id === existing.id).allowance.amount, 400);
+    const legacy = after.trips.find(row => row.legacy);
+    await f.service.deleteTrip(legacy.id, { version: after.version, note: 'Archive correction' }, approver);
+    assert.equal((await f.service.data(worker)).trips.find(row => row.id === existing.id).reconciliationRequired, undefined);
     await assert.rejects(f.service.previewImport(importFiles(), approver), /allerede importeret/);
 });
 

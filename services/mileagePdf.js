@@ -17,15 +17,18 @@ function generateMileagePdf(trips, { includeSummary = true } = {}) {
             doc.font('Helvetica').fontSize(10).text(String(value ?? '-'), { paragraphGap: 7 });
         };
         if (includeSummary) {
+            const operationalTrips = trips.filter(trip => !trip.legacy);
+            const archiveTrips = trips.filter(trip => trip.legacy);
             doc.addPage();
             doc.font('Helvetica-Bold').fontSize(22).text('Gantech');
             doc.fontSize(16).text('Kørselsgodtgørelse - internt bilag');
             doc.moveDown();
             line('Dannet', new Date().toLocaleString('da-DK'));
-            line('Antal kørsler', trips.length);
-            line('Km i alt', money(trips.reduce((sum, trip) => sum + trip.km, 0)));
+            line('Antal aktive kørsler', operationalTrips.length);
+            line('Historiske arkivposter', archiveTrips.length);
+            line('Km i alt (uden historik)', money(operationalTrips.reduce((sum, trip) => sum + trip.km, 0)));
             line('Dokumenteret beløb i alt (DKK)', money(trips.reduce((sum, trip) => sum + (trip.allowance?.amount || 0), 0)));
-            doc.fontSize(10).text('Beløbet omfatter kun godkendte/udbetalte kørsler med fastlåst beregning. Historiske beløb, kladder og afventende kørsler er ikke medregnet. Dette bilag udfører ingen bankbetaling.');
+            doc.fontSize(10).text('Historiske arkivposter er kun til dokumentation og indgår ikke i km- eller godtgørelsesberegningen. Beløbet omfatter kun godkendte/udbetalte kørsler med fastlåst beregning. Historiske beløb, kladder og afventende kørsler er ikke medregnet. Dette bilag udfører ingen bankbetaling.');
         }
         for (const trip of trips) {
             doc.addPage();
