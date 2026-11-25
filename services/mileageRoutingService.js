@@ -52,8 +52,16 @@ function createMileageRoutingService({ fetchImpl = global.fetch, apiKey = () => 
         } catch {
             throw fail('Ruteservicen kunne ikke kontaktes. Prøv igen eller angiv km manuelt.', 502);
         }
-        if (!response.ok) throw fail(response.status === 429 ? 'Ruteservicens forespørgselsgrænse er nået. Prøv senere eller angiv km manuelt.'
-            : 'Ruteservicen afviste forespørgslen. Kontrollér adresser og serverens API-konfiguration.', 502);
+        if (!response.ok) {
+            if (response.status === 429) throw fail('Ruteservicens forespørgselsgrænse er nået. Prøv senere eller angiv km manuelt.', 502);
+            if (response.status === 401 || response.status === 403) {
+                throw fail('Ruteservicen afviste API-nøglen eller adgangen. Bed superadministratoren kontrollere eller udskifte nøglen.', 502);
+            }
+            if (response.status === 400) {
+                throw fail('Ruteservicen afviste forespørgslen. Kontrollér indtastningen og prøv igen, eller angiv km manuelt.', 502);
+            }
+            throw fail(`Ruteservicen returnerede HTTP ${response.status}. Prøv igen eller angiv km manuelt.`, 502);
+        }
         try { return await response.json(); }
         catch { throw fail('Ruteservicen returnerede et ugyldigt svar.', 502); }
     }

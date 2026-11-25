@@ -354,6 +354,18 @@ test('routing is opt-in, validates provider results and routes return through re
     const broken = createMileageRoutingService({ apiKey: () => 'test-only-key', fetchImpl: async () => ({ ok: true, json: async () => null }) });
     await assert.rejects(broken.route(points,false), /alle delstrækninger/);
     await assert.rejects(broken.search('Example'), /ingen adresseliste/);
+    for (const [status, message] of [
+        [401, /API-nøglen eller adgangen/],
+        [403, /API-nøglen eller adgangen/],
+        [400, /afviste forespørgslen/],
+        [500, /HTTP 500/]
+    ]) {
+        const rejected = createMileageRoutingService({
+            apiKey: () => 'test-only-key',
+            fetchImpl: async () => ({ ok: false, status })
+        });
+        await assert.rejects(rejected.search('Example'), message);
+    }
 });
 
 test('routing settings share a write-only database key across instances and handle conflicts and removal', async () => {

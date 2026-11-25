@@ -85,7 +85,9 @@
             $('addressEdit').innerHTML = '<option value="">Ny adresse</option>'+data.addresses.map((row,index) =>
                 '<option value="'+index+'">'+esc(row.name || 'Uden navn')+' — '+esc(row.address)+'</option>').join('');
             $('rateList').textContent = data.rates.slice().sort((a,b) => b.year-a.year).map(row => row.year+': '+rateFmt(row.high)+' / '+rateFmt(row.low)+' DKK pr. km').join(' · ') || 'Ingen satser oprettet.';
-            $('routingStatus').textContent = data.routingConfigured ? 'openrouteservice er konfigureret på serveren.' : 'Automatisk afstand er ikke konfigureret. Brug manuelle km indtil videre.';
+            $('routingStatus').textContent = data.routingConfigured
+                ? 'En API-nøgle er gemt på serveren. Gyldigheden kontrolleres ved adresseopslag.'
+                : 'Automatisk afstand er ikke konfigureret. Brug manuelle km indtil videre.';
             $('employeeEdit').dispatchEvent(new Event('change'));
             $('purposeEdit').dispatchEvent(new Event('change'));
             $('addressEdit').dispatchEvent(new Event('change'));
