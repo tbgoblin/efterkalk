@@ -56,12 +56,15 @@ dialog::backdrop { background:rgba(15,35,52,.5); }
 .stop-title { display:flex; align-items:center; justify-content:space-between; }
 .stop-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
 .stop-actions select { width:auto; }
-.drag-stop { display:inline-flex; align-items:center; gap:6px; cursor:grab; touch-action:none; }
+.drag-stop { display:inline-flex; align-items:center; gap:6px; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+.drag-stop svg { pointer-events:none; }
 .drag-stop:active { cursor:grabbing; }
-.stop.dragging { opacity:.5; }
-.stop.drop-target { outline:3px solid var(--accent); outline-offset:2px; background:#f2f7f8; }
-.stop.drop-target::after { content:"Slip her"; position:absolute; top:-14px; left:10px; padding:2px 8px; border-radius:4px; background:var(--accent); color:white; font-size:12px; font-weight:700; }
-.drag-preview { position:fixed; top:0; left:0; z-index:1; max-width:208px; padding:8px 10px; border:1px solid var(--accent); border-radius:6px; background:white; box-shadow:0 6px 18px rgba(15,35,52,.25); font-weight:700; overflow-wrap:anywhere; pointer-events:none; }
+.reordering,.reordering * { user-select:none; -webkit-user-select:none; }
+.stop.dragging { opacity:.45; background:#f2f7f8; }
+.stop.drop-before::after,.stop.drop-after::after { content:""; position:absolute; left:0; right:0; z-index:2; height:4px; border-radius:4px; background:var(--accent); }
+.stop.drop-before::after { top:-7px; }
+.stop.drop-after::after { bottom:-7px; }
+.drag-preview { position:fixed; top:0; left:0; z-index:10; max-width:208px; padding:10px 12px; border:1px solid var(--accent); border-radius:6px; background:white; box-shadow:0 6px 18px rgba(15,35,52,.25); font-weight:700; overflow-wrap:anywhere; pointer-events:none; }
 #status:empty,#tripError:empty,#detailError:empty,#addressError:empty,#deleteError:empty,#purposeStatus:empty,#sharedAddressStatus:empty { display:none; }
 #status { padding:10px; background:#f7fbff; }
 .error,#tripError,#detailError,#addressError,#deleteError,#purposeStatus.error,#sharedAddressStatus.error { color:#a33025; }

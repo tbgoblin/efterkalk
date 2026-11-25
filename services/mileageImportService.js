@@ -86,7 +86,7 @@ function parseMileageImport(files) {
         'Gamle Admin-markeringer giver ingen GOH-rettigheder.'
     ];
     const undated = trips.filter(row => !row.date).length;
-    if (undated) warnings.push(undated + ' historiske kørsler mangler dato; de berørte medarbejderes nye godkendelser blokeres indtil datoen er rettet.');
+    if (undated) warnings.push(undated + ' historiske kørsler mangler dato. Datoen kan suppleres, men er ikke nødvendig for nye godkendelser.');
     return { employees, trips,
         addresses: addressRows.map(row => ({ name: row.Firmanavn || row.Titel, address: row.Addresse })).filter(row => row.address),
         purposes: [...new Set(purposeRows.map(row => row.Formaal || row.Titel).filter(Boolean))], warnings };

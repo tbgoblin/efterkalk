@@ -101,7 +101,8 @@
         const showHistory = $('filterHistory').checked;
         const rows = data.trips.filter(row => (status === 'deleted' ? row.status === 'deleted' : row.status !== 'deleted')
             && (!year || row.date?.startsWith(year)) && (!employee || row.employeeId === employee)
-            && (!status || row.status === status) && (showHistory || row.status !== 'legacy'))
+            && (!status || row.status === status || (status === 'paid' && row.status === 'legacy' && row.legacyPaid === true))
+            && (showHistory || row.status !== 'legacy'))
             .slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
         const activeRows = rows.filter(row => !['deleted', 'legacy'].includes(row.status));
         const archiveCount = rows.filter(row => row.status === 'legacy').length;
@@ -110,7 +111,7 @@
         $('totals').textContent = activeRows.length+' kørsler · '+fmt(activeRows.reduce((sum,row) => sum+row.km,0))+' km · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.'
             +(archiveCount ? ' '+archiveCount+' historiske poster vises kun som arkiv og påvirker ikke satser eller godtgørelse.' : '')
             +(reviews ? ' '+reviews+' godkendte kørsler skal gennemgås: tidligere km er ændret; beløb er ikke genberegnet.' : '');
-        $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
+        $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.status === 'legacy' ? '<small>'+(row.legacyPaid === true ? 'Udbetalt i Power Apps' : 'Ikke markeret udbetalt')+'</small>' : '')+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
         applyAvailability();
     }
     function invalidateDistance() {
@@ -151,7 +152,8 @@
     function clearDrag() {
         if (dragging?.frame) cancelAnimationFrame(dragging.frame);
         dragging?.ghost?.remove();
-        $('stops').querySelectorAll('.dragging, .drop-target').forEach(row => row.classList.remove('dragging','drop-target'));
+        $('tripDialog').classList.remove('reordering');
+        $('stops').querySelectorAll('.dragging, .drop-before, .drop-after').forEach(row => row.classList.remove('dragging','drop-before','drop-after'));
         dragging=null;
     }
     function updateDragTarget(y) {
@@ -166,7 +168,8 @@
         }
         rows.forEach((row,index) => {
             row.classList.toggle('dragging',index+1 === dragging.index);
-            row.classList.toggle('drop-target',index+1 === dragging.target && dragging.target !== dragging.index);
+            row.classList.toggle('drop-before',index+1 === dragging.target && dragging.target < dragging.index);
+            row.classList.toggle('drop-after',index+1 === dragging.target && dragging.target > dragging.index);
         });
     }
     function scrollDuringDrag() {
@@ -304,12 +307,15 @@
         if (!dragging.active && Math.hypot(event.clientX-dragging.x,event.clientY-dragging.y) < 8) return;
         if (!dragging.active) {
             const row=$('stops').querySelector('.stop[data-index="'+dragging.index+'"]');
+            window.getSelection()?.removeAllRanges();
+            $('tripDialog').classList.add('reordering');
             dragging.ghost=document.createElement('div');
             dragging.ghost.className='drag-preview';
             dragging.ghost.setAttribute('aria-hidden','true');
             dragging.ghost.textContent='Flytter: '+(row.querySelector('[data-address]').value.trim() || 'Mellemstop '+dragging.index);
             $('tripDialog').appendChild(dragging.ghost);
         }
+        event.preventDefault();
         dragging.active=true;
         dragging.y=event.clientY;
         const x=Math.max(0,Math.min(event.clientX+12,window.innerWidth-220));

@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const express = require('express');
 const { createMileageService, calculateAllowance } = require('../services/mileageService');
 const { parseMileageImport, parseCsv } = require('../services/mileageImportService');
@@ -264,6 +266,7 @@ test('legacy CSV preserves purpose and total km, does not invent amounts or gran
     assert.equal(result.trips[0].purpose, 'Visit, with return');
     assert.equal(result.trips[0].km, 100);
     assert.equal(result.trips[0].allowance, null);
+    assert.equal(result.trips[0].legacyPaid, false);
     assert.equal(result.trips[1].date, null);
     assert.equal(result.trips[1].legacyPaid, true);
     assert.equal(result.employees[0].username, '');
@@ -276,6 +279,72 @@ test('legacy CSV preserves purpose and total km, does not invent amounts or gran
     assert.throws(() => parseCsv('A,B\n"broken,b\n'), /Uafsluttet/);
     const files = importFiles(); files.trips += files.trips.split('\n')[1] + '\n';
     assert.throws(() => parseMileageImport(files), /Dublerede/);
+});
+
+test('paid historical entries are identified and included in the paid filter only when history is visible', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'mileage.js'), 'utf8');
+    const renderSource = source.slice(source.indexOf('    function render() {'), source.indexOf('    function invalidateDistance() {'));
+    const fields = {
+        filterYear: { value: '' }, filterEmployee: { value: '' }, filterStatus: { value: 'paid' },
+        filterHistory: { checked: true }, totals: {}, tripRows: {}
+    };
+    const data = { trips: [
+        { id:'legacy-paid', employeeName:'Paid', purpose:'', status:'legacy', legacyPaid:true, km:10 },
+        { id:'legacy-unpaid', employeeName:'Unpaid', purpose:'', status:'legacy', legacyPaid:false, km:20 },
+        { id:'new-paid', employeeName:'New paid', purpose:'', status:'paid', km:30, allowance:{ amount:120 } }
+    ] };
+    const render = new Function('data', '$', 'esc', 'fmt', 'statuses', 'applyAvailability',
+        renderSource + '\nreturn render;')(data, id => fields[id], String, String, { legacy:'Historik', paid:'Udbetalt' }, () => {});
+    render();
+    assert.match(fields.tripRows.innerHTML, /legacy-paid/);
+    assert.match(fields.tripRows.innerHTML, /Udbetalt i Power Apps/);
+    assert.doesNotMatch(fields.tripRows.innerHTML, /legacy-unpaid/);
+    assert.match(fields.tripRows.innerHTML, /new-paid/);
+    fields.filterHistory.checked = false;
+    render();
+    assert.doesNotMatch(fields.tripRows.innerHTML, /legacy-paid/);
+    assert.match(fields.tripRows.innerHTML, /new-paid/);
+    fields.filterStatus.value = 'legacy';
+    fields.filterHistory.checked = true;
+    render();
+    assert.match(fields.tripRows.innerHTML, /Ikke markeret udbetalt/);
+});
+
+test('drag feedback marks the actual insertion side and is cleared after dragging', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'mileage.js'), 'utf8');
+    const dragSource = source.slice(source.indexOf('    function clearDrag() {'), source.indexOf('    function scrollDuringDrag() {'));
+    const classList = () => {
+        const values = new Set();
+        return {
+            toggle: (name, enabled) => enabled ? values.add(name) : values.delete(name),
+            remove: (...names) => names.forEach(name => values.delete(name)),
+            contains: name => values.has(name)
+        };
+    };
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+        classList: classList(), getBoundingClientRect: () => ({ top: i * 100, height: 100 })
+    }));
+    const dialog = { classList: classList() }, notice = {};
+    dialog.classList.toggle('reordering', true);
+    const fields = {
+        tripDialog: dialog, tripNotice: notice,
+        stops: { querySelectorAll: selector => selector === '.stop' ? rows : rows.filter(row =>
+            ['dragging', 'drop-before', 'drop-after'].some(name => row.classList.contains(name))) }
+    };
+    let removed = false;
+    const state = { index: 2, ghost: { remove: () => { removed = true; } } };
+    const drag = new Function('$', 'state', 'let dragging = state;\n' + dragSource + '\nreturn { updateDragTarget, clearDrag };')(id => fields[id], state);
+    drag.updateDragTarget(150);
+    assert.equal(rows[1].classList.contains('drop-before'), true);
+    assert.equal(rows[2].classList.contains('dragging'), true);
+    drag.updateDragTarget(350);
+    assert.equal(rows[1].classList.contains('drop-before'), false);
+    assert.equal(rows[3].classList.contains('drop-after'), true);
+    drag.clearDrag();
+    assert.equal(rows[3].classList.contains('drop-after'), false);
+    assert.equal(rows[2].classList.contains('dragging'), false);
+    assert.equal(dialog.classList.contains('reordering'), false);
+    assert.equal(removed, true);
 });
 
 test('one-time imported history is archival and never affects approval or allowance calculations', async () => {
