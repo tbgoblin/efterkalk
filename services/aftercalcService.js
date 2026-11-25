@@ -214,6 +214,13 @@ function createAftercalcService({
         return key === '6' || isPurchasedPartLine(line) || isUProduct(line.ProdNo);
     }
 
+    function getUnlinkedStockMaterialCost(line, quantity) {
+        const key = (line.ProdTp4 === null || line.ProdTp4 === undefined) ? 'NA' : String(line.ProdTp4);
+        if (key !== '2' || Number(line.PurcNo || 0) > 0 || isLaserLProduct(line.ProdNo) || isInvoiceTrackedLine(line)) return null;
+        // Without a linked purchase order, match the stock cost shown by Visma.
+        return Number(quantity || 0) * Number(line.CstPr ?? line.CCstPr ?? 0);
+    }
+
     function findMatchingChildYdelseLine(lines, prodNo) {
         if (!Array.isArray(lines)) return null;
         const prodKey = String(prodNo || '').trim().toUpperCase();
@@ -819,6 +826,7 @@ function createAftercalcService({
                                     : ((isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0)
                                         ? noOrgValue
                                         : noFinValue)));
+                        const unlinkedStockMaterialCost = getUnlinkedStockMaterialCost(line, displayQuantity);
                         let effectiveLineCost = Number(line.LineCost || 0);
                         let childProductionTotalCost = null;
                         let specialLaserCostInfo = null;
@@ -852,6 +860,8 @@ function createAftercalcService({
                                 : (hasNestingCost
                                     ? Number((line.NestingCost || 0) * (line.NoFin || 0))
                                     : Number(line.LineCost || 0));
+                        } else if (unlinkedStockMaterialCost !== null) {
+                            effectiveLineCost = unlinkedStockMaterialCost;
                         } else if (isTubeMaterialLine && noFinValue === 0 && noOrgValue > 0) {
                             const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
                             effectiveLineCost = tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0);
@@ -1227,6 +1237,7 @@ function createAftercalcService({
                     OrdLn.NoInvo,
                     OrdLn.NoInvoAb,
                     OrdLn.DPrice,
+                    OrdLn.CstPr,
                     OrdLn.CCstPr,
                     OrdLn.TrInf2,
                     OrdLn.TrInf4,
@@ -1302,6 +1313,7 @@ function createAftercalcService({
                             : noFinValue));
                 const warningMessages = buildLineWarnings(line);
                 const tubeFallbackCost = getInconsistentTubeFallbackCost(line);
+                const unlinkedStockMaterialCost = getUnlinkedStockMaterialCost(line, displayQuantity);
                 const specialLaserCostInfo = (key === '2' && isLaserLProduct(line.ProdNo) && specialLaserPricingData)
                     ? getSpecialGr4LaserCostInfo(specialLaserPricingData, line)
                     : null;
@@ -1309,15 +1321,20 @@ function createAftercalcService({
                     line.NestingCost = specialLaserCostInfo.unitCost;
                 }
                 const recalculatedHasNestingCost = Number(line.NestingCost || 0) > 0;
-                const effectiveLineCost = key === '1'
-                    ? Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0))
-                    : (isInvoiceTracked
-                        ? Number(ydelseCostInfo.effectiveQuantity * (line.CCstPr || 0))
-                        : (key === '2' && isLaserLProduct(line.ProdNo)
-                            ? ((specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
-                                ? Number(specialLaserCostInfo.totalCost)
-                                : (recalculatedHasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0)))
-                            : (tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0))));
+                let effectiveLineCost;
+                if (key === '1') {
+                    effectiveLineCost = Number(operationTimeInfo.effectiveMinutes * (line.CCstPr || 0));
+                } else if (isInvoiceTracked) {
+                    effectiveLineCost = Number(ydelseCostInfo.effectiveQuantity * (line.CCstPr || 0));
+                } else if (key === '2' && isLaserLProduct(line.ProdNo)) {
+                    effectiveLineCost = (specialLaserCostInfo && specialLaserCostInfo.totalCost !== null)
+                        ? Number(specialLaserCostInfo.totalCost)
+                        : (recalculatedHasNestingCost ? ((line.NestingCost || 0) * (line.NoFin || 0)) : (line.LineCost || 0));
+                } else if (unlinkedStockMaterialCost !== null) {
+                    effectiveLineCost = unlinkedStockMaterialCost;
+                } else {
+                    effectiveLineCost = tubeFallbackCost !== null ? tubeFallbackCost : Number(line.LineCost || 0);
+                }
 
                 const roundedEffectiveLineCost = parseFloat(Number(effectiveLineCost).toFixed(2));
                 const displayUnitCost = Number(displayQuantity || 0) > 0
