@@ -62,6 +62,9 @@
             actorError = actorLookup.status === 'rejected' ? actorLookup.reason.message : 'Visma returnerede en ugyldig adressebog.';
         }
         data = await api('/data');
+        $('amountHeading').hidden = !data.canManage;
+        $('monthlyAmountHeading').hidden = !data.canManage;
+        $('purposeAmountHeading').hidden = !data.canManage;
         $('syncNotice').hidden = !syncError;
         $('syncNotice').textContent = syncError ? 'Visma: '+syncError+' Medarbejderlisten kan være ufuldstændig eller forældet.' : '';
         $('vismaAddressNotice').hidden = !actorError;
@@ -108,11 +111,80 @@
         const archiveCount = rows.filter(row => row.status === 'legacy').length;
         const amount = activeRows.reduce((sum,row) => sum+(row.allowance?.amount || 0),0);
         const reviews = data.trips.filter(row => row.reconciliationRequired && !['deleted', 'legacy'].includes(row.status)).length;
-        $('totals').textContent = activeRows.length+' kørsler · '+fmt(activeRows.reduce((sum,row) => sum+row.km,0))+' km · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.'
-            +(archiveCount ? ' '+archiveCount+' historiske poster vises kun som arkiv og påvirker ikke satser eller godtgørelse.' : '')
+        $('totals').textContent = activeRows.length+' kørsler · '+fmt(activeRows.reduce((sum,row) => sum+row.km,0))+' km'
+            +(data.canManage ? ' · '+fmt(amount)+' DKK dokumenteret. Historiske beløb og afventende kørsler er ikke medregnet i DKK.' : '')
+            +(archiveCount ? ' · '+archiveCount+' historiske poster vises kun som arkiv og påvirker ikke satser eller godtgørelse.' : '')
             +(reviews ? ' '+reviews+' godkendte kørsler skal gennemgås: tidligere km er ændret; beløb er ikke genberegnet.' : '');
-        $('tripRows').innerHTML = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.status === 'legacy' ? '<small>'+(row.legacyPaid === true ? 'Udbetalt i Power Apps' : 'Ikke markeret udbetalt')+'</small>' : '')+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td><td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td><td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('') || '<tr><td colspan="6">Ingen kørsler med de valgte filtre.</td></tr>';
+        const visibleRows = rows.map(row => '<tr><td>'+esc(row.date || 'Dato mangler')+'</td><td>'+esc(row.employeeName)+'<small>'+esc(row.purpose)+'</small></td><td><span class="badge '+esc(row.status)+'">'+esc(statuses[row.status])+'</span>'+(row.status === 'legacy' ? '<small>'+(row.legacyPaid === true ? 'Udbetalt i Power Apps' : 'Ikke markeret udbetalt')+'</small>' : '')+(row.reconciliationRequired && row.status !== 'deleted' ? '<small>Kontrollér beregning</small>' : '')+'</td><td class="numeric">'+fmt(row.km)+'</td>'
+            +(data.canManage ? '<td class="numeric">'+(row.status !== 'deleted' && row.allowance ? fmt(row.allowance.amount) : '—')+'</td>' : '')
+            +'<td><button type="button" data-detail="'+esc(row.id)+'">Åbn</button></td></tr>').join('');
+        $('tripRows').innerHTML = visibleRows || '<tr><td colspan="'+(data.canManage ? 6 : 5)+'">Ingen kørsler med de valgte filtre.</td></tr>';
+        renderStatistics(rows, activeRows);
         applyAvailability();
+    }
+    function renderStatistics(rows, activeRows) {
+        const archiveRows = rows.filter(row => row.status === 'legacy');
+        const activeKm = activeRows.reduce((sum,row) => sum + row.km, 0);
+        const archiveKm = archiveRows.reduce((sum,row) => sum + row.km, 0);
+        const cards = [['Kørsler', String(activeRows.length)], ['Km', fmt(activeKm)]];
+        if ($('filterHistory').checked) {
+            cards.push(['Historiske poster', String(archiveRows.length)], ['Historiske km', fmt(archiveKm)]);
+        }
+        if (data.canManage) cards.push(['Godkendt beløb', fmt(activeRows.reduce((sum,row) => sum + (row.allowance?.amount || 0), 0))+' DKK']);
+        $('statisticsSummary').innerHTML = cards.map(([label,value]) => '<div class="statistic"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong></div>').join('');
+
+        const months = new Map();
+        rows.filter(row => row.status !== 'deleted' && /^\d{4}-\d{2}/.test(row.date || '')).forEach(row => {
+            const key = row.date.slice(0,7);
+            if (!months.has(key)) months.set(key, { activeCount:0, activeKm:0, archiveCount:0, archiveKm:0, amount:0 });
+            const item = months.get(key);
+            if (row.status === 'legacy') {
+                item.archiveCount += 1;
+                item.archiveKm += row.km;
+            } else {
+                item.activeCount += 1;
+                item.activeKm += row.km;
+                item.amount += row.allowance?.amount || 0;
+            }
+        });
+        const monthRows = [...months].sort(([a],[b]) => a.localeCompare(b)).map(([key,item]) => {
+            const [year,month] = key.split('-').map(Number);
+            const label = new Date(year, month - 1, 1).toLocaleDateString('da-DK', { month:'long', year:'numeric' });
+            return '<tr><td>'+esc(label)+'</td><td class="numeric">'+item.activeCount+'</td><td class="numeric">'+fmt(item.activeKm)+'</td><td class="numeric">'+item.archiveCount+'</td><td class="numeric">'+fmt(item.archiveKm)+'</td>'
+                +(data.canManage ? '<td class="numeric">'+fmt(item.amount)+'</td>' : '')+'</tr>';
+        }).join('');
+        $('monthlyRows').innerHTML = monthRows || '<tr><td colspan="'+(data.canManage ? 6 : 5)+'">Ingen data for perioden.</td></tr>';
+
+        const destinations = new Map();
+        rows.filter(row => row.status !== 'deleted').forEach(row => {
+            const seen = new Set();
+            (row.stops || []).forEach(stop => {
+                const address = String(stop.address || '').trim();
+                const key = address.toLocaleLowerCase('da-DK');
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                const item = destinations.get(key) || { label:address, count:0 };
+                item.count += 1;
+                destinations.set(key,item);
+            });
+        });
+        const destinationRows = [...destinations.values()].sort((a,b) => b.count-a.count || a.label.localeCompare(b.label,'da')).slice(0,10)
+            .map(item => '<tr><td>'+esc(item.label)+'</td><td class="numeric">'+item.count+'</td></tr>').join('');
+        $('destinationRows').innerHTML = destinationRows || '<tr><td colspan="2">Ingen steder i perioden.</td></tr>';
+
+        const purposes = new Map();
+        activeRows.forEach(row => {
+            const key = String(row.purpose || 'Uden formål').trim();
+            const item = purposes.get(key) || { count:0, km:0, amount:0 };
+            item.count += 1;
+            item.km += row.km;
+            item.amount += row.allowance?.amount || 0;
+            purposes.set(key,item);
+        });
+        const purposeRows = [...purposes].sort((a,b) => b[1].count-a[1].count || a[0].localeCompare(b[0],'da'))
+            .map(([purpose,item]) => '<tr><td>'+esc(purpose)+'</td><td class="numeric">'+item.count+'</td><td class="numeric">'+fmt(item.km)+'</td>'
+                +(data.canManage ? '<td class="numeric">'+fmt(item.amount)+'</td>' : '')+'</tr>').join('');
+        $('purposeRows').innerHTML = purposeRows || '<tr><td colspan="'+(data.canManage ? 4 : 3)+'">Ingen formål i perioden.</td></tr>';
     }
     function invalidateDistance() {
         $('tripKm').value = '';
@@ -235,9 +307,9 @@
         const pair = (label,value) => '<dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd>';
         $('detailBody').innerHTML = '<dl>'+pair('Medarbejder',t.employeeName)+(t.createdBy ? pair('Oprettet af',t.createdBy) : '')+pair('Dato',t.date || 'Mangler')+
             pair('Nummerplade',t.plate)+pair('Status',statuses[t.status])+
-            pair('Formål',t.purpose)+pair('Rute / stop',t.stops.map(stop => stop.address+(stop.note?' ('+stop.note+')':'')).join('\n') || 'Se historisk Formål')+
+            pair('Formål',t.purpose)+pair('Rute / stop',(t.stops || []).map(stop => stop.address+(stop.note?' ('+stop.note+')':'')).join('\n') || 'Se historisk Formål')+
             pair('Retur',t.roundTrip?'Ja':'Nej')+pair('Samlet km',fmt(t.km))+pair('Afstandsgrundlag',t.manualReason)+
-            pair('Godtgørelse',t.allowance ? fmt(t.allowance.amount)+' DKK; '+fmt(t.allowance.highKm)+' km × '+rateFmt(t.allowance.highRate)+' + '+fmt(t.allowance.lowKm)+' km × '+rateFmt(t.allowance.lowRate) : t.legacy ? 'Arkivpost: historisk beløb er ikke eksporteret eller genberegnet.' : t.estimate ? fmt(t.estimate.amount)+' DKK foreløbigt. Endeligt beløb fastlåses ved godkendelse.' : 'Satser mangler for kørselsåret; beløbet kan ikke beregnes endnu.')+
+            pair('Godtgørelse',!data.canManage ? 'Beløb er kun synlige for administratorer.' : t.allowance ? fmt(t.allowance.amount)+' DKK; '+fmt(t.allowance.highKm)+' km × '+rateFmt(t.allowance.highRate)+' + '+fmt(t.allowance.lowKm)+' km × '+rateFmt(t.allowance.lowRate) : t.legacy ? 'Arkivpost: historisk beløb er ikke eksporteret eller genberegnet.' : t.estimate ? fmt(t.estimate.amount)+' DKK foreløbigt. Endeligt beløb fastlåses ved godkendelse.' : 'Satser mangler for kørselsåret; beløbet kan ikke beregnes endnu.')+
             pair('Kommentar',t.comment || '—')+
             (t.reconciliationRequired && t.status !== 'deleted' ? pair('Kontrol kræves','Tidligere km er ændret efter godkendelsen. Kontrollér beregningen; beløbet er ikke genberegnet.') : '')+
             (t.status === 'deleted' ? pair('Før sletning',statuses[t.deletedPreviousStatus] || t.deletedPreviousStatus) : '')+

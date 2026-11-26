@@ -1,5 +1,5 @@
 const express = require('express');
-const { createMileageService, fail } = require('../services/mileageService');
+const { createMileageService, fail, manager } = require('../services/mileageService');
 const { createMileageRoutingService, createMileageRoutingSettings } = require('../services/mileageRoutingService');
 const { generateMileagePdf } = require('../services/mileagePdf');
 
@@ -74,7 +74,7 @@ function createMileageRouter({
     router.post('/route', throttle, run(async (req, res) => res.json({ ok: true, ...await routing.route(req.body.points, req.body.roundTrip) })));
     router.get('/trips/:id/document.pdf', run(async (req, res, user) => {
         const trip = await service.document(req.params.id, user);
-        const pdf = await generateMileagePdf([trip], { includeSummary: false });
+        const pdf = await generateMileagePdf([trip], { includeSummary: false, includeAmounts: manager(user) });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="Gantech-korsel.pdf"');
         res.send(pdf);
@@ -84,7 +84,7 @@ function createMileageRouter({
         const data = await service.data(user);
         const trips = data.trips.filter(row => row.status !== 'deleted' && row.employeeId === req.query.employeeId && row.date?.slice(0, 4) === req.query.year);
         if (!trips.length) throw fail('Ingen kørsler i det valgte år.', 404);
-        const pdf = await generateMileagePdf(trips.sort((a, b) => a.date.localeCompare(b.date)));
+        const pdf = await generateMileagePdf(trips.sort((a, b) => a.date.localeCompare(b.date)), { includeAmounts: data.canManage });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="Gantech-korsel-aarsbilag.pdf"');
         res.send(pdf);

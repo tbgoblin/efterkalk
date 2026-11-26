@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Kørselgodtgørelse · Gantech</title>
-    <link rel="stylesheet" href="/assets/css/mileage.css?v=3">
+    <link rel="stylesheet" href="/assets/css/mileage.css?v=4">
 </head>
 <body>
     <header class="toolbar"><a href="/">← Operations Hub</a><strong>Gantech · Kørselgodtgørelse</strong><span id="identity"></span><button id="refresh" type="button">Opdater</button></header>
@@ -20,10 +20,28 @@
                 <label>År<select id="filterYear"><option value="">Alle år / uden dato</option></select></label>
                 <label>Medarbejder<select id="filterEmployee"><option value="">Alle tilgængelige</option></select></label>
                 <label>Status<select id="filterStatus"><option value="">Alle</option><option value="draft">Kladde</option><option value="submitted">Afventer</option><option value="approved">Godkendt</option><option value="paid">Udbetalt</option><option value="rejected">Afvist</option><option value="legacy">Historik</option></select></label>
-                <label class="check"><input id="filterHistory" type="checkbox" checked> Vis historiske kørsler</label>
+                <label class="check"><input id="filterHistory" type="checkbox"> Vis historiske kørsler</label>
             </div>
             <div id="totals" class="totals"></div>
-            <div class="table-wrap"><table><thead><tr><th>Dato</th><th>Medarbejder / formål</th><th>Status</th><th class="numeric">Km</th><th class="numeric">Godkendt DKK</th><th>Bilag</th></tr></thead><tbody id="tripRows"></tbody></table></div>
+            <section class="statistics" aria-labelledby="statisticsTitle">
+                <div class="section-head"><div><h3 id="statisticsTitle">Statistikker</h3><p class="muted">Beregnet ud fra de valgte filtre. Historik vises separat og indgår ikke i godtgørelsesberegningen.</p></div></div>
+                <div id="statisticsSummary" class="statistics-summary"></div>
+                <div class="statistics-grid">
+                    <section class="statistics-card" aria-labelledby="monthlyTitle">
+                        <h3 id="monthlyTitle">Månedlig udvikling</h3>
+                        <div class="table-wrap"><table><thead><tr><th>Måned</th><th class="numeric">Kørsler</th><th class="numeric">Km</th><th class="numeric">Historik</th><th class="numeric">Historiske km</th><th id="monthlyAmountHeading" class="numeric" hidden>Godkendt DKK</th></tr></thead><tbody id="monthlyRows"></tbody></table></div>
+                    </section>
+                    <section class="statistics-card" aria-labelledby="destinationsTitle">
+                        <h3 id="destinationsTitle">Besøgte steder</h3>
+                        <div class="table-wrap"><table><thead><tr><th>Sted</th><th class="numeric">Kørsler</th></tr></thead><tbody id="destinationRows"></tbody></table></div>
+                    </section>
+                    <section class="statistics-card" aria-labelledby="purposesTitle">
+                        <h3 id="purposesTitle">Kørsler efter formål</h3>
+                        <div class="table-wrap"><table><thead><tr><th>Formål</th><th class="numeric">Kørsler</th><th class="numeric">Km</th><th id="purposeAmountHeading" class="numeric" hidden>Godkendt DKK</th></tr></thead><tbody id="purposeRows"></tbody></table></div>
+                    </section>
+                </div>
+            </section>
+            <div class="table-wrap"><table><thead><tr><th>Dato</th><th>Medarbejder / formål</th><th>Status</th><th class="numeric">Km</th><th id="amountHeading" class="numeric" hidden>Godkendt DKK</th><th>Bilag</th></tr></thead><tbody id="tripRows"></tbody></table></div>
         </section>
         <section id="management" class="panel" hidden>
             <div class="section-head"><div><p class="eyebrow">GODKENDELSE & OPSÆTNING</p><h2>Administration af kørsel</h2></div></div>
@@ -135,6 +153,6 @@
         </form>
     </dialog>
     <dialog id="detailDialog" aria-labelledby="detailTitle"><div class="section-head"><h2 id="detailTitle">Kørselsbilag</h2><button id="closeDetail" type="button">Luk</button></div><div id="detailBody"></div><p id="detailError" role="alert"></p></dialog>
-    <script src="/assets/js/mileage.js?v=3"></script>
+    <script src="/assets/js/mileage.js?v=4"></script>
 </body>
 </html>

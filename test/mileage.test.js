@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const { inflateSync } = require('node:zlib');
 const express = require('express');
 const { createMileageService, calculateAllowance } = require('../services/mileageService');
 const { parseMileageImport, parseCsv } = require('../services/mileageImportService');
@@ -43,6 +44,13 @@ async function fixture() {
         version: (await service.data(user)).version, action, note
     }, user);
     return { gohData, service, save, act };
+}
+function pdfText(pdf) {
+    const source = pdf.toString('latin1');
+    return [...source.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].map(match => {
+        const content = inflateSync(Buffer.from(match[1], 'latin1')).toString('latin1');
+        return [...content.matchAll(/<([0-9a-f]+)>/gi)].map(text => Buffer.from(text[1], 'hex').toString('latin1')).join('');
+    }).join('\n');
 }
 
 test('allowance correctly splits the 20,000-km crossing and rounds only money', () => {
@@ -103,7 +111,8 @@ test('managers can edit and remove shared purposes and addresses without changin
 test('trip workflow enforces permission, fixed rates, and payment once', async () => {
     const f = await fixture();
     const trip = await f.save();
-    assert.equal((await f.service.data(worker)).trips[0].estimate.amount, 400);
+    assert.equal((await f.service.data(worker)).trips[0].estimate, undefined);
+    assert.equal((await f.service.data(approver)).trips[0].estimate.amount, 400);
     assert.equal((await f.service.data(other)).trips.length, 0);
     await assert.rejects(f.service.document(trip.id, other), { statusCode: 404 });
     await f.act(trip, 'submit', worker);
@@ -111,18 +120,36 @@ test('trip workflow enforces permission, fixed rates, and payment once', async (
     const selfManager = { ...worker, permissions: approver.permissions };
     await assert.rejects(f.act(trip, 'reject', selfManager, 'Test'), { statusCode: 409 });
     await f.act(trip, 'approve', selfManager);
-    let approved = (await f.service.data(worker)).trips[0];
+    let approved = (await f.service.data(approver)).trips[0];
     assert.equal(approved.approvedBy, worker.username);
     assert.equal(approved.history.at(-1).by, worker.username);
     assert.equal(approved.allowance.amount, 400);
     assert.equal(approved.km, 100); // Total km already includes return; never double it again.
     await f.service.saveRate({ version: (await f.service.data(approver)).version, year: 2026, high: 5, low: 3 }, approver);
-    approved = (await f.service.data(worker)).trips[0];
+    approved = (await f.service.data(approver)).trips[0];
     assert.equal(approved.allowance.highRate, 4);
     await f.act(trip, 'pay');
     await assert.rejects(f.act(trip, 'pay'), { statusCode: 409 });
     await assert.rejects(f.save({ id: trip.id }), { statusCode: 409 });
     assert.equal((await f.service.data(worker)).trips[0].history.at(-1).action, 'pay');
+});
+
+test('only mileage managers receive allowance values in trip data and documents', async () => {
+    const f = await fixture();
+    const trip = await f.save();
+    await f.act(trip, 'submit', worker);
+    await f.act(trip, 'approve');
+    const workerData = await f.service.data(worker);
+    const managerData = await f.service.data(approver);
+    const workerTrip = workerData.trips[0];
+    const managerTrip = managerData.trips[0];
+    assert.deepEqual(workerData.rates, []);
+    assert.equal(managerData.rates.length, 1);
+    assert.equal(workerTrip.allowance, undefined);
+    assert.equal(workerTrip.estimate, undefined);
+    assert.equal(managerTrip.allowance.amount, 400);
+    assert.equal((await f.service.document(trip.id, worker)).allowance, undefined);
+    assert.equal((await f.service.document(trip.id, approver)).allowance.amount, 400);
 });
 
 test('reject requires a reason and allows the owner to correct and resubmit', async () => {
@@ -134,7 +161,7 @@ test('reject requires a reason and allows the owner to correct and resubmit', as
     await f.save({ id: trip.id, km: 80, manualReason: 'Corrected odometer reading' });
     await f.act(trip, 'submit', worker);
     await f.act(trip, 'approve');
-    assert.equal((await f.service.data(worker)).trips[0].allowance.amount, 320);
+    assert.equal((await f.service.data(approver)).trips[0].allowance.amount, 320);
 });
 
 test('a manager can approve a trip they created for another employee or one created for them', async () => {
@@ -150,7 +177,7 @@ test('a manager can approve a trip they created for another employee or one crea
     const creatorManager = { ...worker, permissions: approver.permissions };
     const ownerManager = { ...other, permissions: approver.permissions };
     await f.act(trip, 'approve', creatorManager);
-    const approved = await f.service.document(trip.id, other);
+    const approved = await f.service.document(trip.id, approver);
     assert.equal(approved.allowance.amount, 320);
     assert.equal(approved.approvedBy, worker.username);
     const second = await f.save({ employeeId: otherId }, worker);
@@ -213,12 +240,12 @@ test('manager deletion is audited, excludes operational km and marks affected ap
     assert.equal(deleted.history.at(-1).note, 'Duplicate entry');
     const affected = await f.service.document(second.id, worker);
     assert.equal(affected.reconciliationRequired, true);
-    assert.equal(affected.allowance.previousKm, 10000);
+    assert.equal((await f.service.document(second.id, approver)).allowance.previousKm, 10000);
     await assert.rejects(f.service.document(first.id, worker), { statusCode: 404 });
     await assert.rejects(f.act(first, 'pay'), { statusCode: 409 });
     const third = await f.save({ km: 20 });
     await f.act(third, 'submit', worker); await f.act(third, 'approve');
-    assert.equal((await f.service.document(third.id, worker)).allowance.previousKm, 100);
+    assert.equal((await f.service.document(third.id, approver)).allowance.previousKm, 100);
 });
 
 test('backdated trips use their own calendar-year rate and exclude other years from the threshold', async () => {
@@ -228,8 +255,8 @@ test('backdated trips use their own calendar-year rate and exclude other years f
     await f.act(previousYear, 'submit', worker); await f.act(previousYear, 'approve');
     const thisYear = await f.save();
     await f.act(thisYear, 'submit', worker); await f.act(thisYear, 'approve');
-    assert.equal((await f.service.document(previousYear.id, worker)).allowance.amount, 30000);
-    assert.equal((await f.service.document(thisYear.id, worker)).allowance.previousKm, 0);
+    assert.equal((await f.service.document(previousYear.id, approver)).allowance.amount, 30000);
+    assert.equal((await f.service.document(thisYear.id, approver)).allowance.previousKm, 0);
     await assert.rejects(f.save({ stops: [null, { address:'Test' }] }), { statusCode:400 });
 });
 
@@ -251,7 +278,7 @@ test('stale or failed GOH writes never report success, and concurrent approvals 
     assert.equal(results.filter(row => row.status === 'fulfilled').length, 1);
     const pending = (await f.service.data(worker)).trips.find(row => row.status === 'submitted');
     await f.act(pending, 'approve');
-    const amounts = (await f.service.data(worker)).trips.slice(-2).map(row => row.allowance.amount).sort((a,b) => a-b);
+    const amounts = (await f.service.data(approver)).trips.slice(-2).map(row => row.allowance.amount).sort((a,b) => a-b);
     assert.deepEqual(amounts, [40, 60]);
 });
 
@@ -284,15 +311,19 @@ test('legacy CSV preserves purpose and total km, does not invent amounts or gran
 test('paid historical entries are identified and included in the paid filter only when history is visible', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'mileage.js'), 'utf8');
     const renderSource = source.slice(source.indexOf('    function render() {'), source.indexOf('    function invalidateDistance() {'));
+    const html = fs.readFileSync(path.join(__dirname, '..', 'assets', 'mileage.html'), 'utf8');
+    assert.match(html, /id="filterHistory" type="checkbox">/);
     const fields = {
         filterYear: { value: '' }, filterEmployee: { value: '' }, filterStatus: { value: 'paid' },
-        filterHistory: { checked: true }, totals: {}, tripRows: {}
+        filterHistory: { checked: true }, totals: {}, tripRows: {}, statisticsSummary: {}, monthlyRows: {},
+        destinationRows: {}, purposeRows: {}
     };
     const data = { trips: [
         { id:'legacy-paid', employeeName:'Paid', purpose:'', status:'legacy', legacyPaid:true, km:10 },
         { id:'legacy-unpaid', employeeName:'Unpaid', purpose:'', status:'legacy', legacyPaid:false, km:20 },
-        { id:'new-paid', employeeName:'New paid', purpose:'', status:'paid', km:30, allowance:{ amount:120 } }
-    ] };
+        { id:'new-paid', employeeName:'New paid', purpose:'Business visit', status:'paid', date:'2026-11-20', km:30,
+            stops:[{address:'Farm Road 1'}, {address:'Farm Road 1'}, {address:'Office'}], allowance:{ amount:120 } }
+    ], canManage:false };
     const render = new Function('data', '$', 'esc', 'fmt', 'statuses', 'applyAvailability',
         renderSource + '\nreturn render;')(data, id => fields[id], String, String, { legacy:'Historik', paid:'Udbetalt' }, () => {});
     render();
@@ -300,6 +331,10 @@ test('paid historical entries are identified and included in the paid filter onl
     assert.match(fields.tripRows.innerHTML, /Udbetalt i Power Apps/);
     assert.doesNotMatch(fields.tripRows.innerHTML, /legacy-unpaid/);
     assert.match(fields.tripRows.innerHTML, /new-paid/);
+    assert.match(fields.statisticsSummary.innerHTML, /30/);
+    assert.match(fields.monthlyRows.innerHTML, /30/);
+    assert.match(fields.destinationRows.innerHTML, /Farm Road 1/);
+    assert.doesNotMatch(fields.tripRows.innerHTML, /120/);
     fields.filterHistory.checked = false;
     render();
     assert.doesNotMatch(fields.tripRows.innerHTML, /legacy-paid/);
@@ -357,15 +392,15 @@ test('one-time imported history is archival and never affects approval or allowa
     await service.saveEmployee({ ...data.employees[0], username: worker.username, version: data.version }, approver);
     data = await service.data(approver);
     await service.saveRate({ year: 2026, high: 4, low: 2, version: data.version }, approver);
-    data = await service.data(worker);
+    data = await service.data(approver);
     assert.equal(data.trips.find(row => row.legacy && !row.date).date, null);
     await service.saveTrip({ version: data.version, date: '2026-11-20', plate: 'TEST', purpose: 'Visit',
         km: 100, stops: [{ address: 'Start' }, { address: 'End' }], manualReason: 'Odometer' }, worker);
-    let trip = (await service.data(worker)).trips.at(-1);
+    let trip = (await service.data(approver)).trips.at(-1);
     assert.equal(trip.estimate.previousKm, 0);
     await service.transition(trip.id, { version: (await service.data(worker)).version, action: 'submit' }, worker);
     await service.transition(trip.id, { version: (await service.data(worker)).version, action: 'approve' }, approver);
-    trip = await service.document(trip.id, worker);
+    trip = await service.document(trip.id, approver);
     assert.equal(trip.allowance.previousKm, 0);
     assert.equal(trip.allowance.amount, 400);
     const legacy = (await service.data(approver)).trips.find(row => row.legacy && !row.date);
@@ -561,14 +596,19 @@ test('internal PDF is generated from authorized trip data including fixed allowa
     const f = await fixture();
     const trip = await f.save();
     await f.act(trip, 'submit', worker); await f.act(trip, 'approve');
-    const authorizedTrip = await f.service.document(trip.id, worker);
-    const pdf = await generateMileagePdf([authorizedTrip]);
-    const singlePagePdf = await generateMileagePdf([authorizedTrip], { includeSummary: false });
+    const authorizedTrip = await f.service.document(trip.id, approver);
+    const pdf = await generateMileagePdf([authorizedTrip], { includeAmounts:true });
+    const singlePagePdf = await generateMileagePdf([authorizedTrip], { includeSummary:false, includeAmounts:true });
+    const workerPdf = await generateMileagePdf([await f.service.document(trip.id, worker)]);
     assert.equal(pdf.subarray(0,5).toString(), '%PDF-');
     assert.ok(pdf.length > 2000);
     const pageCount = buffer => (buffer.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
     assert.equal(pageCount(pdf), 2);
     assert.equal(pageCount(singlePagePdf), 1);
+    assert.match(pdfText(pdf), /Test stop/);
+    assert.match(pdfText(pdf), /Pause/);
+    assert.match(pdfText(pdf), /400,00/);
+    assert.doesNotMatch(pdfText(workerPdf), /400,00/);
 });
 
 test('API protects configuration and import separately from employee access', async t => {

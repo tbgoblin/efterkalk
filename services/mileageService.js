@@ -81,21 +81,28 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         const state = await load();
         const canManage = manager(user);
         const employee = ownEmployee(state, user);
+        const trips = state.trips.filter(row => canManage || (row.status !== 'deleted'
+            && (row.employeeId === employee?.id || row.createdBy === username(user)))).map(trip => {
+            const visibleTrip = { ...trip };
+            if (!canManage) {
+                delete visibleTrip.allowance;
+                delete visibleTrip.estimate;
+                return visibleTrip;
+            }
+            if (trip.legacy || trip.allowance) return visibleTrip;
+            const year = Number(trip.date?.slice(0, 4));
+            const rate = state.rates.find(row => row.year === year);
+            const previousKm = state.trips.filter(row => row.employeeId === trip.employeeId
+                && ['approved', 'paid'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
+                .reduce((sum, row) => sum + row.km, 0);
+            return { ...visibleTrip, estimate: rate ? calculateAllowance(trip.km, previousKm, rate) : null };
+        });
         return { version: state.version, user: { username: username(user), displayName: user.displayName || user.username },
             isSuperadmin: user?.role === 'superadmin',
             canManage, employeeId: employee?.id || null, employees: canManage ? state.employees : employee ? [employee] : [],
             participants: state.employees.filter(row => row.active).map(row => ({ id: row.id, name: row.name, vismaEmpNo: row.vismaEmpNo || null })),
-            addresses: state.addresses, purposes: state.purposes, rates: state.rates,
-            trips: state.trips.filter(row => canManage || (row.status !== 'deleted'
-                && (row.employeeId === employee?.id || row.createdBy === username(user)))).map(trip => {
-                if (trip.legacy || trip.allowance) return trip;
-                const year = Number(trip.date?.slice(0, 4));
-                const rate = state.rates.find(row => row.year === year);
-                const previousKm = state.trips.filter(row => row.employeeId === trip.employeeId
-                    && ['approved', 'paid'].includes(row.status) && Number(row.date?.slice(0, 4)) === year)
-                    .reduce((sum, row) => sum + row.km, 0);
-                return { ...trip, estimate: rate ? calculateAllowance(trip.km, previousKm, rate) : null };
-            }),
+            addresses: state.addresses, purposes: state.purposes, rates: canManage ? state.rates : [],
+            trips,
             users: canManage ? readUsers().filter(row => row.active !== false).map(row => ({ username: row.username, name: row.displayName || row.username })) : [] };
     }
 
@@ -356,7 +363,11 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         const trip = state.trips.find(row => row.id === tripId && row.status !== 'deleted'
             && (manager(user) || row.employeeId === employee?.id || row.createdBy === username(user)));
         if (!trip) throw fail('Kørslen findes ikke.', 404);
-        return trip;
+        if (manager(user)) return trip;
+        const visibleTrip = { ...trip };
+        delete visibleTrip.allowance;
+        delete visibleTrip.estimate;
+        return visibleTrip;
     }
 
     function mergeImport(state, files, user) {
