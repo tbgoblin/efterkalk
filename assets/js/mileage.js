@@ -193,14 +193,15 @@
     function stopValues() {
         return [...$('stops').querySelectorAll('.stop')].map((row, i) => ({
             address: row.querySelector('[data-address]').value.trim(), note: row.querySelector('[data-note]').value.trim(),
-            coordinates: points[i]?.coordinates || null, savedAddress: points[i]?.savedAddress || null, name: points[i]?.name || ''
+            coordinates: points[i]?.coordinates || null, savedAddress: points[i]?.savedAddress || null,
+            name: row.querySelector('[data-stop-name]').value.trim()
         }));
     }
     function renderStops() {
         $('stops').innerHTML = points.map((point,index) => '<section class="stop" data-index="'+index+'"><div class="stop-title"><strong>'+esc(index === 0 ? 'Fra' : index === points.length-1 ? 'Til' : 'Mellemstop '+index)+'</strong>'+
             (index > 0 && index < points.length-1 ? '<div class="stop-actions">'+
                 (points.length > 3 ? '<button type="button" class="drag-stop" data-drag-stop aria-label="Flyt mellemstop '+index+'" aria-describedby="reorderHelp" aria-keyshortcuts="ArrowUp ArrowDown"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.3"/><circle cx="11" cy="3" r="1.3"/><circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/><circle cx="5" cy="13" r="1.3"/><circle cx="11" cy="13" r="1.3"/></svg>Træk for at flytte</button>' : '')+
-                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><div class="fields"><label>Adresse, hotel eller virksomhedsnavn<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><small>Søgningen sendes til Klimadatastyrelsen og openrouteservice.</small><div class="saved-addresses" data-saved-results aria-live="polite"></div>'+(data.canManage?'<div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div>':'')+'<label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
+                '<button type="button" data-remove-stop="'+index+'">Fjern</button></div>' : '')+'</div><label>Virksomhed / sted (valgfri)<input data-stop-name value="'+esc(point.name || '')+'" maxlength="500" placeholder="Fx FarmDroid"></label><small>Vises i rapporten sammen med adressen.</small><div class="fields"><label>Adresse<input data-address autocomplete="off" value="'+esc(point.address)+'" maxlength="500" required></label><button type="button" data-search="'+index+'"'+(!data.routingConfigured?' disabled':'')+'>Find adresse online</button></div><small>Søgningen sendes til Klimadatastyrelsen og openrouteservice.</small><div class="saved-addresses" data-saved-results aria-live="polite"></div>'+(data.canManage?'<div class="stop-tools"><button type="button" data-save-address>Gem fælles adresse</button></div>':'')+'<label>Pause / stopnote<input data-note value="'+esc(point.note || '')+'" maxlength="500" placeholder="Fx kundebesøg eller pause"></label><div class="stop-tools saved-addresses" data-results aria-live="polite"></div></section>').join('');
     }
     function moveStop(index, target) {
         if (target < 1 || target >= points.length - 1 || target === index) return;
@@ -357,11 +358,14 @@
     });
     $('tripKm').addEventListener('input', () => { $('tripBasis').value=''; });
     $('stops').addEventListener('input', event => {
+        if (event.target.matches('[data-stop-name]')) {
+            points[Number(event.target.closest('.stop').dataset.index)].name = event.target.value;
+            return;
+        }
         if (!event.target.matches('[data-address]')) return;
         const row = event.target.closest('.stop');
         points[Number(row.dataset.index)].coordinates = null;
         points[Number(row.dataset.index)].savedAddress = null;
-        points[Number(row.dataset.index)].name = '';
         row.querySelector('[data-results]').innerHTML = '';
         suggestAddresses(row);
         invalidateDistance();
@@ -446,6 +450,7 @@
             const index=Number(row.dataset.index), address=vismaActorAddress(item) || item.Nm || kind+' '+number;
             row.querySelector('[data-address]').value=address;
             points[index]={...points[index],name:item.Nm || kind+' '+number,address,coordinates:null,savedAddress:null};
+            row.querySelector('[data-stop-name]').value=points[index].name;
             row.querySelector('[data-saved-results]').innerHTML='';
             row.querySelector('[data-results]').textContent='Visma '+kind.toLowerCase()+' valgt. Vælg et bekræftet resultat fra Find adresse online til ruteberegning, eller angiv km manuelt.';
             invalidateDistance();
@@ -456,6 +461,7 @@
             const row=saved.closest('.stop'), item=data.addresses[Number(saved.dataset.savedAddress)], index=Number(row.dataset.index);
             row.querySelector('[data-address]').value=item.address;
             points[index]={...points[index],name:item.name,address:item.address,coordinates:item.coordinates || null,savedAddress:{name:item.name,address:item.address}};
+            row.querySelector('[data-stop-name]').value=item.name;
             row.querySelector('[data-saved-results]').innerHTML='';
             row.querySelector('[data-results]').textContent=item.coordinates ? 'Gemte koordinater er klar til ruteberegning.' : 'Find og bekræft adressen online for at gemme koordinater.';
             invalidateDistance();
@@ -485,13 +491,16 @@
             if (input.value !== query) throw new Error('Adressen blev ændret. Søg igen.');
             results.innerHTML=(result.warnings || []).map(warning=>'<span class="error">'+esc(warning)+'</span>').join('')
                 +(result.addresses.length ? '<strong>Kontrollér adresse og postnummer, og vælg det rigtige resultat:</strong>' : '<span>Ingen adresser fundet. Præcisér søgningen eller angiv km manuelt.</span>')+result.addresses.map((item,index)=>
-                '<button type="button" data-online-result="'+index+'">'+esc(item.address)+
+                '<button type="button" data-online-result="'+index+'">'+esc(item.name && item.name !== item.address ? item.name+' · '+item.address : item.address)+
                 '<small>'+esc(item.source === 'danish' ? 'Klimadatastyrelsen' : 'openrouteservice')+
                 (!item.streetAddressKnown ? ' · Gade og husnummer er ikke særskilt oplyst af søgetjenesten.' : '')+'</small></button>').join('');
             results.querySelectorAll('[data-online-result]').forEach(button => button.addEventListener('click', () => {
                 const match=result.addresses[Number(button.dataset.onlineResult)];
                 const index=Number(row.dataset.index), original=points[index].savedAddress;
-                input.value=match.address; points[index]={...points[index],...match}; row.querySelector('[data-saved-results]').innerHTML=''; results.textContent='Adresse valgt.'; invalidateDistance();
+                const manualName=row.querySelector('[data-stop-name]').value.trim();
+                input.value=match.address; points[index]={...points[index],...match,name:manualName || match.name || ''};
+                row.querySelector('[data-stop-name]').value=points[index].name;
+                row.querySelector('[data-saved-results]').innerHTML=''; results.textContent='Adresse valgt.'; invalidateDistance();
                 if (original?.name) perform(async () => {
                     await api('/addresses',{version:data.version,...original,coordinates:match.coordinates});
                     await load();
