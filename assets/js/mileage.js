@@ -305,16 +305,21 @@
         const own = t.employeeId === data.employeeId;
         const creator = t.createdBy === data.user.username;
         const pair = (label,value) => '<dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd>';
-        $('detailBody').innerHTML = '<dl>'+pair('Medarbejder',t.employeeName)+(t.createdBy ? pair('Oprettet af',t.createdBy) : '')+pair('Dato',t.date || 'Mangler')+
+        const stopDescription = stop => {
+            const name=String(stop.name || '').trim(), address=String(stop.address || '').trim();
+            const hasSeparateName=name && address && name.toLocaleLowerCase('da-DK') !== address.toLocaleLowerCase('da-DK');
+            return (hasSeparateName ? name+' — '+address : address || name)+(stop.note ? ' · Note: '+stop.note : '');
+        };
+        $('detailBody').innerHTML = '<dl>'+pair('Medarbejder',t.employeeName)+(t.createdBy ? pair('Oprettet af',t.createdByName || t.createdBy) : '')+pair('Dato',t.date || 'Mangler')+
             pair('Nummerplade',t.plate)+pair('Status',statuses[t.status])+
-            pair('Formål',t.purpose)+pair('Rute / stop',(t.stops || []).map(stop => stop.address+(stop.note?' ('+stop.note+')':'')).join('\n') || 'Se historisk Formål')+
+            pair('Formål',t.purpose)+pair('Rute / stop',(t.stops || []).map(stopDescription).join('\n') || 'Se historisk Formål')+
             pair('Retur',t.roundTrip?'Ja':'Nej')+pair('Samlet km',fmt(t.km))+pair('Afstandsgrundlag',t.manualReason)+
             pair('Godtgørelse',!data.canManage ? 'Beløb er kun synlige for administratorer.' : t.allowance ? fmt(t.allowance.amount)+' DKK; '+fmt(t.allowance.highKm)+' km × '+rateFmt(t.allowance.highRate)+' + '+fmt(t.allowance.lowKm)+' km × '+rateFmt(t.allowance.lowRate) : t.legacy ? 'Arkivpost: historisk beløb er ikke eksporteret eller genberegnet.' : t.estimate ? fmt(t.estimate.amount)+' DKK foreløbigt. Endeligt beløb fastlåses ved godkendelse.' : 'Satser mangler for kørselsåret; beløbet kan ikke beregnes endnu.')+
             pair('Kommentar',t.comment || '—')+
             (t.reconciliationRequired && t.status !== 'deleted' ? pair('Kontrol kræves','Tidligere km er ændret efter godkendelsen. Kontrollér beregningen; beløbet er ikke genberegnet.') : '')+
             (t.status === 'deleted' ? pair('Før sletning',statuses[t.deletedPreviousStatus] || t.deletedPreviousStatus) : '')+
             (t.legacy ? pair('Historisk betaling',t.legacyPaid?'Markeret udbetalt':'Ikke markeret udbetalt') : '')+
-            pair('Hændelser',t.history.map(row => row.at+' · '+row.by+' · '+row.action+(row.note?' · '+row.note:'')).join('\n') || 'Importeret historik')+'</dl>'+
+            pair('Hændelser',t.history.map(row => row.at+' · '+(row.byName || row.by)+' · '+row.action+(row.note?' · '+row.note:'')).join('\n') || 'Importeret historik')+'</dl>'+
             (data.canManage && t.status === 'legacy' && !t.date ? '<label>Manglende historisk kørselsdato<input id="legacyDate" type="date"></label><button type="button" data-action="legacy-date">Gem historisk dato</button>' : '')+
             '<label>Begrundelse / kommentar<input id="actionNote" maxlength="1000"></label><div class="actions">'+
             (t.status !== 'deleted' ? '<button type="button" data-pdf="'+esc(t.id)+'">Hent PDF</button>' : '')+

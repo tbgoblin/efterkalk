@@ -57,6 +57,35 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         return state.employees.find(row => row.username === username(user) && row.active);
     }
 
+    function userNames(users) {
+        return new Map(users.map(row => [username(row), row.displayName || row.name || row.username]));
+    }
+
+    function savedAddressNames(state) {
+        const names = new Map();
+        for (const address of state.addresses) {
+            const key = nameKey(address.address);
+            if (!names.has(key)) names.set(key, address.name);
+            else if (names.get(key) !== address.name) names.set(key, null);
+        }
+        return names;
+    }
+
+    function addDisplayNames(trip, names, addressNames) {
+        const stops = (trip.stops || []).map(stop => {
+            const name = stop.name || addressNames.get(nameKey(stop.address));
+            return name ? { ...stop, name } : stop;
+        });
+        const history = (trip.history || []).map(item => ({ ...item, byName: names.get(username({ username: item.by })) || item.by }));
+        return {
+            ...trip,
+            createdByName: names.get(username({ username: trip.createdBy })) || trip.createdBy,
+            approvedByName: names.get(username({ username: trip.approvedBy })) || trip.approvedBy,
+            stops,
+            history
+        };
+    }
+
     function requireManager(user) {
         if (!manager(user)) throw fail('Adgang til kørselsadministration kræves.', 403);
     }
@@ -81,9 +110,12 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         const state = await load();
         const canManage = manager(user);
         const employee = ownEmployee(state, user);
+        const users = readUsers();
+        const names = userNames(users);
+        const addressNames = savedAddressNames(state);
         const trips = state.trips.filter(row => canManage || (row.status !== 'deleted'
             && (row.employeeId === employee?.id || row.createdBy === username(user)))).map(trip => {
-            const visibleTrip = { ...trip };
+            const visibleTrip = addDisplayNames(trip, names, addressNames);
             if (!canManage) {
                 delete visibleTrip.allowance;
                 delete visibleTrip.estimate;
@@ -103,7 +135,7 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
             participants: state.employees.filter(row => row.active).map(row => ({ id: row.id, name: row.name, vismaEmpNo: row.vismaEmpNo || null })),
             addresses: state.addresses, purposes: state.purposes, rates: canManage ? state.rates : [],
             trips,
-            users: canManage ? readUsers().filter(row => row.active !== false).map(row => ({ username: row.username, name: row.displayName || row.username })) : [] };
+            users: canManage ? users.filter(row => row.active !== false).map(row => ({ username: row.username, name: row.displayName || row.username })) : [] };
     }
 
     async function saveEmployee(input, user) {
@@ -296,7 +328,8 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         if (!Array.isArray(input.stops) || input.stops.length < 2 || input.stops.length > 12) throw fail('Angiv fra, til og højst 10 mellemstop.');
         const stops = input.stops.map(stop => {
             if (!stop || typeof stop !== 'object' || Array.isArray(stop)) throw fail('Ugyldigt stop.');
-            return { address: text(stop.address, 'Adresse', 500), note: text(stop.note || '', 'Stop/pausenote', 500, false) };
+            return { name: text(stop.name || '', 'Virksomhedsnavn', 500, false),
+                address: text(stop.address, 'Adresse', 500), note: text(stop.note || '', 'Stop/pausenote', 500, false) };
         });
         const km = round(positive(input.km, 'Samlet antal km', 10000));
         if (km <= 0) throw fail('Samlet antal km er for lille.');
@@ -363,8 +396,8 @@ function createMileageService({ gohData, readUsers, now = () => new Date().toISO
         const trip = state.trips.find(row => row.id === tripId && row.status !== 'deleted'
             && (manager(user) || row.employeeId === employee?.id || row.createdBy === username(user)));
         if (!trip) throw fail('Kørslen findes ikke.', 404);
-        if (manager(user)) return trip;
-        const visibleTrip = { ...trip };
+        const visibleTrip = addDisplayNames(trip, userNames(readUsers()), savedAddressNames(state));
+        if (manager(user)) return visibleTrip;
         delete visibleTrip.allowance;
         delete visibleTrip.estimate;
         return visibleTrip;

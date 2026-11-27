@@ -592,9 +592,39 @@ test('routing settings share a write-only database key across instances and hand
     assert.equal((await noFallback.status()).configured, false);
 });
 
+test('trip display data resolves creator names and company names for saved addresses', async () => {
+    const f = await fixture();
+    const initialData = await f.service.data(approver);
+    await f.service.saveAddress({ version: initialData.version, name: 'Saved company', address: 'Test stop' }, approver);
+
+    const legacyShapeTrip = await f.save();
+    assert.equal(legacyShapeTrip.createdByName, worker.displayName);
+    assert.equal(legacyShapeTrip.stops[1].name, 'Saved company');
+
+    const updatedData = await f.service.data(approver);
+    await f.service.saveAddress({ version: updatedData.version, name: 'Another company', address: 'Test stop' }, approver);
+    const ambiguousTrip = await f.save();
+    assert.equal(ambiguousTrip.stops[1].name, '');
+
+    const namedTrip = await f.save({
+        stops: [
+            { address: 'Test start', note: '' },
+            { name: 'Explicit company', address: 'Explicit address', note: 'Pause' },
+            { address: 'Test end', note: '' }
+        ]
+    });
+    assert.equal(namedTrip.stops[1].name, 'Explicit company');
+});
+
 test('internal PDF is generated from authorized trip data including fixed allowance', async () => {
     const f = await fixture();
-    const trip = await f.save();
+    const trip = await f.save({
+        stops: [
+            { address: 'Test start', note: '' },
+            { name: 'Test Company', address: 'Test stop', note: 'Pause' },
+            { address: 'Test end', note: '' }
+        ]
+    });
     await f.act(trip, 'submit', worker); await f.act(trip, 'approve');
     const authorizedTrip = await f.service.document(trip.id, approver);
     const pdf = await generateMileagePdf([authorizedTrip], { includeAmounts:true });
@@ -605,8 +635,13 @@ test('internal PDF is generated from authorized trip data including fixed allowa
     const pageCount = buffer => (buffer.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
     assert.equal(pageCount(pdf), 2);
     assert.equal(pageCount(singlePagePdf), 1);
+    assert.match(pdfText(singlePagePdf), /Test Worker/);
+    assert.match(pdfText(singlePagePdf), /OPRETTET AF/);
+    assert.match(pdfText(singlePagePdf), /Test Company/);
     assert.match(pdfText(pdf), /Test stop/);
+    assert.match(pdfText(pdf), /Test Company/);
     assert.match(pdfText(pdf), /Pause/);
+    assert.match(pdfText(singlePagePdf), /NOTE/);
     assert.match(pdfText(pdf), /400,00/);
     assert.doesNotMatch(pdfText(workerPdf), /400,00/);
 });
